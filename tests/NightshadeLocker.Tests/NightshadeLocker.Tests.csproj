@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>NSL_RULES_ONLY</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../carbon/plugins/05_Players/NightshadeLocker.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>
