@@ -1,8 +1,8 @@
 {
   "Chat server name (sender of vote messages)": "Nightshade",
   "Chat avatar SteamID (0 = server icon)": 0,
-  "Vote mode (Daily = vote every night, SkipMultiple = one passing vote skips several nights)": "SkipMultiple",
-  "Nights to skip (SkipMultiple only, includes the voted night, minimum 1)": 2,
+  "Vote mode (Daily = vote every night, SkipMultiple = a pass sets this night to morning, then the next N nights have no vote and run normally)": "SkipMultiple",
+  "Nights without a vote after a pass (SkipMultiple only, default 2; these nights are not set to morning)": 2,
   "VoteStartTime (24hr format)": 19.0,
   "DayTime (Game hour to set if vote passes or day is purchased)": 8.0,
   "VoteDuration (Time players have to vote in seconds)": 60.0,

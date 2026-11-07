@@ -1,22 +1,32 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using UnityEngine;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("VoteDayTests")]
+
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.2.1")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.2.2")]
     [Description("Vote for day at configurable night time. 75%+ required. One vote per night. Players can buy day instantly via /buyday.")]
     public class NightshadeVoteDay : RustPlugin
     {
         // --- Config ---
         private const string SkipDataPath = "Nightshade/NightshadeVoteDay";
+        private const int SkipStateVersion = 2;
+        internal const string ModeKey = "Vote mode (Daily = vote every night, SkipMultiple = a pass sets this night to morning, then the next N nights have no vote and run normally)";
+        internal const string QuietNightsKey = "Nights without a vote after a pass (SkipMultiple only, default 2; these nights are not set to morning)";
+        private const string OldModeKey = "Vote mode (Daily = vote every night, SkipMultiple = one passing vote skips several nights)";
+        private const string OldNightsKey = "Nights to skip (SkipMultiple only, includes the voted night, minimum 1)";
+
         private PluginConfig _config;
 
-        private class PluginConfig
+        internal class PluginConfig
         {
             [JsonProperty("Chat server name (sender of vote messages)")]
             public string ChatServerName = "Nightshade";
@@ -24,11 +34,11 @@ namespace Oxide.Plugins
             [JsonProperty("Chat avatar SteamID (0 = server icon)")]
             public ulong ChatAvatarSteamId = 0;
 
-            [JsonProperty("Vote mode (Daily = vote every night, SkipMultiple = one passing vote skips several nights)")]
+            [JsonProperty(ModeKey)]
             public string VoteMode = "SkipMultiple";
 
-            [JsonProperty("Nights to skip (SkipMultiple only, includes the voted night, minimum 1)")]
-            public int NightsToSkip = 2;
+            [JsonProperty(QuietNightsKey)]
+            public int NightsWithoutVote = 2;
 
             [JsonProperty("VoteStartTime (24hr format)")]
             public float VoteStartTime  = 19f;
@@ -55,24 +65,99 @@ namespace Oxide.Plugins
             public double EcoCost       = 500.0;
         }
 
-        private class SkipState
+        internal class SkipState
         {
+            public int Version;
             public int SkipsRemaining;
+            public int NightsWithoutVote;
+            public int HandledNightId;
+            public bool NaturalTonight;
+        }
+
+        internal struct ClockInput
+        {
+            public float Hour;
+            public int Year;
+            public int Month;
+            public int Day;
+            public float VoteStart;
+            public bool SkipMultiple;
+            public bool VoteActive;
+            public bool WindowOpen;
+            public bool VotedThisNight;
+            public bool NaturalTonight;
+            public int NightsWithoutVote;
+            public int HandledNightId;
+        }
+
+        internal struct ClockResult
+        {
+            public bool SetMorning;
+            public string Action;
+            public bool VotedThisNight;
+            public bool NaturalTonight;
+            public bool WindowOpen;
+            public int NightsWithoutVote;
+            public int HandledNightId;
         }
 
         protected override void LoadConfig()
         {
             base.LoadConfig();
-            try   { _config = Config.ReadObject<PluginConfig>() ?? new PluginConfig(); }
+            JObject raw = null;
+            try { raw = Config.ReadObject<JObject>(); }
+            catch { raw = null; }
+            try { _config = raw == null ? new PluginConfig() : raw.ToObject<PluginConfig>() ?? new PluginConfig(); }
             catch { _config = new PluginConfig(); }
-            if (string.IsNullOrWhiteSpace(_config.ChatServerName)) _config.ChatServerName = "Nightshade";
-            _config.VoteMode = NormalizeMode(_config.VoteMode);
-            if (_config.NightsToSkip < 1) _config.NightsToSkip = 2;
+            ApplyConfigMigrations(raw, _config);
             SaveConfig();
         }
 
         protected override void LoadDefaultConfig() => _config = new PluginConfig();
         protected override void SaveConfig()         => Config.WriteObject(_config);
+
+        internal static void ApplyConfigMigrations(JObject raw, PluginConfig config)
+        {
+            if (config == null) return;
+            bool hasNewMode = raw != null && raw[ModeKey] != null && raw[ModeKey].Type != JTokenType.Null;
+            bool hasNewNights = raw != null && raw[QuietNightsKey] != null && raw[QuietNightsKey].Type != JTokenType.Null;
+            string oldMode = raw != null && raw[OldModeKey] != null && raw[OldModeKey].Type != JTokenType.Null ? raw[OldModeKey].ToString() : null;
+            string oldNights = null;
+            if (raw != null && raw[OldNightsKey] != null && raw[OldNightsKey].Type != JTokenType.Null)
+            {
+                int oldValue;
+                if (TryReadInt(raw[OldNightsKey], out oldValue))
+                    oldNights = oldValue.ToString(CultureInfo.InvariantCulture);
+            }
+            ApplyMigratedValues(hasNewMode, oldMode, hasNewNights, oldNights, config);
+        }
+
+        internal static void ApplyMigratedValues(bool hasNewMode, string oldMode, bool hasNewNights, string oldNightsText, PluginConfig config)
+        {
+            if (config == null) return;
+            if (!hasNewMode && !string.IsNullOrEmpty(oldMode))
+                config.VoteMode = oldMode;
+            if (!hasNewNights && !string.IsNullOrEmpty(oldNightsText))
+            {
+                double number;
+                if (double.TryParse(oldNightsText, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                    config.NightsWithoutVote = (int)number;
+            }
+            if (string.IsNullOrWhiteSpace(config.ChatServerName)) config.ChatServerName = "Nightshade";
+            config.VoteMode = NormalizeMode(config.VoteMode);
+            if (config.NightsWithoutVote < 0) config.NightsWithoutVote = 2;
+        }
+
+        private static bool TryReadInt(JToken token, out int value)
+        {
+            value = 0;
+            if (token == null) return false;
+            double number;
+            if (!double.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                return false;
+            value = (int)number;
+            return true;
+        }
 
         // --- Lang ---
         protected override void LoadDefaultMessages()
@@ -87,21 +172,21 @@ namespace Oxide.Plugins
                 ["AlreadyVoted"]        = "You've already voted.",
 
                 ["VotePassed"]          = "Vote Day PASSED \u2014 {votes}/{pop} voted ({percent}%). Time set to {daytime}!",
-                ["VotePassedExtra"]     = "This vote covers {nights} nights, so the next {extra} night(s) are skipped without another vote.",
+                ["VotePassedLater"]     = "This night is now morning ({daytime}). The next {nights} night(s) have no vote and run on the normal clock. They are not set to morning.",
                 ["VoteFailed"]          = "Vote Day FAILED \u2014 {votes}/{pop} voted ({percent}%). Needed {needed}. See you tomorrow night!",
 
-                ["AutoSkip"]            = "Night skipped from the last vote. {left} more night(s) will be skipped after this one.",
-                ["AutoSkipLast"]        = "Night skipped from the last vote. Voting opens again next night.",
+                ["NoVoteNatural"]       = "No vote tonight. This night runs normally and is not set to morning. {left} more night(s) without a vote after this one.",
+                ["NoVoteNaturalLast"]   = "No vote tonight. This night runs normally and is not set to morning. Voting opens again next night.",
 
                 ["NoVoteYet"]           = "No active vote. The window opens at {time} (~{hours} game hour(s) away).",
                 ["NoVoteAtTime"]        = "No active vote right now.",
                 ["VoteAlreadyDone"]     = "The vote already happened tonight. Check back tomorrow at {time}.",
 
-                ["BuyDayInfo"]        = "Force it to {daytime} immediately for {cost}. Use /buyday confirm to purchase.",
-                ["BuyDayUsage"]       = "Usage: /buyday confirm",
-                ["BuyDayDaytime"]     = "It's already daytime \u2014 nothing to buy!",
-                ["BuyDayClosed"]      = "The vote window for tonight has already closed.",
-                ["BuyDayPurchased"]   = "{player} spent {cost} to skip the night. Time set to {daytime}!",
+                ["BuyDayInfo"]          = "Force it to {daytime} immediately for {cost}. Use /buyday confirm to purchase.",
+                ["BuyDayUsage"]         = "Usage: /buyday confirm",
+                ["BuyDayDaytime"]       = "It's already daytime \u2014 nothing to buy!",
+                ["BuyDayClosed"]        = "The vote window for tonight has already closed.",
+                ["BuyDayPurchasedOne"]  = "{player} spent {cost} to set this night to {daytime}. Only this night was changed.",
 
                 ["NotEnoughRP"]         = "Not enough RP. Need {need} RP, you have {have}.",
                 ["NotEnoughEco"]        = "Not enough coins. Need {need}, you have {have}.",
@@ -139,7 +224,9 @@ namespace Oxide.Plugins
         private bool            _voteActive     = false;
         private bool            _votedThisNight = false;
         private bool            _windowOpen     = false;
-        private int             _skipsRemaining = 0;
+        private bool            _naturalTonight = false;
+        private int             _nightsWithoutVote = 0;
+        private int             _handledNightId = 0;
         private Timer           _windowTimer;
         private Timer           _voteTimer;
         private HashSet<ulong>  _votes          = new HashSet<ulong>();
@@ -166,38 +253,153 @@ namespace Oxide.Plugins
 
         private void CheckGameTime()
         {
-            float t = TOD_Sky.Instance?.Cycle.Hour ?? -1f;
-            if (t < 0f) return;
+            TOD_Sky sky = TOD_Sky.Instance;
+            if (sky == null || sky.Cycle == null) return;
+            float hour = sky.Cycle.Hour;
+            if (hour < 0f || float.IsNaN(hour)) return;
 
-            if (t >= 6f && t < _config.VoteStartTime)
+            bool windowWasOpen = _windowOpen;
+            ClockResult result = Advance(new ClockInput
             {
-                if (_votedThisNight || _windowOpen)
-                {
-                    _votedThisNight = false;
-                    _windowOpen     = false;
-                    _windowTimer?.Destroy();
-                }
+                Hour = hour,
+                Year = sky.Cycle.Year,
+                Month = sky.Cycle.Month,
+                Day = sky.Cycle.Day,
+                VoteStart = _config.VoteStartTime,
+                SkipMultiple = IsSkipMultiple(),
+                VoteActive = _voteActive,
+                WindowOpen = _windowOpen,
+                VotedThisNight = _votedThisNight,
+                NaturalTonight = _naturalTonight,
+                NightsWithoutVote = _nightsWithoutVote,
+                HandledNightId = _handledNightId
+            });
+
+            _votedThisNight = result.VotedThisNight;
+            _naturalTonight = result.NaturalTonight;
+            _windowOpen = result.WindowOpen;
+            _nightsWithoutVote = result.NightsWithoutVote;
+            _handledNightId = result.HandledNightId;
+
+            if (result.Action == "daytime")
+            {
+                if (windowWasOpen) _windowTimer?.Destroy();
+                return;
             }
-
-            if (t >= _config.VoteStartTime && !_votedThisNight && !_windowOpen && !_voteActive)
+            if (result.Action == "natural")
             {
-                if (IsSkipMultiple() && _skipsRemaining > 0)
-                    SkipQueuedNight();
-                else
-                    OpenWindow();
+                SaveSkips();
+                AnnounceNaturalNight(null);
+                return;
+            }
+            if (result.Action == "vote")
+            {
+                SaveSkips();
+                OpenWindow();
             }
         }
 
-        private void SkipQueuedNight()
+        private void AnnounceNaturalNight(BasePlayer player)
         {
-            _skipsRemaining = Math.Max(0, _skipsRemaining - 1);
-            _votedThisNight = true;
-            SaveSkips();
-            ApplyDay();
-            if (_skipsRemaining > 0)
-                Say(null, L("AutoSkip", null, ("left", _skipsRemaining.ToString())));
+            string playerId = player == null ? null : player.UserIDString;
+            if (_nightsWithoutVote > 0)
+                Say(player, L("NoVoteNatural", playerId, ("left", _nightsWithoutVote.ToString(CultureInfo.InvariantCulture))));
             else
-                Say(null, L("AutoSkipLast"));
+                Say(player, L("NoVoteNaturalLast", playerId));
+        }
+
+        internal static ClockResult Advance(ClockInput s)
+        {
+            ClockResult result = new ClockResult
+            {
+                SetMorning = false,
+                Action = "none",
+                VotedThisNight = s.VotedThisNight,
+                NaturalTonight = s.NaturalTonight,
+                WindowOpen = s.WindowOpen,
+                NightsWithoutVote = s.NightsWithoutVote < 0 ? 0 : s.NightsWithoutVote,
+                HandledNightId = s.HandledNightId
+            };
+            float hour = s.Hour;
+            if (float.IsNaN(hour) || hour < 0f) return result;
+
+            float voteStart = s.VoteStart <= 0f ? 19f : s.VoteStart;
+            if (hour >= 6f && hour < voteStart)
+            {
+                result.Action = "daytime";
+                result.VotedThisNight = false;
+                result.NaturalTonight = false;
+                result.WindowOpen = false;
+                return result;
+            }
+            if (hour < voteStart) return result;
+
+            int nightId = NightId(s.Year, s.Month, s.Day, hour, voteStart);
+            if (nightId != 0 && nightId == s.HandledNightId) return result;
+            if (s.VoteActive || s.WindowOpen) return result;
+
+            result.HandledNightId = nightId;
+            if (!s.SkipMultiple)
+                result.NightsWithoutVote = 0;
+            if (s.SkipMultiple && result.NightsWithoutVote > 0)
+            {
+                result.NightsWithoutVote = result.NightsWithoutVote - 1;
+                result.VotedThisNight = true;
+                result.NaturalTonight = true;
+                result.WindowOpen = false;
+                result.Action = "natural";
+                result.SetMorning = false;
+                return result;
+            }
+
+            result.NaturalTonight = false;
+            result.Action = "vote";
+            result.SetMorning = false;
+            return result;
+        }
+
+        internal static int NightId(int year, int month, int day, float hour, float voteStart)
+        {
+            if (year < 1 || month < 1 || month > 12 || day < 1 || day > 31) return 0;
+            DateTime date;
+            try { date = new DateTime(year, month, day); }
+            catch (ArgumentOutOfRangeException) { return 0; }
+            if (hour < 6f && hour < voteStart)
+                date = date.AddDays(-1);
+            return date.Year * 10000 + date.Month * 100 + date.Day;
+        }
+
+        internal static int QuietNightsAfterPurchase(int nightsWithoutVote)
+        {
+            return nightsWithoutVote < 0 ? 0 : nightsWithoutVote;
+        }
+
+        internal static void OnVotePassed(bool skipMultiple, int configuredQuietNights, out int nightsWithoutVote, out bool setMorning)
+        {
+            setMorning = true;
+            nightsWithoutVote = skipMultiple ? Math.Max(0, configuredQuietNights) : 0;
+        }
+
+        internal static SkipState MigrateSkipState(SkipState state)
+        {
+            if (state == null)
+                return new SkipState { Version = SkipStateVersion, SkipsRemaining = 0 };
+            if (state.Version >= SkipStateVersion)
+            {
+                if (state.NightsWithoutVote < 0) state.NightsWithoutVote = 0;
+                state.SkipsRemaining = 0;
+                state.Version = SkipStateVersion;
+                return state;
+            }
+            int queued = state.SkipsRemaining > 0 ? state.SkipsRemaining : 0;
+            return new SkipState
+            {
+                Version = SkipStateVersion,
+                SkipsRemaining = 0,
+                NightsWithoutVote = queued,
+                HandledNightId = 0,
+                NaturalTonight = false
+            };
         }
 
         // --- Window & vote lifecycle ---
@@ -205,6 +407,8 @@ namespace Oxide.Plugins
         private void OpenWindow()
         {
             _windowOpen = true;
+            _naturalTonight = false;
+            RememberNight();
             StartVote();
 
             _windowTimer = timer.Once(_config.WindowDuration, () =>
@@ -225,9 +429,9 @@ namespace Oxide.Plugins
 
             Say(null, L("VoteStart", null,
                 ("time",      FormatHour(_config.VoteStartTime)),
-                ("threshold", pct.ToString()),
-                ("needed",    needed.ToString()),
-                ("duration",  ((int)_config.VoteDuration).ToString())));
+                ("threshold", pct.ToString(CultureInfo.InvariantCulture)),
+                ("needed",    needed.ToString(CultureInfo.InvariantCulture)),
+                ("duration",  ((int)_config.VoteDuration).ToString(CultureInfo.InvariantCulture))));
 
             Say(null, L("VoteStartBuyHint"));
 
@@ -242,6 +446,7 @@ namespace Oxide.Plugins
             _voteActive     = false;
             _windowOpen     = false;
             _votedThisNight = true;
+            _naturalTonight = false;
 
             int    pop      = BasePlayer.activePlayerList.Count;
             int    votes    = _votes.Count;
@@ -252,34 +457,32 @@ namespace Oxide.Plugins
 
             if (passed)
             {
-                ApplyDay();
-                int nights = Math.Max(1, _config.NightsToSkip);
-                int extra = 0;
-                if (IsSkipMultiple())
-                {
-                    extra = nights - 1;
-                    _skipsRemaining = extra;
-                }
-                else
-                    _skipsRemaining = 0;
+                int quiet;
+                bool setMorning;
+                OnVotePassed(IsSkipMultiple(), _config.NightsWithoutVote, out quiet, out setMorning);
+                _nightsWithoutVote = quiet;
+                RememberNight();
                 SaveSkips();
+                if (setMorning) ApplyDay();
                 Say(null, L("VotePassed", null,
-                    ("votes",   votes.ToString()),
-                    ("pop",     pop.ToString()),
-                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString()),
+                    ("votes",   votes.ToString(CultureInfo.InvariantCulture)),
+                    ("pop",     pop.ToString(CultureInfo.InvariantCulture)),
+                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString(CultureInfo.InvariantCulture)),
                     ("daytime", daytime)));
-                if (extra > 0)
-                    Say(null, L("VotePassedExtra", null,
-                        ("nights", nights.ToString()),
-                        ("extra", extra.ToString())));
+                if (quiet > 0)
+                    Say(null, L("VotePassedLater", null,
+                        ("daytime", daytime),
+                        ("nights", quiet.ToString(CultureInfo.InvariantCulture))));
             }
             else
             {
+                RememberNight();
+                SaveSkips();
                 Say(null, L("VoteFailed", null,
-                    ("votes",   votes.ToString()),
-                    ("pop",     pop.ToString()),
-                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString()),
-                    ("needed",  needed.ToString())));
+                    ("votes",   votes.ToString(CultureInfo.InvariantCulture)),
+                    ("pop",     pop.ToString(CultureInfo.InvariantCulture)),
+                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString(CultureInfo.InvariantCulture)),
+                    ("needed",  needed.ToString(CultureInfo.InvariantCulture))));
             }
 
             _votes.Clear();
@@ -292,11 +495,14 @@ namespace Oxide.Plugins
             _voteActive     = false;
             _windowOpen     = false;
             _votedThisNight = true;
+            _naturalTonight = false;
             _votes.Clear();
-
+            _nightsWithoutVote = QuietNightsAfterPurchase(_nightsWithoutVote);
+            RememberNight();
+            SaveSkips();
             ApplyDay();
 
-            Say(null, L("BuyDayPurchased", null,
+            Say(null, L("BuyDayPurchasedOne", null,
                 ("player",  buyer.displayName),
                 ("cost",    CostLabel()),
                 ("daytime", FormatHour(_config.DayTime))));
@@ -304,7 +510,15 @@ namespace Oxide.Plugins
 
         private void ApplyDay()
         {
-            ConsoleSystem.Run(ConsoleSystem.Option.Server, "env.time " + _config.DayTime.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "env.time " + _config.DayTime.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private void RememberNight()
+        {
+            TOD_Sky sky = TOD_Sky.Instance;
+            if (sky == null || sky.Cycle == null) return;
+            int nightId = NightId(sky.Cycle.Year, sky.Cycle.Month, sky.Cycle.Day, sky.Cycle.Hour, _config.VoteStartTime);
+            if (nightId != 0) _handledNightId = nightId;
         }
 
         // --- /day command ---
@@ -314,6 +528,11 @@ namespace Oxide.Plugins
         {
             if (!_voteActive)
             {
+                if (_naturalTonight)
+                {
+                    AnnounceNaturalNight(player);
+                    return;
+                }
                 if (_votedThisNight)
                 {
                     Say(player, L("VoteAlreadyDone", player.UserIDString,
@@ -327,7 +546,7 @@ namespace Oxide.Plugins
                     if (hoursLeft > 0)
                         Say(player, L("NoVoteYet", player.UserIDString,
                             ("time",  FormatHour(_config.VoteStartTime)),
-                            ("hours", hoursLeft.ToString())));
+                            ("hours", hoursLeft.ToString(CultureInfo.InvariantCulture))));
                     else
                         Say(player, L("NoVoteAtTime", player.UserIDString));
                 }
@@ -347,13 +566,14 @@ namespace Oxide.Plugins
             int voteCount = _votes.Count;
 
             Say(player, L("VoteRegistered", player.UserIDString,
-                ("current", voteCount.ToString()),
-                ("needed",  needed.ToString())));
+                ("current", voteCount.ToString(CultureInfo.InvariantCulture)),
+                ("needed",  needed.ToString(CultureInfo.InvariantCulture))));
 
+            int percent = pop > 0 ? Mathf.RoundToInt((float)voteCount / pop * 100f) : 0;
             Say(null, L("VoteProgress", null,
-                ("current", voteCount.ToString()),
-                ("needed",  needed.ToString()),
-                ("percent", Mathf.RoundToInt((float)voteCount / pop * 100f).ToString())));
+                ("current", voteCount.ToString(CultureInfo.InvariantCulture)),
+                ("needed",  needed.ToString(CultureInfo.InvariantCulture)),
+                ("percent", percent.ToString(CultureInfo.InvariantCulture))));
 
             if (voteCount >= needed)
             {
@@ -369,7 +589,7 @@ namespace Oxide.Plugins
         {
             float  t    = TOD_Sky.Instance?.Cycle.Hour ?? -1f;
             string uid  = player.UserIDString;
-            string mode = _config.Currency.ToLower();
+            string mode = _config.Currency == null ? string.Empty : _config.Currency.ToLowerInvariant();
 
             // /buyday is only available at night: 1900-2359 or 0000-0600
             bool isNight = (t >= _config.VoteStartTime) || (t >= 0f && t < 6f);
@@ -381,7 +601,8 @@ namespace Oxide.Plugins
 
             if (_votedThisNight && !_voteActive)
             {
-                Say(player, L("BuyDayClosed", uid));
+                if (_naturalTonight) AnnounceNaturalNight(player);
+                else Say(player, L("BuyDayClosed", uid));
                 return;
             }
 
@@ -409,7 +630,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args[0].ToLower() != "confirm")
+            if (args[0].ToLowerInvariant() != "confirm")
             {
                 Say(player, L("BuyDayUsage", uid));
                 return;
@@ -435,8 +656,8 @@ namespace Oxide.Plugins
             if (balance < _config.RPCost)
             {
                 Say(player, L("NotEnoughRP", player.UserIDString,
-                    ("need", _config.RPCost.ToString()),
-                    ("have", balance.ToString())));
+                    ("need", _config.RPCost.ToString(CultureInfo.InvariantCulture)),
+                    ("have", balance.ToString(CultureInfo.InvariantCulture))));
                 return false;
             }
             ServerRewards.Call("TakePoints", player.userID, _config.RPCost);
@@ -449,8 +670,8 @@ namespace Oxide.Plugins
             if (balance < _config.EcoCost)
             {
                 Say(player, L("NotEnoughEco", player.UserIDString,
-                    ("need", _config.EcoCost.ToString()),
-                    ("have", balance.ToString())));
+                    ("need", _config.EcoCost.ToString(CultureInfo.InvariantCulture)),
+                    ("have", balance.ToString(CultureInfo.InvariantCulture))));
                 return false;
             }
             Economics.Call("Withdraw", player.UserIDString, _config.EcoCost);
@@ -459,9 +680,9 @@ namespace Oxide.Plugins
 
         private string CostLabel()
         {
-            return _config.Currency.ToLower() == "economics"
-                ? $"{_config.EcoCost} coins"
-                : $"{_config.RPCost} RP";
+            if (_config.Currency != null && _config.Currency.ToLowerInvariant() == "economics")
+                return _config.EcoCost.ToString(CultureInfo.InvariantCulture) + " coins";
+            return _config.RPCost.ToString(CultureInfo.InvariantCulture) + " RP";
         }
 
         // --- Utility ---
@@ -482,27 +703,36 @@ namespace Oxide.Plugins
 
         private void LoadSkips()
         {
-            try
-            {
-                SkipState state = Interface.Oxide.DataFileSystem.ReadObject<SkipState>(SkipDataPath);
-                _skipsRemaining = state != null && state.SkipsRemaining > 0 ? state.SkipsRemaining : 0;
-            }
-            catch
-            {
-                _skipsRemaining = 0;
-            }
+            SkipState loaded = null;
+            try { loaded = Interface.Oxide.DataFileSystem.ReadObject<SkipState>(SkipDataPath); }
+            catch { loaded = null; }
+            bool legacy = loaded != null && loaded.Version < SkipStateVersion;
+            SkipState state = MigrateSkipState(loaded);
+            _nightsWithoutVote = state.NightsWithoutVote;
+            _handledNightId = state.HandledNightId;
+            _naturalTonight = state.NaturalTonight;
+            if (loaded == null || legacy || loaded.SkipsRemaining != 0 || loaded.Version < SkipStateVersion)
+                SaveSkips();
         }
 
         private void SaveSkips()
         {
-            if (_skipsRemaining < 0) _skipsRemaining = 0;
-            Interface.Oxide.DataFileSystem.WriteObject(SkipDataPath, new SkipState { SkipsRemaining = _skipsRemaining });
+            if (_nightsWithoutVote < 0) _nightsWithoutVote = 0;
+            Interface.Oxide.DataFileSystem.WriteObject(SkipDataPath, new SkipState
+            {
+                Version = SkipStateVersion,
+                SkipsRemaining = 0,
+                NightsWithoutVote = _nightsWithoutVote,
+                HandledNightId = _handledNightId,
+                NaturalTonight = _naturalTonight
+            });
         }
 
         private string FormatHour(float hour)
         {
             int h = (int)hour % 24;
-            return $"{h:D2}00";
+            if (h < 0) h += 24;
+            return h.ToString("00", CultureInfo.InvariantCulture) + "00";
         }
     }
 }
