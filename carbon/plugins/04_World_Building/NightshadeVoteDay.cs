@@ -168,17 +168,17 @@ namespace Oxide.Plugins
                 ["VoteStartBuyHint"]    = "Can't wait? Use /buyday to force day instantly!",
 
                 ["VoteRegistered"]      = "Vote registered! {current}/{needed} needed.",
-                ["VoteProgress"]        = "{current}/{needed} votes ({percent}%). Type /day!",
+                ["VoteProgress"]        = "{current}/{needed} votes ({percent}%). Type /day",
                 ["AlreadyVoted"]        = "You've already voted.",
 
                 ["VotePassed"]          = "Vote Day PASSED \u2014 {votes}/{pop} voted ({percent}%). Time set to {daytime}!",
-                ["VotePassedLater"]     = "This night is now morning ({daytime}). The next {nights} night(s) have no vote and run on the normal clock. They are not set to morning.",
+                ["VotePassedLater"]     = "This night is now morning ({daytime}). The next {nights} night(s) have no vote.",
                 ["VoteFailed"]          = "Vote Day FAILED \u2014 {votes}/{pop} voted ({percent}%). Needed {needed}. See you tomorrow night!",
 
-                ["NoVoteNatural"]       = "No vote tonight. This night runs normally and is not set to morning. {left} more night(s) without a vote after this one.",
-                ["NoVoteNaturalLast"]   = "No vote tonight. This night runs normally and is not set to morning. Voting opens again next night.",
+                ["NoVoteNatural"]       = "No vote tonight. {left} more night(s) without a vote after this one.",
+                ["NoVoteNaturalLast"]   = "No vote tonight. Voting opens again next night.",
 
-                ["NoVoteYet"]           = "No active vote. The window opens at {time} (~{hours} game hour(s) away).",
+                ["NoVoteYet"]           = "No vote yet - Don't be greedy",
                 ["NoVoteAtTime"]        = "No active vote right now.",
                 ["VoteAlreadyDone"]     = "The vote already happened tonight. Check back tomorrow at {time}.",
 
