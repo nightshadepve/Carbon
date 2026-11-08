@@ -13,6 +13,10 @@ namespace UnityEngine
 
     public class Object
     {
+        public static void Destroy(Object obj)
+        {
+        }
+
         public static bool operator ==(Object a, Object b)
         {
             return ReferenceEquals(a, b);
@@ -56,9 +60,16 @@ namespace UnityEngine
     {
         public Transform transform;
         public int layer;
+        public bool activeSelf;
+
         public T GetComponent<T>() where T : class
         {
             return null;
+        }
+
+        public void SetActive(bool active)
+        {
+            activeSelf = active;
         }
     }
 

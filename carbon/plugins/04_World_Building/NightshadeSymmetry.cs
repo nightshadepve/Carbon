@@ -937,6 +937,70 @@ namespace Nightshade.Symmetry
         }
     }
 
+    public static class PlacementLifecycle
+    {
+        public static string AwakePlan(bool activeSelf, bool hasPoolable)
+        {
+            if (!activeSelf)
+                return "activate";
+            if (hasPoolable)
+                return "enable-poolable";
+            return "skip-poolable";
+        }
+
+        public static bool GradeCanBeApplied(bool hasDefinition, bool hasGrades, bool resolvedGradeBase)
+        {
+            return hasDefinition && hasGrades && resolvedGradeBase;
+        }
+
+        public static string BoundDiagnostic(string stage, string prefab, string label, string exceptionText, int maxLines, int maxChars)
+        {
+            if (maxLines < 1)
+                maxLines = 1;
+            if (maxChars < 80)
+                maxChars = 80;
+            string safeStage = string.IsNullOrEmpty(stage) ? "unknown" : stage;
+            string safePrefab = string.IsNullOrEmpty(prefab) ? "unknown" : prefab;
+            string safeLabel = string.IsNullOrEmpty(label) ? "unknown" : label;
+            string body = exceptionText ?? "";
+            string[] lines = body.Replace("\r", "").Split('\n');
+            int count = lines.Length;
+            if (count > maxLines)
+                count = maxLines;
+            string stack = "";
+            for (int i = 0; i < count; i++)
+            {
+                if (i > 0)
+                    stack += "\n";
+                stack += lines[i];
+            }
+            string text = "Mirror copy failed at stage=" + safeStage + " prefab=" + safePrefab + " side=" + safeLabel + "\n" + stack;
+            if (text.Length > maxChars)
+                text = text.Substring(0, maxChars);
+            return text;
+        }
+    }
+
+    public sealed class SpawnRescue
+    {
+        public string Stage = "none";
+        public bool EntityCreated;
+        public bool ItemsConsumed;
+        public bool Refunded;
+        public int Receipt;
+        public MaterialLedger Ledger;
+
+        public bool RefundOnce()
+        {
+            if (!ItemsConsumed || Refunded || Ledger == null)
+                return false;
+            if (!Ledger.TryRefund(Receipt))
+                return false;
+            Refunded = true;
+            return true;
+        }
+    }
+
     public sealed class RecursionGuard
     {
         private int depth;
@@ -982,7 +1046,7 @@ namespace Nightshade.Symmetry
 #if !NIGHTSHADE_SYMMETRY_CORE_ONLY
 namespace Oxide.Plugins
 {
-    [Info("NightshadeSymmetry", "Nightshade", "1.0.0")]
+    [Info("NightshadeSymmetry", "Nightshade", "1.0.1")]
     [Description("Permission-based four-way mirror placement across two vertical planes.")]
     public class NightshadeSymmetry : RustPlugin
     {
@@ -1291,7 +1355,8 @@ namespace Oxide.Plugins
             }
             catch (Exception ex)
             {
-                PrintError("NightshadeSymmetry failed while mirroring: " + ex.Message);
+                string prefab = block != null ? block.ShortPrefabName : "unknown";
+                PrintError(Nightshade.Symmetry.PlacementLifecycle.BoundDiagnostic("mirror", prefab, "original", ex.ToString(), 12, 900));
             }
         }
 
@@ -1606,92 +1671,110 @@ namespace Oxide.Plugins
             }
 
             List<TakenLine> taken = null;
-            if (charge)
-            {
-                string takeError;
-                if (!TakeCost(player, cost, out taken, out takeError))
-                {
-                    if (ledger != null)
-                        ledger.TryRefund(receipt);
-                    if (config.Debug && takeError.Length > 0)
-                        Puts("Mirror take failed: " + takeError);
-                    detail = Msg("DenyMaterials");
-                    return false;
-                }
-            }
-
+            Nightshade.Symmetry.SpawnRescue rescue = new Nightshade.Symmetry.SpawnRescue();
+            rescue.Stage = "take";
+            rescue.Ledger = ledger;
+            rescue.Receipt = receipt;
             BuildingBlock spawned = null;
             spawnDepth++;
             guard.Enter();
             try
             {
-                spawned = SpawnMirror(player, original, position, rotation, support);
+                if (charge)
+                {
+                    string takeError;
+                    if (!TakeCost(player, cost, out taken, out takeError))
+                    {
+                        if (ledger != null)
+                            ledger.TryRefund(receipt);
+                        if (config.Debug && takeError != null && takeError.Length > 0)
+                            Puts("Mirror take failed: " + takeError);
+                        detail = Msg("DenyMaterials");
+                        return false;
+                    }
+                    rescue.ItemsConsumed = true;
+                }
+
+                rescue.Stage = "create";
+                spawned = CreateDormantBlock(original, position, rotation);
+                rescue.EntityCreated = spawned != null;
                 if (spawned == null)
                 {
-                    if (charge)
-                        UndoTake(player, ledger, receipt, taken, true);
+                    AbandonCopy(player, rescue, null, taken);
                     detail = Msg("DenySupport");
                     return false;
                 }
-                ulong mid = NetId(spawned);
-                if (mid == 0)
+
+                rescue.Stage = "awake";
+                AwakeDormantBlock(spawned.gameObject);
+
+                rescue.Stage = "grade";
+                ulong ownerId;
+                if (!Nightshade.Symmetry.CopyOwnership.TryOwner(player.userID, out ownerId) || !ApplyGradeAndSpawn(player, original, spawned, ownerId))
                 {
-                    spawned.Kill();
-                    if (charge)
-                        UndoTake(player, ledger, receipt, taken, true);
+                    AbandonCopy(player, rescue, spawned, taken);
+                    detail = Msg("DenyGrade");
+                    return false;
+                }
+
+                rescue.Stage = "attach";
+                if (support is BuildingBlock)
+                    spawned.AttachToBuilding(support);
+                else
+                    spawned.AttachToBuilding(null);
+
+                rescue.Stage = "identity";
+                ulong mid = NetId(spawned);
+                if (mid == 0 || spawned.IsDestroyed)
+                {
+                    AbandonCopy(player, rescue, spawned, taken);
                     detail = Msg("DenySupport");
                     return false;
                 }
                 mirroredIds.Add(mid);
                 guard.MarkMirror(mid);
+
+                rescue.Stage = "stability";
                 spawned.GetEntityLinks(true);
                 spawned.UpdateSurroundingEntities();
                 spawned.StabilityCheck();
-                bool stable = !spawned.IsDestroyed && (spawned.grounded || spawned.cachedStability + 0.0001f >= ConVar.Stability.collapse);
-                if (!stable && !spawned.IsDestroyed)
-                {
-                    spawned.Kill();
-                }
+                bool stable = spawned != null && !spawned.IsDestroyed && (spawned.grounded || spawned.cachedStability + 0.0001f >= ConVar.Stability.collapse);
                 if (!Nightshade.Symmetry.SpawnOutcome.Keep(spawned != null, spawned == null || spawned.IsDestroyed, stable))
                 {
-                    if (charge)
-                        UndoTake(player, ledger, receipt, taken, true);
+                    AbandonCopy(player, rescue, spawned, taken);
                     detail = Msg("DenyStability");
                     return false;
                 }
-                try
-                {
-                    Interface.CallHook("OnEntityBuilt", planner, spawned.gameObject);
-                }
-                catch (Exception ex)
-                {
-                    PrintWarning("OnEntityBuilt hook failed for a mirror: " + ex.Message);
-                }
-                if (spawned.IsDestroyed)
-                {
-                    if (charge)
-                        UndoTake(player, ledger, receipt, taken, true);
-                    detail = Msg("DenyHook");
-                    return false;
-                }
-                if (charge)
-                    NoteCost(player, cost);
-            }
-            catch (Exception ex)
-            {
-                PrintError("Mirror copy failed closed: " + ex.Message);
-                if (spawned != null && !spawned.IsDestroyed)
+
+                rescue.Stage = "hook";
+                if (spawned.gameObject != null)
                 {
                     try
                     {
-                        spawned.Kill();
+                        Interface.CallHook("OnEntityBuilt", planner, spawned.gameObject);
                     }
-                    catch
+                    catch (Exception hookEx)
                     {
+                        PrintWarning(Nightshade.Symmetry.PlacementLifecycle.BoundDiagnostic("hook", original.ShortPrefabName, copy.Label, hookEx.ToString(), 8, 700));
                     }
                 }
+                if (spawned.IsDestroyed)
+                {
+                    AbandonCopy(player, rescue, null, taken);
+                    detail = Msg("DenyHook");
+                    return false;
+                }
+
+                rescue.Stage = "note";
                 if (charge)
-                    UndoTake(player, ledger, receipt, taken, true);
+                    NoteCost(player, cost);
+                rescue.EntityCreated = false;
+            }
+            catch (Exception ex)
+            {
+                string prefab = original != null ? original.ShortPrefabName : "unknown";
+                PrintError(Nightshade.Symmetry.PlacementLifecycle.BoundDiagnostic(rescue.Stage, prefab, copy.Label, ex.ToString(), 12, 900));
+                AbandonCopy(player, rescue, spawned, taken);
                 detail = Msg("DenySupport");
                 return false;
             }
@@ -1704,47 +1787,130 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private BuildingBlock SpawnMirror(BasePlayer player, BuildingBlock original, Vector3 position, Quaternion rotation, DecayEntity support)
+        private BuildingBlock CreateDormantBlock(BuildingBlock original, Vector3 position, Quaternion rotation)
         {
-            ulong ownerId;
-            if (!Nightshade.Symmetry.CopyOwnership.TryOwner(player.userID, out ownerId))
+            if (original == null || GameManager.server == null || string.IsNullOrEmpty(original.PrefabName))
                 return null;
-            BaseEntity created = GameManager.server.CreateEntity(original.PrefabName, position, rotation, true);
-            BuildingBlock block = created as BuildingBlock;
+            GameObject created = GameManager.server.CreatePrefab(original.PrefabName, position, rotation, false);
+            if (created == null)
+                return null;
+            BuildingBlock block = created.ToBaseEntity() as BuildingBlock;
             if (block == null)
             {
-                if (created != null)
-                    created.Kill();
+                UnityEngine.Object.Destroy(created);
                 return null;
             }
-            PoolableEx.AwakeFromInstantiate(block.gameObject);
-            block.blockDefinition = PrefabAttribute.server.Find<Construction>(block.prefabID);
+            return block;
+        }
+
+        private static void AwakeDormantBlock(GameObject gameObject)
+        {
+            if (gameObject == null)
+                return;
+            Poolable poolable = gameObject.GetComponent<Poolable>();
+            string plan = Nightshade.Symmetry.PlacementLifecycle.AwakePlan(gameObject.activeSelf, poolable != null);
+            if (plan == "activate")
+                gameObject.SetActive(true);
+            else if (plan == "enable-poolable" && poolable != null)
+                poolable.SetBehaviourEnabled(true);
+        }
+
+        private bool ApplyGradeAndSpawn(BasePlayer player, BuildingBlock original, BuildingBlock block, ulong ownerId)
+        {
+            if (block == null || original == null || PrefabAttribute.server == null)
+                return false;
             if (block.blockDefinition == null)
-            {
-                block.Kill();
-                return null;
-            }
-            block.SetGrade(original.grade);
+                block.blockDefinition = PrefabAttribute.server.Find<Construction>(block.prefabID);
+            Construction definition = block.blockDefinition;
+            if (!GradesAreSafe(definition))
+                return false;
             block.skinID = original.skinID;
+            ConstructionGrade resolved = definition.GetGrade(original.grade, block.skinID);
+            if (resolved == null || resolved.gradeBase == null)
+                resolved = definition.defaultGrade;
+            if (!Nightshade.Symmetry.PlacementLifecycle.GradeCanBeApplied(true, true, resolved != null && resolved.gradeBase != null))
+                return false;
+            block.SetGrade(resolved.gradeBase.type);
+            if (block.currentGrade == null || block.currentGrade.gradeBase == null)
+                return false;
             block.ResetLifeStateOnSpawn = false;
-            float max = block.currentGrade != null ? block.currentGrade.maxHealth : block.StartMaxHealth();
+            float max = block.currentGrade.maxHealth;
             block.InitializeHealth(max, block.StartMaxHealth());
             block.OwnerID = ownerId;
             block.OnPlaced(player);
-            if (support != null)
-                block.AttachToBuilding(support);
-            else
-                block.AttachToBuilding(null);
             block.Spawn();
+            return !block.IsDestroyed;
+        }
+
+        private static bool GradesAreSafe(Construction definition)
+        {
+            if (definition == null || definition.grades == null || definition.defaultGrade == null || definition.defaultGrade.gradeBase == null)
+                return false;
+            for (int i = 0; i < definition.grades.Length; i++)
+            {
+                ConstructionGrade grade = definition.grades[i];
+                if (grade == null || grade.gradeBase == null)
+                    return false;
+            }
+            return true;
+        }
+
+        private void AbandonCopy(BasePlayer player, Nightshade.Symmetry.SpawnRescue rescue, BuildingBlock spawned, List<TakenLine> taken)
+        {
+            if (spawned != null && !spawned.IsDestroyed)
+            {
+                try
+                {
+                    spawned.Kill();
+                    if (!spawned.IsDestroyed && spawned.gameObject != null)
+                        UnityEngine.Object.Destroy(spawned.gameObject);
+                }
+                catch (Exception ex)
+                {
+                    string prefab = "unknown";
+                    try
+                    {
+                        prefab = spawned.ShortPrefabName;
+                    }
+                    catch
+                    {
+                    }
+                    PrintWarning(Nightshade.Symmetry.PlacementLifecycle.BoundDiagnostic("kill", prefab, rescue != null ? rescue.Stage : "kill", ex.ToString(), 6, 500));
+                    try
+                    {
+                        if (spawned.gameObject != null)
+                            UnityEngine.Object.Destroy(spawned.gameObject);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            if (rescue != null)
+                rescue.EntityCreated = false;
+            if (rescue == null || !rescue.RefundOnce())
+                return;
             try
             {
-                block.UpdateSkin();
+                GiveTaken(player, taken);
             }
             catch (Exception ex)
             {
-                PrintWarning("Mirror skin update failed: " + ex.Message);
+                PrintError(Nightshade.Symmetry.PlacementLifecycle.BoundDiagnostic("refund", "unknown", rescue.Stage, ex.ToString(), 8, 700));
             }
-            return block;
+        }
+
+        private static void GiveTaken(BasePlayer player, List<TakenLine> taken)
+        {
+            if (player == null || taken == null)
+                return;
+            List<Nightshade.Symmetry.CostLine> refund = new List<Nightshade.Symmetry.CostLine>();
+            for (int i = 0; i < taken.Count; i++)
+            {
+                if (taken[i].Amount > 0)
+                    refund.Add(new Nightshade.Symmetry.CostLine(taken[i].ItemId, taken[i].Amount));
+            }
+            GiveCost(player, refund);
         }
 
         private bool FindSupport(

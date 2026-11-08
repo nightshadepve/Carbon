@@ -28,6 +28,9 @@ internal static class Program
         CatalogAndPrefabNames();
         RangeAndRateFailClosed();
         ChargePolicyMatchesVanilla();
+        AwakeAndGradeLifecycle();
+        SpawnRescueRefundsOnce();
+        DiagnosticIsBounded();
         if (failures == 0)
         {
             Console.WriteLine("NightshadeSymmetry core tests passed.");
@@ -370,6 +373,69 @@ internal static class Program
         Eq(MirrorMath.ClampRadius(100f) == MirrorMath.HardMaxSearchRadius, "radius clamp");
         Eq(MirrorMath.AllowRate(6, 6), "rate allows the cap");
         Eq(!MirrorMath.AllowRate(7, 6), "rate blocks the next");
+    }
+
+    private static void AwakeAndGradeLifecycle()
+    {
+        Eq(PlacementLifecycle.AwakePlan(false, false) == "activate", "inactive block activates without Poolable");
+        Eq(PlacementLifecycle.AwakePlan(false, true) == "activate", "inactive block activates even with Poolable");
+        Eq(PlacementLifecycle.AwakePlan(true, true) == "enable-poolable", "active pooled block enables behaviour");
+        Eq(PlacementLifecycle.AwakePlan(true, false) == "skip-poolable", "active block without Poolable is not dereferenced");
+        Eq(!PlacementLifecycle.GradeCanBeApplied(true, true, false), "missing grade base is not applied");
+        Eq(!PlacementLifecycle.GradeCanBeApplied(true, false, true), "missing grade list is not applied");
+        Eq(PlacementLifecycle.GradeCanBeApplied(true, true, true), "safe grade can be applied");
+    }
+
+    private static void SpawnRescueRefundsOnce()
+    {
+        const int wood = -151838185;
+        MaterialLedger ledger = new MaterialLedger();
+        ledger.Set(wood, 100);
+        int receipt;
+        Eq(ledger.TryCharge(new List<CostLine> { new CostLine(wood, 50) }, out receipt), "spawn charge");
+        SpawnRescue rescue = new SpawnRescue();
+        rescue.Stage = "grade";
+        rescue.EntityCreated = true;
+        rescue.ItemsConsumed = true;
+        rescue.Receipt = receipt;
+        rescue.Ledger = ledger;
+        Eq(rescue.RefundOnce(), "first rescue refunds");
+        Eq(ledger.Get(wood) == 100, "materials restored");
+        Eq(!rescue.RefundOnce(), "second rescue does not refund");
+        Eq(ledger.Get(wood) == 100, "balance stays after duplicate rescue");
+
+        MaterialLedger unpaid = new MaterialLedger();
+        unpaid.Set(wood, 80);
+        int unpaidReceipt;
+        Eq(unpaid.TryCharge(new List<CostLine> { new CostLine(wood, 50) }, out unpaidReceipt), "pre-spawn charge");
+        SpawnRescue beforeCreate = new SpawnRescue();
+        beforeCreate.ItemsConsumed = true;
+        beforeCreate.EntityCreated = false;
+        beforeCreate.Receipt = unpaidReceipt;
+        beforeCreate.Ledger = unpaid;
+        Eq(beforeCreate.RefundOnce(), "refund when create never returned an entity");
+        Eq(!beforeCreate.EntityCreated, "no entity to orphan");
+        Eq(unpaid.Get(wood) == 80, "pre-spawn failure restored materials");
+
+        SpawnRescue uncharged = new SpawnRescue();
+        uncharged.ItemsConsumed = false;
+        uncharged.Ledger = ledger;
+        uncharged.Receipt = receipt;
+        Eq(!uncharged.RefundOnce(), "uncharged failure does not create items");
+    }
+
+    private static void DiagnosticIsBounded()
+    {
+        string boom = "Object reference not set to an instance of an object";
+        for (int i = 0; i < 30; i++)
+            boom += "\n at NightshadeSymmetry.TryPlaceCopy line " + i + " player=76561198000000000";
+        string text = PlacementLifecycle.BoundDiagnostic("awake", "foundation", "left-right", boom, 12, 900);
+        Eq(text.IndexOf("stage=awake", StringComparison.Ordinal) >= 0, "stage is logged");
+        Eq(text.IndexOf("prefab=foundation", StringComparison.Ordinal) >= 0, "prefab is logged");
+        Eq(text.IndexOf("side=left-right", StringComparison.Ordinal) >= 0, "side is logged");
+        Eq(text.Length <= 900, "diagnostic is bounded");
+        int lines = text.Split('\n').Length;
+        Eq(lines <= 13, "stack lines are bounded");
     }
 
     private static void ChargePolicyMatchesVanilla()
