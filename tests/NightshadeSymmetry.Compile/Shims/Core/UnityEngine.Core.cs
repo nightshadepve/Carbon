@@ -86,6 +86,12 @@ namespace UnityEngine
         {
             return local;
         }
+
+        public void SetPositionAndRotation(Vector3 position, Quaternion rotation)
+        {
+            this.position = position;
+            this.rotation = rotation;
+        }
     }
 
     public struct Vector3

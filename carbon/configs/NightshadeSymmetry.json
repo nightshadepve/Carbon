@@ -91,7 +91,8 @@
     "DenyRoad": "too close to a road",
     "DenySupport": "no valid support",
     "DenyStability": "not stable",
-    "DenyMaterials": "not enough materials"
+    "DenyMaterials": "not enough materials",
+    "DenyPose": "exact mirror position was not kept"
   },
   "Documentation": [
     "Permission: nightshadesymmetry.use. Nothing is granted automatically and admin status is not a bypass.",
@@ -99,7 +100,7 @@
     "Reload: c.reload NightshadeSymmetry",
     "Center look: /symmetry center aims at a building block. The center is that block pivot, not the bounds center and not your feet. The two mirror planes are vertical and use the block yaw (forward flattened to the horizontal).",
     "Center here: /symmetry center here uses your feet and your horizontal look direction. Add snap to round that yaw to the nearest 90 degrees.",
-    "Each placement can add at most three copies: left-right, front-back, and the opposite corner. Pieces on an axis are not duplicated. This is reflection, not four 90-degree copies, and it does not use negative scale.",
+    "Each placement can add at most three copies: left-right, front-back, and the opposite corner. Each copy pivot keeps the same distance from the center, the same height, and the mirrored horizontal offset. Pieces on an axis are not duplicated. This is reflection, not four 90-degree copies, and it does not use negative scale. A copy that cannot stay on that exact pose is skipped.",
     "The original piece is placed and charged by vanilla. Each mirrored copy is charged the full default-grade construction cost only after it spawns and stays stable. Creative free-build and tutorial follow Planner.PayForPlacement and do not take items there either.",
     "Eligible pieces are attempted only when their live sockets match a proper rotation of the reflected shape. Chiral stairs are excluded. Unknown prefabs are rejected.",
     "Centers can persist across reload and are cleared when the wipe id, seed, or world size changes. Symmetry is always off after reload, reconnect, death, or permission loss.",

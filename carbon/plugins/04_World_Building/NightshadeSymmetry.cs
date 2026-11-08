@@ -267,6 +267,8 @@ namespace Nightshade.Symmetry
     {
         public const float HardMaxDistance = 80f;
         public const float HardMaxSearchRadius = 6f;
+        public const float ExactPositionEpsilon = 0.001f;
+        public const float ExactAngleEpsilon = 0.05f;
 
         public static Vec3 ReflectVector(Vec3 value, Vec3 normal)
         {
@@ -391,6 +393,8 @@ namespace Nightshade.Symmetry
             if (!found)
                 return false;
             result = new Pose(reflectedPosition, best);
+            if (!SingleMirrorOffset(center, normal, pose.Position, result.Position, ExactPositionEpsilon))
+                return false;
             return true;
         }
 
@@ -416,7 +420,43 @@ namespace Nightshade.Symmetry
             if (!BasisIsProper(rotation))
                 return false;
             List<SocketWorld> expected = ReflectSockets(pose, sockets, center, firstNormal, true, secondNormal);
-            return MatchWorld(sockets, result, expected, positionEpsilon, angleDegrees);
+            if (!MatchWorld(sockets, result, expected, positionEpsilon, angleDegrees))
+                return false;
+            Vec3 midway = ReflectPoint(pose.Position, center, firstNormal);
+            if (!SingleMirrorOffset(center, firstNormal, pose.Position, midway, ExactPositionEpsilon))
+                return false;
+            if (!SingleMirrorOffset(center, secondNormal, midway, result.Position, ExactPositionEpsilon))
+                return false;
+            return true;
+        }
+
+        public static bool SingleMirrorOffset(Vec3 center, Vec3 normal, Vec3 original, Vec3 copy, float epsilon)
+        {
+            Vec3 n = normal.Normalized();
+            if (n.Length < 0.5f)
+                return false;
+            Vec3 from = original - center;
+            Vec3 to = copy - center;
+            if (Math.Abs(copy.Y - original.Y) > epsilon)
+                return false;
+            if (Math.Abs(to.Y - from.Y) > epsilon)
+                return false;
+            float fromNormal = from.Dot(n);
+            float toNormal = to.Dot(n);
+            if (Math.Abs(toNormal + fromNormal) > epsilon)
+                return false;
+            Vec3 fromPerp = from - n * fromNormal;
+            Vec3 toPerp = to - n * toNormal;
+            if ((toPerp - fromPerp).Length > epsilon)
+                return false;
+            return Math.Abs(to.Length - from.Length) <= epsilon;
+        }
+
+        public static bool AcceptSpawnedPivot(Vec3 requested, Vec3 actual, float epsilon)
+        {
+            if (epsilon < 0f)
+                return false;
+            return (requested - actual).Length <= epsilon;
         }
 
         public static List<PlannedCopy> Dedup(Pose original, List<PlannedCopy> copies, float positionEpsilon, float angleDegrees)
@@ -1046,7 +1086,7 @@ namespace Nightshade.Symmetry
 #if !NIGHTSHADE_SYMMETRY_CORE_ONLY
 namespace Oxide.Plugins
 {
-    [Info("NightshadeSymmetry", "Nightshade", "1.0.1")]
+    [Info("NightshadeSymmetry", "Nightshade", "1.0.2")]
     [Description("Permission-based four-way mirror placement across two vertical planes.")]
     public class NightshadeSymmetry : RustPlugin
     {
@@ -1185,7 +1225,8 @@ namespace Oxide.Plugins
                 ["DenyRoad"] = "too close to a road",
                 ["DenySupport"] = "no valid support",
                 ["DenyStability"] = "not stable",
-                ["DenyMaterials"] = "not enough materials"
+                ["DenyMaterials"] = "not enough materials",
+                ["DenyPose"] = "exact mirror position was not kept"
             };
         }
 
@@ -1198,7 +1239,7 @@ namespace Oxide.Plugins
                 "Reload: c.reload NightshadeSymmetry",
                 "Center look: /symmetry center aims at a building block. The center is that block pivot, not the bounds center and not your feet. The two mirror planes are vertical and use the block yaw (forward flattened to the horizontal).",
                 "Center here: /symmetry center here uses your feet and your horizontal look direction. Add snap to round that yaw to the nearest 90 degrees.",
-                "Each placement can add at most three copies: left-right, front-back, and the opposite corner. Pieces on an axis are not duplicated. This is reflection, not four 90-degree copies, and it does not use negative scale.",
+                "Each placement can add at most three copies: left-right, front-back, and the opposite corner. Each copy pivot keeps the same distance from the center, the same height, and the mirrored horizontal offset. Pieces on an axis are not duplicated. This is reflection, not four 90-degree copies, and it does not use negative scale. A copy that cannot stay on that exact pose is skipped.",
                 "The original piece is placed and charged by vanilla. Each mirrored copy is charged the full default-grade construction cost only after it spawns and stays stable. Creative free-build and tutorial follow Planner.PayForPlacement and do not take items there either.",
                 "Eligible pieces are attempted only when their live sockets match a proper rotation of the reflected shape. Chiral stairs are excluded. Unknown prefabs are rejected.",
                 "Centers can persist across reload and are cleared when the wipe id, seed, or world size changes. Symmetry is always off after reload, reconnect, death, or permission loss.",
@@ -1224,8 +1265,17 @@ namespace Oxide.Plugins
                 PrintError("NightshadeSymmetry config could not be read. Defaults were kept in memory: " + ex.Message);
                 config = new PluginConfig();
             }
+            Dictionary<string, string> defaultMessages = DefaultMessages();
             if (config.Messages == null)
-                config.Messages = DefaultMessages();
+                config.Messages = defaultMessages;
+            else
+            {
+                foreach (KeyValuePair<string, string> pair in defaultMessages)
+                {
+                    if (!config.Messages.ContainsKey(pair.Key))
+                        config.Messages[pair.Key] = pair.Value;
+                }
+            }
             if (config.Documentation == null)
                 config.Documentation = DefaultDocs();
             if (config.Eligible == null)
@@ -1633,6 +1683,11 @@ namespace Oxide.Plugins
             }
             Vector3 position = U(copy.Pose.Position);
             Quaternion rotation = U(copy.Pose.Rotation);
+            if (!PlannedPoseIsExact(axes, original.transform.position, copy))
+            {
+                detail = Msg("DenyPose");
+                return false;
+            }
             facts.Duplicate = IsDuplicate(original, position, rotation);
             DecayEntity support;
             Socket_Base female;
@@ -1723,6 +1778,14 @@ namespace Oxide.Plugins
                 else
                     spawned.AttachToBuilding(null);
 
+                rescue.Stage = "pose";
+                if (!SpawnedPoseHeld(spawned, position, rotation))
+                {
+                    AbandonCopy(player, rescue, spawned, taken);
+                    detail = Msg("DenyPose");
+                    return false;
+                }
+
                 rescue.Stage = "identity";
                 ulong mid = NetId(spawned);
                 if (mid == 0 || spawned.IsDestroyed)
@@ -1800,7 +1863,32 @@ namespace Oxide.Plugins
                 UnityEngine.Object.Destroy(created);
                 return null;
             }
+            if (block.transform != null)
+                block.transform.SetPositionAndRotation(position, rotation);
             return block;
+        }
+
+        private static bool PlannedPoseIsExact(Nightshade.Symmetry.Axes axes, Vector3 originalPosition, Nightshade.Symmetry.PlannedCopy copy)
+        {
+            Nightshade.Symmetry.Vec3 original = V(originalPosition);
+            if (copy.Label == "front-back")
+                return Nightshade.Symmetry.MirrorMath.SingleMirrorOffset(axes.Center, axes.Forward, original, copy.Pose.Position, Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon);
+            if (copy.Label == "opposite")
+            {
+                Nightshade.Symmetry.Vec3 midway = Nightshade.Symmetry.MirrorMath.ReflectPoint(original, axes.Center, axes.Right);
+                return Nightshade.Symmetry.MirrorMath.SingleMirrorOffset(axes.Center, axes.Right, original, midway, Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon)
+                    && Nightshade.Symmetry.MirrorMath.SingleMirrorOffset(axes.Center, axes.Forward, midway, copy.Pose.Position, Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon);
+            }
+            return Nightshade.Symmetry.MirrorMath.SingleMirrorOffset(axes.Center, axes.Right, original, copy.Pose.Position, Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon);
+        }
+
+        private static bool SpawnedPoseHeld(BuildingBlock spawned, Vector3 position, Quaternion rotation)
+        {
+            if (spawned == null || spawned.transform == null)
+                return false;
+            if (!Nightshade.Symmetry.MirrorMath.AcceptSpawnedPivot(V(spawned.transform.position), V(position), Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon))
+                return false;
+            return Quaternion.Angle(spawned.transform.rotation, rotation) <= Nightshade.Symmetry.MirrorMath.ExactAngleEpsilon;
         }
 
         private static void AwakeDormantBlock(GameObject gameObject)
@@ -2089,9 +2177,10 @@ namespace Oxide.Plugins
             if (male != null)
             {
                 Vector3 before = placement.position;
+                Quaternion beforeRotation = placement.rotation;
                 if (!male.CheckSocketMods(ref placement))
                     return false;
-                if (Vector3.Distance(before, placement.position) > config.DedupPosition)
+                if (!PoseStayedExact(before, beforeRotation, placement.position, placement.rotation))
                     return false;
             }
             if (terrain)
@@ -2111,12 +2200,20 @@ namespace Oxide.Plugins
                 if (terrainSocket == null)
                     return false;
                 Vector3 before = placement.position;
+                Quaternion beforeRotation = placement.rotation;
                 if (!terrainSocket.CheckSocketMods(ref placement))
                     return false;
-                if (Vector3.Distance(before, placement.position) > config.DedupPosition)
+                if (!PoseStayedExact(before, beforeRotation, placement.position, placement.rotation))
                     return false;
             }
             return true;
+        }
+
+        private static bool PoseStayedExact(Vector3 before, Quaternion beforeRotation, Vector3 after, Quaternion afterRotation)
+        {
+            if (!Nightshade.Symmetry.MirrorMath.AcceptSpawnedPivot(V(before), V(after), Nightshade.Symmetry.MirrorMath.ExactPositionEpsilon))
+                return false;
+            return Quaternion.Angle(beforeRotation, afterRotation) <= Nightshade.Symmetry.MirrorMath.ExactAngleEpsilon;
         }
 
         private static bool PrivilegeBlocked(BasePlayer player, Construction definition, Vector3 position, Quaternion rotation)

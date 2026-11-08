@@ -31,6 +31,7 @@ internal static class Program
         AwakeAndGradeLifecycle();
         SpawnRescueRefundsOnce();
         DiagnosticIsBounded();
+        DistanceAndOffsetStayExact();
         if (failures == 0)
         {
             Console.WriteLine("NightshadeSymmetry core tests passed.");
@@ -436,6 +437,60 @@ internal static class Program
         Eq(text.Length <= 900, "diagnostic is bounded");
         int lines = text.Split('\n').Length;
         Eq(lines <= 13, "stack lines are bounded");
+    }
+
+    private static void DistanceAndOffsetStayExact()
+    {
+        Axes axes;
+        Vec3 look = new Vec3((float)Math.Sin(123.4 * Math.PI / 180.0), 0.4f, (float)Math.Cos(123.4 * Math.PI / 180.0));
+        Eq(Axes.TryCreate(new Vec3(1234.5f, 62.25f, -890.125f), look, false, out axes), "arbitrary center");
+        Vec3 offset = axes.Right * 4.5f + new Vec3(0f, 3.25f, 0f) + axes.Forward * -2.75f;
+        Pose pose = new Pose(axes.Center + offset, Quat.FromYawDegrees(20f));
+        List<SocketSample> shifted = new List<SocketSample>
+        {
+            new SocketSample(new Vec3(0.2f, 0f, 0.4f), new Vec3(0f, 0f, 1f)),
+            new SocketSample(new Vec3(-0.2f, 0f, 0.4f), new Vec3(0f, 0f, 1f)),
+            new SocketSample(new Vec3(0f, 1.5f, 0.4f), new Vec3(0f, 0f, 1f))
+        };
+        List<PlannedCopy> plan = MirrorMath.Plan(pose, shifted, axes, 0.02f, 2f, 0.05f, 2f);
+        Eq(CountRepresentable(plan) == 3, "offset sockets still mirror");
+        float originalDistance = (pose.Position - axes.Center).Length;
+        for (int i = 0; i < plan.Count; i++)
+        {
+            Eq(plan[i].Representable, plan[i].Label + " representable");
+            float copyDistance = (plan[i].Pose.Position - axes.Center).Length;
+            Eq(Math.Abs(copyDistance - originalDistance) <= MirrorMath.ExactPositionEpsilon, plan[i].Label + " distance");
+            Eq(Math.Abs(plan[i].Pose.Position.Y - pose.Position.Y) <= MirrorMath.ExactPositionEpsilon, plan[i].Label + " height");
+            string label = plan[i].Label;
+            if (label == "left-right")
+                Eq(MirrorMath.SingleMirrorOffset(axes.Center, axes.Right, pose.Position, plan[i].Pose.Position, MirrorMath.ExactPositionEpsilon), "left-right offset");
+            else if (label == "front-back")
+                Eq(MirrorMath.SingleMirrorOffset(axes.Center, axes.Forward, pose.Position, plan[i].Pose.Position, MirrorMath.ExactPositionEpsilon), "front-back offset");
+            else
+            {
+                Vec3 mid = MirrorMath.ReflectPoint(pose.Position, axes.Center, axes.Right);
+                Eq(MirrorMath.SingleMirrorOffset(axes.Center, axes.Forward, mid, plan[i].Pose.Position, MirrorMath.ExactPositionEpsilon), "opposite offset");
+            }
+        }
+
+        List<PlannedCopy> triangles = MirrorMath.Plan(pose, SymmetricTriangle(), axes, 0.02f, 2f, 0.05f, 2f);
+        Eq(CountRepresentable(triangles) == 3, "triangle distance set");
+        for (int i = 0; i < triangles.Count; i++)
+        {
+            float copyDistance = (triangles[i].Pose.Position - axes.Center).Length;
+            Eq(Math.Abs(copyDistance - originalDistance) <= MirrorMath.ExactPositionEpsilon, "triangle " + triangles[i].Label);
+        }
+
+        List<SocketSample> unpaired = new List<SocketSample>
+        {
+            new SocketSample(new Vec3(0f, 0f, 0f), new Vec3(0f, 0f, 1f)),
+            new SocketSample(new Vec3(1.25f, 0.2f, 0.4f), new Vec3(0f, 0f, 1f))
+        };
+        Eq(!MirrorMath.TrySingle(pose, unpaired, axes.Center, axes.Right, 0.02f, 2f, out Pose _), "unpaired socket is skipped");
+        Eq(!MirrorMath.TrySingle(pose, unpaired, axes.Center, axes.Forward, 0.02f, 2f, out Pose _), "unpaired depth is skipped");
+
+        Eq(MirrorMath.AcceptSpawnedPivot(pose.Position, pose.Position + axes.Right * 0.0001f, MirrorMath.ExactPositionEpsilon), "numeric noise kept");
+        Eq(!MirrorMath.AcceptSpawnedPivot(pose.Position, pose.Position + axes.Right * 0.05f, MirrorMath.ExactPositionEpsilon), "five centimetre shift rejected");
     }
 
     private static void ChargePolicyMatchesVanilla()
