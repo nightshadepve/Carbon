@@ -1,0 +1,13 @@
+{
+  "Enabled": true,
+  "Group name": "default_unlocked",
+  "Time zone id": "America/New_York",
+  "Wipe weekday": "Thursday",
+  "Wipe ordinal in month (1 = first)": 1,
+  "Wipe hour (0-23, Eastern wall time)": 14,
+  "Wipe minute (0-59)": 0,
+  "Unlock weekday (first one after the wipe)": "Monday",
+  "Unlock hour (0-23, Eastern wall time)": 4,
+  "Unlock minute (0-59)": 0,
+  "Daily schedule wake seconds": 86400
+}

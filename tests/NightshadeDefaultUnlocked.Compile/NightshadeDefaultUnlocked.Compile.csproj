@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <LangVersion>10.0</LangVersion>
+    <!-- Carbon 2.0.262 plugin symbols. Game modules are stubbed; see MissingModuleShims.cs. -->
+    <DefineConstants>CARBON;RUST;OXIDE_PUBLICIZED;UNIX</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <RootNamespace>Oxide.Plugins</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\carbon\plugins\01_Server\NightshadeDefaultUnlocked.cs" />
+    <Compile Include="..\compile-shims\MissingModuleShims.cs" />
+  </ItemGroup>
+</Project>
