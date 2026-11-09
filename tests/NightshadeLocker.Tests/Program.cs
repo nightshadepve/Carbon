@@ -78,7 +78,20 @@ internal static class Program
     {
         Check(NightshadeLockerRules.MayClaim(0, 42, true), "unowned vehicle can be claimed");
         Check(!NightshadeLockerRules.MayClaim(7, 42, true), "another player's vehicle is not claimed");
-        Check(!NightshadeLockerRules.MayReplaceOwner(7, 42), "ownership replacement is never allowed");
+        Check(!NightshadeLockerRules.MayReplaceOwner(7, 42, false, true), "ownership replacement stays off until the config allows it");
+        Check(NightshadeLockerRules.MayReplaceOwner(7, 42, true, true), "a vehicle can change owner when the lock is allowed and replace is on");
+        Check(!NightshadeLockerRules.MayReplaceOwner(7, 42, true, false), "replace does not run when that vehicle cannot be locked");
+        Check(NightshadeLockerRules.PushAllowed(true, false, false, true), "push stays allowed by default even on a locked vehicle");
+        Check(!NightshadeLockerRules.PushAllowed(false, false, false, true), "push can be blocked when both allow flags are off");
+        Check(NightshadeLockerRules.PushAllowed(false, true, true, true), "privilege can still allow a push");
+        Check(NightshadeLockerRules.LockCategory("rfbroadcaster", "other") == "electric", "RF broadcasters are electrical");
+        Check(NightshadeLockerRules.LockCategory("piano.deployed", "other") == "fun", "pianos are instruments");
+        Check(NightshadeLockerRules.LockCategory("chickencoop.deployed", "storage") == "farming", "chicken coops are farming");
+        Check(NightshadeLockerRules.LockCategory("industrialconveyor.deployed", "other") == "industrial", "conveyors are industrial");
+        Check(NightshadeLockerRules.LockCategory("mining_quarry", "other") == "quarry", "quarries have a category");
+        Check(NightshadeLockerRules.SafeText("hello 2468 there", "2468").IndexOf("2468", StringComparison.Ordinal) < 0, "log text strips a code");
+        Check(NightshadeLockerRules.PrivateCodeText("1357", "2468", true).IndexOf("1357", StringComparison.Ordinal) >= 0, "a private code reply contains the code for the asker only");
+        Check(NightshadeLockerRules.Layout.Row <= 26 && NightshadeLockerRules.Layout.WindowWidth <= 700f, "the panel uses slim rows and a compact window");
         Check(!NightshadeLockerRules.ControlAllowed(true), "a loaded rival plugin pauses control");
         Check(NightshadeLockerRules.ControlAllowed(false), "control is allowed when no rival is loaded");
         var denied = NightshadeLockerRules.PlaceDenial(new NightshadeLockerRules.PlaceRequest

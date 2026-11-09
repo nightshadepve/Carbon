@@ -22,7 +22,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeLocker", "Nightshade", "1.0.0")]
+    [Info("NightshadeLocker", "Nightshade", "1.1.0")]
     [Description("Nightshade locks, automatic lock placement, and automatic closing.")]
     public class NightshadeLocker : RustPlugin
     {
@@ -57,7 +57,6 @@ namespace Oxide.Plugins
         private bool worldReady;
         private bool conflict;
         private bool conflictLogged;
-        private bool replaceWarned;
         private bool dlcWarned;
         private int tickCount;
         private ulong flightSkin;
@@ -77,8 +76,8 @@ namespace Oxide.Plugins
             [JsonProperty("Theme source config file")] public string ThemeFile = "NightshadeShop.json";
             [JsonProperty("Logo source config file")] public string LogoFile = "NightshadeInfo.json";
             [JsonProperty("Logo URL fallback")] public string LogoUrl = DefaultLogo;
-            [JsonProperty("Window width")] public float WindowWidth = 760f;
-            [JsonProperty("Window height")] public float WindowHeight = 500f;
+            [JsonProperty("Window width")] public float WindowWidth = NightshadeLockerRules.Layout.WindowWidth;
+            [JsonProperty("Window height")] public float WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
             [JsonProperty("Plugins that pause entity control while loaded", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> ConflictPlugins = new List<string> { "UltimateLocker" };
             [JsonProperty("Warn if NightshadeLockPickup is loaded")] public bool WarnLockPickup = true;
             [JsonProperty("Legacy preferences file under the data directory")] public string LegacyDataFile = "UltimateLocker.json";
@@ -87,7 +86,14 @@ namespace Oxide.Plugins
             [JsonProperty("Allow a lock on a vehicle owned by someone else")] public bool AllowOthersVehicles = false;
             [JsonProperty("Allow a lock on an unowned vehicle")] public bool AllowUnownedVehicles = true;
             [JsonProperty("Claim an unowned vehicle when a lock is placed")] public bool ClaimUnownedVehicles = true;
-            [JsonProperty("Replace another player's vehicle ownership (ignored)")] public bool ReplaceOtherVehicleOwnership = false;
+            [JsonProperty("Replace another player's vehicle ownership when a lock is allowed")] public bool ReplaceOtherVehicleOwnership = true;
+            [JsonProperty("Block wires on a locked electrical entity")] public bool BlockWires = true;
+            [JsonProperty("Block RF frequency changes on a locked broadcaster or receiver")] public bool BlockRf = true;
+            [JsonProperty("Block harvesting and cloning on a locked planter")] public bool BlockFarming = true;
+            [JsonProperty("Block instruments and boom boxes that are locked")] public bool BlockInstruments = true;
+            [JsonProperty("Block turret id, rotate, and mode changes")] public bool BlockTurretControls = true;
+            [JsonProperty("Allow pushing a locked vehicle")] public bool AllowVehiclePush = true;
+            [JsonProperty("Allow pushing a locked vehicle inside your building privilege")] public bool AllowVehiclePushInPrivilege = true;
             [JsonProperty("Key locks only")] public bool KeyLocksOnly = false;
             [JsonProperty("Force team share (true, false, or null)")] public bool? ForceShare = null;
             [JsonProperty("Reset player toggles to defaults once")] public bool ResyncDefaults = false;
@@ -184,8 +190,8 @@ namespace Oxide.Plugins
             if (config.ConflictPlugins == null) config.ConflictPlugins = new List<string> { "UltimateLocker" };
             if (config.LockSkinBlacklist == null) config.LockSkinBlacklist = new List<ulong>();
             if (config.CloserSkinBlacklist == null) config.CloserSkinBlacklist = new List<ulong>();
-            if (config.WindowWidth < 480f) config.WindowWidth = 760f;
-            if (config.WindowHeight < 360f) config.WindowHeight = 500f;
+            if (config.WindowWidth < 480f) config.WindowWidth = NightshadeLockerRules.Layout.WindowWidth;
+            if (config.WindowHeight < 320f) config.WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
             if (config.MinDelay < 1) config.MinDelay = 1;
             if (config.MaxDelay < config.MinDelay) config.MaxDelay = config.MinDelay;
             config.DefaultDelay = NightshadeLockerRules.ClampDelay(config.DefaultDelay, config.MinDelay, config.MaxDelay);
@@ -269,11 +275,6 @@ namespace Oxide.Plugins
             {
                 dlcWarned = true;
                 PrintWarning("DLC ownership checks are off. Use that only on a creative or test server.");
-            }
-            if (config.ReplaceOtherVehicleOwnership && !replaceWarned)
-            {
-                replaceWarned = true;
-                PrintWarning("Replacing another player's vehicle ownership is ignored. NightshadeLocker will not take a vehicle that already has an owner.");
             }
             ticker = timer.Every(1f, Tick);
             Puts("NightshadeLocker ready. Players open it with /" + NightshadeLockerRules.PrimaryCommand + ".");
@@ -452,7 +453,7 @@ namespace Oxide.Plugins
             string verb = args[0].ToLowerInvariant();
             if (verb == "help")
             {
-                Reply(player, "Open the panel with /" + NightshadeLockerRules.PrimaryCommand + ". Also: toggle, place, closer, uncloser, code, codeall, guest, delay, closetoggle.");
+                Reply(player, "Open the panel with /" + NightshadeLockerRules.PrimaryCommand + ". Also: toggle, place, closer, uncloser, code, codeall, guest, show, delay, closetoggle.");
                 return;
             }
             if (verb == "admin" || forceAdmin)
@@ -476,6 +477,7 @@ namespace Oxide.Plugins
                 case "code": SetLookCode(player, args.Length > 1 ? args[1] : null, false); break;
                 case "codeall": SetAllCodes(player, args.Length > 1 ? args[1] : null); break;
                 case "guest": SetGuest(player, args.Length > 1 ? args[1] : null, false); break;
+                case "show": ShowCode(player, false); break;
                 case "delay": SetLookDelay(player, args.Length > 1 ? args[1] : null); break;
                 default:
                     Reply(player, "Unknown option. Open /" + NightshadeLockerRules.PrimaryCommand + " or use help.");
@@ -511,7 +513,7 @@ namespace Oxide.Plugins
         {
             if (args.Length == 0)
             {
-                Reply(player, "Admin: status, grants, import, lock, unlock, remove, code, codeall, lockall, unlockall, removeall.");
+                Reply(player, "Admin: status, grants, import, show, lock, unlock, remove, code, codeall, lockall, unlockall, removeall.");
                 return;
             }
             string verb = args[0].ToLowerInvariant();
@@ -522,6 +524,7 @@ namespace Oxide.Plugins
             var target = Look(player);
             switch (verb)
             {
+                case "show": ShowCode(player, true); break;
                 case "lock": SetLockFlag(player, target, true); break;
                 case "unlock": SetLockFlag(player, target, false); break;
                 case "remove": RemoveLook(player, args.Any(a => a.Equals("norefund", StringComparison.OrdinalIgnoreCase))); break;
@@ -754,8 +757,15 @@ namespace Oxide.Plugins
             };
             ShareLock(player, created, pref, record);
             store.Locks[record.LockId.ToString()] = record;
-            if (match != null && (match.Category == "vehicles" || match.Category == "naval") && NightshadeLockerRules.MayClaim(entity.OwnerID, player.userID, config.ClaimUnownedVehicles))
-                entity.OwnerID = player.userID;
+            if (match != null && (match.Category == "vehicles" || match.Category == "naval"))
+            {
+                bool bypass = HasPerm(player, PermVehicleBypass);
+                bool team = IsWith(player, entity.OwnerID);
+                if (NightshadeLockerRules.MayClaim(entity.OwnerID, player.userID, config.ClaimUnownedVehicles))
+                    entity.OwnerID = player.userID;
+                else if (NightshadeLockerRules.MayReplaceOwner(entity.OwnerID, player.userID, config.ReplaceOtherVehicleOwnership, (config.AllowOthersVehicles || bypass) && !team))
+                    entity.OwnerID = player.userID;
+            }
             SaveStore();
             _ = tell;
             return choice.Free ? "A lock was placed without using one from your inventory." : "Lock placed.";
@@ -1147,6 +1157,105 @@ namespace Oxide.Plugins
         private object OnTurretAuthorize(AutoTurret turret, BasePlayer player) => Deny(player, turret);
         private object OnTurretModeToggle(AutoTurret turret, BasePlayer player) => Deny(player, turret);
         private object CanUpdateSign(BasePlayer player, Signage sign) => Deny(player, sign);
+        private object CanLootEntity(BasePlayer player, PlanterBox planter) => Deny(player, planter);
+        private object CanLootEntity(BasePlayer player, Composter composter) => Deny(player, composter);
+        private object CanLootEntity(BasePlayer player, MixingTable table) => Deny(player, table);
+        private object CanLootEntity(BasePlayer player, ChickenCoop coop) => Deny(player, coop);
+        private object CanLootEntity(BasePlayer player, Beehive hive) => Deny(player, hive);
+        private object CanLootEntity(BasePlayer player, ComputerStation station) => Deny(player, station);
+        private object CanLootEntity(BasePlayer player, RepairBench bench) => Deny(player, bench);
+        private object CanLootEntity(BasePlayer player, ResearchTable table) => Deny(player, table);
+        private object CanLootEntity(BasePlayer player, WeaponRack rack) => Deny(player, rack);
+        private object CanLootEntity(BasePlayer player, HitchTrough trough) => Deny(player, trough);
+        private object CanLootEntity(BasePlayer player, Workbench bench) => Deny(player, bench);
+        private object CanLootEntity(BasePlayer player, Recycler recycler) => Deny(player, recycler);
+        private object CanLootEntity(BasePlayer player, IndustrialCrafter crafter) => Deny(player, crafter);
+        private object CanLootEntity(BasePlayer player, LiquidContainer container) => Deny(player, container);
+        private object CanAdministerVending(BasePlayer player, VendingMachine machine) => Deny(player, machine);
+
+        private object OnWireConnect(BasePlayer player, IOEntity entity, int inputSlot, IOEntity other, int outputSlot)
+        {
+            _ = inputSlot;
+            _ = outputSlot;
+            if (!config.BlockWires) return null;
+            return Deny(player, entity) ?? Deny(player, other);
+        }
+
+        private object OnRfFrequencyChanged(IRFObject rf, int frequency, BasePlayer player)
+        {
+            _ = frequency;
+            if (!config.BlockRf) return null;
+            return Deny(player, rf as BaseEntity);
+        }
+
+        private object OnGrowableGather(GrowableEntity plant, BasePlayer player)
+        {
+            if (!config.BlockFarming || plant == null) return null;
+            var parent = plant.GetParentEntity();
+            return Deny(player, parent) ?? Deny(player, plant);
+        }
+
+        private object CanTakeCutting(BasePlayer player, GrowableEntity plant)
+        {
+            if (!config.BlockFarming || plant == null) return null;
+            return Deny(player, plant.GetParentEntity()) ?? Deny(player, plant);
+        }
+
+        private object OnHorseLead(RidableHorse horse, BasePlayer player) => Deny(player, horse);
+
+        private object OnVehiclePush(BaseVehicle vehicle, BasePlayer player)
+        {
+            if (conflict || vehicle == null || player == null) return null;
+            var lck = vehicle.GetSlot(BaseEntity.Slot.Lock) as BaseLock;
+            bool locked = lck != null && lck.HasFlag(BaseEntity.Flags.Locked) && !Bypass(player) && !lck.GetPlayerLockPermission(player);
+            if (NightshadeLockerRules.PushAllowed(config.AllowVehiclePush, config.AllowVehiclePushInPrivilege, HasPrivilege(player, vehicle), locked))
+                return null;
+            return false;
+        }
+
+        private object OnButtonPress(PressButton button, BasePlayer player) => Deny(player, button);
+        private object OnTurretIdentifierSet(AutoTurret turret, BasePlayer player)
+        {
+            if (!config.BlockTurretControls) return null;
+            return Deny(player, turret);
+        }
+        private object OnTurretRotate(AutoTurret turret, BasePlayer player)
+        {
+            if (!config.BlockTurretControls) return null;
+            return Deny(player, turret);
+        }
+        private object OnTurretToggle(AutoTurret turret, BasePlayer player)
+        {
+            if (!config.BlockTurretControls) return null;
+            return Deny(player, turret);
+        }
+        private object OnSamSiteModeToggle(SamSite site, BasePlayer player) => Deny(player, site);
+        private object OnEngineStart(BaseVehicle vehicle, BasePlayer player) => Deny(player, vehicle);
+        private object OnLiftUse(ModularCarGarage lift, BasePlayer player) => Deny(player, lift);
+        private object OnElevatorButtonPress(Elevator elevator, BasePlayer player) => Deny(player, elevator);
+        private object OnQuarryToggled(MiningQuarry quarry, BasePlayer player) => Deny(player, quarry);
+        private object OnQuarryGather(MiningQuarry quarry, Item item, BasePlayer player)
+        {
+            _ = item;
+            return Deny(player, quarry);
+        }
+        private object OnBoomboxStationUpdate(BaseEntity box, BasePlayer player)
+        {
+            if (!config.BlockInstruments) return null;
+            return Deny(player, box);
+        }
+        private object OnRackedWeaponMount(Item item, BasePlayer player, WeaponRack rack)
+        {
+            _ = item;
+            return Deny(player, rack);
+        }
+        private object OnConveyorFiltersChange(IndustrialConveyor conveyor, BasePlayer player) => Deny(player, conveyor);
+        private object OnCCTVDirectionChange(CCTV_RC camera, BasePlayer player) => Deny(player, camera);
+        private object OnPhoneDial(Telephone phone, string number, BasePlayer player)
+        {
+            _ = number;
+            return Deny(player, phone);
+        }
 
         private object Deny(BasePlayer player, BaseEntity entity)
         {
@@ -1248,6 +1357,31 @@ namespace Oxide.Plugins
             if (!staff) pref.Code = pin;
             SaveStore();
             Reply(player, "Code updated.");
+        }
+
+        private void ShowCode(BasePlayer player, bool staff)
+        {
+            var entity = Look(player);
+            var code = entity != null ? entity.GetSlot(BaseEntity.Slot.Lock) as CodeLock : null;
+            if (code == null) code = entity as CodeLock;
+            if (code == null) { Reply(player, "Look at a code lock."); return; }
+            if (!staff && !CanManage(player, code.GetParentEntity(), code))
+            {
+                Reply(player, "You cannot read that code.");
+                return;
+            }
+            if (!staff && Pref(player).Streamer)
+            {
+                Reply(player, "Streamer mode is on, so the code stays off this chat.");
+                return;
+            }
+            if (!code.hasCode || string.IsNullOrEmpty(code.code))
+            {
+                Reply(player, "That lock has no code.");
+                return;
+            }
+            string guest = code.hasGuestCode && !string.IsNullOrEmpty(code.guestCode) ? " Guest " + code.guestCode + "." : string.Empty;
+            Reply(player, "Code " + code.code + "." + guest);
         }
 
         private void SetGuest(BasePlayer player, string pin, bool fromUi)
@@ -1484,6 +1618,18 @@ namespace Oxide.Plugins
             if (entity is WeaponRack) return "rack";
             if (entity is NeonSign) return "neon";
             if (entity is Signage) return "sign";
+            if (entity is ChickenCoop) return "farming";
+            if (entity is Beehive) return "farming";
+            if (entity is HitchTrough) return "farming";
+            if (entity is WaterCatcher) return "farming";
+            if (entity is ComputerStation || entity is RepairBench || entity is ResearchTable || entity is Workbench || entity is Recycler) return "crafting";
+            if (entity is IOEntity) return "electric";
+            if (entity is RFBroadcaster || entity is RFReceiver || entity is Telephone) return "electric";
+            if (entity is IndustrialCrafter || entity is IndustrialConveyor) return "industrial";
+            if (entity is MiningQuarry) return "quarry";
+            if (entity is PressButton || entity is SmartSwitch || entity is TimerSwitch || entity is FuelGenerator) return "electric";
+            if (entity is Elevator || entity is ModularCarGarage || entity is SearchLight || entity is CCTV_RC) return "electric";
+            if (entity is BoomBox || entity is InstrumentTool || entity is BaseArcadeMachine) return "fun";
             if (entity is HotAirBalloon) return "balloon";
             if (entity is BaseVehicle) return "vehicle";
             if (entity is StorageContainer) return "storage";
@@ -1742,9 +1888,20 @@ namespace Oxide.Plugins
             return string.IsNullOrEmpty(config.LogoUrl) ? DefaultLogo : config.LogoUrl;
         }
 
+        private class Row
+        {
+            public string Kind = "toggle";
+            public string Text;
+            public string Command;
+            public bool On;
+            public bool Live = true;
+            public string Value;
+        }
+
         private void OpenUi(BasePlayer player, string page)
         {
             if (!CanUse(player)) return;
+            if (page != "places" && page != "closing" && page != "code") page = "locks";
             uiPage[player.userID] = page;
             var palette = LoadPalette();
             var pref = Pref(player);
@@ -1752,9 +1909,7 @@ namespace Oxide.Plugins
             var c = new CuiElementContainer();
             c.Add(new CuiElement
             {
-                Name = UiRoot,
-                Parent = "Overlay",
-                DestroyUi = UiRoot,
+                Name = UiRoot, Parent = "Overlay", DestroyUi = UiRoot,
                 Components =
                 {
                     new CuiImageComponent { Color = Hex(palette.Overlay), BlocksRaycast = true },
@@ -1767,131 +1922,210 @@ namespace Oxide.Plugins
             string frame = UiRoot + ".Frame";
             c.Add(new CuiElement
             {
-                Name = frame,
-                Parent = UiRoot,
+                Name = frame, Parent = UiRoot,
                 Components =
                 {
                     new CuiImageComponent { Color = Hex(palette.Background) },
                     new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = (-w / 2f).ToString(CultureInfo.InvariantCulture) + " " + (-h / 2f).ToString(CultureInfo.InvariantCulture), OffsetMax = (w / 2f).ToString(CultureInfo.InvariantCulture) + " " + (h / 2f).ToString(CultureInfo.InvariantCulture) }
                 }
             });
-            string header = Box(c, frame, palette.Header, 0, h - 58, w, h);
-            Box(c, frame, palette.Accent, 0, h - 62, w, h - 58);
+            string header = Box(c, frame, palette.Header, 0, h - NightshadeLockerRules.Layout.Header, w, h);
+            Box(c, frame, palette.Accent, 0, h - NightshadeLockerRules.Layout.Header - 2, w, h - NightshadeLockerRules.Layout.Header);
             c.Add(new CuiElement
             {
-                Name = CuiHelper.GetGuid(),
-                Parent = header,
+                Name = CuiHelper.GetGuid(), Parent = header,
                 Components =
                 {
                     new CuiRawImageComponent { Url = Logo(), Color = "1 1 1 1" },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "10 8", OffsetMax = "50 48" }
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "14 9", OffsetMax = "42 37" }
                 }
             });
-            Label(c, header, "NIGHTSHADE LOCKER", 20, palette.Text, TextAnchor.MiddleLeft, 58, 18, 460, 52, true);
-            Label(c, header, palette.Tagline, 12, palette.Accent, TextAnchor.MiddleLeft, 58, 4, 460, 22, false);
-            Button(c, header, UiCmd + " close", palette.Danger, w - 46, 10, w - 10, 46, "X", 16, palette.DangerText);
-            float tabY = h - 100;
-            Button(c, frame, UiCmd + " page locks", page == "locks" ? palette.Accent : palette.Button, 16, tabY, 150, tabY + 30, "LOCKS", 13, page == "locks" ? palette.AccentText : palette.ButtonText);
-            Button(c, frame, UiCmd + " page closing", page == "closing" ? palette.Accent : palette.Button, 158, tabY, 320, tabY + 30, "CLOSING", 13, page == "closing" ? palette.AccentText : palette.ButtonText);
-            Button(c, frame, UiCmd + " page code", page == "code" ? palette.Accent : palette.Button, 328, tabY, 470, tabY + 30, "CODE", 13, page == "code" ? palette.AccentText : palette.ButtonText);
-            if (conflict) Label(c, frame, "Paused. Another locker plugin is still loaded.", 12, palette.DangerText, TextAnchor.MiddleLeft, 480, tabY, w - 16, tabY + 30, false);
-            var lines = page == "closing" ? CloseLines(player, pref) : page == "code" ? CodeLines(pref) : LockLines(player, pref);
-            int rowH = 36;
-            int contentH = Math.Max(220, lines.Count * rowH + 8);
+            Label(c, header, "Nightshade Locker", 16, palette.Text, TextAnchor.MiddleLeft, 50, 16, 420, 40, true);
+            Label(c, header, palette.Tagline, 10, palette.SubText, TextAnchor.MiddleLeft, 50, 4, 420, 18, false);
+            Button(c, header, UiCmd + " close", palette.Danger, w - 36, 11, w - 12, 35, "X", 12, palette.DangerText);
+            float tabY = h - NightshadeLockerRules.Layout.Header - 2 - NightshadeLockerRules.Layout.Tab - 8;
+            DrawTab(c, frame, palette, "locks", "Locks", page, 16, tabY);
+            DrawTab(c, frame, palette, "places", "Places", page, 112, tabY);
+            DrawTab(c, frame, palette, "closing", "Closing", page, 214, tabY);
+            DrawTab(c, frame, palette, "code", "Code", page, 322, tabY);
+            if (conflict) Label(c, frame, "Paused while the other locker is loaded.", 11, palette.DangerText, TextAnchor.MiddleRight, 420, tabY, w - 16, tabY + 22, false);
+            var rows = page == "places" ? PlaceRows(pref) : page == "closing" ? CloseRows(player, pref) : page == "code" ? CodeRows(pref) : LockRows(player, pref);
+            int contentH = 12;
+            for (int i = 0; i < rows.Count; i++)
+                contentH += rows[i].Kind == "section" ? NightshadeLockerRules.Layout.Section : rows[i].Kind == "field" ? 36 : NightshadeLockerRules.Layout.Row + NightshadeLockerRules.Layout.RowGap;
+            contentH = Math.Max(contentH, 80);
             string scroll = frame + ".Scroll";
             c.Add(new CuiElement
             {
-                Name = scroll,
-                Parent = frame,
+                Name = scroll, Parent = frame,
                 Components =
                 {
                     new CuiImageComponent { Color = Hex(palette.Panel), BlocksRaycast = true },
                     new CuiNeedsCursorComponent(),
                     new CuiScrollViewComponent
                     {
-                        Vertical = true,
-                        Horizontal = false,
+                        Vertical = true, Horizontal = false,
                         MovementType = ScrollRect.MovementType.Clamped,
-                        Elasticity = 0.1f,
-                        Inertia = true,
-                        DecelerationRate = 0.135f,
-                        ScrollSensitivity = 40f,
+                        Elasticity = 0.08f, Inertia = true, DecelerationRate = 0.12f, ScrollSensitivity = 28f,
                         ContentTransform = new CuiRectTransform { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = "0 -" + contentH, OffsetMax = "0 0", Pivot = "0.5 1" },
-                        VerticalScrollbar = new CuiScrollbar { Size = 8, AutoHide = false, HandleColor = Hex(palette.Accent), TrackColor = Hex(palette.Panel) }
+                        VerticalScrollbar = new CuiScrollbar { Size = 4, AutoHide = true, HandleColor = Hex(palette.Accent), TrackColor = Hex(palette.Panel) }
                     },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "12 12", OffsetMax = (w - 12).ToString(CultureInfo.InvariantCulture) + " " + (tabY - 8).ToString(CultureInfo.InvariantCulture) }
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "14 12", OffsetMax = (w - 14).ToString(CultureInfo.InvariantCulture) + " " + (tabY - 8).ToString(CultureInfo.InvariantCulture) }
                 }
             });
-            for (int i = 0; i < lines.Count; i++)
+            float cursor = 6;
+            float inner = w - 46;
+            for (int i = 0; i < rows.Count; i++)
             {
-                var line = lines[i];
-                float top = i * rowH;
-                string row = TopBox(c, scroll, i % 2 == 0 ? palette.Card : palette.Panel, 0, top, w - 40, rowH);
-                Label(c, row, line.Text, 13, palette.Text, TextAnchor.MiddleLeft, 10, 4, w - 190, rowH - 4, false);
-                if (!string.IsNullOrEmpty(line.Command))
-                    Button(c, row, line.Command, line.On ? palette.Accent : palette.Button, w - 176, 4, w - 64, rowH - 4, line.On ? "ON" : "OFF", 12, line.On ? palette.AccentText : palette.ButtonText);
+                var row = rows[i];
+                if (row.Kind == "section")
+                {
+                    Label(c, scroll, row.Text.ToUpperInvariant(), 10, palette.SubText, TextAnchor.LowerLeft, 8, contentH - cursor - 16, inner - 8, contentH - cursor, true);
+                    cursor += NightshadeLockerRules.Layout.Section;
+                    continue;
+                }
+                if (row.Kind == "note")
+                {
+                    Label(c, scroll, row.Text, 11, palette.SubText, TextAnchor.MiddleLeft, 8, contentH - cursor - 20, inner - 8, contentH - cursor, false);
+                    cursor += 22;
+                    continue;
+                }
+                if (row.Kind == "field")
+                {
+                    Label(c, scroll, row.Text, 11, palette.SubText, TextAnchor.MiddleLeft, 8, contentH - cursor - 30, 120, contentH - cursor - 6, false);
+                    string box = Box(c, scroll, palette.Card, 124, contentH - cursor - 30, inner - 8, contentH - cursor - 4);
+                    c.Add(new CuiElement
+                    {
+                        Name = CuiHelper.GetGuid(), Parent = box,
+                        Components =
+                        {
+                            new CuiInputFieldComponent { Text = row.Value ?? string.Empty, Command = row.Command ?? string.Empty, FontSize = 13, Color = Hex(palette.Text), Align = TextAnchor.MiddleLeft, Font = FontReg, CharsLimit = 4, NeedsKeyboard = true },
+                            new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "8 0", OffsetMax = "-8 0" }
+                        }
+                    });
+                    cursor += 36;
+                    continue;
+                }
+                float top = cursor;
+                float bottom = contentH - top - NightshadeLockerRules.Layout.Row;
+                string tone = row.Live ? palette.Text : palette.SubText;
+                if (!string.IsNullOrEmpty(row.Command) && row.Live)
+                {
+                    c.Add(new CuiElement
+                    {
+                        Name = CuiHelper.GetGuid(), Parent = scroll,
+                        Components =
+                        {
+                            new CuiButtonComponent { Command = row.Command, Color = "0 0 0 0", BlocksRaycast = true },
+                            new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = "0 " + (-(top + NightshadeLockerRules.Layout.Row)).ToString(CultureInfo.InvariantCulture), OffsetMax = inner.ToString(CultureInfo.InvariantCulture) + " " + (-top).ToString(CultureInfo.InvariantCulture) }
+                        }
+                    });
+                }
+                Label(c, scroll, row.Text, 12, tone, TextAnchor.MiddleLeft, 8, bottom, inner - 64, bottom + NightshadeLockerRules.Layout.Row, false);
+                DrawSwitch(c, scroll, palette, inner - 46, bottom + 6, row.On, row.Live);
+                cursor += NightshadeLockerRules.Layout.Row + NightshadeLockerRules.Layout.RowGap;
+                _ = bottom;
             }
             CuiHelper.AddUi(player, c);
         }
 
-        private class Line
+        private void DrawTab(CuiElementContainer c, string parent, Palette palette, string id, string title, string current, float x, float y)
         {
-            public string Text;
-            public string Command;
-            public bool On;
+            bool on = current == id;
+            Button(c, parent, UiCmd + " page " + id, on ? palette.Card : palette.Background, x, y, x + 88, y + 22, title, 12, on ? palette.AccentText : palette.SubText);
+            if (on) Box(c, parent, palette.Accent, x + 16, y, x + 72, y + 2);
         }
 
-        private List<Line> LockLines(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
+        private static void DrawSwitch(CuiElementContainer c, string parent, Palette palette, float x, float y, bool on, bool live)
         {
-            var lines = new List<Line>();
+            string track = on && live ? palette.Accent : palette.Button;
+            Box(c, parent, track, x, y, x + 34, y + 14);
+            float knob = on ? x + 18 : x + 2;
+            Box(c, parent, live ? palette.Text : palette.SubText, knob, y + 2, knob + 10, y + 12);
+        }
+
+        private List<Row> LockRows(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
+        {
             bool autoPerm = HasPerm(player, PermAuto) || IsStaff(player);
-            lines.Add(new Line { Text = autoPerm ? "Automatic lock placement" : "Automatic lock placement (needs nightshadelocker.autolock)", Command = autoPerm ? UiCmd + " toggle auto" : null, On = pref.Auto });
-            lines.Add(new Line { Text = "Use a key lock when no code lock is in your inventory", Command = UiCmd + " toggle key", On = pref.KeyFallback });
-            lines.Add(new Line { Text = config.ForceShare.HasValue ? "Share with your team (set by the server)" : "Share new locks with your team", Command = config.ForceShare.HasValue ? null : UiCmd + " toggle share", On = WantsShare(pref) });
-            lines.Add(new Line { Text = "Streamer mode hides your saved code in this panel", Command = UiCmd + " toggle stream", On = pref.Streamer });
-            lines.Add(new Line { Text = "Use the Flight Control code lock skin when you own it", Command = UiCmd + " toggle skin", On = pref.FlightSkin });
-            lines.Add(new Line { Text = "Lock a vehicle when you get off", Command = UiCmd + " toggle dismount", On = pref.LockOnDismount });
-            foreach (var pair in config.LockCategories)
+            bool closePerm = HasPerm(player, PermClose) || IsStaff(player);
+            var rows = new List<Row>();
+            rows.Add(new Row { Kind = "section", Text = "Automatic" });
+            rows.Add(new Row { Text = autoPerm ? "Place locks for me" : "Place locks for me  (needs autolock)", Command = autoPerm ? UiCmd + " toggle auto" : null, On = pref.Auto, Live = autoPerm });
+            rows.Add(new Row { Text = "Key lock if no code lock is on me", Command = UiCmd + " toggle key", On = pref.KeyFallback });
+            rows.Add(new Row { Text = "Lock the vehicle when I get off", Command = UiCmd + " toggle dismount", On = pref.LockOnDismount });
+            rows.Add(new Row { Text = closePerm ? "Close doors for me" : "Close doors for me  (needs autoclose)", Command = closePerm ? UiCmd + " toggle close" : null, On = pref.AutoClose, Live = closePerm });
+            rows.Add(new Row { Kind = "section", Text = "Sharing" });
+            rows.Add(new Row { Text = config.ForceShare.HasValue ? "Team share is set by the server" : "Share new locks with my team", Command = config.ForceShare.HasValue ? null : UiCmd + " toggle share", On = WantsShare(pref), Live = !config.ForceShare.HasValue });
+            rows.Add(new Row { Kind = "section", Text = "Privacy" });
+            rows.Add(new Row { Text = "Streamer mode", Command = UiCmd + " toggle stream", On = pref.Streamer });
+            rows.Add(new Row { Text = "Flight Control skin when I own it", Command = UiCmd + " toggle skin", On = pref.FlightSkin });
+            return rows;
+        }
+
+        private List<Row> PlaceRows(NightshadeLockerRules.PlayerPref pref)
+        {
+            var rows = new List<Row>();
+            string section = string.Empty;
+            var order = NightshadeLockerRules.CategoryOrder();
+            for (int i = 0; i < order.Length; i++)
             {
-                if (!pair.Value) continue;
-                string key = pair.Key;
-                lines.Add(new Line
+                string key = order[i];
+                string next = NightshadeLockerRules.SectionFor(key);
+                if (next != section)
                 {
-                    Text = "Auto lock: " + NightshadeLockerRules.Label(key),
-                    Command = UiCmd + " lock " + key,
-                    On = pref.LockOn(key)
+                    section = next;
+                    rows.Add(new Row { Kind = "section", Text = section });
+                }
+                bool server = CategoryOn(config.LockCategories, key);
+                rows.Add(new Row
+                {
+                    Text = NightshadeLockerRules.Label(key) + (server ? string.Empty : "   server off"),
+                    Command = server ? UiCmd + " lock " + key : null,
+                    On = pref.LockOn(key),
+                    Live = server
                 });
             }
-            return lines;
+            return rows;
         }
 
-        private List<Line> CloseLines(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
+        private List<Row> CloseRows(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
         {
-            var lines = new List<Line>();
             bool perm = HasPerm(player, PermClose) || IsStaff(player);
-            lines.Add(new Line { Text = perm ? "Automatic closing" : "Automatic closing (needs nightshadelocker.autoclose)", Command = perm ? UiCmd + " toggle close" : null, On = pref.AutoClose });
-            lines.Add(new Line { Text = "Delay " + pref.CloseDelay + " seconds (server " + config.MinDelay + "-" + config.MaxDelay + ")", Command = UiCmd + " delay down", On = false });
-            lines.Add(new Line { Text = "Raise the closing delay", Command = UiCmd + " delay up", On = true });
-            bool any = false;
-            foreach (var pair in config.CloseCategories)
+            var rows = new List<Row>();
+            rows.Add(new Row { Kind = "section", Text = "Closing" });
+            rows.Add(new Row { Text = perm ? "Automatic closing" : "Automatic closing  (needs autoclose)", Command = perm ? UiCmd + " toggle close" : null, On = pref.AutoClose, Live = perm });
+            rows.Add(new Row { Text = "Delay " + pref.CloseDelay + "s    shorter", Command = UiCmd + " delay down", On = false });
+            rows.Add(new Row { Text = "Delay " + pref.CloseDelay + "s    longer", Command = UiCmd + " delay up", On = true });
+            rows.Add(new Row { Kind = "section", Text = "Which doors" });
+            string[] order = { "door", "double", "window", "garage", "hatch", "external", "fence", "legacy" };
+            for (int i = 0; i < order.Length; i++)
             {
-                if (!pair.Value) continue;
-                any = true;
-                lines.Add(new Line { Text = "Auto close: " + NightshadeLockerRules.Label(pair.Key), Command = UiCmd + " close " + pair.Key, On = pref.CloseOn(pair.Key) });
+                string key = order[i];
+                bool server = CategoryOn(config.CloseCategories, key);
+                rows.Add(new Row
+                {
+                    Text = NightshadeLockerRules.Label(key) + (server ? string.Empty : "   server off"),
+                    Command = server ? UiCmd + " close " + key : null,
+                    On = pref.CloseOn(key),
+                    Live = server
+                });
             }
-            if (!any) lines.Add(new Line { Text = "The server has not enabled any closing types." });
-            return lines;
+            return rows;
         }
 
-        private List<Line> CodeLines(NightshadeLockerRules.PlayerPref pref)
+        private List<Row> CodeRows(NightshadeLockerRules.PlayerPref pref)
         {
-            var lines = new List<Line>();
-            lines.Add(new Line { Text = pref.Streamer ? "Your code is hidden." : (NightshadeLockerRules.PinValid(pref.Code) ? "Saved code: " + pref.Code : "No code is saved yet. Enter one below.") });
-            lines.Add(new Line { Text = "Guest code " + (pref.GuestEnabled ? "is on" : "is off"), Command = UiCmd + " toggle guest", On = pref.GuestEnabled });
-            lines.Add(new Line { Text = "Apply the saved code to your locks", Command = UiCmd + " apply", On = true });
-            lines.Add(new Line { Text = "Type a new code in chat: /" + NightshadeLockerRules.PrimaryCommand + " code ####" });
-            lines.Add(new Line { Text = "Type a guest code: /" + NightshadeLockerRules.PrimaryCommand + " guest ####" });
-            return lines;
+            var rows = new List<Row>();
+            rows.Add(new Row { Kind = "section", Text = "Your code" });
+            bool hide = pref.Streamer;
+            rows.Add(new Row { Kind = "field", Text = "Code", Value = hide ? string.Empty : pref.Code, Command = UiCmd + " setpin" });
+            rows.Add(new Row { Kind = "note", Text = hide ? "Streamer mode is hiding the saved code." : "Four digits. Enter replaces the saved code." });
+            rows.Add(new Row { Kind = "section", Text = "Guest" });
+            rows.Add(new Row { Text = "Guest code on new locks", Command = UiCmd + " toggle guest", On = pref.GuestEnabled });
+            rows.Add(new Row { Kind = "field", Text = "Guest", Value = hide ? string.Empty : pref.Guest, Command = UiCmd + " setguest" });
+            rows.Add(new Row { Kind = "section", Text = "Apply" });
+            rows.Add(new Row { Text = "Write the saved code onto my locks", Command = UiCmd + " apply", On = true });
+            return rows;
         }
 
         private void UiAction(BasePlayer player, string[] args)
@@ -1940,6 +2174,17 @@ namespace Oxide.Plugins
                 int delta = args[1] == "up" ? 5 : -5;
                 pref.CloseDelay = NightshadeLockerRules.ClampDelay(pref.CloseDelay + delta, config.MinDelay, config.MaxDelay);
             }
+            else if (verb == "setpin" && args.Length > 1)
+            {
+                if (NightshadeLockerRules.PinValid(args[1])) pref.Code = args[1];
+                else Reply(player, "Use 4 digits.");
+            }
+            else if (verb == "setguest" && args.Length > 1)
+            {
+                if (args[1] == "clear" || args[1].Length == 0) { pref.Guest = string.Empty; pref.GuestEnabled = false; }
+                else if (NightshadeLockerRules.PinValid(args[1])) { pref.Guest = args[1]; pref.GuestEnabled = true; }
+                else Reply(player, "Use 4 digits.");
+            }
             else if (verb == "apply")
             {
                 if (!NightshadeLockerRules.PinValid(pref.Code)) Reply(player, "Save a 4 digit code first.");
@@ -1949,7 +2194,8 @@ namespace Oxide.Plugins
             OpenUi(player, page);
         }
 
-        private void OnPlayerInput(BasePlayer player, InputState input)
+
+            private void OnPlayerInput(BasePlayer player, InputState input)
         {
             if (!worldReady || conflict || !config.ProximityButton || player == null || input == null) return;
             if (!input.WasJustPressed(BUTTON.FIRE_THIRD)) return;
@@ -2309,11 +2555,31 @@ namespace Oxide.Plugins
             return claimUnowned && owner == 0 && actor != 0;
         }
 
-        public static bool MayReplaceOwner(ulong owner, ulong actor)
+        public static bool MayReplaceOwner(ulong owner, ulong actor, bool replaceOthers, bool allowedOnThatVehicle)
         {
-            _ = owner;
-            _ = actor;
-            return false;
+            return replaceOthers && allowedOnThatVehicle && owner != 0 && actor != 0 && owner != actor;
+        }
+
+        public static bool PushAllowed(bool allowPush, bool allowInPrivilege, bool hasPrivilege, bool blockedByLock)
+        {
+            if (!blockedByLock) return true;
+            if (allowPush) return true;
+            return allowInPrivilege && hasPrivilege;
+        }
+
+        public static string PrivateCodeText(string code, string guest, bool includeGuest)
+        {
+            if (!PinValid(code)) return "That lock has no code.";
+            string text = "Code " + code + ".";
+            if (includeGuest && PinValid(guest)) text += " Guest " + guest + ".";
+            return text;
+        }
+
+        public static string SafeText(string message, string secret)
+        {
+            if (string.IsNullOrEmpty(message)) return string.Empty;
+            if (string.IsNullOrEmpty(secret)) return message;
+            return message.Replace(secret, "****");
         }
 
         public static bool SkinBlocked(ulong skin, IList<ulong> blocked)
@@ -2367,6 +2633,8 @@ namespace Oxide.Plugins
             string close = CloseCategory(shortPrefab);
             if (close == "window") return "windows";
             if (close != null) return "doors";
+            string named = CategoryFromName(shortPrefab);
+            if (named != null) return named;
             switch (kind)
             {
                 case "door": return "doors";
@@ -2388,6 +2656,12 @@ namespace Oxide.Plugins
                 case "sign": return "signs";
                 case "balloon": return "vehicles";
                 case "vehicle": return "vehicles";
+                case "farming": return "farming";
+                case "crafting": return "crafting";
+                case "electric": return "electric";
+                case "industrial": return "industrial";
+                case "quarry": return "quarry";
+                case "fun": return "fun";
                 default:
                     if (!string.IsNullOrEmpty(shortPrefab))
                     {
@@ -2397,6 +2671,107 @@ namespace Oxide.Plugins
                     }
                     return null;
             }
+        }
+
+        public static class Layout
+        {
+            public const float WindowWidth = 700f;
+            public const float WindowHeight = 448f;
+            public const int Header = 46;
+            public const int Tab = 26;
+            public const int Row = 26;
+            public const int RowGap = 3;
+            public const int Section = 18;
+        }
+
+        public static string SectionFor(string key)
+        {
+            switch (key)
+            {
+                case "doors":
+                case "windows":
+                case "cupboards":
+                    return "Structures";
+                case "boxes":
+                case "storage":
+                case "lockers":
+                case "stashes":
+                    return "Storage";
+                case "vehicles":
+                case "naval":
+                case "medieval":
+                    return "Vehicles";
+                case "furnaces":
+                case "vending":
+                case "composters":
+                case "mixing":
+                case "planters":
+                case "farming":
+                case "quarry":
+                    return "Workshop";
+                case "turrets":
+                case "sam":
+                case "traps":
+                case "racks":
+                    return "Defense";
+                case "electric":
+                case "industrial":
+                    return "Power";
+                case "crafting":
+                    return "Crafting";
+                case "neon":
+                case "signs":
+                case "fun":
+                    return "Decor";
+                default:
+                    return "Other";
+            }
+        }
+
+        public static string[] CategoryOrder()
+        {
+            return new[]
+            {
+                "doors", "windows", "cupboards",
+                "boxes", "storage", "lockers", "stashes",
+                "vehicles", "naval", "medieval",
+                "furnaces", "vending", "composters", "mixing", "planters", "farming", "quarry",
+                "turrets", "sam", "traps", "racks",
+                "electric", "industrial", "crafting",
+                "neon", "signs", "fun", "other", "custom"
+            };
+        }
+
+        public static string CategoryFromName(string shortPrefab)
+        {
+            if (string.IsNullOrEmpty(shortPrefab)) return null;
+            string s = shortPrefab.ToLowerInvariant();
+            string[] map =
+            {
+                "fluidswitch", "farming", "sprinkler", "farming", "water_catcher", "farming", "waterbarrel", "farming",
+                "poweredwaterpurifier", "farming", "chickencoop", "farming", "beehive", "farming", "hitchtrough", "farming",
+                "planter", "planters", "plantpot", "planters", "composter", "composters", "mixingtable", "mixing",
+                "industrial.furnace", "furnaces", "industrial_electric_furnace", "furnaces", "furnace", "furnaces",
+                "fireplace", "furnaces", "bbq", "furnaces", "hobobarrel", "furnaces", "refinery", "furnaces",
+                "campfire", "furnaces", "cauldron", "furnaces", "skull_fire", "furnaces",
+                "rfbroadcaster", "electric", "rfreceiver", "electric", "smartswitch", "electric", "smartalarm", "electric",
+                "fuel_generator", "electric", "searchlight", "electric", "cctv", "electric", "button", "electric",
+                "elevator", "electric", "modularcarlift", "electric", "fogmachine", "electric", "snowmachine", "electric",
+                "switch", "electric", "timer", "electric",
+                "industrialconveyor", "industrial", "industrialcrafter", "industrial", "industrial_storage", "boxes", "hopper", "industrial",
+                "weaponrack", "racks", "autoturret", "turrets", "flameturret", "traps", "guntrap", "traps", "sam_site", "sam",
+                "workbench", "crafting", "repairbench", "crafting", "researchtable", "crafting", "computerstation", "crafting",
+                "cookingworkbench", "crafting", "recycler", "crafting",
+                "mining_quarry", "quarry", "miningquarry", "quarry", "pumpjack", "quarry",
+                "piano", "fun", "drumkit", "fun", "boombox", "fun", "chippy", "fun", "arcade", "fun",
+                "strobelight", "fun", "laserlight", "fun", "soundlight", "fun", "lantern", "fun", "tunalight", "fun", "jackolantern", "fun",
+                "neon", "neon", "canvas", "signs", "lightup", "signs", "goldframe", "signs", "scrapframe", "signs", "easel", "signs", "sign.", "signs",
+                "vending", "vending", "stash", "stashes", "dropbox", "boxes", "mailbox", "boxes", "barrel", "boxes", "shopfront", "boxes",
+                "mannequin", "storage", "ballista", "medieval", "batteringram", "medieval", "catapult", "medieval", "siegetower", "medieval"
+            };
+            for (int i = 0; i + 1 < map.Length; i += 2)
+                if (s.IndexOf(map[i], StringComparison.Ordinal) >= 0) return map[i + 1];
+            return null;
         }
 
         public static string CloseCategory(string shortPrefab)
@@ -2520,6 +2895,12 @@ namespace Oxide.Plugins
                 case "stashes": return "stashes";
                 case "neon": return "neon signs";
                 case "signs": return "signs";
+                case "electric": return "electrical";
+                case "industrial": return "industrial";
+                case "crafting": return "crafting stations";
+                case "farming": return "farming";
+                case "fun": return "instruments and lights";
+                case "quarry": return "quarries and pump jacks";
                 case "other": return "other lockable entities";
                 case "custom": return "custom entities";
                 case "door": return "single doors";
@@ -2753,7 +3134,9 @@ namespace Oxide.Plugins
                 ["cupboards"] = true, ["vehicles"] = true, ["naval"] = true, ["medieval"] = false, ["furnaces"] = false,
                 ["vending"] = false, ["composters"] = false, ["mixing"] = false, ["planters"] = false, ["turrets"] = false,
                 ["sam"] = false, ["traps"] = false, ["racks"] = false, ["stashes"] = true, ["neon"] = false,
-                ["signs"] = false, ["other"] = true, ["custom"] = true
+                ["signs"] = false, ["other"] = true, ["custom"] = true,
+                ["electric"] = false, ["industrial"] = false, ["crafting"] = false,
+                ["farming"] = false, ["fun"] = false, ["quarry"] = false
             };
         }
 
@@ -2774,7 +3157,9 @@ namespace Oxide.Plugins
                 ["cupboards"] = true, ["vehicles"] = true, ["naval"] = true, ["medieval"] = false, ["furnaces"] = false,
                 ["vending"] = false, ["composters"] = false, ["mixing"] = false, ["planters"] = false, ["turrets"] = false,
                 ["sam"] = false, ["traps"] = false, ["racks"] = false, ["stashes"] = false, ["neon"] = false,
-                ["signs"] = false, ["other"] = false, ["custom"] = false
+                ["signs"] = false, ["other"] = false, ["custom"] = false,
+                ["electric"] = false, ["industrial"] = false, ["crafting"] = false,
+                ["farming"] = false, ["fun"] = false, ["quarry"] = false
             };
         }
 

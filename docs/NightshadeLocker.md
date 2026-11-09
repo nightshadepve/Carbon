@@ -16,7 +16,7 @@ NightshadeShop does not expose a theme API, so NightshadeLocker does not call th
 
 The logo is read from `Logo URL` in `carbon/configs/NightshadeInfo.json`. If that file cannot be read, the fallback is the Nightshade logo URL already used by NightshadeInfo and NightshadeHud.
 
-The panel is a centered 760 by 500 window with a scroll view. A dim layer sits behind it so the cursor can close the panel. Colors, logo, width, and height are config fields.
+Version 1.1.0 draws a centered 700 by 448 window. The header is 46 pixels with a 28 pixel logo, a 16 pixel title, and a small close control. Four text tabs (Locks, Places, Closing, Code) sit under a 2 pixel accent line. Rows are 26 pixels with a 34 by 14 switch. Section labels are 10 pixel muted capitals. Places lists every category, including ones the server has turned off, and those rows are not clickable. The code tab has two 4 digit fields. Colors still come from the shop theme, with the Nightshade purple set as the fallback.
 
 ## Permissions
 
@@ -77,6 +77,25 @@ While UltimateLocker is loaded, NightshadeLocker does not place, remove, close, 
 
 Do not load NightshadeLockPickup with NightshadeLocker. That proposed patch (PR 10) prefixes UltimateLocker's pickup hook. This plugin has its own pickup rules and does not reference that patch. Loading both is unnecessary, and the pickup patch is aimed at the other plugin.
 
+## Version 1.1.0 options
+
+New config keys, all honored:
+
+- `Replace another player's vehicle ownership when a lock is allowed` (default true, matching this server's previous locker config). It changes OwnerID only after a lock is allowed on that vehicle, and it does not replace a teammate.
+- `Block wires on a locked electrical entity`
+- `Block RF frequency changes on a locked broadcaster or receiver`
+- `Block harvesting and cloning on a locked planter`
+- `Block instruments and boom boxes that are locked`
+- `Block turret id, rotate, and mode changes`
+- `Allow pushing a locked vehicle` (default true)
+- `Allow pushing a locked vehicle inside your building privilege` (default true)
+
+Categories added, off by default to match this server's disabled deployable list: electrical, industrial, crafting stations, farming, instruments and lights, quarries and pump jacks. Short prefab names for the public entity list map into those categories, so turning a category on covers that group. Extra entity prefabs can still name one prefab.
+
+`/nslock show` tells the owner the code in their own chat. `nslock admin show` does the same for an admin looking at a lock. Neither command writes the code to the server log. Streamer mode refuses the player show command.
+
+Raid damage is not blocked.
+
 ## Commands
 
 Players, with `nightshadelocker.use`:
@@ -117,6 +136,14 @@ Used:
 - Carbon 2.0.262 and the patched Rust `Assembly-CSharp.dll` in this repository, plus lock placement already used by this server's own Convoy and RaidableBases plugins.
 
 Not used: `UltimateLocker.cs`, its history, its language files, and any decompiled third-party locker. NightshadeLockPickup was not copied.
+
+## Checklist
+
+Implemented: code and key locks, auto placement, manual place, per-category toggles for every public category plus electrical, industrial, crafting, farming, instruments, and quarries, guest code, team share, streamer mode, key fallback, dismount lock, Flight Control skin when owned, door closing types and delay, proximity button, wires, RF frequency, harvest and clone, boom box, weapon rack mount, turret id rotate and mode, quarry toggle and gather, elevator, car lift, engine start, horse lead, vehicle push flags, vending admin, phone dial, CCTV aim, conveyor filters, building privilege, unowned vehicle claim, other-owner vehicle lock when that config is on, ownership replace when the lock is allowed, private code show, import, conflict pause, paid and free provenance, locked pickup block.
+
+Not implemented because the game does not give a safe hook for it here: blocking a turret or SAM from shooting (that would stop base defense, and raid damage stays vanilla), and a perfect in-world "use" key for every piano or drum if the boom-box and loot hooks do not see that entity. Those entities can still take a lock when their category is on.
+
+Not live tested: placement, the in-game panel, and each new hook on a running server.
 
 ## Checks
 
