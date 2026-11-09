@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <StartupObject>PlanterStackRulesTests</StartupObject>
+    <DefineConstants>CARBON;RUST;OXIDE_PUBLICIZED;UNIX;NIGHTSHADE_PLANTER_STACK_TESTS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\carbon\plugins\04_World_Building\NightshadePlanterStack.cs" Link="NightshadePlanterStack.cs" />
+  </ItemGroup>
+</Project>

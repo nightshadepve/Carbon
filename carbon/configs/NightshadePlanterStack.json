@@ -1,0 +1,14 @@
+{
+  "Enabled": true,
+  "Planter identifiers": [
+    "planter.large",
+    "planter.small",
+    "planter.triangle",
+    "minecart.planter",
+    "railroadplanter",
+    "bathtub.planter"
+  ],
+  "Minimum vertical gap": 0.0,
+  "Horizontal overlap for gap": 0.75,
+  "Gap search radius": 3.0
+}
