@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeInfo", "Nightshade", "1.2.1")]
+    [Info("NightshadeInfo", "Nightshade", "1.2.2")]
     [Description("Nightshade info panel: live status, rules, and Discord.")]
     public class NightshadeInfo : RustPlugin
     {
@@ -730,7 +730,8 @@ namespace Oxide.Plugins
             bool manual = false;
             double manualEnd = 0d;
             string manualSource = ReadManualPurge(out manual, out manualEnd);
-            bool rulesetPurge = RulesetIsPurge();
+            // A stuck TruePVE "Default RuleSet" of purge is not a purge. Trust the purge plugin when it answers.
+            bool rulesetPurge = manualSource == "none" && RulesetIsPurge();
 
             DateTime now = DateTime.UtcNow;
             DateTime purgeStart;
@@ -796,6 +797,7 @@ namespace Oxide.Plugins
                 string purgeSource = scheduled ? "built-in schedule" : "built-in schedule (not in window)";
                 if (manual) purgeSource = manualSource + (scheduled ? " + built-in schedule" : "");
                 else if (rulesetPurge) purgeSource = "TruePVE ruleset purge" + (scheduled ? " + built-in schedule" : "");
+                else if (manualSource != "none" && RulesetIsPurge()) purgeSource = purgeSource + "; ignored stale TruePVE default ruleset purge";
                 Puts("NightshadeInfo status: PvP from " + weekendSource + ". Purge from " + purgeSource + ". Mode " + snap.ModeValue + ".");
             }
             return snap;

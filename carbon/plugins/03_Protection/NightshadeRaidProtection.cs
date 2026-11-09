@@ -3,15 +3,236 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+#if !NIGHTSHADE_RAID_TESTS
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using UnityEngine;
+#endif
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeRaidProtection", "Nightshade", "1.1.3")]
+    // Eastern weekend clock and the TruePVE toggle plan. Pure on purpose so the
+    // boundary, DST, restart, and ruleset-file tests can compile without Rust.
+    public static class NightshadeWeekendClock
+    {
+        public const string RulesetCommand = "tpve.ruleset";
+        public const string ReloadCommand = "c.reload TruePVE";
+
+        public struct TruePveState
+        {
+            public bool Found;
+            public string Ruleset;
+            public bool ScheduleEnabled;
+            public string Error;
+        }
+
+        public struct TogglePlan
+        {
+            public string Ruleset;
+            public bool WriteConfig;
+            public bool DisableSchedule;
+            public bool RunRulesetCommand;
+            public bool ReloadTruePve;
+            public string Reason;
+        }
+
+        public struct ApplyResult
+        {
+            public bool Wrote;
+            public bool RanRulesetCommand;
+            public bool Reloaded;
+            public string Error;
+        }
+
+        public static TimeZoneInfo ResolveEastern(out bool fallback)
+        {
+            fallback = false;
+            string[] ids = { "America/New_York", "Eastern Standard Time", "US/Eastern" };
+            foreach (string id in ids)
+            {
+                try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
+                catch (TimeZoneNotFoundException) { }
+                catch (InvalidTimeZoneException) { }
+            }
+            fallback = true;
+            return FallbackEastern();
+        }
+
+        // US DST since 2007: second Sunday in March, first Sunday in November, both at 02:00.
+        public static TimeZoneInfo FallbackEastern()
+        {
+            try
+            {
+                TimeZoneInfo.TransitionTime start = TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 2, 0, 0), 3, 2, DayOfWeek.Sunday);
+                TimeZoneInfo.TransitionTime end = TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 2, 0, 0), 11, 1, DayOfWeek.Sunday);
+                TimeZoneInfo.AdjustmentRule rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+                    new DateTime(2007, 1, 1), new DateTime(9999, 12, 31), TimeSpan.FromHours(1), start, end);
+                return TimeZoneInfo.CreateCustomTimeZone(
+                    "Nightshade-Eastern", TimeSpan.FromHours(-5), "Eastern Time (fallback)",
+                    "Eastern Standard Time", "Eastern Daylight Time", new[] { rule });
+            }
+            catch
+            {
+                return TimeZoneInfo.CreateCustomTimeZone("Nightshade-Eastern-EST", TimeSpan.FromHours(-5), "Eastern Time (fixed EST)", "EST");
+            }
+        }
+
+        // Friday 20:00 through Monday 03:00 on the supplied zone. End is exclusive.
+        // Outside the window, start/end are the next weekend.
+        public static void Evaluate(DateTime utc, TimeZoneInfo zone, out DateTime startUtc, out DateTime endUtc, out bool active)
+        {
+            if (zone == null) zone = TimeZoneInfo.Utc;
+            DateTime instant = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+            DateTime local = TimeZoneInfo.ConvertTimeFromUtc(instant, zone);
+            int back = ((int)local.DayOfWeek - (int)DayOfWeek.Friday + 7) % 7;
+            DateTime friday = local.Date.AddDays(-back);
+            DateTime candidateStart = friday.AddHours(20);
+            DateTime candidateEnd = friday.AddDays(3).AddHours(3);
+            active = local >= candidateStart && local < candidateEnd;
+            if (!active && local >= candidateEnd) friday = friday.AddDays(7);
+            startUtc = ToUtc(friday.AddHours(20), zone);
+            endUtc = ToUtc(friday.AddDays(3).AddHours(3), zone);
+        }
+
+        public static DateTime ToUtc(DateTime easternWall, TimeZoneInfo zone)
+        {
+            if (zone == null) zone = TimeZoneInfo.Utc;
+            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(easternWall, DateTimeKind.Unspecified), zone);
+        }
+
+        public static double SecondsUntil(DateTime utc, DateTime startUtc, DateTime endUtc, bool active)
+        {
+            DateTime instant = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+            return Math.Max(0d, ((active ? endUtc : startUtc) - instant).TotalSeconds);
+        }
+
+        // Wake at the next edge, but at least once a day, and never in under a second.
+        public static double BoundaryDelaySeconds(DateTime utc, DateTime startUtc, DateTime endUtc, bool active)
+        {
+            DateTime instant = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+            double seconds = Math.Max(1d, ((active ? endUtc : startUtc) - instant).TotalSeconds);
+            return Math.Min(seconds, 86400d);
+        }
+
+        public static TruePveState Read(string path)
+        {
+            var state = new TruePveState();
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                state.Error = "TruePVE.json was not found.";
+                return state;
+            }
+            try
+            {
+                JObject root = JObject.Parse(File.ReadAllText(path));
+                state.Found = true;
+                JToken ruleset = root["Default RuleSet"];
+                if (ruleset == null || ruleset.Type == JTokenType.Null) state.Ruleset = string.Empty;
+                else state.Ruleset = ruleset.Type == JTokenType.String ? (string)ruleset : ruleset.ToString();
+                JObject schedule = root["Schedule"] as JObject;
+                JToken enabled = schedule == null ? null : schedule["enabled"];
+                state.ScheduleEnabled = enabled != null && enabled.Type == JTokenType.Boolean && (bool)enabled;
+                return state;
+            }
+            catch (Exception ex)
+            {
+                state.Error = ex.Message;
+                return state;
+            }
+        }
+
+        // Purge wins over the weekend. The file's Default RuleSet is what TruePVE loads
+        // on init and what a later reload (raid base mapping, purge sync) puts back.
+        // tpve.ruleset alone only changes private in-memory state and does not survive that.
+        public static TogglePlan Plan(TruePveState state, bool purgeActive, string purgeRuleset, bool weekendActive, string pvpRuleset, string pveRuleset)
+        {
+            string desired;
+            string reason;
+            if (purgeActive && !string.IsNullOrEmpty(purgeRuleset))
+            {
+                desired = purgeRuleset;
+                reason = "purge";
+            }
+            else if (weekendActive)
+            {
+                desired = string.IsNullOrEmpty(pvpRuleset) ? "nightshade_pvp_weekend" : pvpRuleset;
+                reason = "weekend";
+            }
+            else
+            {
+                desired = string.IsNullOrEmpty(pveRuleset) ? "default" : pveRuleset;
+                reason = "weekday";
+            }
+            bool rulesetMismatch = !state.Found || !string.Equals(state.Ruleset, desired, StringComparison.OrdinalIgnoreCase);
+            bool scheduleOn = state.Found && state.ScheduleEnabled;
+            bool write = rulesetMismatch || scheduleOn;
+            return new TogglePlan
+            {
+                Ruleset = desired,
+                WriteConfig = write,
+                DisableSchedule = scheduleOn,
+                RunRulesetCommand = true,
+                ReloadTruePve = write,
+                Reason = reason
+            };
+        }
+
+        public static ApplyResult Apply(string path, TogglePlan plan, bool truePveLoaded, Action<string, object[]> command)
+        {
+            var result = new ApplyResult();
+            if (plan.WriteConfig)
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                    result.Error = "TruePVE.json was not found.";
+                else
+                {
+                    try
+                    {
+                        JObject root = JObject.Parse(File.ReadAllText(path));
+                        root["Default RuleSet"] = plan.Ruleset ?? string.Empty;
+                        JObject schedule = root["Schedule"] as JObject;
+                        if (schedule != null) schedule["enabled"] = false;
+                        string text = root.ToString(Formatting.Indented) + "\n";
+                        string tmp = path + ".nightshade.tmp";
+                        File.WriteAllText(tmp, text, new UTF8Encoding(false));
+                        try
+                        {
+                            File.Replace(tmp, path, null);
+                        }
+                        catch
+                        {
+                            File.Copy(tmp, path, true);
+                            File.Delete(tmp);
+                        }
+                        result.Wrote = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Error = ex.Message;
+                    }
+                }
+            }
+            if (command == null || !truePveLoaded) return result;
+            if (plan.RunRulesetCommand && !string.IsNullOrEmpty(plan.Ruleset))
+            {
+                command(RulesetCommand, new object[] { plan.Ruleset });
+                result.RanRulesetCommand = true;
+            }
+            // Reload only after a successful write. Reloading the old file would put the previous ruleset back.
+            if (plan.ReloadTruePve && result.Wrote)
+            {
+                command(ReloadCommand, new object[0]);
+                result.Reloaded = true;
+            }
+            return result;
+        }
+    }
+
+#if !NIGHTSHADE_RAID_TESTS
+    [Info("NightshadeRaidProtection", "Nightshade", "1.2.0")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, and the Eastern-time weekend window that drives TruePVE.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -41,6 +262,8 @@ namespace Oxide.Plugins
         private Timer boundaryTimer;
         private Timer rulesTimer;
         private Timer shieldTimer;
+        private string appliedRuleset;
+        private bool applyingRuleset;
         private readonly Dictionary<ulong, string> published = new Dictionary<ulong, string>();
 
         private class Settings
@@ -101,7 +324,7 @@ namespace Oxide.Plugins
             if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
             if (store.LegitimateVoucherUids == null) store.LegitimateVoucherUids = new HashSet<ulong>();
             if (store.LastSeenUtcTicks == null) store.LastSeenUtcTicks = new Dictionary<ulong, long>();
-            eastern = ResolveEastern(out usedZoneFallback);
+            eastern = NightshadeWeekendClock.ResolveEastern(out usedZoneFallback);
         }
 
         private void Save() => Interface.Oxide.DataFileSystem.WriteObject(DataPath, store);
@@ -141,7 +364,7 @@ namespace Oxide.Plugins
             CheckWindow();
             WarnIfTruePveScheduleEnabled();
             EnsureRuleset();
-            rulesTimer = timer.Every(60f, EnsureRuleset);
+            rulesTimer = timer.Every(60f, OnReconcileTick);
             Puts("Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM.");
         }
 
@@ -286,20 +509,12 @@ namespace Oxide.Plugins
         // Returns Friday 8 PM through Monday 3 AM Eastern, DST-safe. Outside that window, returns NEXT weekend.
         private void Weekend(DateTime utc, out DateTime startUtc, out DateTime endUtc, out bool active)
         {
-            DateTime local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), eastern);
-            int back = ((int)local.DayOfWeek - (int)DayOfWeek.Friday + 7) % 7;
-            DateTime friday = local.Date.AddDays(-back);
-            DateTime candidateStart = friday.AddHours(20);
-            DateTime candidateEnd = friday.AddDays(3).AddHours(3);
-            active = local >= candidateStart && local < candidateEnd;
-            if (!active && local >= candidateEnd) friday = friday.AddDays(7);
-            startUtc = ToUtc(friday.AddHours(20));
-            endUtc = ToUtc(friday.AddDays(3).AddHours(3));
+            NightshadeWeekendClock.Evaluate(utc, eastern, out startUtc, out endUtc, out active);
         }
 
         private DateTime ToUtc(DateTime easternWall)
         {
-            return TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(easternWall, DateTimeKind.Unspecified), eastern);
+            return NightshadeWeekendClock.ToUtc(easternWall, eastern);
         }
 
         private DateTime NowUtc() => fakeUtc ?? DateTime.UtcNow;
@@ -521,9 +736,8 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
-            double seconds = Math.Max(1d, ((active ? end : start) - NowUtc()).TotalSeconds);
-            // Wake at least daily so a clock change or DST correction is not missed.
-            seconds = Math.Min(seconds, 86400d);
+            // Wake at the edge, and at least daily, so a missed tick still converges.
+            double seconds = NightshadeWeekendClock.BoundaryDelaySeconds(NowUtc(), start, end, active);
             boundaryTimer = timer.Once((float)seconds, CheckWindow);
         }
 
@@ -658,31 +872,67 @@ namespace Oxide.Plugins
             }
         }
 
+        // The 60s tick is the restart and missed-boundary catch-up. The edge timer is exact
+        // when it fires; this still flips the window if that timer was late or the process was down.
+        private void OnReconcileTick()
+        {
+            DateTime start, end;
+            bool active;
+            Weekend(NowUtc(), out start, out end, out active);
+            if (windowReady && active != windowActive) CheckWindow();
+            else EnsureRuleset();
+        }
+
         private void EnsureRuleset()
         {
-            if (!settings.DriveTruePve || TruePVE == null || !TruePVE.IsLoaded) return;
+            if (applyingRuleset || settings == null || !settings.DriveTruePve) return;
+            string purgeRuleset = null;
+            bool purgeActive = false;
+            // Purge owns the ruleset for its whole span, including a weekend that falls inside a manual purge.
             if (settings.YieldToPurge && PurgeStatus != null && PurgeStatus.IsLoaded)
             {
-                string purgeRuleset = PurgeStatus.Call("API_GetActiveRulesetOverride") as string;
-                if (!string.IsNullOrEmpty(purgeRuleset))
-                {
-                    SetRuleset(purgeRuleset);
-                    return;
-                }
+                purgeRuleset = PurgeStatus.Call("API_GetActiveRulesetOverride") as string;
+                purgeActive = !string.IsNullOrEmpty(purgeRuleset);
             }
             DateTime start, end;
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
-            SetRuleset(active ? settings.PvpRuleset : settings.PveRuleset);
-        }
-
-        private void SetRuleset(string name)
-        {
-            if (string.IsNullOrEmpty(name) || TruePVE == null || !TruePVE.IsLoaded) return;
-            string current = TruePVE.Call("CurrentRuleSetName") as string;
-            if (string.Equals(current, name, StringComparison.OrdinalIgnoreCase)) return;
-            Server.Command("tpve.ruleset", name);
-            Puts("Set TruePVE ruleset to " + name + (fakeUtc.HasValue ? " (test clock)" : "") + ".");
+            string path = Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json");
+            NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(path);
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Plan(state, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset);
+            // nrp.faketime must not be written into TruePVE.json. A crash would otherwise boot into the test ruleset.
+            if (fakeUtc.HasValue)
+            {
+                plan.WriteConfig = false;
+                plan.ReloadTruePve = false;
+                plan.DisableSchedule = false;
+            }
+            bool loaded = TruePVE != null && TruePVE.IsLoaded;
+            if (!plan.WriteConfig && string.Equals(appliedRuleset, plan.Ruleset, StringComparison.Ordinal)) return;
+            applyingRuleset = true;
+            try
+            {
+                NightshadeWeekendClock.ApplyResult result = NightshadeWeekendClock.Apply(path, plan, loaded, (cmd, args) =>
+                {
+                    if (args == null || args.Length == 0) Server.Command(cmd);
+                    else Server.Command(cmd, args);
+                });
+                if (!string.IsNullOrEmpty(result.Error))
+                    PrintWarning("TruePVE ruleset was not saved: " + result.Error);
+                else
+                    appliedRuleset = plan.Ruleset;
+                if (result.Wrote || result.RanRulesetCommand)
+                    Puts("TruePVE " + plan.Reason + " -> " + plan.Ruleset
+                        + (result.Wrote ? " (wrote Default RuleSet" + (plan.DisableSchedule ? ", schedule off" : "") + ")" : "")
+                        + (result.RanRulesetCommand ? " via tpve.ruleset" : "")
+                        + (result.Reloaded ? " and reloaded TruePVE" : "")
+                        + (fakeUtc.HasValue ? " (test clock)" : "")
+                        + ".");
+            }
+            finally
+            {
+                applyingRuleset = false;
+            }
         }
 
         private string FormatEdge(DateTime utc)
@@ -697,13 +947,18 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
-            string current = TruePVE != null && TruePVE.IsLoaded ? TruePVE.Call("CurrentRuleSetName") as string : "(TruePVE not loaded)";
             string purge = PurgeStatus != null && PurgeStatus.IsLoaded ? (PurgeStatus.Call("API_GetActiveRulesetOverride") as string ?? "inactive") : "(purge plugin not loaded)";
+            bool purgeActive = purge != "inactive" && purge != "(purge plugin not loaded)";
+            NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json"));
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Plan(state, purgeActive, purgeActive ? purge : null, active, settings.PvpRuleset, settings.PveRuleset);
+            // CurrentRuleSetName is private and not a HookMethod, so Carbon Call cannot read the live ruleset.
+            // The file's Default RuleSet is what TruePVE loads and what Info used to treat as purge.
             arg.ReplyWith("Window " + (active ? "ACTIVE" : "inactive")
                 + " | " + FormatEdge(start) + " -> " + FormatEdge(end)
                 + " | seconds " + Math.Ceiling(SecondsUntilNow(start, end, active))
-                + " | target ruleset " + (active ? settings.PvpRuleset : settings.PveRuleset)
-                + " | TruePVE now " + current
+                + " | target ruleset " + plan.Ruleset
+                + " | file ruleset " + (state.Found ? (string.IsNullOrEmpty(state.Ruleset) ? "(blank)" : state.Ruleset) : "unreadable")
+                + " | schedule " + (state.Found && state.ScheduleEnabled ? "ENABLED" : "off")
                 + " | purge override " + purge
                 + " | zone " + eastern.Id + (usedZoneFallback ? " (fallback)" : "")
                 + " | test clock " + (fakeUtc.HasValue ? fakeUtc.Value.ToString("u") : "off"));
@@ -756,7 +1011,7 @@ namespace Oxide.Plugins
             }
             CheckWindow();
             EnsureRuleset();
-            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE will follow it. Shield drain still uses the real clock. Clear with nrp.faketime clear.");
+            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. Clear with nrp.faketime clear.");
             arg.ReplyWith("Test clock set to " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ").");
         }
 
@@ -771,33 +1026,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static TimeZoneInfo ResolveEastern(out bool fallback)
-        {
-            fallback = false;
-            string[] ids = { "America/New_York", "Eastern Standard Time", "US/Eastern" };
-            foreach (string id in ids)
-            {
-                try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-                catch (TimeZoneNotFoundException) { }
-                catch (InvalidTimeZoneException) { }
-            }
-            fallback = true;
-            try
-            {
-                TimeZoneInfo.TransitionTime start = TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 2, 0, 0), 3, 2, DayOfWeek.Sunday);
-                TimeZoneInfo.TransitionTime end = TimeZoneInfo.TransitionTime.CreateFloatingDateRule(new DateTime(1, 1, 1, 2, 0, 0), 11, 1, DayOfWeek.Sunday);
-                TimeZoneInfo.AdjustmentRule rule = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
-                    new DateTime(2007, 1, 1), new DateTime(9999, 12, 31), TimeSpan.FromHours(1), start, end);
-                return TimeZoneInfo.CreateCustomTimeZone(
-                    "Nightshade-Eastern", TimeSpan.FromHours(-5), "Eastern Time (fallback)",
-                    "Eastern Standard Time", "Eastern Daylight Time", new[] { rule });
-            }
-            catch
-            {
-                return TimeZoneInfo.CreateCustomTimeZone("Nightshade-Eastern-EST", TimeSpan.FromHours(-5), "Eastern Time (fixed EST)", "EST");
-            }
-        }
-
         #endregion
     }
+#endif
 }
