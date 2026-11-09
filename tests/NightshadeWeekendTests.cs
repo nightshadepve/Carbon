@@ -30,6 +30,7 @@ public static class NightshadeWeekendTests
         TestNearBoundary(iana);
         TestRestartCatchUp(iana);
         TestPlans(iana);
+        TestReloadBudget(iana);
         TestApply();
         TestRepoConfig(configPath);
 
@@ -196,7 +197,7 @@ public static class NightshadeWeekendTests
         Check(plan.Ruleset == "purge" && plan.Reason == "purge" && plan.WriteConfig && plan.ReloadTruePve, "purge must replace a weekday file during the weekend");
 
         plan = PlanAt(zone, fridayNight, purgeFile, true, "purge");
-        Check(plan.Ruleset == "purge" && !plan.WriteConfig && !plan.ReloadTruePve && plan.RunRulesetCommand, "an already-purge file during purge must not reload");
+        Check(plan.Ruleset == "purge" && !plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand, "an already-purge file during purge must not reload or rewrite");
 
         plan = PlanAt(zone, monday, weekendFile, true, "purge");
         Check(plan.Ruleset == "purge" && plan.WriteConfig, "purge on a weekday must beat a stale weekend ruleset");
@@ -220,7 +221,89 @@ public static class NightshadeWeekendTests
         purgeFile.ScheduleEnabled = false;
 
         plan = PlanAt(zone, monday, pveFile, false, null);
-        Check(!plan.WriteConfig && !plan.ReloadTruePve && plan.RunRulesetCommand && plan.Ruleset == "default", "matching weekday file must not reload");
+        Check(!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand && plan.Ruleset == "default", "matching weekday file must not reload or command");
+    }
+
+    static void TestReloadBudget(TimeZoneInfo zone)
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "nightshade-reload-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            string path = Path.Combine(dir, "TruePVE.json");
+            File.WriteAllText(path, SampleConfig("default", false));
+            var tracked = new NightshadeWeekendClock.TrackedRuleset();
+            int reloads = 0;
+            int commands = 0;
+
+            // Load onto a file that already matches. No reload, and repeats stay quiet.
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 9, 12, 0, 0), false, null, false, 5, ref tracked, ref commands);
+            Check(reloads == 0 && commands == 0, "steady weekday reloaded or commanded, reloads " + reloads + " commands " + commands);
+
+            // Weekend edge: one reload, then the same mode does nothing.
+            int before = reloads;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 6, 20, 0, 0), false, null, false, 1, ref tracked, ref commands);
+            Check(reloads == before + 1, "weekend start reloads " + (reloads - before));
+            before = reloads;
+            int commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 8, 15, 0, 0), false, null, false, 4, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore, "repeated weekend ticks reloaded or commanded");
+
+            // Monday close: one reload back to default.
+            before = reloads;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 9, 3, 0, 0), false, null, false, 1, ref tracked, ref commands);
+            Check(reloads == before + 1, "weekend end reloads " + (reloads - before));
+            before = reloads;
+            commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 9, 12, 0, 0), false, null, false, 4, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore, "repeated weekday ticks reloaded or commanded");
+
+            // Purge start and end are one reload each.
+            before = reloads;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 9, 18, 0, 0), true, "purge", false, 1, ref tracked, ref commands);
+            Check(reloads == before + 1, "purge start reloads " + (reloads - before));
+            before = reloads;
+            commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 10, 12, 0, 0), true, "purge", false, 3, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore, "repeated purge ticks reloaded or commanded");
+            before = reloads;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 10, 12, 0, 0), false, null, false, 1, ref tracked, ref commands);
+            Check(reloads == before + 1, "purge end reloads " + (reloads - before));
+
+            // Another plugin reloads TruePVE and leaves a stale Default RuleSet.
+            NightshadeWeekendClock.TruePveState stale = NightshadeWeekendClock.Read(path);
+            Check(stale.Ruleset == "default", "purge end did not restore default before the mismatch test");
+            JObject root = JObject.Parse(File.ReadAllText(path));
+            root["Default RuleSet"] = "nightshade_pvp_weekend";
+            ((JObject)root["Schedule"])["enabled"] = true;
+            File.WriteAllText(path, root.ToString());
+            before = reloads;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 10, 12, 0, 0), false, null, false, 1, ref tracked, ref commands);
+            Check(reloads == before + 1, "stale file mismatch reloads " + (reloads - before));
+            stale = NightshadeWeekendClock.Read(path);
+            Check(stale.Ruleset == "default" && !stale.ScheduleEnabled, "mismatch repair did not restore default with the schedule off");
+            before = reloads;
+            commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 10, 13, 0, 0), false, null, false, 4, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore, "ticks after the mismatch repair reloaded or commanded");
+
+            // Test clock moves memory only, once per target, and never reloads.
+            before = reloads;
+            commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 6, 21, 0, 0), false, null, true, 1, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore + 1, "faketime did not push one in-memory ruleset");
+            stale = NightshadeWeekendClock.Read(path);
+            Check(stale.Ruleset == "default", "faketime wrote TruePVE.json");
+            commandsBefore = commands;
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 7, 12, 0, 0), false, null, true, 3, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore, "repeated faketime ticks commanded again");
+            reloads += Ticks(zone, path, new DateTime(2026, 11, 10, 13, 0, 0), false, null, false, 1, ref tracked, ref commands);
+            Check(reloads == before && commands == commandsBefore + 1, "clearing faketime reloaded or skipped the memory restore");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, true); } catch { }
+        }
     }
 
     static void TestApply()
@@ -259,19 +342,19 @@ public static class NightshadeWeekendTests
 
             calls.Clear();
             state = NightshadeWeekendClock.Read(path);
-            // Put the file on the weekday ruleset with the schedule already off, then apply the same plan.
             root["Default RuleSet"] = "default";
             ((JObject)root["Schedule"])["enabled"] = false;
             File.WriteAllText(path, root.ToString());
             state = NightshadeWeekendClock.Read(path);
             plan = NightshadeWeekendClock.Plan(state, false, null, false, "nightshade_pvp_weekend", "default");
             result = NightshadeWeekendClock.Apply(path, plan, true, (cmd, args) => calls.Add(FormatCall(cmd, args)));
-            Check(!result.Wrote && !result.Reloaded && result.RanRulesetCommand && calls.Count == 1 && calls[0] == "tpve.ruleset default", "in-memory command ran without a needless reload");
+            Check(!result.Wrote && !result.Reloaded && !result.RanRulesetCommand && calls.Count == 0, "a matching file must not write, command, or reload");
 
             calls.Clear();
             File.Delete(path);
             plan.WriteConfig = true;
             plan.ReloadTruePve = true;
+            plan.RunRulesetCommand = true;
             plan.Ruleset = "default";
             result = NightshadeWeekendClock.Apply(path, plan, true, (cmd, args) => calls.Add(FormatCall(cmd, args)));
             Check(!string.IsNullOrEmpty(result.Error) && !result.Wrote && !result.Reloaded && calls.Count == 1 && calls[0] == "tpve.ruleset default", "missing file must not reload the old ruleset");
@@ -297,6 +380,35 @@ public static class NightshadeWeekendTests
             if ((string)ruleset["name"] == "nightshade_pvp_weekend") sawWeekend = true;
         }
         Check(sawWeekend, "nightshade_pvp_weekend ruleset is missing");
+    }
+
+    static int Ticks(TimeZoneInfo zone, string path, DateTime wall, bool purgeActive, string purgeRuleset, bool fakeTime, int times, ref NightshadeWeekendClock.TrackedRuleset tracked, ref int commands)
+    {
+        int reloads = 0;
+        for (int i = 0; i < times; i++)
+        {
+            DateTime start, end;
+            bool weekend;
+            NightshadeWeekendClock.Evaluate(Wall(zone, wall), zone, out start, out end, out weekend);
+            NightshadeWeekendClock.TruePveState file = NightshadeWeekendClock.Read(path);
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Decide(file, tracked, purgeActive, purgeRuleset, weekend, "nightshade_pvp_weekend", "default", fakeTime);
+            if (plan.Adopt || (!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand))
+            {
+                tracked.Known = true;
+                tracked.Ruleset = plan.Ruleset;
+                continue;
+            }
+            var calls = new List<string>();
+            NightshadeWeekendClock.ApplyResult result = NightshadeWeekendClock.Apply(path, plan, true, (cmd, args) => calls.Add(FormatCall(cmd, args)));
+            commands += calls.Count;
+            if (result.Reloaded) reloads++;
+            if (string.IsNullOrEmpty(result.Error))
+            {
+                tracked.Known = true;
+                tracked.Ruleset = plan.Ruleset;
+            }
+        }
+        return reloads;
     }
 
     static NightshadeWeekendClock.TogglePlan PlanAt(TimeZoneInfo zone, DateTime utc, NightshadeWeekendClock.TruePveState state, bool purgeActive, string purgeRuleset)

@@ -36,7 +36,15 @@ namespace Oxide.Plugins
             public bool DisableSchedule;
             public bool RunRulesetCommand;
             public bool ReloadTruePve;
+            // File already matches and this process has not tracked a ruleset yet. Record it; do not touch TruePVE.
+            public bool Adopt;
             public string Reason;
+        }
+
+        public struct TrackedRuleset
+        {
+            public bool Known;
+            public string Ruleset;
         }
 
         public struct ApplyResult
@@ -174,10 +182,40 @@ namespace Oxide.Plugins
                 Ruleset = desired,
                 WriteConfig = write,
                 DisableSchedule = scheduleOn,
-                RunRulesetCommand = true,
+                // A matching file is not a change. tpve.ruleset and c.reload run only from Decide.
+                RunRulesetCommand = write,
                 ReloadTruePve = write,
                 Reason = reason
             };
+        }
+
+        // Steady state is a compare: no write, no tpve.ruleset, no reload.
+        // Write and reload only when the target changed or the file disagrees
+        // (stale Default RuleSet, or Schedule.enabled, including after another plugin reloads TruePVE).
+        // Faketime never writes or reloads; it pushes tpve.ruleset only when the test target changes.
+        public static TogglePlan Decide(TruePveState file, TrackedRuleset tracked, bool purgeActive, string purgeRuleset, bool weekendActive, string pvpRuleset, string pveRuleset, bool fakeTime)
+        {
+            TogglePlan plan = Plan(file, purgeActive, purgeRuleset, weekendActive, pvpRuleset, pveRuleset);
+            bool sameMemory = tracked.Known && string.Equals(tracked.Ruleset, plan.Ruleset, StringComparison.Ordinal);
+            if (fakeTime)
+            {
+                plan.WriteConfig = false;
+                plan.ReloadTruePve = false;
+                plan.DisableSchedule = false;
+                plan.RunRulesetCommand = !sameMemory;
+                plan.Adopt = false;
+                return plan;
+            }
+            if (!plan.WriteConfig && !plan.ReloadTruePve)
+            {
+                if (sameMemory) return plan;
+                // First look at a correct file: TruePVE already loaded it. Do not reload.
+                // A later memory drift with a correct file (test clock cleared) is one tpve.ruleset and no reload.
+                plan.RunRulesetCommand = tracked.Known;
+                plan.Adopt = !tracked.Known;
+                return plan;
+            }
+            return plan;
         }
 
         public static ApplyResult Apply(string path, TogglePlan plan, bool truePveLoaded, Action<string, object[]> command)
@@ -232,7 +270,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.2.0")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.2.1")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, and the Eastern-time weekend window that drives TruePVE.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -262,7 +300,7 @@ namespace Oxide.Plugins
         private Timer boundaryTimer;
         private Timer rulesTimer;
         private Timer shieldTimer;
-        private string appliedRuleset;
+        private NightshadeWeekendClock.TrackedRuleset appliedRuleset;
         private bool applyingRuleset;
         private readonly Dictionary<ulong, string> published = new Dictionary<ulong, string>();
 
@@ -899,16 +937,14 @@ namespace Oxide.Plugins
             Weekend(NowUtc(), out start, out end, out active);
             string path = Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json");
             NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(path);
-            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Plan(state, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset);
-            // nrp.faketime must not be written into TruePVE.json. A crash would otherwise boot into the test ruleset.
-            if (fakeUtc.HasValue)
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Decide(state, appliedRuleset, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset, fakeUtc.HasValue);
+            if (plan.Adopt || (!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand))
             {
-                plan.WriteConfig = false;
-                plan.ReloadTruePve = false;
-                plan.DisableSchedule = false;
+                appliedRuleset.Known = true;
+                appliedRuleset.Ruleset = plan.Ruleset;
+                return;
             }
             bool loaded = TruePVE != null && TruePVE.IsLoaded;
-            if (!plan.WriteConfig && string.Equals(appliedRuleset, plan.Ruleset, StringComparison.Ordinal)) return;
             applyingRuleset = true;
             try
             {
@@ -918,10 +954,15 @@ namespace Oxide.Plugins
                     else Server.Command(cmd, args);
                 });
                 if (!string.IsNullOrEmpty(result.Error))
+                {
                     PrintWarning("TruePVE ruleset was not saved: " + result.Error);
-                else
-                    appliedRuleset = plan.Ruleset;
-                if (result.Wrote || result.RanRulesetCommand)
+                    return;
+                }
+                if (plan.RunRulesetCommand && loaded && !result.RanRulesetCommand) return;
+                if (plan.ReloadTruePve && loaded && !result.Reloaded) return;
+                appliedRuleset.Known = true;
+                appliedRuleset.Ruleset = plan.Ruleset;
+                if (result.Wrote || result.RanRulesetCommand || result.Reloaded)
                     Puts("TruePVE " + plan.Reason + " -> " + plan.Ruleset
                         + (result.Wrote ? " (wrote Default RuleSet" + (plan.DisableSchedule ? ", schedule off" : "") + ")" : "")
                         + (result.RanRulesetCommand ? " via tpve.ruleset" : "")
