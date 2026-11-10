@@ -269,9 +269,120 @@ namespace Oxide.Plugins
         }
     }
 
+    // Giant Excavator weekend rates. Pure so the fuel-fraction tests compile without Rust.
+    // Decompiled from Assembly-CSharp (Carbon 2.0.262, publicized):
+    //   ExcavatorArm ctor: resourceProductionTickRate = 3, timeForFullResources = 120
+    //   DieselEngine ctor: runningTimePerFuelUnit = 120
+    //   ProduceResources adds (tick / timeForFullResources) of the selected pile each invoke
+    //   BeginMining does InvokeRepeating(ProduceResources, tick, tick) and does not read the fuel timer
+    //   DieselEngine.FixedUpdate drains cachedFuelTime and, when it runs out, adds runningTimePerFuelUnit
+    // Those three rate fields are not in the save. cachedFuelTime is (dieselEngine.fuelTime).
+    public static class NightshadeExcavatorBoost
+    {
+        public const float VanillaTickRate = 3f;
+        public const float VanillaFullResourcesSeconds = 120f;
+        public const float VanillaFuelSeconds = 120f;
+        public const float DefaultSpeedMultiplier = 2f;
+        // DieselEngine.EngineOn broadcasts DieselEngineOn at 20m, which is what the arm hears.
+        public const float EnginePairMeters = 50f;
+
+        public struct Baseline
+        {
+            public float TickRate;
+            public float FullResourcesSeconds;
+            public float FuelSeconds;
+        }
+
+        public struct Target
+        {
+            public bool Applied;
+            public float TickRate;
+            public float FullResourcesSeconds;
+            public float FuelSeconds;
+        }
+
+        public static bool Near(float a, float b)
+        {
+            return Math.Abs(a - b) <= 0.01f;
+        }
+
+        public static float SanitizeMultiplier(float multiplier)
+        {
+            if (float.IsNaN(multiplier) || float.IsInfinity(multiplier) || multiplier < 0.01f)
+                return DefaultSpeedMultiplier;
+            return multiplier;
+        }
+
+        public static Baseline Defaults()
+        {
+            return new Baseline
+            {
+                TickRate = VanillaTickRate,
+                FullResourcesSeconds = VanillaFullResourcesSeconds,
+                FuelSeconds = VanillaFuelSeconds
+            };
+        }
+
+        // Tick stays at the captured vanilla tick. Speed is timeForFullResources / multiplier.
+        // KeepYieldPerDiesel shortens the diesel by the same factor, so ore per diesel stays put.
+        public static Target TargetFrom(Baseline baseline, bool windowActive, bool enabled, float speedMultiplier, bool keepYieldPerDiesel)
+        {
+            var target = new Target
+            {
+                Applied = false,
+                TickRate = baseline.TickRate,
+                FullResourcesSeconds = baseline.FullResourcesSeconds,
+                FuelSeconds = baseline.FuelSeconds
+            };
+            if (!windowActive || !enabled) return target;
+            float mult = SanitizeMultiplier(speedMultiplier);
+            if (Near(mult, 1f)) return target;
+            target.Applied = true;
+            target.FullResourcesSeconds = baseline.FullResourcesSeconds / mult;
+            if (keepYieldPerDiesel)
+                target.FuelSeconds = baseline.FuelSeconds / mult;
+            return target;
+        }
+
+        // A hot reload that skipped Unload leaves 3/60/60 on the live entities. Those floats
+        // are not what a fresh spawn loads (the ctor writes 3/120/120). Recognize that exact
+        // boosted triple and keep the ctor numbers as vanilla. Anything else is captured as-is.
+        public static Baseline Capture(float tick, float full, float fuel, float speedMultiplier, bool keepYieldPerDiesel)
+        {
+            Baseline defaults = Defaults();
+            Target boosted = TargetFrom(defaults, true, true, speedMultiplier, keepYieldPerDiesel);
+            if (boosted.Applied
+                && Near(tick, boosted.TickRate)
+                && Near(full, boosted.FullResourcesSeconds)
+                && Near(fuel, boosted.FuelSeconds))
+                return defaults;
+            if (tick <= 0f) tick = defaults.TickRate;
+            if (full <= 0f) full = defaults.FullResourcesSeconds;
+            if (fuel <= 0f) fuel = defaults.FuelSeconds;
+            return new Baseline { TickRate = tick, FullResourcesSeconds = full, FuelSeconds = fuel };
+        }
+
+        // Keep the fraction of the diesel already paid for. 90s of a 120s unit becomes 45s of a 60s unit.
+        // Zero stays zero, so a stopped engine does not gain a free unit.
+        public static float ScaleFuel(float cachedFuelTime, float oldSecondsPerUnit, float newSecondsPerUnit)
+        {
+            if (cachedFuelTime <= 0f) return 0f;
+            if (oldSecondsPerUnit <= 0f || newSecondsPerUnit <= 0f) return cachedFuelTime;
+            if (Near(oldSecondsPerUnit, newSecondsPerUnit)) return cachedFuelTime;
+            return cachedFuelTime * (newSecondsPerUnit / oldSecondsPerUnit);
+        }
+
+        // BeginMining cancels ProduceResources and waits a full tick before the next payout.
+        // Restart only when the interval itself must change. The weekend boost does not change it.
+        public static bool ShouldRestartMining(bool mining, float liveTick, float desiredTick)
+        {
+            return mining && !Near(liveTick, desiredTick);
+        }
+    }
+
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.2.1")]
-    [Description("PvP-window Tool Cupboard raid shields, offline protection, and the Eastern-time weekend window that drives TruePVE.")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.3.0")]
+    [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
         private const string PermAdmin = "nightshaderaidprotection.admin";
@@ -303,6 +414,14 @@ namespace Oxide.Plugins
         private NightshadeWeekendClock.TrackedRuleset appliedRuleset;
         private bool applyingRuleset;
         private readonly Dictionary<ulong, string> published = new Dictionary<ulong, string>();
+        private readonly Dictionary<ulong, NightshadeExcavatorBoost.Baseline> excavatorBaselines = new Dictionary<ulong, NightshadeExcavatorBoost.Baseline>();
+        private bool excavatorUnloading;
+        private bool excavatorSaveHold;
+        private bool excavatorBoosted;
+        private bool excavatorEngineWarned;
+        private Timer excavatorSaveTimer;
+        private string excavatorStatus = "excavator not checked";
+        private string excavatorLogSignature;
 
         private class Settings
         {
@@ -317,6 +436,14 @@ namespace Oxide.Plugins
             [JsonProperty("TruePVE ruleset during the weekend window")] public string PvpRuleset = "nightshade_pvp_weekend";
             [JsonProperty("TruePVE ruleset outside the weekend window")] public string PveRuleset = "default";
             [JsonProperty("Yield TruePVE changes while a purge is active")] public bool YieldToPurge = true;
+            [JsonProperty("Excavator")] public ExcavatorSettings Excavator = new ExcavatorSettings();
+        }
+
+        private class ExcavatorSettings
+        {
+            [JsonProperty("Enabled")] public bool Enabled = true;
+            [JsonProperty("SpeedMultiplier")] public float SpeedMultiplier = 2f;
+            [JsonProperty("KeepYieldPerDiesel")] public bool KeepYieldPerDiesel = true;
         }
 
         private class Shield
@@ -346,6 +473,10 @@ namespace Oxide.Plugins
             catch (Exception ex) { PrintError("Invalid config; inspect and repair it: " + ex.Message); settings = new Settings(); }
             if (string.IsNullOrEmpty(settings.PvpRuleset)) settings.PvpRuleset = "nightshade_pvp_weekend";
             if (string.IsNullOrEmpty(settings.PveRuleset)) settings.PveRuleset = "default";
+            if (settings.Excavator == null) settings.Excavator = new ExcavatorSettings();
+            float excavatorMult = settings.Excavator.SpeedMultiplier;
+            if (float.IsNaN(excavatorMult) || float.IsInfinity(excavatorMult) || excavatorMult < 0.01f)
+                settings.Excavator.SpeedMultiplier = NightshadeExcavatorBoost.DefaultSpeedMultiplier;
             SaveConfig();
         }
         protected override void SaveConfig() => Config.WriteObject(settings, true);
@@ -366,9 +497,19 @@ namespace Oxide.Plugins
         }
 
         private void Save() => Interface.Oxide.DataFileSystem.WriteObject(DataPath, store);
-        private void OnServerSave() => Save();
+        private void OnServerSave()
+        {
+            // Entity serialization runs after this hook. Hold vanilla fuel seconds in cachedFuelTime
+            // so a crash cannot reload a shortened timer against the ctor's 120s rate.
+            SuspendExcavatorForSave();
+            Save();
+        }
         private void Unload()
         {
+            excavatorUnloading = true;
+            excavatorSaveTimer?.Destroy();
+            excavatorSaveHold = false;
+            RestoreExcavator();
             boundaryTimer?.Destroy();
             rulesTimer?.Destroy();
             shieldTimer?.Destroy();
@@ -403,7 +544,7 @@ namespace Oxide.Plugins
             WarnIfTruePveScheduleEnabled();
             EnsureRuleset();
             rulesTimer = timer.Every(60f, OnReconcileTick);
-            Puts("Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM.");
+            Puts("Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM. Giant Excavator uses that same window.");
         }
 
         private void OnPluginLoaded(Plugin plugin)
@@ -414,6 +555,16 @@ namespace Oxide.Plugins
 
         private void OnPurgeStarted(double endTimestamp) => timer.Once(1f, EnsureRuleset);
         private void OnPurgeEnded() => timer.Once(1f, EnsureRuleset);
+
+        private void OnEntitySpawned(ExcavatorArm arm)
+        {
+            if (arm != null) QueueExcavatorApply();
+        }
+
+        private void OnEntitySpawned(DieselEngine engine)
+        {
+            if (engine != null) QueueExcavatorApply();
+        }
 
         private void OnEntityKill(BuildingPrivlidge tc)
         {
@@ -433,6 +584,12 @@ namespace Oxide.Plugins
         // API_IsPvPActive() -> bool
         //     True during Friday 8:00 PM through Monday 3:00 AM America/New_York.
         //     A manual /purge is not included; ask Nightshade Purge Status API_IsPurgeActive.
+        //     nrp.faketime and API_SetTestClockUtcTicks are included. API_ClearTestClock returns to the real clock.
+        // API_HasTestClock() -> bool, API_GetTestClockUtcTicks() -> long (0 when the test clock is off)
+        // API_SetTestClockUtcTicks(long utcTicks) -> bool, API_ClearTestClock() -> bool
+        //     Memory only. TruePVE.json is not written. The excavator boost follows this clock.
+        // API_GetExcavatorStatus() -> string
+        //     The same excavator clause nrp.window prints.
         // API_SecondsUntilPvPChange() -> double
         //     Seconds until the window opens, or until it closes when it is already open.
         // API_GetPvPStartUtcTicks() / API_GetPvPEndUtcTicks() -> long (DateTime UTC ticks)
@@ -540,6 +697,48 @@ namespace Oxide.Plugins
                 bestSeconds = shield.RemainingSeconds;
             }
             return best == null ? NoneShield() : Describe(best);
+        }
+
+        [HookMethod("API_HasTestClock")]
+        public bool API_HasTestClock()
+        {
+            return fakeUtc.HasValue;
+        }
+
+        [HookMethod("API_GetTestClockUtcTicks")]
+        public long API_GetTestClockUtcTicks()
+        {
+            return fakeUtc.HasValue ? fakeUtc.Value.Ticks : 0L;
+        }
+
+        [HookMethod("API_SetTestClockUtcTicks")]
+        public bool API_SetTestClockUtcTicks(long utcTicks)
+        {
+            DateTime utc;
+            try { utc = new DateTime(utcTicks, DateTimeKind.Utc); }
+            catch (ArgumentException) { return false; }
+            fakeUtc = utc;
+            CheckWindow();
+            EnsureRuleset();
+            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. TruePVE.json is not changed. The Giant Excavator boost follows this clock. Clear with API_ClearTestClock or nrp.faketime clear.");
+            return true;
+        }
+
+        [HookMethod("API_ClearTestClock")]
+        public bool API_ClearTestClock()
+        {
+            if (!fakeUtc.HasValue) return false;
+            fakeUtc = null;
+            CheckWindow();
+            EnsureRuleset();
+            PrintWarning("PvP test clock cleared via API. The live Eastern window is in use again.");
+            return true;
+        }
+
+        [HookMethod("API_GetExcavatorStatus")]
+        public string API_GetExcavatorStatus()
+        {
+            return excavatorStatus ?? "excavator not checked";
         }
 
         #endregion
@@ -765,6 +964,7 @@ namespace Oxide.Plugins
             {
                 RefreshShieldTimer();
             }
+            ApplyExcavator();
             ScheduleBoundary();
         }
 
@@ -918,7 +1118,11 @@ namespace Oxide.Plugins
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
             if (windowReady && active != windowActive) CheckWindow();
-            else EnsureRuleset();
+            else
+            {
+                EnsureRuleset();
+                ApplyExcavator();
+            }
         }
 
         private void EnsureRuleset()
@@ -1002,7 +1206,8 @@ namespace Oxide.Plugins
                 + " | schedule " + (state.Found && state.ScheduleEnabled ? "ENABLED" : "off")
                 + " | purge override " + purge
                 + " | zone " + eastern.Id + (usedZoneFallback ? " (fallback)" : "")
-                + " | test clock " + (fakeUtc.HasValue ? fakeUtc.Value.ToString("u") : "off"));
+                + " | test clock " + (fakeUtc.HasValue ? fakeUtc.Value.ToString("u") : "off")
+                + " | " + excavatorStatus);
         }
 
         private void CmdFakeTime(ConsoleSystem.Arg arg)
@@ -1052,7 +1257,7 @@ namespace Oxide.Plugins
             }
             CheckWindow();
             EnsureRuleset();
-            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. Clear with nrp.faketime clear.");
+            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. The Giant Excavator boost follows this clock until nrp.faketime clear.");
             arg.ReplyWith("Test clock set to " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ").");
         }
 
@@ -1065,6 +1270,245 @@ namespace Oxide.Plugins
             if (player.IsAdmin || permission.UserHasPermission(player.UserIDString, PermAdmin)) return true;
             arg.ReplyWith("No permission.");
             return false;
+        }
+
+        #endregion
+
+        #region Excavator
+
+        private bool excavatorApplyQueued;
+
+        private void QueueExcavatorApply()
+        {
+            if (excavatorApplyQueued || excavatorUnloading || excavatorSaveHold) return;
+            excavatorApplyQueued = true;
+            timer.Once(1f, () =>
+            {
+                excavatorApplyQueued = false;
+                ApplyExcavator();
+            });
+        }
+
+        private void ApplyExcavator()
+        {
+            if (excavatorUnloading || excavatorSaveHold) return;
+            ApplyExcavatorNow(false, false);
+        }
+
+        private void RestoreExcavator()
+        {
+            ApplyExcavatorNow(true, true);
+        }
+
+        private void SuspendExcavatorForSave()
+        {
+            if (excavatorUnloading || !excavatorBoosted) return;
+            excavatorSaveHold = true;
+            ApplyExcavatorNow(true, true);
+            excavatorSaveTimer?.Destroy();
+            excavatorSaveTimer = timer.Once(1f, EndExcavatorSaveHold);
+        }
+
+        private void EndExcavatorSaveHold()
+        {
+            if (excavatorUnloading) return;
+            if (SaveRestore.IsSaving)
+            {
+                excavatorSaveTimer = timer.Once(1f, EndExcavatorSaveHold);
+                return;
+            }
+            excavatorSaveHold = false;
+            ApplyExcavatorNow(false, true);
+        }
+
+        private void ApplyExcavatorNow(bool forceVanilla, bool quiet)
+        {
+            if (settings == null) settings = new Settings();
+            if (settings.Excavator == null) settings.Excavator = new ExcavatorSettings();
+            bool enabled = settings.Excavator.Enabled;
+            float multiplier = settings.Excavator.SpeedMultiplier;
+            bool keepYield = settings.Excavator.KeepYieldPerDiesel;
+            if (!enabled && !forceVanilla && excavatorBaselines.Count == 0)
+            {
+                excavatorBoosted = false;
+                SetExcavatorStatus("excavator disabled", quiet);
+                return;
+            }
+            bool window = !forceVanilla && enabled && windowActive;
+            var arms = new List<ExcavatorArm>();
+            var engines = new List<DieselEngine>();
+            CollectExcavatorParts(arms, engines);
+            if (arms.Count == 0)
+            {
+                excavatorBoosted = false;
+                SetExcavatorStatus(enabled ? "excavator enabled, no ExcavatorArm on the map" : "excavator disabled", quiet);
+                return;
+            }
+            var paired = new Dictionary<ulong, List<DieselEngine>>();
+            for (int i = 0; i < arms.Count; i++)
+            {
+                if (arms[i] == null || arms[i].net == null) continue;
+                paired[arms[i].net.ID.Value] = new List<DieselEngine>();
+            }
+            bool anyNamed = false;
+            for (int i = 0; i < engines.Count; i++)
+                if (ExcavatorNamed(engines[i])) anyNamed = true;
+            for (int i = 0; i < engines.Count; i++)
+            {
+                DieselEngine engine = engines[i];
+                ExcavatorArm best = null;
+                float bestSqr = float.MaxValue;
+                bool named = ExcavatorNamed(engine);
+                // A named excavator engine wins. Distance is only the fallback, so a quarry
+                // diesel sitting beside the pit is not sped up once the monument engine is known.
+                if (anyNamed && !named) continue;
+                for (int a = 0; a < arms.Count; a++)
+                {
+                    ExcavatorArm arm = arms[a];
+                    if (arm == null || arm.net == null || arm.transform == null || engine.transform == null) continue;
+                    float sqr = (arm.transform.position - engine.transform.position).sqrMagnitude;
+                    float limit = NightshadeExcavatorBoost.EnginePairMeters * NightshadeExcavatorBoost.EnginePairMeters;
+                    if (!named && sqr > limit) continue;
+                    if (sqr < bestSqr)
+                    {
+                        best = arm;
+                        bestSqr = sqr;
+                    }
+                }
+                List<DieselEngine> list;
+                if (best != null && paired.TryGetValue(best.net.ID.Value, out list)) list.Add(engine);
+            }
+            int usedEngines = 0;
+            int missingEngines = 0;
+            bool anyApplied = false;
+            float shownTick = 0f;
+            float shownFull = 0f;
+            float shownFuel = 0f;
+            float shownVanillaFull = 0f;
+            float shownVanillaFuel = 0f;
+            bool anyMining = false;
+            for (int i = 0; i < arms.Count; i++)
+            {
+                ExcavatorArm arm = arms[i];
+                if (arm == null || arm.IsDestroyed || arm.net == null) continue;
+                ulong armId = arm.net.ID.Value;
+                List<DieselEngine> list;
+                if (!paired.TryGetValue(armId, out list) || list == null) list = new List<DieselEngine>();
+                DieselEngine first = null;
+                for (int e = 0; e < list.Count; e++)
+                {
+                    if (list[e] != null && !list[e].IsDestroyed) { first = list[e]; break; }
+                }
+                if (first == null && keepYield && !excavatorBaselines.ContainsKey(armId))
+                {
+                    missingEngines++;
+                    if (!excavatorEngineWarned)
+                    {
+                        excavatorEngineWarned = true;
+                        PrintWarning("Giant Excavator arm has no paired DieselEngine within " + Num(NightshadeExcavatorBoost.EnginePairMeters) + "m and the prefab name does not contain excavator. Production was left unchanged so a faster arm cannot outrun vanilla fuel.");
+                    }
+                    continue;
+                }
+                NightshadeExcavatorBoost.Baseline baseline;
+                if (!excavatorBaselines.TryGetValue(armId, out baseline))
+                {
+                    float liveFuel = first != null ? first.runningTimePerFuelUnit : NightshadeExcavatorBoost.VanillaFuelSeconds;
+                    baseline = NightshadeExcavatorBoost.Capture(arm.resourceProductionTickRate, arm.timeForFullResources, liveFuel, multiplier, keepYield);
+                    excavatorBaselines[armId] = baseline;
+                }
+                // No paired engine and yield must stay 1x: do not speed the arm.
+                bool allowBoost = window && !(keepYield && first == null);
+                NightshadeExcavatorBoost.Target target = NightshadeExcavatorBoost.TargetFrom(baseline, allowBoost, true, multiplier, keepYield);
+                bool restart = NightshadeExcavatorBoost.ShouldRestartMining(arm.IsMining(), arm.resourceProductionTickRate, target.TickRate);
+                arm.timeForFullResources = target.FullResourcesSeconds;
+                arm.resourceProductionTickRate = target.TickRate;
+                if (restart)
+                {
+                    arm.StopMining();
+                    arm.BeginMining();
+                }
+                for (int e = 0; e < list.Count; e++)
+                {
+                    DieselEngine engine = list[e];
+                    if (engine == null || engine.IsDestroyed) continue;
+                    float live = engine.runningTimePerFuelUnit;
+                    if (!NightshadeExcavatorBoost.Near(live, target.FuelSeconds))
+                    {
+                        engine.cachedFuelTime = NightshadeExcavatorBoost.ScaleFuel(engine.cachedFuelTime, live, target.FuelSeconds);
+                        engine.runningTimePerFuelUnit = target.FuelSeconds;
+                    }
+                    usedEngines++;
+                }
+                if (first == null) missingEngines++;
+                if (arm.IsMining()) anyMining = true;
+                if (target.Applied) anyApplied = true;
+                shownTick = target.TickRate;
+                shownFull = target.FullResourcesSeconds;
+                shownFuel = target.FuelSeconds;
+                shownVanillaFull = baseline.FullResourcesSeconds;
+                shownVanillaFuel = baseline.FuelSeconds;
+            }
+            excavatorBoosted = anyApplied;
+            string text;
+            if (excavatorSaveHold)
+                text = "excavator paused for save";
+            else if (missingEngines > 0 && usedEngines == 0 && keepYield)
+                text = "excavator waiting, DieselEngine not found, arm left unchanged so yield stays 1x";
+            else if (anyApplied)
+                text = "excavator active x" + Num(multiplier)
+                    + " tick " + Num(shownTick)
+                    + " full " + Num(shownFull)
+                    + " fuel " + Num(shownFuel)
+                    + " (vanilla full " + Num(shownVanillaFull) + " fuel " + Num(shownVanillaFuel) + ")"
+                    + " arms " + arms.Count + " engines " + usedEngines
+                    + (missingEngines > 0 ? " missing-engines " + missingEngines : "")
+                    + " mining " + (anyMining ? "yes" : "no")
+                    + (keepYield ? " yield-kept" : " yield-not-kept");
+            else
+                text = "excavator vanilla"
+                    + " tick " + Num(shownTick)
+                    + " full " + Num(shownFull)
+                    + " fuel " + Num(shownFuel)
+                    + " arms " + arms.Count + " engines " + usedEngines
+                    + " mining " + (anyMining ? "yes" : "no");
+            SetExcavatorStatus(text, quiet);
+        }
+
+        private void SetExcavatorStatus(string text, bool quiet)
+        {
+            excavatorStatus = text;
+            if (quiet || text == excavatorLogSignature) return;
+            excavatorLogSignature = text;
+            Puts(text + (fakeUtc.HasValue ? " (test clock)" : "") + ".");
+        }
+
+        private static void CollectExcavatorParts(List<ExcavatorArm> arms, List<DieselEngine> engines)
+        {
+            if (BaseNetworkable.serverEntities == null) return;
+            foreach (BaseNetworkable entity in BaseNetworkable.serverEntities)
+            {
+                ExcavatorArm arm = entity as ExcavatorArm;
+                if (arm != null && !arm.IsDestroyed) arms.Add(arm);
+                DieselEngine engine = entity as DieselEngine;
+                if (engine != null && !engine.IsDestroyed) engines.Add(engine);
+            }
+        }
+
+        private static bool ExcavatorNamed(BaseEntity entity)
+        {
+            BaseEntity current = entity;
+            for (int i = 0; current != null && i < 6; i++)
+            {
+                string name = (current.ShortPrefabName ?? "") + " " + (current.PrefabName ?? "");
+                if (name.IndexOf("excavator", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                current = current.GetParentEntity();
+            }
+            return false;
+        }
+
+        private static string Num(float value)
+        {
+            return value.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
         #endregion

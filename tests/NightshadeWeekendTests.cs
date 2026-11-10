@@ -7,7 +7,7 @@ using Oxide.Plugins;
 
 // Regression tests for the Eastern weekend window and the TruePVE toggle path.
 // Compile with NIGHTSHADE_RAID_TESTS so NightshadeRaidProtection.cs contributes
-// NightshadeWeekendClock only. The RustPlugin type needs Unity assemblies that
+// NightshadeWeekendClock and NightshadeExcavatorBoost only. The RustPlugin type needs Unity assemblies that
 // are not in this repo; Carbon compiles that type on the server.
 public static class NightshadeWeekendTests
 {
@@ -33,6 +33,8 @@ public static class NightshadeWeekendTests
         TestReloadBudget(iana);
         TestApply();
         TestRepoConfig(configPath);
+        TestExcavator();
+        TestExcavatorConfig(configPath);
 
         if (failed == 0)
         {
@@ -363,6 +365,70 @@ public static class NightshadeWeekendTests
         {
             try { Directory.Delete(dir, true); } catch { }
         }
+    }
+
+    static void TestExcavator()
+    {
+        NightshadeExcavatorBoost.Baseline vanilla = NightshadeExcavatorBoost.Defaults();
+        Check(vanilla.TickRate == 3f && vanilla.FullResourcesSeconds == 120f && vanilla.FuelSeconds == 120f, "ctor defaults are not 3/120/120");
+
+        NightshadeExcavatorBoost.Target boost = NightshadeExcavatorBoost.TargetFrom(vanilla, true, true, 2f, true);
+        Check(boost.Applied && NightshadeExcavatorBoost.Near(boost.TickRate, 3f) && NightshadeExcavatorBoost.Near(boost.FullResourcesSeconds, 60f) && NightshadeExcavatorBoost.Near(boost.FuelSeconds, 60f), "2x keep-yield should be tick 3, full 60, fuel 60");
+
+        NightshadeExcavatorBoost.Target fasterOnly = NightshadeExcavatorBoost.TargetFrom(vanilla, true, true, 2f, false);
+        Check(fasterOnly.Applied && NightshadeExcavatorBoost.Near(fasterOnly.FullResourcesSeconds, 60f) && NightshadeExcavatorBoost.Near(fasterOnly.FuelSeconds, 120f), "2x without keep-yield must leave the diesel at 120s");
+
+        NightshadeExcavatorBoost.Target closed = NightshadeExcavatorBoost.TargetFrom(vanilla, false, true, 2f, true);
+        Check(!closed.Applied && NightshadeExcavatorBoost.Near(closed.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(closed.FuelSeconds, 120f), "closed window must be vanilla");
+
+        NightshadeExcavatorBoost.Target disabled = NightshadeExcavatorBoost.TargetFrom(vanilla, true, false, 2f, true);
+        Check(!disabled.Applied && NightshadeExcavatorBoost.Near(disabled.FuelSeconds, 120f), "disabled config must be vanilla");
+
+        NightshadeExcavatorBoost.Target same = NightshadeExcavatorBoost.TargetFrom(vanilla, true, true, 1f, true);
+        Check(!same.Applied, "multiplier 1 is not a boost");
+
+        NightshadeExcavatorBoost.Target fromNaN = NightshadeExcavatorBoost.TargetFrom(vanilla, true, true, float.NaN, true);
+        Check(fromNaN.Applied && NightshadeExcavatorBoost.Near(fromNaN.FullResourcesSeconds, 60f), "invalid multiplier should fall back to 2");
+
+        var custom = new NightshadeExcavatorBoost.Baseline { TickRate = 3f, FullResourcesSeconds = 90f, FuelSeconds = 100f };
+        NightshadeExcavatorBoost.Target customBoost = NightshadeExcavatorBoost.TargetFrom(custom, true, true, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(customBoost.FullResourcesSeconds, 45f) && NightshadeExcavatorBoost.Near(customBoost.FuelSeconds, 50f) && NightshadeExcavatorBoost.Near(customBoost.TickRate, 3f), "custom vanilla should scale and keep the tick");
+
+        float half = NightshadeExcavatorBoost.ScaleFuel(90f, 120f, 60f);
+        float back = NightshadeExcavatorBoost.ScaleFuel(half, 60f, 120f);
+        Check(NightshadeExcavatorBoost.Near(half, 45f), "90s of a 120s diesel should become 45s at 60s");
+        Check(NightshadeExcavatorBoost.Near(back, 90f), "scaling back should return the same diesel fraction");
+        Check(NightshadeExcavatorBoost.ScaleFuel(0f, 120f, 60f) == 0f, "an empty fuel timer must not gain a free diesel");
+        Check(NightshadeExcavatorBoost.Near(NightshadeExcavatorBoost.ScaleFuel(45f, 60f, 60f), 45f), "same rate must not scale again");
+        Check(NightshadeExcavatorBoost.ScaleFuel(-5f, 120f, 60f) == 0f, "negative fuel time should clamp to zero");
+
+        NightshadeExcavatorBoost.Baseline leftover = NightshadeExcavatorBoost.Capture(3f, 60f, 60f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(leftover.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(leftover.FuelSeconds, 120f), "a leftover 60/60 boost must not be captured as vanilla");
+        NightshadeExcavatorBoost.Baseline liveVanilla = NightshadeExcavatorBoost.Capture(3f, 120f, 120f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(liveVanilla.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(liveVanilla.FuelSeconds, 120f), "live 120/120 should stay vanilla");
+        NightshadeExcavatorBoost.Baseline customLive = NightshadeExcavatorBoost.Capture(3f, 90f, 100f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(customLive.FullResourcesSeconds, 90f) && NightshadeExcavatorBoost.Near(customLive.FuelSeconds, 100f), "custom live rates should be stored");
+        NightshadeExcavatorBoost.Baseline fuelOnly = NightshadeExcavatorBoost.Capture(3f, 120f, 60f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(fuelOnly.FuelSeconds, 60f) && NightshadeExcavatorBoost.Near(fuelOnly.FullResourcesSeconds, 120f), "fuel 60 with vanilla production is not the boosted triple");
+
+        Check(!NightshadeExcavatorBoost.ShouldRestartMining(true, 3f, 3f), "an unchanged 3s tick must not restart BeginMining");
+        Check(NightshadeExcavatorBoost.ShouldRestartMining(true, 1f, 3f), "a changed tick on a running arm should restart");
+        Check(!NightshadeExcavatorBoost.ShouldRestartMining(false, 1f, 3f), "a stopped arm has no invoke to restart");
+        Check(NightshadeExcavatorBoost.Near(NightshadeExcavatorBoost.EnginePairMeters, 50f), "engine pair distance drifted from the 20m broadcast plus margin");
+    }
+
+    static void TestExcavatorConfig(string truePvePath)
+    {
+        string path = Path.Combine(Path.GetDirectoryName(truePvePath) ?? "", "NightshadeRaidProtection.json");
+        Check(File.Exists(path), "NightshadeRaidProtection.json not found next to " + truePvePath);
+        if (!File.Exists(path)) return;
+        JObject root = JObject.Parse(File.ReadAllText(path));
+        JObject excavator = root["Excavator"] as JObject;
+        Check(excavator != null, "Excavator config block missing");
+        if (excavator == null) return;
+        Check(excavator["Enabled"] != null && (bool)excavator["Enabled"], "Excavator.Enabled should default on");
+        Check(excavator["SpeedMultiplier"] != null && Math.Abs((double)excavator["SpeedMultiplier"] - 2d) < 0.001, "Excavator.SpeedMultiplier should be 2");
+        Check(excavator["KeepYieldPerDiesel"] != null && (bool)excavator["KeepYieldPerDiesel"], "Excavator.KeepYieldPerDiesel should default on");
     }
 
     static void TestRepoConfig(string path)

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compiles the Eastern weekend clock and TruePVE toggle tests.
+# Compiles the Eastern weekend clock, TruePVE toggle, and excavator rate tests.
 # Defines match a Carbon server compile. NIGHTSHADE_RAID_TESTS drops the
 # RustPlugin type, which needs Unity assemblies this repo does not ship.
 # Newtonsoft.Json.dll is not in the repo; the script downloads the net45 build
