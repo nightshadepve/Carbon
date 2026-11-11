@@ -27,7 +27,7 @@ using Time = UnityEngine.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Backpacks", "WhiteThunder", "3.17.7")]
+    [Info("Backpacks", "WhiteThunder", "3.17.10")]
     [Description("Allows players to have a Backpack which provides them extra inventory space.")]
     public class Backpacks : CovalencePlugin
     {
@@ -445,7 +445,7 @@ namespace Oxide.Plugins
             NextTick(() =>
             {
                 // Verify the conversation started, since another plugin may have blocked it.
-                if (!npcTalking.conversingPlayers.Contains(player))
+                if (!npcTalking.ConversationHost.IsConversingWith(player))
                     return;
 
                 DestroyButtonUi(player);
@@ -2782,7 +2782,6 @@ namespace Oxide.Plugins
                 CustomPool.Reset<ItemContainerAdapter>(empty ? 0 : 2 * BackpackPoolSize);
                 CustomPool.Reset<DisposableList<Item>>(empty ? 0 : 4);
                 CustomPool.Reset<DisposableList<ItemData>>(empty ? 0 : 4);
-                CustomPool.Reset<ContainerAdapterEnumerator>(empty ? 0 : 4);
             }
         }
 
@@ -5627,7 +5626,7 @@ namespace Oxide.Plugins
 
             private Action _onDirty;
             private Func<BasePlayer, Item, int, bool> _canAcceptItem;
-            private Action<Item, bool> _onItemAddedRemoved;
+            private Action<Item, bool, BasePlayer> _onItemAddedRemoved;
 
             private Backpacks _plugin => _backpack.Plugin;
             private Configuration _config => _plugin._config;
@@ -5651,7 +5650,7 @@ namespace Oxide.Plugins
                     }
                     return result;
                 };
-                _onItemAddedRemoved = (item, wasAdded) =>
+                _onItemAddedRemoved = (item, wasAdded, sourcePlayer) =>
                 {
                     _backpack.HandleItemCountChanged();
                 };
@@ -5880,37 +5879,15 @@ namespace Oxide.Plugins
             }
         }
 
-        private class ContainerAdapterEnumerator : IEnumerator<IContainerAdapter>, CustomPool.IPooled
+        private struct ContainerAdapterEnumerator
         {
-            private ContainerAdapterCollection _adapterCollection;
-            private int _position = -1;
+            private readonly ContainerAdapterCollection _adapterCollection;
+            private int _position;
 
-            public ContainerAdapterEnumerator Setup(ContainerAdapterCollection adapterCollection)
+            public ContainerAdapterEnumerator(ContainerAdapterCollection adapterCollection)
             {
-                #if DEBUG_POOLING
-                LogDebug("ContainerAdapterEnumerator::Setup");
-                #endif
-
                 _adapterCollection = adapterCollection;
                 _position = -1;
-                return this;
-            }
-
-            public void EnterPool()
-            {
-                #if DEBUG_POOLING
-                LogDebug($"ContainerAdapterEnumerator::EnterPool | {CustomPool.GetStats<ContainerAdapterEnumerator>()}");
-                #endif
-
-                _adapterCollection = null;
-                _position = -1;
-            }
-
-            public void LeavePool()
-            {
-                #if DEBUG_POOLING
-                LogDebug($"ContainerAdapterEnumerator::LeavePool | {CustomPool.GetStats<ContainerAdapterEnumerator>()}");
-                #endif
             }
 
             public bool MoveNext()
@@ -5924,20 +5901,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            public void Reset()
-            {
-                throw new NotImplementedException();
-            }
-
             public IContainerAdapter Current => _adapterCollection[_position];
-
-            object IEnumerator.Current => Current;
-
-            public void Dispose()
-            {
-                var self = this;
-                CustomPool.Free(ref self);
-            }
         }
 
         /// <summary>
@@ -5947,7 +5911,7 @@ namespace Oxide.Plugins
         ///
         /// When enumerating via foreach, null entries are skipped, and enumeration stops at Count.
         /// </summary>
-        private class ContainerAdapterCollection : IEnumerable<IContainerAdapter>
+        private class ContainerAdapterCollection
         {
             public int Count { get; private set; }
             private IContainerAdapter[] _containerAdapters;
@@ -5980,14 +5944,9 @@ namespace Oxide.Plugins
                 }
             }
 
-            public IEnumerator<IContainerAdapter> GetEnumerator()
+            public ContainerAdapterEnumerator GetEnumerator()
             {
-                return CustomPool.Get<ContainerAdapterEnumerator>().Setup(this);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return GetEnumerator();
+                return new ContainerAdapterEnumerator(this);
             }
 
             public void Resize(int newSize)
@@ -6069,7 +6028,7 @@ namespace Oxide.Plugins
             private HashSet<Item> _gatherQueueSet;
 
             public GatherModeStats Stats;
-            private Action<Item, bool> _onItemAddedRemoved;
+            private Action<Item, bool, BasePlayer> _onItemAddedRemoved;
             private Item _itemBeingGathered;
             private Action _processGatherQueue;
 
@@ -6103,7 +6062,7 @@ namespace Oxide.Plugins
                 return _backpack.Plugin._backpackManager.IsBackpack(rootContainer);
             }
 
-            private void OnItemAddedRemoved(Item item, bool wasAdded)
+            private void OnItemAddedRemoved(Item item, bool wasAdded, BasePlayer sourcePlayer)
             {
                 if (!wasAdded)
                 {
@@ -8089,7 +8048,7 @@ namespace Oxide.Plugins
                     if (photoEntity.ImageCrc == 0)
                         return;
 
-                    var fileContent = FileStorage.server.Get(photoEntity.ImageCrc, FileStorage.Type.jpg, entity.net.ID);
+                    var fileContent = FileStorage.server.Get(entity.net.ID, 0, photoEntity.ImageCrc);
                     if (fileContent == null)
                         return;
 
@@ -8124,7 +8083,7 @@ namespace Oxide.Plugins
                         if (imageId == 0)
                             continue;
 
-                        var fileContent = FileStorage.server.Get(imageId, FileStorage.Type.png, entity.net.ID);
+                        var fileContent = FileStorage.server.Get(entity.net.ID, (ulong)i, imageId);
                         if (fileContent == null)
                             continue;
 
@@ -8140,7 +8099,7 @@ namespace Oxide.Plugins
                     if (paintedItemStorageEntity._currentImageCrc == 0)
                         return;
 
-                    var fileContent = FileStorage.server.Get(paintedItemStorageEntity._currentImageCrc, FileStorage.Type.png, entity.net.ID);
+                    var fileContent = FileStorage.server.Get(entity.net.ID, 0, paintedItemStorageEntity._currentImageCrc);
                     if (fileContent == null)
                         return;
 
@@ -8156,7 +8115,7 @@ namespace Oxide.Plugins
                     if (cassette.AudioId == 0)
                         return;
 
-                    var fileContent = FileStorage.server.Get(cassette.AudioId, FileStorage.Type.ogg, entity.net.ID);
+                    var fileContent = FileStorage.server.Get(entity.net.ID, 0, cassette.AudioId);
                     if (fileContent == null)
                         return;
 
@@ -8273,13 +8232,18 @@ namespace Oxide.Plugins
                     if (FileContent == null)
                         return;
 
-                    for (uint i = 0; i < FileContent.Length && i < signContent.GetContentCRCs.Length; i++)
+                    for (uint i = 0; i < FileContent.Length; i++)
                     {
                         var fileContent = FileContent[i];
                         if (fileContent == null)
                             continue;
 
-                        signContent.GetContentCRCs[i] = FileStorage.server.Store(Convert.FromBase64String(fileContent), FileStorage.Type.png, entity.net.ID, i);
+                        var contentCrc = FileStorage.server.Store(entity.net.ID, i, FileStorage.Type.png, Convert.FromBase64String(fileContent));
+
+                        if (i == 0)
+                        {
+                            signContent.imageCrc = contentCrc;
+                        }
                     }
 
                     return;
@@ -8292,7 +8256,7 @@ namespace Oxide.Plugins
                     if (fileContent == null)
                         return;
 
-                    paintedItemStorageEntity._currentImageCrc = FileStorage.server.Store(Convert.FromBase64String(fileContent), FileStorage.Type.png, entity.net.ID);
+                    paintedItemStorageEntity._currentImageCrc = FileStorage.server.Store(entity.net.ID, 0, FileStorage.Type.png, Convert.FromBase64String(fileContent));
                     return;
                 }
 
@@ -8305,7 +8269,7 @@ namespace Oxide.Plugins
                     if (fileContent == null)
                         return;
 
-                    var audioId = FileStorage.server.Store(Convert.FromBase64String(fileContent), FileStorage.Type.ogg, entity.net.ID);
+                    var audioId = FileStorage.server.Store(entity.net.ID, 0, FileStorage.Type.ogg, Convert.FromBase64String(fileContent));
                     cassette.SetAudioId(audioId, CreatorSteamId);
                     return;
                 }

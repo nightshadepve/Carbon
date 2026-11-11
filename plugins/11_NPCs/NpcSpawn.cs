@@ -8,6 +8,8 @@ using Oxide.Plugins.NpcSpawnExtensionMethods;
 using ProtoBuf;
 using Rust;
 using Rust.Ai;
+using Rust.Ai.Gen2;
+using Rust.Ai.Gen2.Nav;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,7 +24,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NpcSpawn", "KpucTaJl", "3.4.1")]
+    [Info("NpcSpawn", "KpucTaJl", "3.5.0")]
     internal class NpcSpawn : RustPlugin
     {
         #region Config
@@ -145,7 +147,8 @@ namespace Oxide.Plugins
                         ["blowpipe"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
                         ["pistol.eoka"] = new DefaultSettings { EffectiveRange = 10f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
                         ["snowballgun"] = new DefaultSettings { EffectiveRange = 5f, AttackLengthMin = 2f, AttackLengthMax = 2f, NpcDamageScale = 0.2f },
-                        ["crossbowbowless"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f }
+                        ["crossbowbowless"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
+                        ["smg.uzi"] = new DefaultSettings { EffectiveRange = 20f, AttackLengthMin = 0.4f, AttackLengthMax = 0.4f, NpcDamageScale = 0.25f },
                     },
                     Weapons = new Dictionary<int, HashSet<string>>
                     {
@@ -233,7 +236,8 @@ namespace Oxide.Plugins
                             "rifle.sks",
                             "revolver.hc",
                             "t1_smg",
-                            "paintballgun"
+                            "paintballgun",
+                            "smg.uzi"
                         },
                         [3] = new HashSet<string>
                         {
@@ -650,6 +654,7 @@ namespace Oxide.Plugins
             public float BarricadeHealthThreshold { get; set; }
             public float BarricadeDistanceThreshold { get; set; }
             public float HealingScale { get; set; }
+            public bool AlwaysUseLights { get; set; }
 
             public NpcConfig() { }
 
@@ -733,7 +738,8 @@ namespace Oxide.Plugins
                     LegDamageScale = 1f,
                     BarricadeHealthThreshold = 30f,
                     BarricadeDistanceThreshold = 12f,
-                    HealingScale = 1f
+                    HealingScale = 1f,
+                    AlwaysUseLights = false
                 };
             }
 
@@ -951,6 +957,7 @@ namespace Oxide.Plugins
                 cfg.BarricadeHealthThreshold = obj.Read("NpcBarricadeHealthThreshold", cfg.BarricadeHealthThreshold);
                 cfg.BarricadeDistanceThreshold = obj.Read("BarricadeDistanceThreshold", cfg.BarricadeDistanceThreshold);
                 cfg.HealingScale = obj.Read("HealingScale", cfg.HealingScale);
+                cfg.AlwaysUseLights = obj.Read("AlwaysUseLights", cfg.AlwaysUseLights);
 
                 if (obj.TryGetValue("WearItems", out JToken wearToken) && wearToken != null && wearToken.Type != JTokenType.Null && wearToken.Type != JTokenType.Undefined)
                 {
@@ -1137,8 +1144,16 @@ namespace Oxide.Plugins
             UnityEngine.Object.DestroyImmediate(scientistNpc, true);
             UnityEngine.Object.DestroyImmediate(scientistBrain, true);
 
-            customScientist.Config = config;
             customScientist.Brain = customScientistBrain;
+
+            customScientist.Config = config;
+            customScientist.UpdateStationary();
+            if (customScientist.IsStationary)
+            {
+                RustNavMeshAgent navAgent = customScientist.GetComponent<RustNavMeshAgent>();
+                if (navAgent != null) navAgent.updatePosition = false;
+            }
+
             customScientist.enableSaving = false;
             customScientist.gameObject.AwakeFromInstantiate();
             customScientist.Spawn();
@@ -1179,6 +1194,8 @@ namespace Oxide.Plugins
         {
             if (!IsCustomScientist(npc) || transform == null) return;
             if (!AllNavMeshes.TryGetValue(navMeshName, out Dictionary<int, Dictionary<int, PointNavMeshFile>> navMesh)) return;
+
+            npc.CustomNavMeshName = navMeshName;
 
             npc.CustomNavMesh ??= new Dictionary<int, Dictionary<int, PointNavMesh>>();
             foreach (KeyValuePair<int, Dictionary<int, PointNavMesh>> row in npc.CustomNavMesh) row.Value.Clear();
@@ -1233,7 +1250,7 @@ namespace Oxide.Plugins
 
             if (states.Contains("SledgeState")) npc.Brain.AddState(new CustomScientistBrain.SledgeState(npc));
             if (states.Contains("BlazerState")) npc.Brain.AddState(new CustomScientistBrain.BlazerState(npc));
-            
+
             npc.UpdateStationary();
         }
 
@@ -1368,6 +1385,46 @@ namespace Oxide.Plugins
                 };
             }
         }
+
+        private void AddSphereNavObstacle(string navMeshName, ulong netId, Transform transform, float radius, Vector3 centerOffset)
+        {
+            if (string.IsNullOrEmpty(navMeshName) || transform == null || netId == 0 || radius <= 0f) return;
+
+            if (!DynamicNavObstacles.TryGetValue(navMeshName, out Dictionary<ulong, DynamicNavObstacle> obstacles))
+            {
+                obstacles = new Dictionary<ulong, DynamicNavObstacle>();
+                DynamicNavObstacles.Add(navMeshName, obstacles);
+            }
+
+            if (obstacles.ContainsKey(netId)) return;
+
+            obstacles.Add(netId, new DynamicNavObstacle(transform, radius, centerOffset));
+        }
+        private void AddBoxNavObstacle(string navMeshName, ulong netId, Transform transform, Vector3 size, Vector3 centerOffset)
+        {
+            if (string.IsNullOrEmpty(navMeshName) || transform == null || netId == 0) return;
+            if (size.x <= 0f || size.y <= 0f || size.z <= 0f) return;
+
+            if (!DynamicNavObstacles.TryGetValue(navMeshName, out Dictionary<ulong, DynamicNavObstacle> obstacles))
+            {
+                obstacles = new Dictionary<ulong, DynamicNavObstacle>();
+                DynamicNavObstacles.Add(navMeshName, obstacles);
+            }
+
+            if (obstacles.ContainsKey(netId)) return;
+
+            obstacles.Add(netId, new DynamicNavObstacle(transform, size, centerOffset));
+        }
+        private void RemoveNavObstacle(string navMeshName, ulong netId)
+        {
+            if (string.IsNullOrEmpty(navMeshName) || netId == 0) return;
+            if (!DynamicNavObstacles.TryGetValue(navMeshName, out Dictionary<ulong, DynamicNavObstacle> obstacles)) return;
+            obstacles.Remove(netId);
+            if (obstacles.Count == 0) DynamicNavObstacles.Remove(navMeshName);
+        }
+
+        private void AddIgnoredPlayer(ulong steamId) => IgnoredPlayers.Add(steamId);
+        private void RemoveIgnoredPlayer(ulong steamId) => IgnoredPlayers.Remove(steamId);
         #endregion Methods
 
         #region Gender and Skin Tone
@@ -1508,7 +1565,7 @@ namespace Oxide.Plugins
 
                 HomePosition = string.IsNullOrEmpty(Config.HomePosition) ? transform.position : Config.HomePosition.ToVector3();
 
-                if (NavAgent == null) NavAgent = GetComponent<Rust.Ai.Gen2.RustNavMeshAgent>();
+                if (NavAgent == null) NavAgent = GetComponent<RustNavMeshAgent>();
                 if (NavAgent != null)
                 {
                     NavAgent.areaMask = Config.AreaMask;
@@ -1540,7 +1597,14 @@ namespace Oxide.Plugins
 
                 Selector = new WeaponSelector(this);
 
-                InvokeRepeating(LightCheck, 1f, 30f);
+                if (Config.AlwaysUseLights)
+                {
+                    Invoke(() => {
+                        LightToggle();
+                        lightsOn = true;
+                    }, 1f);
+                }
+                else InvokeRepeating(LightCheck, 1f, 30f);
                 InvokeRepeating(UpdateTick, 1f, 2f);
             }
 
@@ -1752,6 +1816,7 @@ namespace Oxide.Plugins
             public bool CanTargetPlayer(BasePlayer target)
             {
                 if (target.limitNetworking || target.isInvisible) return false;
+                if (_.IgnoredPlayers.Contains(target.userID)) return false;
                 if (Config.IgnoreSleepingPlayers && target.IsSleeping()) return false;
                 if (Config.IgnoreWoundedPlayers && target.IsWounded()) return false;
                 if (Config.IgnoreSafeZonePlayers && target.InSafeZone()) return false;
@@ -2158,13 +2223,13 @@ namespace Oxide.Plugins
                         if (main == null) return null;
                     }
 
-                    if (NavMesh.SamplePosition(main.transform.position, out NavMeshHit navMeshHit, 30f, NavAgent.areaMask))
+                    if (RustNavMeshHelpers.SamplePosition(main.transform.position, out NavMeshHit navMeshHit, 30f, NavAgent.areaMask))
                     {
-                        NavMeshPath path = new NavMeshPath();
-                        if (NavMesh.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
+                        RustNavMeshPath path = new RustNavMeshPath();
+                        if (RustNavMeshHelpers.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
                         {
                             if (path.status == NavMeshPathStatus.PathComplete) return main;
-                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last(), 5f, 2097408); //1 << 8 | 1 << 21
+                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last().Value, 5f, 2097408); //1 << 8 | 1 << 21
                         }
                     }
 
@@ -2177,25 +2242,25 @@ namespace Oxide.Plugins
                     main = GetNearEntity<BuildingBlock>(pos, 15f, 2097152); //1 << 21
                     if (main == null) return null;
 
-                    if (NavMesh.SamplePosition(main.transform.position, out navMeshHit, 30f, NavAgent.areaMask))
+                    if (RustNavMeshHelpers.SamplePosition(main.transform.position, out navMeshHit, 30f, NavAgent.areaMask))
                     {
-                        NavMeshPath path = new NavMeshPath();
-                        if (NavMesh.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
+                        RustNavMeshPath path = new RustNavMeshPath();
+                        if (RustNavMeshHelpers.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
                         {
                             if (path.status == NavMeshPathStatus.PathComplete) return main;
-                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last(), 5f, 2097408); //1 << 8 | 1 << 21
+                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last().Value, 5f, 2097408); //1 << 8 | 1 << 21
                         }
                     }
                 }
                 else if (IsRaidStateMelee)
                 {
-                    if (NavMesh.SamplePosition(main.transform.position, out NavMeshHit navMeshHit, 30f, NavAgent.areaMask))
+                    if (RustNavMeshHelpers.SamplePosition(main.transform.position, out NavMeshHit navMeshHit, 30f, NavAgent.areaMask))
                     {
-                        NavMeshPath path = new NavMeshPath();
-                        if (NavMesh.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
+                        RustNavMeshPath path = new RustNavMeshPath();
+                        if (RustNavMeshHelpers.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
                         {
                             if (path.status == NavMeshPathStatus.PathComplete && Vector3.Distance(navMeshHit.position, main.transform.position) < 6f) return main;
-                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last(), 6f, 2097408); //1 << 8 | 1 << 21
+                            else return GetNearEntity<BaseCombatEntity>(path.corners.Last().Value, 6f, 2097408); //1 << 8 | 1 << 21
                         }
                     }
                 }
@@ -2274,7 +2339,10 @@ namespace Oxide.Plugins
                 Vector3 homePosition = HomePosition;
                 bool isLocalZero = local == Vector3.zero;
 
-                while (parent != null)
+                BasePlayer player = parent.ToBaseEntity() as BasePlayer;
+                bool isPlayer = player.IsPlayer();
+
+                while (parent != null && (!isPlayer || !player.IsWounded()))
                 {
                     HomePosition = isLocalZero ? parent.position : parent.GetGlobalPosition(local);
                     yield return CoroutineEx.waitForSeconds(delta);
@@ -2395,22 +2463,20 @@ namespace Oxide.Plugins
 
                 attackEntity.TopUpAmmo();
 
+                attackEntity.aiOnlyInRange = true;
+                if (_.Cfg.WeaponsParameters.TryGetValue(weapon.info.shortname, out DefaultSettings setting))
+                {
+                    attackEntity.effectiveRange = setting.EffectiveRange;
+                    attackEntity.attackLengthMin = setting.AttackLengthMin;
+                    attackEntity.attackLengthMax = setting.AttackLengthMax;
+                    attackEntity.npcDamageScale = setting.NpcDamageScale;
+                }
+
                 if (attackEntity is Chainsaw chainsaw) chainsaw.ServerNPCStart();
 
                 if (attackEntity is BaseProjectile baseProjectile)
                 {
-                    baseProjectile.aiOnlyInRange = true;
-
                     if (baseProjectile.MuzzlePoint == null) baseProjectile.MuzzlePoint = baseProjectile.transform;
-
-                    if (_.Cfg.WeaponsParameters.TryGetValue(weapon.info.shortname, out DefaultSettings setting))
-                    {
-                        baseProjectile.effectiveRange = setting.EffectiveRange;
-                        baseProjectile.attackLengthMin = setting.AttackLengthMin;
-                        baseProjectile.attackLengthMax = setting.AttackLengthMax;
-                        baseProjectile.npcDamageScale = setting.NpcDamageScale;
-                    }
-                    
                     SetAmmoType(baseProjectile, Config.BeltItems.FirstOrDefault(x => x.ShortName == weapon.info.shortname));
                 }
             }
@@ -2959,6 +3025,7 @@ namespace Oxide.Plugins
             }
 
             public Dictionary<int, Dictionary<int, PointNavMesh>> CustomNavMesh { get; set; } = null;
+            public string CustomNavMeshName { get; set; } = null;
 
             private int CurrentI { get; set; }
             private int CurrentJ { get; set; }
@@ -3033,7 +3100,7 @@ namespace Oxide.Plugins
                 NavMeshController.enabled = false;
                 NavMeshController.Main = this;
 
-                if (!TryFindNearestEnabledNode(transform.position, out int si, out int sj)) return;
+                if (!TryFindNearestAvailableNode(transform.position, out int si, out int sj)) return;
 
                 CurrentI = si;
                 CurrentJ = sj;
@@ -3060,6 +3127,8 @@ namespace Oxide.Plugins
                     CustomNavMesh.Clear();
                     CustomNavMesh = null;
                 }
+
+                CustomNavMeshName = null;
             }
 
             public void StopMove()
@@ -3071,7 +3140,7 @@ namespace Oxide.Plugins
                 LastPlannedTarget = Vector3.zero;
                 LastReplanTime = 0f;
 
-                if (TryFindNearestEnabledNode(transform.position, out int si, out int sj))
+                if (TryFindNearestAvailableNode(transform.position, out int si, out int sj))
                 {
                     CurrentI = si;
                     CurrentJ = sj;
@@ -3124,7 +3193,7 @@ namespace Oxide.Plugins
 
                 int gi;
                 int gj;
-                if (!TryFindNearestEnabledNode(targetWorld, out gi, out gj)) return false;
+                if (!TryFindNearestAvailableNode(targetWorld, out gi, out gj)) return false;
 
                 if (si == gi && sj == gj)
                 {
@@ -3187,7 +3256,7 @@ namespace Oxide.Plugins
                             if (!ExistsNode(ni, nj)) continue;
 
                             PointNavMesh candidate = CustomNavMesh[ni][nj];
-                            if (!candidate.Enabled) continue;
+                            if (!IsPointAvailable(candidate)) continue;
 
                             NodeKey neighborKey = new NodeKey(ni, nj);
                             if (closed.Contains(neighborKey)) continue;
@@ -3296,7 +3365,7 @@ namespace Oxide.Plugins
                 return row.ContainsKey(j);
             }
 
-            private bool TryFindNearestEnabledNode(Vector3 world, out int bestI, out int bestJ)
+            private bool TryFindNearestAvailableNode(Vector3 world, out int bestI, out int bestJ)
             {
                 bestI = 0;
                 bestJ = 0;
@@ -3310,7 +3379,7 @@ namespace Oxide.Plugins
                     {
                         int j = rj.Key;
                         PointNavMesh n = rj.Value;
-                        if (!n.Enabled) continue;
+                        if (!IsPointAvailable(n)) continue;
 
                         Vector3 d = world - n.Position;
                         float sq = d.x * d.x + d.y * d.y + d.z * d.z;
@@ -3323,6 +3392,58 @@ namespace Oxide.Plugins
                     }
                 }
                 return bestD < float.PositiveInfinity;
+            }
+
+            private bool IsPointAvailable(PointNavMesh point)
+            {
+                if (!point.Enabled) return false;
+                return !IsPointBlockedByDynamicObstacle(point.Position);
+            }
+
+            private bool IsPointBlockedByDynamicObstacle(Vector3 position)
+            {
+                if (string.IsNullOrEmpty(CustomNavMeshName)) return false;
+
+                if (!_.DynamicNavObstacles.TryGetValue(CustomNavMeshName, out Dictionary<ulong, DynamicNavObstacle> obstacles)) return false;
+
+                foreach (DynamicNavObstacle obstacle in obstacles.Values)
+                {
+                    if (obstacle.Transform == null) continue;
+                    if (IsPointInsideObstacle(position, obstacle)) return true;
+                }
+
+                return false;
+            }
+
+            private static bool IsPointInsideObstacle(Vector3 position, DynamicNavObstacle obstacle)
+            {
+                switch (obstacle.Type)
+                {
+                    case DynamicObstacleType.Sphere:
+                        {
+                            Vector3 center = obstacle.Transform.GetGlobalPosition(obstacle.CenterOffset);
+                            Vector3 delta = position - center;
+                            return delta.sqrMagnitude <= obstacle.Radius * obstacle.Radius;
+                        }
+                    case DynamicObstacleType.Box:
+                        {
+                            Vector3 local = obstacle.Transform.GetLocalPosition(position) - obstacle.CenterOffset;
+                            Vector3 half = obstacle.Size * 0.5f;
+                            return Mathf.Abs(local.x) <= half.x &&
+                                   Mathf.Abs(local.y) <= half.y &&
+                                   Mathf.Abs(local.z) <= half.z;
+                        }
+                }
+                return false;
+            }
+
+            private bool IsNodeAvailable(int i, int j) => ExistsNode(i, j) && IsPointAvailable(CustomNavMesh[i][j]);
+
+            private void InvalidateCustomPath()
+            {
+                Path?.Clear();
+                LastPlannedTarget = Vector3.zero;
+                LastReplanTime = 0f;
             }
 
             public class CustomNavMeshController : FacepunchBehaviour
@@ -3363,6 +3484,14 @@ namespace Oxide.Plugins
                     if (!hasSegment)
                     {
                         PointPath p = Main.Path.Peek();
+
+                        if (!Main.IsNodeAvailable(p.I, p.J))
+                        {
+                            Main.InvalidateCustomPath();
+                            enabled = false;
+                            return;
+                        }
+
                         Vector3 cur = Main.transform.position;
                         float dst = Vector3.Distance(cur, p.Position);
 
@@ -3424,7 +3553,7 @@ namespace Oxide.Plugins
 
                             int si;
                             int sj;
-                            if (Main.TryFindNearestEnabledNode(Main.transform.position, out si, out sj))
+                            if (Main.TryFindNearestAvailableNode(Main.transform.position, out si, out sj))
                             {
                                 Main.CurrentI = si;
                                 Main.CurrentJ = sj;
@@ -3452,7 +3581,7 @@ namespace Oxide.Plugins
                 else
                 {
                     Vector3 sample = GetSamplePosition(pos, radius);
-                    sample.y += 2f;
+                    if (ConVar.AI.useUnityNavmesh) sample.y += 2f;
                     if (!EntityManager.PositionEquals(sample, Brain.Navigator.Destination)) Brain.Navigator.SetDestination(sample, speed);
                 }
             }
@@ -3465,13 +3594,13 @@ namespace Oxide.Plugins
 
             public Vector3 GetSamplePosition(Vector3 source, float radius)
             {
-                if (NavMesh.SamplePosition(source, out NavMeshHit navMeshHit, radius, NavAgent.areaMask))
+                if (RustNavMeshHelpers.SamplePosition(source, out NavMeshHit navMeshHit, radius, NavAgent.areaMask))
                 {
-                    NavMeshPath path = new NavMeshPath();
-                    if (NavMesh.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
+                    RustNavMeshPath path = new RustNavMeshPath();
+                    if (RustNavMeshHelpers.CalculatePath(transform.position, navMeshHit.position, NavAgent.areaMask, path))
                     {
                         if (path.status == NavMeshPathStatus.PathComplete) return navMeshHit.position;
-                        else return path.corners.Last();
+                        else return path.corners.Last().Value;
                     }
                 }
                 return source;
@@ -3487,13 +3616,13 @@ namespace Oxide.Plugins
             {
                 if (CurrentWeapon == null || NavAgent == null) return false;
                 float range = EngagementRange();
-                if (NavMesh.SamplePosition(finish, out NavMeshHit navMeshHit, range, NavAgent.areaMask))
+                if (RustNavMeshHelpers.SamplePosition(finish, out NavMeshHit navMeshHit, range, NavAgent.areaMask))
                 {
-                    NavMeshPath path = new NavMeshPath();
-                    if (NavMesh.CalculatePath(start, navMeshHit.position, NavAgent.areaMask, path))
+                    RustNavMeshPath path = new RustNavMeshPath();
+                    if (RustNavMeshHelpers.CalculatePath(start, navMeshHit.position, NavAgent.areaMask, path))
                     {
                         if (path.status == NavMeshPathStatus.PathComplete) return Vector3.Distance(navMeshHit.position, finish) < range;
-                        else return Vector3.Distance(path.corners.Last(), finish) < range;
+                        else return Vector3.Distance(path.corners.Last().Value, finish) < range;
                     }
                     else return false;
                 }
@@ -3653,7 +3782,7 @@ namespace Oxide.Plugins
                 Brain.sleeping = sleep;
 
                 if (IsStationary) return;
-                
+
                 if (Brain.sleeping) SetDestination(HomePosition, 2f, BaseNavigator.NavigationSpeed.Fast);
                 else if (!ActiveCustomNavMesh) NavAgent.enabled = true;
             }
@@ -3694,7 +3823,7 @@ namespace Oxide.Plugins
                 entity.startHealth = entity._health = 25f;
                 entity.enableSaving = false;
                 entity.Spawn();
-                entity.SetFlagLocal(BaseEntity.Flags.Busy, true);
+                entity.SetFlag(BaseEntity.Flags.Busy, true);
 
                 Traps ??= new HashSet<BaseTrap>();
                 Traps.Add(entity);
@@ -3804,8 +3933,6 @@ namespace Oxide.Plugins
             {
                 if (Npc == null) Npc = GetEntity() as CustomScientistNpc;
                 states = new Dictionary<AIState, BasicAIState>();
-
-                Npc.UpdateStationary();
 
                 if (Npc.IsStationary) DisableNavAgent();
 
@@ -4171,10 +4298,10 @@ namespace Oxide.Plugins
                 {
                     result = source;
                     if (brain.Navigator.CanUseAStar) return true;
-                    if (NavMesh.SamplePosition(source, out NavMeshHit navMeshHit, 2f, Main.NavAgent.areaMask))
+                    if (RustNavMeshHelpers.SamplePosition(source, out NavMeshHit navMeshHit, 2f, Main.NavAgent.areaMask))
                     {
-                        NavMeshPath path = new NavMeshPath();
-                        if (NavMesh.CalculatePath(Main.transform.position, navMeshHit.position, Main.NavAgent.areaMask, path))
+                        RustNavMeshPath path = new RustNavMeshPath();
+                        if (RustNavMeshHelpers.CalculatePath(Main.transform.position, navMeshHit.position, Main.NavAgent.areaMask, path))
                         {
                             if (path.status == NavMeshPathStatus.PathComplete)
                             {
@@ -4183,7 +4310,7 @@ namespace Oxide.Plugins
                             }
                             else
                             {
-                                result = path.corners.Last();
+                                result = path.corners.Last().Value;
                                 return true;
                             }
                         }
@@ -4247,6 +4374,7 @@ namespace Oxide.Plugins
                     if (Target == null) return StateStatus.Error;
 
                     brain.Navigator.SetFacingDirectionEntity(Target);
+                    Main.eyes.rotation = Quaternion.LookRotation((Target.CenterPoint() - Main.eyes.position).normalized);
 
                     if (Weapon is BaseLauncher)
                     {
@@ -4364,6 +4492,7 @@ namespace Oxide.Plugins
                     if (Target == null) return StateStatus.Error;
 
                     brain.Navigator.SetFacingDirectionEntity(Target);
+                    Main.eyes.rotation = Quaternion.LookRotation((Target.CenterPoint() - Main.eyes.position).normalized);
 
                     if (Weapon is BaseProjectile)
                     {
@@ -4895,19 +5024,7 @@ namespace Oxide.Plugins
 
             DeployableBarricadeCover = PrefabAttribute.server.Find<Deployable>(2982625522);
 
-            if (Cfg.GeneratePositionDelay > 0f)
-            {
-                timer.In(Cfg.GeneratePositionDelay, () =>
-                {
-                    GeneratePositions();
-                    Interface.Oxide.CallHook("OnNpcSpawnInitialized");
-                });
-            }
-            else
-            {
-                GeneratePositions();
-                Interface.Oxide.CallHook("OnNpcSpawnInitialized");
-            }
+            GenerateSpawnPoints();
 
             CheckVersionPlugin();
         }
@@ -4976,12 +5093,14 @@ namespace Oxide.Plugins
 
         private static object CanHelicopterTarget(PatrolHelicopterAI heli, CustomScientistNpc victim)
         {
+            if (heli != null && heli.helicopterBase != null && heli.helicopterBase.skinID == 3622136509) return null;
             if (IsCustomScientist(victim)) return false;
             else return null;
         }
         private object CanHelicopterStrafeTarget(PatrolHelicopterAI heli, CustomScientistNpc victim) => CanHelicopterTarget(heli, victim);
         private object OnHelicopterTarget(HelicopterTurret turret, CustomScientistNpc victim)
         {
+            if (turret != null && turret._heliAI != null && turret._heliAI.helicopterBase != null && turret._heliAI.helicopterBase.skinID == 3622136509) return null;
             if (IsCustomScientist(victim)) return true;
             else return null;
         }
@@ -4994,7 +5113,7 @@ namespace Oxide.Plugins
         }
 
         private object OnNpcTarget(BaseAnimalNPC attacker, CustomScientistNpc victim) => OnAnimalTarget(attacker, victim);
-        private object OnNpcTarget(Rust.Ai.Gen2.BaseNPC2 attacker, CustomScientistNpc victim) => OnAnimalTarget(attacker, victim);
+        private object OnNpcTarget(BaseNPC2 attacker, CustomScientistNpc victim) => OnAnimalTarget(attacker, victim);
         private object OnNpcTarget(SimpleShark attacker, CustomScientistNpc victim) => OnAnimalTarget(attacker, victim);
         private static object OnAnimalTarget(BaseCombatEntity attacker, CustomScientistNpc victim)
         {
@@ -5168,6 +5287,7 @@ namespace Oxide.Plugins
             if (victim == null || info == null) return null;
 
             BaseEntity attacker = info.Initiator;
+            if (attacker == null) return null;
 
             if (IsCustomScientist(victim))
             {
@@ -5300,40 +5420,82 @@ namespace Oxide.Plugins
             }
             Puts("All custom navigation mesh files have loaded successfully!");
         }
+
+        public enum DynamicObstacleType { Sphere, Box }
+
+        public class DynamicNavObstacle
+        {
+            public Transform Transform { get; set; }
+            public DynamicObstacleType Type { get; set; }
+
+            public Vector3 CenterOffset { get; set; }
+
+            public float Radius { get; set; }
+            public Vector3 Size { get; set; }
+
+            public DynamicNavObstacle(Transform transform, float radius, Vector3 centerOffset)
+            {
+                Transform = transform;
+                Type = DynamicObstacleType.Sphere;
+                Radius = radius;
+                CenterOffset = centerOffset;
+            }
+
+            public DynamicNavObstacle(Transform transform, Vector3 size, Vector3 centerOffset)
+            {
+                Transform = transform;
+                Type = DynamicObstacleType.Box;
+                Size = size;
+                CenterOffset = centerOffset;
+            }
+        }
+
+        public Dictionary<string, Dictionary<ulong, DynamicNavObstacle>> DynamicNavObstacles { get; } = new Dictionary<string, Dictionary<ulong, DynamicNavObstacle>>();
         #endregion Custom Navigation Mesh
 
         #region Find Random Points
-        private void GeneratePositions()
+        private bool IsInitialized { get; set; } = false;
+        private Coroutine GenerateBiomePointsCoroutine { get; set; } = null;
+
+        private bool IsNavmeshInitialized => RustNavigation.Instance != null && RustNavigation.Instance.DefaultNavmesh != null && RustNavigation.Instance.DefaultNavmesh.IsValid() && RustNavigation.Instance.DefaultNavmesh.IsBuilt();
+
+        private bool IsPluginInitialized() => IsInitialized;
+
+        private void GenerateSpawnPoints()
         {
-            GenerateBiomePositions(10000);
-            GenerateRoadPositions();
-            GenerateRailPositions();
+            GenerateRoadPoints();
+            GenerateRailPoints();
+            StartGeneratingBiomePoints(10000, true);
         }
 
-        private Dictionary<string, List<Vector3>> BiomePoints { get; } = new Dictionary<string, List<Vector3>>
+        private void StartGeneratingBiomePoints(int attempts, bool serverStartup = false)
         {
-            ["Arid"] = new List<Vector3>(),
-            ["Temperate"] = new List<Vector3>(),
-            ["Tundra"] = new List<Vector3>(),
-            ["Arctic"] = new List<Vector3>(),
-            ["Jungle"] = new List<Vector3>()
-        };
+            if (GenerateBiomePointsCoroutine != null) return;
+            GenerateBiomePointsCoroutine = GenerateBiomePoints(attempts, serverStartup).Start();
+        }
 
-        private const int EntityLayers = 1 << 8 | 1 << 21;
-        private const int GroundLayers = 1 << 4 | 1 << 10 | 1 << 16 | 1 << 23 | 1 << 25;
-        private const int BlockedTopology = (int)(TerrainTopology.Enum.Cliff | TerrainTopology.Enum.Cliffside |
-                                                  TerrainTopology.Enum.Beach | TerrainTopology.Enum.Beachside |
-                                                  TerrainTopology.Enum.Ocean | TerrainTopology.Enum.Oceanside |
-                                                  TerrainTopology.Enum.Monument | TerrainTopology.Enum.Building |
-                                                  TerrainTopology.Enum.River | TerrainTopology.Enum.Riverside |
-                                                  TerrainTopology.Enum.Lake | TerrainTopology.Enum.Lakeside);
-
-        private HashSet<string> BlacklistBiomes { get; } = new HashSet<string>();
-
-        private void GenerateBiomePositions(int attempts)
+        private IEnumerator GenerateBiomePoints(int attempts, bool serverStartup = false)
         {
+            if (serverStartup)
+            {
+                if (!ConVar.AI.useUnityNavmesh)
+                {
+                    while (!IsNavmeshInitialized)
+                        yield return CoroutineEx.waitForSeconds(1f);
+                }
+                yield return CoroutineEx.waitForSeconds(Cfg.GeneratePositionDelay);
+            }
+
+            int amountToWait = 0;
             for (int i = 0; i < attempts; i++)
             {
+                if (amountToWait >= 10)
+                {
+                    yield return CoroutineEx.waitForSeconds(0.001f);
+                    amountToWait = 0;
+                }
+                amountToWait++;
+
                 Vector2 random = World.Size * 0.475f * UnityEngine.Random.insideUnitCircle;
                 Vector3 position = new Vector3(random.x, 500f, random.y);
 
@@ -5356,13 +5518,41 @@ namespace Oxide.Plugins
             foreach (KeyValuePair<string, List<Vector3>> kvp in BiomePoints) if (kvp.Value.Count == 0) BlacklistBiomes.Add(kvp.Key);
 
             Puts($"List of biome positions: Arid = {BiomePoints["Arid"].Count}, Temperate = {BiomePoints["Temperate"].Count}, Tundra = {BiomePoints["Tundra"].Count}, Arctic = {BiomePoints["Arctic"].Count}, Jungle = {BiomePoints["Jungle"].Count}");
+
+            if (serverStartup)
+            {
+                Interface.Oxide.CallHook("OnNpcSpawnInitialized");
+                IsInitialized = true;
+            }
+
+            GenerateBiomePointsCoroutine = null;
         }
+
+        private Dictionary<string, List<Vector3>> BiomePoints { get; } = new Dictionary<string, List<Vector3>>
+        {
+            ["Arid"] = new List<Vector3>(),
+            ["Temperate"] = new List<Vector3>(),
+            ["Tundra"] = new List<Vector3>(),
+            ["Arctic"] = new List<Vector3>(),
+            ["Jungle"] = new List<Vector3>()
+        };
+
+        private const int EntityLayers = 1 << 8 | 1 << 21;
+        private const int GroundLayers = 1 << 4 | 1 << 10 | 1 << 16 | 1 << 23 | 1 << 25;
+        private const int BlockedTopology = (int)(TerrainTopology.Enum.Cliff | TerrainTopology.Enum.Cliffside |
+                                                  TerrainTopology.Enum.Beach | TerrainTopology.Enum.Beachside |
+                                                  TerrainTopology.Enum.Ocean | TerrainTopology.Enum.Oceanside |
+                                                  TerrainTopology.Enum.Monument | TerrainTopology.Enum.Building |
+                                                  TerrainTopology.Enum.River | TerrainTopology.Enum.Riverside |
+                                                  TerrainTopology.Enum.Lake | TerrainTopology.Enum.Lakeside);
+
+        private HashSet<string> BlacklistBiomes { get; } = new HashSet<string>();
 
         private object GetSpawnPoint(string biome)
         {
             if (!BiomePoints.TryGetValue(biome, out List<Vector3> positions)) return null;
 
-            if (positions.Count < 100 && !BlacklistBiomes.Contains(biome)) GenerateBiomePositions(1000);
+            if (positions.Count < 100 && !BlacklistBiomes.Contains(biome)) StartGeneratingBiomePoints(1000);
 
             int attempts = 100;
             while (attempts > 0)
@@ -5375,7 +5565,7 @@ namespace Oxide.Plugins
                 if (IsEntities(position, 6f))
                 {
                     positions.Remove(position);
-                    if (positions.Count < 100 && !BlacklistBiomes.Contains(biome)) GenerateBiomePositions(1000);
+                    if (positions.Count < 100 && !BlacklistBiomes.Contains(biome)) StartGeneratingBiomePoints(1000);
                     continue;
                 }
 
@@ -5389,7 +5579,7 @@ namespace Oxide.Plugins
 
         private static bool IsRaycast(Vector3 position, out RaycastHit raycastHit) => Physics.Raycast(position, Vector3.down, out raycastHit, 500f, GroundLayers);
 
-        private static bool IsNavMesh(Vector3 position, out NavMeshHit navMeshHit) => NavMesh.SamplePosition(position, out navMeshHit, 2f, 1);
+        private static bool IsNavMesh(Vector3 position, out NavMeshHit navMeshHit) => RustNavMeshHelpers.SamplePosition(position, out navMeshHit, 2f, 1);
 
         private static bool IsEntities(Vector3 position, float radius)
         {
@@ -5407,7 +5597,7 @@ namespace Oxide.Plugins
             ["ExtraNarrow"] = new List<Vector3>()
         };
 
-        private void GenerateRoadPositions()
+        private void GenerateRoadPoints()
         {
             foreach (PathList path in TerrainMeta.Path.Roads)
             {
@@ -5427,7 +5617,7 @@ namespace Oxide.Plugins
 
         private List<Vector3> RailPositions { get; } = new List<Vector3>();
 
-        private void GenerateRailPositions()
+        private void GenerateRailPoints()
         {
             foreach (PathList path in TerrainMeta.Path.Rails)
                 foreach (Vector3 vector3 in path.Path.Points)
@@ -5445,7 +5635,9 @@ namespace Oxide.Plugins
         #region Helpers
         [PluginReference] private readonly Plugin Kits, Friends, Clans;
 
-        private Dictionary<ulong, CustomScientistNpc> Scientists { get; set; } = new Dictionary<ulong, CustomScientistNpc>();
+        private Dictionary<ulong, CustomScientistNpc> Scientists { get; } = new Dictionary<ulong, CustomScientistNpc>();
+
+        private HashSet<ulong> IgnoredPlayers { get; } = new HashSet<ulong>();
 
         private static void CreateAllFolders()
         {
@@ -5490,6 +5682,12 @@ namespace Oxide.Plugins
 
         private void ClearVariables()
         {
+            if (GenerateBiomePointsCoroutine != null)
+            {
+                GenerateBiomePointsCoroutine.Stop();
+                GenerateBiomePointsCoroutine = null;
+            }
+
             Presets.Clear();
 
             AvailableUserIds.Clear();
@@ -5500,6 +5698,7 @@ namespace Oxide.Plugins
             GasStationNpc.Clear();
 
             AllNavMeshes.Clear();
+            DynamicNavObstacles.Clear();
 
             BiomePoints.Clear();
             BlacklistBiomes.Clear();
@@ -5529,6 +5728,8 @@ namespace Oxide.Plugins
 
             PrefabLootTables.Clear();
             CorpsesForLoottable.Clear();
+
+            IgnoredPlayers.Clear();
         }
         #endregion Helpers
 
@@ -6151,7 +6352,7 @@ namespace Oxide.Plugins
             if (!Underwears[gender].ContainsKey(config.Underwear))
             {
                 config.Underwear = 0;
-                Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+                SavePreset(preset, config);
             }
 
             CuiElementContainer container = new CuiElementContainer();
@@ -7899,6 +8100,12 @@ namespace Oxide.Plugins
                 "ammo.rifle.hv",
                 "ammo.rifle.incendiary",
                 "ammo.rifle.explosive"
+            },
+            ["smg.uzi"] = new HashSet<string>
+            {
+                "ammo.pistol",
+                "ammo.pistol.hv",
+                "ammo.pistol.fire"
             }
         };
         private HashSet<string> GetAmmo(NpcBelt belt)
@@ -8864,6 +9071,39 @@ namespace Oxide.Plugins
                 {
                     "weapon.mod.targetingattachment"
                 }
+            },
+            ["smg.uzi"] = new HashSet<HashSet<string>>
+            {
+                new HashSet<string>
+                {
+                    "weapon.mod.holosight",
+                    "weapon.mod.simplesight"
+                },
+                new HashSet<string>
+                {
+                    "weapon.mod.lasersight",
+                    "weapon.mod.flashlight"
+                },
+                new HashSet<string>
+                {
+                    "weapon.mod.muzzleboost",
+                    "weapon.mod.muzzlebrake",
+                    "weapon.mod.silencer",
+                    "weapon.mod.oilfiltersilencer",
+                    "weapon.mod.sodacansilencer"
+                },
+                new HashSet<string>
+                {
+                    "weapon.mod.extendedmags"
+                },
+                new HashSet<string>
+                {
+                    "weapon.mod.targetingattachment"
+                },
+                new HashSet<string>
+                {
+                    "weapon.mod.gascompressionovedrive"
+                }
             }
         };
         private HashSet<string> GetMods(NpcBelt belt)
@@ -9581,7 +9821,7 @@ namespace Oxide.Plugins
                         success = true;
                         break;
                 }
-                if (success) Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+                if (success) SavePreset(preset, config);
                 else MessageGui(player, "You have entered an invalid value for this parameter", 5f);
             }
             catch (FormatException)
@@ -9723,7 +9963,7 @@ namespace Oxide.Plugins
             {
                 ulong newValue = arg.Args[3].ToULong();
                 wear.SkinID = newValue;
-                Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+                SavePreset(preset, config);
             }
             catch (FormatException)
             {
@@ -9774,7 +10014,7 @@ namespace Oxide.Plugins
                         success = true;
                     }
                 }
-                if (success) Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+                if (success) SavePreset(preset, config);
                 else MessageGui(player, "You have entered an invalid value for this parameter", 5f);
             }
             catch (FormatException)
@@ -9806,7 +10046,7 @@ namespace Oxide.Plugins
             NpcConfig config = Presets[preset];
 
             config.Kit = arg.Args.Length == 1 ? string.Empty : arg.Args[1].ToString();
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             UpdateKit(player, preset);
         }
@@ -9881,7 +10121,7 @@ namespace Oxide.Plugins
             NpcConfig config = Presets[preset];
 
             config.WearItems.Remove(config.WearItems.FirstOrDefault(x => x.ShortName == arg.Args.GetNameArgs(1)));
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "Right_NpcSpawn");
             UpdateWears(player, preset);
@@ -9902,7 +10142,7 @@ namespace Oxide.Plugins
 
             config.BeltItems.Remove(config.BeltItems.FirstOrDefault(x => x.ShortName == shortName));
             if (config.States.Contains("RaidState") && !config.BeltItems.Any(x => x.ShortName is "rocket.launcher" or "rocket.launcher.dragon" or "explosive.timed")) config.States.Remove("RaidState");
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "Right_NpcSpawn");
             UpdateBelts(player, preset);
@@ -9986,7 +10226,7 @@ namespace Oxide.Plugins
 
             config.WearItems.Add(new NpcWear { ShortName = arg.Args.GetNameArgs(1), SkinID = 0 });
 
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "BG_Adding_NpcSpawn");
             UpdateWears(player, preset);
@@ -10007,7 +10247,7 @@ namespace Oxide.Plugins
 
             config.BeltItems.Add(new NpcBelt { ShortName = shortName, Amount = 1, SkinID = 0, Mods = new HashSet<string>(), Ammo = string.Empty });
             if (shortName is "rocket.launcher" or "rocket.launcher.dragon" or "explosive.timed" && !config.States.Contains("RaidState")) config.States.Add("RaidState");
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "BG_Adding_NpcSpawn");
             UpdateBelts(player, preset);
@@ -10030,7 +10270,7 @@ namespace Oxide.Plugins
             if (belt == null) return;
 
             belt.Mods.Add(arg.Args[2].ToString());
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "BG_Adding_NpcSpawn");
             UpdateRightParameters(player, preset, shortName, belt.SkinID, "Belt");
@@ -10053,7 +10293,7 @@ namespace Oxide.Plugins
             if (belt == null) return;
 
             belt.Ammo = arg.Args[2].ToString();
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "BG_Adding_NpcSpawn");
             UpdateRightParameters(player, preset, shortName, belt.SkinID, "Belt");
@@ -10076,7 +10316,7 @@ namespace Oxide.Plugins
             if (config.Underwear == 359039573 && config.Gender != 1) config.Gender = 1;
             if (config.Underwear == 2059471831 && config.Gender != 2) config.Gender = 2;
 
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{preset}", config);
+            SavePreset(preset, config);
 
             CuiHelper.DestroyUi(player, "BG_Adding_NpcSpawn");
             UpdateUnderwear(player, preset, config, gender);
@@ -10152,7 +10392,10 @@ namespace Oxide.Plugins
 
             string preset = arg.Args[0].ToString();
 
-            Interface.Oxide.DataFileSystem.DeleteDataFile($"NpcSpawn/Preset/{preset}");
+            string folderName = GetFolderName(preset);
+            if (!string.IsNullOrEmpty(folderName)) folderName += "/";
+
+            Interface.Oxide.DataFileSystem.DeleteDataFile($"NpcSpawn/Preset/{folderName}{preset}");
             Presets.Remove(preset);
 
             UpdatePresets(player, string.Empty, 1);
@@ -10171,9 +10414,12 @@ namespace Oxide.Plugins
 
             string newPreset = preset + "-";
 
-            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{newPreset}", config);
+            string folderName = GetFolderName(preset);
+            if (!string.IsNullOrEmpty(folderName)) folderName += "/";
 
-            NpcConfig newConfig = Interface.Oxide.DataFileSystem.ReadObject<NpcConfig>($"NpcSpawn/Preset/{newPreset}");
+            Interface.Oxide.DataFileSystem.WriteObject($"NpcSpawn/Preset/{folderName}{newPreset}", config);
+
+            NpcConfig newConfig = Interface.Oxide.DataFileSystem.ReadObject<NpcConfig>($"NpcSpawn/Preset/{folderName}{newPreset}");
             if (newConfig == null) return;
 
             Presets.Add(newPreset, newConfig);
@@ -10315,7 +10561,7 @@ namespace Oxide.Plugins
                     else
                     {
                         Texture2D tex = DownloadHandlerTexture.GetContent(unityWebRequest);
-                        Images.Add(name, FileStorage.server.Store(tex.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID).ToString());
+                        Images.Add(name, FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, tex.EncodeToPNG()).ToString());
                         Puts($"Image {name} download is complete");
                         UnityEngine.Object.DestroyImmediate(tex);
                     }
@@ -10383,6 +10629,12 @@ namespace Oxide.Plugins
                 text += $"\n<color=#55aaff>attackLengthMin:</color> {weapon.attackLengthMin}";
                 text += $"\n<color=#55aaff>attackLengthMax:</color> {weapon.attackLengthMax}";
                 text += $"\n<color=#55aaff>npcDamageScale:</color> {weapon.npcDamageScale}";
+            }
+
+            if (npc is CustomScientistNpc customNpc)
+            {
+                if (!string.IsNullOrEmpty(customNpc.PresetName))
+                    text += $"\n<color=#55aaff>Preset:</color> {customNpc.PresetName}";
             }
 
             PrintToChat(player, text);
@@ -11589,9 +11841,16 @@ namespace Oxide.Plugins
                 if (lootTable.PrefabsTable is { IsEnabled: true, Prefabs: { Count: > 0 } })
                 {
                     if (container.capacity < 56) container.capacity = 56;
-                    int prefabsAmount = UnityEngine.Random.Range(lootTable.PrefabsTable.MinPrefabsAmount, lootTable.PrefabsTable.MaxPrefabsAmount + 1);
-                    HashSet<LootPrefabConfig> prefabsForSpawn = GetElementsForSpawn(lootTable.PrefabsTable.Prefabs, prefabsAmount);
-                    PrefabController.FillContainer(container, prefabsForSpawn);
+                    if (lootTable.PrefabsTable is { MinPrefabsAmount: 0, MaxPrefabsAmount: 0 })
+                    {
+                        PrefabController.FillContainerWithoutMinMax(container, lootTable.PrefabsTable.Prefabs);
+                    }
+                    else
+                    {
+                        int prefabsAmount = UnityEngine.Random.Range(lootTable.PrefabsTable.MinPrefabsAmount, lootTable.PrefabsTable.MaxPrefabsAmount + 1);
+                        HashSet<LootPrefabConfig> prefabsForSpawn = GetElementsForSpawn(lootTable.PrefabsTable.Prefabs, prefabsAmount);
+                        PrefabController.FillContainer(container, prefabsForSpawn);
+                    }
                 }
 
                 if (!string.IsNullOrEmpty(lootTable.AlphaLootPreset))
@@ -11635,6 +11894,7 @@ namespace Oxide.Plugins
                 for (int i = container.itemList.Count - 1; i >= 0; i--)
                 {
                     Item item = container.itemList[i];
+                    if (item.info.shortname == "note" && !string.IsNullOrWhiteSpace(item.text)) continue;
                     item.RemoveFromContainer();
                     item.Remove();
                 }
@@ -11793,6 +12053,16 @@ namespace Oxide.Plugins
                     ScrapAmount = scrapAmount
                 };
                 _.PrefabLootTables.TryAdd(prefabName, prefabLootInfo);
+            }
+
+            public static void FillContainerWithoutMinMax(ItemContainer container, List<LootPrefabConfig> prefabs)
+            {
+                foreach (LootPrefabConfig lootPrefabConfig in prefabs)
+                {
+                    float roll = UnityEngine.Random.Range(0f, 100f);
+                    if (roll > lootPrefabConfig.Chance) continue;
+                    FillContainer(container, lootPrefabConfig);
+                }
             }
 
             public static void FillContainer(ItemContainer container, HashSet<LootPrefabConfig> prefabs)
@@ -12229,6 +12499,20 @@ namespace Oxide.Plugins.NpcSpawnExtensionMethods
         public static Vector3 AddToY(this Vector3 vector3, float offset) => vector3.WithY(vector3.y + offset);
 
         public static Vector3 GetGlobalPosition(this Transform tr, Vector3 local) => tr.TransformPoint(local);
+        public static Vector3 GetLocalPosition(this Transform tr, Vector3 global) => tr.InverseTransformPoint(global);
+
+        public static void SetFlag(this BaseEntity entity, BaseEntity.Flags flag, bool b)
+        {
+            BaseEntity.FlagsUpdateScope update = entity.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate);
+            try
+            {
+                update.Set(flag, b);
+            }
+            finally
+            {
+                ((IDisposable)update).Dispose();
+            }
+        }
     }
 
     public static class FindPositionManager
