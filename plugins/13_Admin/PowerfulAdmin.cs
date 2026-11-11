@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using Oxide.Core;
@@ -27,11 +27,63 @@ using ServiceCommand = Oxide.Plugins.ConsoleCommandAttribute;
 
 namespace Oxide.Plugins
 {
-    [Info("PowerfulAdmin", "codeboy", "1.2.7")]
+    [Info("PowerfulAdmin", "codeboy", "1.3.1")]
     [Description("In-game admin panel with player, map and server management tools")]
     internal class PowerfulAdmin : RustPlugin
     {
         #region Classes
+
+        private static class StoredImages
+        {
+            private static readonly System.Reflection.MethodInfo StoreMethod =
+                typeof(FileStorage).GetMethod("StoreByCrc") ??
+                typeof(FileStorage).GetMethod("Store", new[]
+                {
+                    typeof(byte[]), typeof(FileStorage.Type), typeof(NetworkableId), typeof(uint)
+                });
+
+            private static readonly bool ByCrc = StoreMethod.Name == "StoreByCrc";
+
+            public static uint Store(byte[] data, FileStorage.Type type)
+            {
+                var entityId = CommunityEntity.ServerInstance.net.ID;
+                var args = ByCrc
+                    ? new object[] { entityId, type, data }
+                    : new object[] { data, type, entityId, 0u };
+
+                return (uint)StoreMethod.Invoke(FileStorage.server, args);
+            }
+
+            private static readonly System.Reflection.MethodInfo GetMethod = typeof(FileStorage).GetMethod("Get",
+                ByCrc
+                    ? new[] { typeof(NetworkableId), typeof(ulong), typeof(uint) }
+                    : new[] { typeof(uint), typeof(FileStorage.Type), typeof(NetworkableId), typeof(uint) });
+
+            public static byte[] Get(uint crc, FileStorage.Type type)
+            {
+                var entityId = CommunityEntity.ServerInstance.net.ID;
+                var args = ByCrc
+                    ? new object[] { entityId, (ulong)crc, crc }
+                    : new object[] { crc, type, entityId, 0u };
+
+                return (byte[])GetMethod.Invoke(FileStorage.server, args);
+            }
+
+            private static readonly System.Reflection.MethodInfo RemoveMethod = typeof(FileStorage).GetMethod("Remove",
+                ByCrc
+                    ? new[] { typeof(NetworkableId), typeof(ulong) }
+                    : new[] { typeof(uint), typeof(FileStorage.Type), typeof(NetworkableId) });
+
+            public static void Remove(uint crc, FileStorage.Type type)
+            {
+                var entityId = CommunityEntity.ServerInstance.net.ID;
+                var args = ByCrc
+                    ? new object[] { entityId, (ulong)crc }
+                    : new object[] { crc, type, entityId };
+
+                RemoveMethod.Invoke(FileStorage.server, args);
+            }
+        }
 
         #region Constants
 
@@ -140,7 +192,9 @@ namespace Oxide.Plugins
             public const string MapMarkers = MapCanvas + ".markers";
             public const string MapCard = Body + ".map.card";
             public const string MapObj = Body + ".map.obj";
+            public const string MapClu = Body + ".map.clu";
             public const string MapPause = Body + ".map.pause";
+            public const string MapClusters = Body + ".map.clusters";
             public const string MapLegend = Body + ".maplegend";
             public const string QuickEditor = Root + ".qbe";
             public const string PopupRoot = Root + ".pop";
@@ -179,11 +233,12 @@ namespace Oxide.Plugins
             public const string PluginsEdit = "powerfuladmin.plugins.edit";
             public const string Economy = "powerfuladmin.economy";
             public const string EconomyEdit = "powerfuladmin.economy.edit";
+            public const string Items = "powerfuladmin.items";
 
             public static readonly string[] PlayerActions =
             {
-                "heal", "kill", "strip", "kick", "ban", "freeze", "mute", "tp", "inv", "spectate", "give", "bp",
-                "mod", "vitals", "perms", "notes", "showmap"
+                "heal", "kill", "strip", "kick", "ban", "freeze", "mute", "tp", "inv", "spectate", "give",
+                "bp", "mod", "vitals", "perms", "notes", "showmap"
             };
 
             public static string GetPlayerActionPermission(string key) => "powerfuladmin.player." + key;
@@ -192,7 +247,7 @@ namespace Oxide.Plugins
             {
                 Use, Settings, Console, Esp, Vanish, Players, Logs, Perms, Plugins, God, Noclip, Countable,
                 CanDisableVitals, Convars, ViewIp, QuickButtons, Map, MapTeleport, MapRemove, MapLoot, VanishUnlock,
-                Hammer, HammerCodes, HammerLoot, PluginsEdit, Economy, EconomyEdit
+                Hammer, HammerCodes, HammerLoot, PluginsEdit, Economy, EconomyEdit, Items
             };
         }
 
@@ -305,6 +360,7 @@ namespace Oxide.Plugins
             [JsonIgnore] public bool CrateTimerBad;
             public bool MapPaused;
             public bool MapLegend;
+            public bool MapNoClusters;
             [JsonIgnore] public string ActivePage;
             [JsonIgnore] public string Search;
             [JsonIgnore] public string OpenDropdown;
@@ -315,6 +371,7 @@ namespace Oxide.Plugins
             [JsonIgnore] public ulong MapSelected;
             [JsonIgnore] public string MapObjSelected;
             [JsonIgnore] public string MapObjDeleteConfirm;
+            [JsonIgnore] public string MapCluOpen;
             [JsonIgnore] public bool MapNotesTab;
             [JsonIgnore] public string HammerSignature;
             [JsonIgnore] public ulong HammerTarget;
@@ -333,15 +390,25 @@ namespace Oxide.Plugins
             [JsonIgnore] public string ConsoleSignature;
             [JsonIgnore] public bool NewGroupOpen;
             [JsonIgnore] public string DeleteGroupConfirm;
+            [JsonIgnore] public string GroupMembersView;
             [JsonIgnore] public StorageState? StorageStatus;
             [JsonIgnore] public bool StorageConfirm;
             [JsonIgnore] public string DashboardSignature;
             [JsonIgnore] public HashSet<string> SettingsCollapsed;
+            [JsonIgnore] public HashSet<string> PermsCollapsed;
             [JsonIgnore] public List<CartEntry> GiveCart;
             [JsonIgnore] public HashSet<string> GiveFav;
             [JsonIgnore] public string GiveFilterKey;
             [JsonIgnore] public List<CartEntry> GiveFilterCache;
             [JsonIgnore] public bool GiveCustomOpen;
+            [JsonIgnore] public List<CartEntry> ItemsCart;
+            [JsonIgnore] public string ItemsFilterKey;
+            [JsonIgnore] public List<CartEntry> ItemsFilterCache;
+            [JsonIgnore] public bool ItemsGiveOpen;
+            [JsonIgnore] public HashSet<ulong> ItemsGiveTargets;
+            [JsonIgnore] public int ItemsGiveShown;
+            [JsonIgnore] public string ItemsInfoShortname;
+            [JsonIgnore] public List<string> PluginListOrder;
             [JsonIgnore] public TimeSince Session;
             [JsonIgnore] public bool UiOpen;
             [JsonIgnore] public Dictionary<string, string> InputPlaceholders;
@@ -368,6 +435,7 @@ namespace Oxide.Plugins
             [JsonIgnore] public bool CfgLangDelete;
             [JsonIgnore] public string CfgFieldKey;
             [JsonIgnore] public string CfgFieldValue;
+            [JsonIgnore] public Dictionary<string, (string Raw, Color Color)> EspColorCache;
         }
 
         private class GlobalSettings
@@ -392,6 +460,7 @@ namespace Oxide.Plugins
             public int Amount;
             public ulong SkinId;
             public string DisplayName = "";
+            public bool IsCustomNamed;
 
             public bool Blueprint;
 
@@ -412,8 +481,7 @@ namespace Oxide.Plugins
                     item = ItemManager.CreateByItemID(ItemId, Mathf.Max(1, Amount), SkinId);
                     if (item == null)
                         return null;
-                    var baseName = def != null ? ItemName(def) : "";
-                    if (!string.IsNullOrEmpty(DisplayName) && DisplayName != baseName)
+                    if (IsCustomNamed && !string.IsNullOrEmpty(DisplayName))
                         item.name = DisplayName;
                 }
 
@@ -572,6 +640,11 @@ namespace Oxide.Plugins
         {
             public string Name, Title, Author, Version;
             public bool Loaded;
+        }
+
+        private sealed class PluginUpdateInfo
+        {
+            public string LatestVersion, Url, Marketplace;
         }
 
         private sealed class CfgRow
@@ -895,12 +968,22 @@ namespace Oxide.Plugins
                 }
             }
 
+            private static Vector3 EspOrigin(BasePlayer admin) =>
+                admin.IsSpectating() && admin.SpectatingTarget != null ? admin.SpectatingTarget.transform.position : admin.transform.position;
+
             private PowerfulAdmin _plugin;
             private BasePlayer _player;
 
             private readonly List<BaseEntity> _entityBuffer = new();
             private readonly List<CollectibleEntity> _collectibleBuffer = new();
             private readonly List<EspMatch> _matchBuffer = new();
+            private readonly List<EspMatch> _staticMatchBuffer = new();
+
+            private const int StaticRefreshEvery = 8;
+            private const int StaticWaveSize = 150;
+            private int _staticTick;
+            private int _staticWaves = StaticRefreshEvery;
+            private bool _staticPrimed;
 
             public void Init(PowerfulAdmin plugin, BasePlayer player)
             {
@@ -963,7 +1046,7 @@ namespace Oxide.Plugins
                     !_plugin.GetToggle(admin, "e.players", true))
                     return;
                 var radius = Mathf.Clamp01(_plugin.GetSlider(admin, FieldKey.EspRadius, 0.5f)) * 500f;
-                var origin = admin.transform.position;
+                var origin = EspOrigin(admin);
                 var duration = EspLookFast * 1.6f;
                 var colAdmin = _plugin.EspColor(admin, "e.admin");
                 var colTeam = _plugin.EspColor(admin, "e.team");
@@ -991,7 +1074,7 @@ namespace Oxide.Plugins
                     return;
                 var duration = _plugin.EspInterval() * 1.15f;
                 var radius = Mathf.Clamp01(_plugin.GetSlider(admin, FieldKey.EspRadius, 0.5f)) * 500f;
-                var origin = admin.transform.position;
+                var origin = EspOrigin(admin);
                 var showDist = _plugin.GetToggle(admin, "e.dist", true);
                 var showHp = _plugin.GetToggle(admin, "e.hp", true);
                 var showHeld = _plugin.GetToggle(admin, "e.held", false);
@@ -1048,32 +1131,67 @@ namespace Oxide.Plugins
                 var wantVeh = _plugin.GetToggle(admin, "e.vehicles", false);
                 var wantNodes = _plugin.GetToggle(admin, "e.nodes", false);
                 var wantForage = _plugin.GetToggle(admin, "e.forage", false);
-                var wantScan = wantLoot || wantBoxes || wantTc || wantBeds || wantTraps || wantStash || wantDrops ||
-                               wantNpc || wantTurret || wantVeh || wantNodes;
-                if (wantScan || wantForage)
+
+                var wantDynamic = wantNpc || wantVeh;
+                var wantStatic = wantLoot || wantBoxes || wantTc || wantBeds || wantTraps || wantStash ||
+                                 wantDrops || wantTurret || wantNodes;
+                var wantStaticScan = _staticTick == 0 && wantStatic;
+
+                if (wantDynamic || wantStaticScan)
                 {
-                    var colTc = _plugin.EspColor(admin, "e.tc");
-                    var colTurret = _plugin.EspColor(admin, "e.turrets");
-                    var colTrap = _plugin.EspColor(admin, "e.traps");
-                    var colBed = _plugin.EspColor(admin, "e.beds");
-                    var colStash = _plugin.EspColor(admin, "e.stash");
-                    var colLoot = _plugin.EspColor(admin, "e.loot");
-                    var colDrops = _plugin.EspColor(admin, "e.drops");
-                    var colBoxes = _plugin.EspColor(admin, "e.boxes");
+                    _entityBuffer.Clear();
+                    Vis.Entities(origin, radius, _entityBuffer);
+                }
+
+                var dynamicCount = 0;
+                if (wantDynamic)
+                {
                     var colNpc = _plugin.EspColor(admin, "e.npc");
                     var colVeh = _plugin.EspColor(admin, "e.vehicles");
-                    var colNodes = _plugin.EspColor(admin, "e.nodes");
-                    var colForage = _plugin.EspColor(admin, "e.forage");
 
                     var matches = _matchBuffer;
                     matches.Clear();
-                    if (wantScan)
+                    foreach (var e in _entityBuffer)
                     {
-                        var list = _entityBuffer;
-                        list.Clear();
-                        Vis.Entities(origin, radius, list);
+                        if (e == null)
+                            continue;
+                        var d = Vector3Ex.Distance2D(origin, e.transform.position);
+                        if (wantNpc && (e is BaseNpc || e is BaseNPC2 || e is NPCPlayer))
+                            matches.Add(new EspMatch(e, d, colNpc, e.ShortPrefabName));
+                        else if (wantVeh && e is BaseVehicle)
+                            matches.Add(new EspMatch(e, d, colVeh, e.ShortPrefabName));
+                    }
 
-                        foreach (var e in list)
+                    DrawMatches(admin, matches, duration, showDist);
+                    dynamicCount = matches.Count;
+                }
+
+                if (!wantStatic && !wantForage)
+                {
+                    _staticMatchBuffer.Clear();
+                    _staticTick = 0;
+                    _staticPrimed = false;
+                    return;
+                }
+
+                if (_staticTick == 0)
+                {
+                    var matches = _staticMatchBuffer;
+                    matches.Clear();
+
+                    if (wantStatic)
+                    {
+                        var colTc = _plugin.EspColor(admin, "e.tc");
+                        var colTurret = _plugin.EspColor(admin, "e.turrets");
+                        var colTrap = _plugin.EspColor(admin, "e.traps");
+                        var colBed = _plugin.EspColor(admin, "e.beds");
+                        var colStash = _plugin.EspColor(admin, "e.stash");
+                        var colLoot = _plugin.EspColor(admin, "e.loot");
+                        var colDrops = _plugin.EspColor(admin, "e.drops");
+                        var colBoxes = _plugin.EspColor(admin, "e.boxes");
+                        var colNodes = _plugin.EspColor(admin, "e.nodes");
+
+                        foreach (var e in _entityBuffer)
                         {
                             if (e == null)
                                 continue;
@@ -1095,13 +1213,9 @@ namespace Oxide.Plugins
                                 matches.Add(new EspMatch(e, d, colDrops, "Loot Bag"));
                             else if (wantDrops && e is DroppedItem drop)
                                 matches.Add(new EspMatch(e, d, colDrops,
-                                    drop.item == null ? "Dropped item" : drop.item.info.displayName.english));
+                                    drop.item == null ? "Dropped item" : _plugin.LocalizedItemName(drop.item.info, admin)));
                             else if (wantBoxes && e is StorageContainer && e.OwnerID != 0)
                                 matches.Add(new EspMatch(e, d, colBoxes, e.ShortPrefabName));
-                            else if (wantNpc && (e is BaseNpc || e is BaseNPC2 || e is NPCPlayer))
-                                matches.Add(new EspMatch(e, d, colNpc, e.ShortPrefabName));
-                            else if (wantVeh && e is BaseVehicle)
-                                matches.Add(new EspMatch(e, d, colVeh, e.ShortPrefabName));
                             else if (wantNodes && e is OreResourceEntity)
                                 matches.Add(new EspMatch(e, d, colNodes, e.ShortPrefabName));
                         }
@@ -1109,6 +1223,7 @@ namespace Oxide.Plugins
 
                     if (wantForage && BaseEntity.Query.Server != null)
                     {
+                        var colForage = _plugin.EspColor(admin, "e.forage");
                         var collectibles = _collectibleBuffer;
                         collectibles.Clear();
                         BaseEntity.Query.Server.GetInSphere(origin, radius, collectibles);
@@ -1121,15 +1236,52 @@ namespace Oxide.Plugins
                         }
                     }
 
-                    matches.Sort((a, b) => a.Distance.CompareTo(b.Distance));
-                    var cap = Mathf.Min(matches.Count, _plugin.EspMaxObjects());
-                    for (var i = 0; i < cap; i++)
-                    {
-                        var m = matches[i];
-                        EspBox(admin, duration, m.Color, m.Entity);
-                        var label = showDist ? $"{m.Tag} {(int)m.Distance}m" : m.Tag;
-                        EspText(admin, duration, m.Color, m.Entity.transform.position + Vector3.up, label);
-                    }
+                    TrimMatches(matches, Mathf.Max(0, _plugin.EspMaxObjects() - dynamicCount));
+                    var waves = Mathf.Max(StaticRefreshEvery,
+                        Mathf.CeilToInt(matches.Count / (float)StaticWaveSize));
+                    if (waves != _staticWaves)
+                        _staticPrimed = false;
+                    _staticWaves = waves;
+                }
+
+                if (_staticPrimed)
+                    DrawWave(admin, _staticMatchBuffer, _staticTick, _staticWaves, duration * _staticWaves, showDist);
+                else
+                    DrawWave(admin, _staticMatchBuffer, 0, 1, duration * _staticWaves, showDist);
+                _staticPrimed = true;
+                _staticTick++;
+                if (_staticTick >= _staticWaves)
+                    _staticTick = 0;
+            }
+
+            private void DrawMatches(BasePlayer admin, List<EspMatch> matches, float duration, bool showDist)
+            {
+                TrimMatches(matches);
+                DrawWave(admin, matches, 0, 1, duration, showDist);
+            }
+
+            private void TrimMatches(List<EspMatch> matches, int? capOverride = null)
+            {
+                matches.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+                var cap = capOverride ?? _plugin.EspMaxObjects();
+                if (matches.Count > cap)
+                    matches.RemoveRange(cap, matches.Count - cap);
+            }
+
+            private void DrawWave(BasePlayer admin, List<EspMatch> matches, int wave, int waves, float duration,
+                bool showDist)
+            {
+                for (var i = 0; i < matches.Count; i++)
+                {
+                    var m = matches[i];
+                    if (m.Entity == null)
+                        continue;
+                    var slot = m.Entity.net == null ? 0 : (int)(m.Entity.net.ID.Value % (ulong)waves);
+                    if (slot != wave)
+                        continue;
+                    EspBox(admin, duration, m.Color, m.Entity);
+                    var label = showDist ? $"{m.Tag} {(int)m.Distance}m" : m.Tag;
+                    EspText(admin, duration, m.Color, m.Entity.transform.position + Vector3.up, label);
                 }
             }
 
@@ -1194,14 +1346,14 @@ namespace Oxide.Plugins
                 {
                     var item = player.GetActiveItem();
                     if (item != null)
-                        EspText(admin, duration, col, pos + new Vector3(0f, 0.5f, 0f), item.info.displayName.english);
+                        EspText(admin, duration, col, pos + new Vector3(0f, 0.5f, 0f), _plugin.LocalizedItemName(item.info, admin));
                 }
             }
 
 #if DEBUG_SERVER
             private void DebugEspTargets(BasePlayer admin, float duration, bool showDist, bool showHp, bool showHeld)
             {
-                var origin = admin.transform.position;
+                var origin = EspOrigin(admin);
                 var palette = new[] { EspEnemy, EspTeam, EspAdmin };
                 for (var i = 0; i < _plugin._debugBots.Count; i++)
                 {
@@ -1417,7 +1569,7 @@ namespace Oxide.Plugins
 
         #region Harmony patches
 
-        [HarmonyPatch(typeof(BasePlayer), nameof(BasePlayer.Server_RequestMarkers))]
+        [HarmonyPatch(typeof(BasePlayer), nameof(BasePlayer.Server_RequestMarkers)), AutoPatch]
         private static class MapOpenedPatch
         {
             [HarmonyPostfix]
@@ -1428,7 +1580,7 @@ namespace Oxide.Plugins
             }
         }
 
-        [HarmonyPatch(typeof(BasePlayer), nameof(BasePlayer.IsGod))]
+        [HarmonyPatch(typeof(BasePlayer), nameof(BasePlayer.IsGod)), AutoPatch]
         private static class IsGodPatch
         {
             [HarmonyPostfix]
@@ -1453,7 +1605,7 @@ namespace Oxide.Plugins
         }
 
         [HarmonyPatch(typeof(BaseEntity), nameof(BaseEntity.SignalBroadcast), typeof(BaseEntity.Signal),
-            typeof(string), typeof(Connection), typeof(string), typeof(float))]
+            typeof(string), typeof(Connection), typeof(string), typeof(float)), AutoPatch]
         private static class VanishSignalPatch
         {
             [HarmonyPrefix]
@@ -1466,7 +1618,7 @@ namespace Oxide.Plugins
         }
 
         [HarmonyPatch(typeof(BaseNetworkable), nameof(BaseNetworkable.GetConnectionsWithin), typeof(Vector3),
-            typeof(float), typeof(bool))]
+            typeof(float), typeof(bool)), AutoPatch]
         private static class VanishHearingPatch
         {
             [HarmonyPrefix]
@@ -1477,7 +1629,7 @@ namespace Oxide.Plugins
             }
         }
 
-        [HarmonyPatch(typeof(Effect.server), nameof(Effect.server.ImpactEffect), typeof(HitInfo), typeof(string))]
+        [HarmonyPatch(typeof(Effect.server), nameof(Effect.server.ImpactEffect), typeof(HitInfo), typeof(string)), AutoPatch]
         private static class VanishImpactPatch
         {
             [HarmonyPrefix]
@@ -1488,7 +1640,7 @@ namespace Oxide.Plugins
             }
         }
 
-        [HarmonyPatch(typeof(EffectNetwork), nameof(EffectNetwork.Send), typeof(Effect), typeof(EntityNetworkRange))]
+        [HarmonyPatch(typeof(EffectNetwork), nameof(EffectNetwork.Send), typeof(Effect), typeof(EntityNetworkRange)), AutoPatch]
         private static class VanishEffectPatch
         {
             [HarmonyPrefix]
@@ -1500,7 +1652,7 @@ namespace Oxide.Plugins
             }
         }
 
-        [HarmonyPatch(typeof(AntiHack), nameof(AntiHack.ShouldIgnore))]
+        [HarmonyPatch(typeof(AntiHack), nameof(AntiHack.ShouldIgnore)), AutoPatch]
         private static class NoclipAntiHackPatch
         {
             [HarmonyPostfix]
@@ -2160,8 +2312,7 @@ namespace Oxide.Plugins
                     return;
                 if (_plugin._assets.MapSignature == MapSignature() && _plugin._assets.MapCrc != 0)
                 {
-                    var cached = FileStorage.server.Get(_plugin._assets.MapCrc, FileStorage.Type.jpg,
-                        CommunityEntity.ServerInstance.net.ID);
+                    var cached = StoredImages.Get(_plugin._assets.MapCrc, FileStorage.Type.jpg);
                     if (cached != null && cached.Length > 0)
                     {
                         _mapCrc = _plugin._assets.MapCrc;
@@ -2189,10 +2340,8 @@ namespace Oxide.Plugins
                     if (bytes == null || bytes.Length == 0)
                         return;
                     if (_plugin._assets.MapCrc != 0)
-                        FileStorage.server.Remove(_plugin._assets.MapCrc, FileStorage.Type.jpg,
-                            CommunityEntity.ServerInstance.net.ID);
-                    _mapCrc = FileStorage.server.Store(bytes, FileStorage.Type.jpg,
-                        CommunityEntity.ServerInstance.net.ID);
+                        StoredImages.Remove(_plugin._assets.MapCrc, FileStorage.Type.jpg);
+                    _mapCrc = StoredImages.Store(bytes, FileStorage.Type.jpg);
                     _plugin._assets.MapCrc = _mapCrc;
                     _plugin._assets.MapSignature = MapSignature();
                     _plugin.SaveAssets();
@@ -2254,8 +2403,7 @@ namespace Oxide.Plugins
                     return;
                 if (_deepCrc == 0 && _plugin._assets.DeepSignature == signature && _plugin._assets.DeepCrc != 0)
                 {
-                    var cached = FileStorage.server.Get(_plugin._assets.DeepCrc, FileStorage.Type.png,
-                        CommunityEntity.ServerInstance.net.ID);
+                    var cached = StoredImages.Get(_plugin._assets.DeepCrc, FileStorage.Type.png);
                     if (cached != null && cached.Length > 0)
                     {
                         _deepCrc = _plugin._assets.DeepCrc;
@@ -2378,9 +2526,8 @@ namespace Oxide.Plugins
                 if (bytes == null || bytes.Length == 0)
                     yield break;
                 if (_plugin._assets.DeepCrc != 0)
-                    FileStorage.server.Remove(_plugin._assets.DeepCrc, FileStorage.Type.png,
-                        CommunityEntity.ServerInstance.net.ID);
-                _deepCrc = FileStorage.server.Store(bytes, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                    StoredImages.Remove(_plugin._assets.DeepCrc, FileStorage.Type.png);
+                _deepCrc = StoredImages.Store(bytes, FileStorage.Type.png);
                 _deepSignature = signature;
                 _plugin._assets.DeepCrc = _deepCrc;
                 _plugin._assets.DeepSignature = signature;
@@ -2582,7 +2729,7 @@ namespace Oxide.Plugins
                     var pos = entity.transform.position;
                     if (IsDeepSeaPosition(pos) != deepSea)
                         continue;
-                    cache.Add(new MapMarkerPoint(pos, entity.transform.forward, VehicleKind(entity), null));
+                    cache.Add(new MapMarkerPoint(entity, VehicleKind(entity), null));
                     if (cache.Count >= MapPointLimit)
                         break;
                 }
@@ -2639,7 +2786,7 @@ namespace Oxide.Plugins
                         ? ColorToRustFormat(new Color(radius.color1.r, radius.color1.g, radius.color1.b,
                             radius.alpha <= 0f ? 1f : radius.alpha))
                         : null;
-                    into.Add(new MapMarkerPoint(pos, marker.transform.forward, kind, color));
+                    into.Add(new MapMarkerPoint(marker, kind, color));
                     if (into.Count >= MapPointLimit)
                         return;
                 }
@@ -2654,7 +2801,7 @@ namespace Oxide.Plugins
                     var pos = city.transform.position;
                     if (IsDeepSeaPosition(pos) != deepSea)
                         continue;
-                    into.Add(new MapMarkerPoint(pos, city.transform.forward, MapMarkerKind.City, null));
+                    into.Add(new MapMarkerPoint(city, MapMarkerKind.City, null));
                 }
 
                 foreach (var stations in BoatBuildingStation.BBSPerPlayer.Values)
@@ -2669,7 +2816,7 @@ namespace Oxide.Plugins
                         var pos = station.transform.position;
                         if (IsDeepSeaPosition(pos) != deepSea)
                             continue;
-                        into.Add(new MapMarkerPoint(pos, station.transform.forward, MapMarkerKind.Station, null));
+                        into.Add(new MapMarkerPoint(station, MapMarkerKind.Station, null));
                     }
                 }
 
@@ -2683,7 +2830,7 @@ namespace Oxide.Plugins
                     var pos = rhib.transform.position;
                     if (!IsDeepSeaPosition(pos))
                         continue;
-                    into.Add(new MapMarkerPoint(pos, rhib.transform.forward, MapMarkerKind.Rhib, null));
+                    into.Add(new MapMarkerPoint(rhib, MapMarkerKind.Rhib, null));
                 }
 
                 foreach (var signal in _signals)
@@ -2693,7 +2840,7 @@ namespace Oxide.Plugins
                     var pos = signal.transform.position;
                     if (!IsDeepSeaPosition(pos))
                         continue;
-                    into.Add(new MapMarkerPoint(pos, signal.transform.forward, MapMarkerKind.Airdrop, null));
+                    into.Add(new MapMarkerPoint(signal, MapMarkerKind.Airdrop, null));
                 }
             }
         }
@@ -2758,13 +2905,33 @@ namespace Oxide.Plugins
             public readonly Vector3 Forward;
             public readonly MapMarkerKind Kind;
             public readonly string Color;
+            public readonly ulong NetId;
 
-            public MapMarkerPoint(Vector3 position, Vector3 forward, MapMarkerKind kind, string color)
+            public MapMarkerPoint(BaseEntity entity, MapMarkerKind kind, string color)
             {
-                Position = position;
-                Forward = forward;
+                Position = entity.transform.position;
+                Forward = entity.transform.forward;
                 Kind = kind;
                 Color = color;
+                NetId = entity.net?.ID.Value ?? 0uL;
+            }
+        }
+
+        private sealed class MapClusterGroup<T>
+        {
+            public Vector2 Center;
+            public readonly List<T> Members = new();
+        }
+
+        private readonly struct MapCluRow
+        {
+            public readonly string Label;
+            public readonly string Command;
+
+            public MapCluRow(string label, string command)
+            {
+                Label = label;
+                Command = command;
             }
         }
 
@@ -2879,11 +3046,35 @@ namespace Oxide.Plugins
             public bool Allowed(BasePlayer p) =>
                 p != null && p.IsConnected && Can(p) && _plugin.GetToggle(p, "f.hammer", false);
 
-            public float Interval() =>
-                Mathf.Max(0.05f, ParseNumber(_plugin.GetInput(null, FieldKey.SecHammerInt, "0.25"), 0.25f));
+            private string _intervalRaw;
+            private float _interval = 0.25f;
 
-            public float Range() =>
-                Mathf.Max(1f, ParseNumber(_plugin.GetInput(null, FieldKey.SecHammerDist, "200"), 200f));
+            public float Interval()
+            {
+                var raw = _plugin.GetInput(null, FieldKey.SecHammerInt, "0.25");
+                if (raw != _intervalRaw)
+                {
+                    _intervalRaw = raw;
+                    _interval = Mathf.Max(0.05f, ParseNumber(raw, 0.25f));
+                }
+
+                return _interval;
+            }
+
+            private string _rangeRaw;
+            private float _range = 200f;
+
+            public float Range()
+            {
+                var raw = _plugin.GetInput(null, FieldKey.SecHammerDist, "200");
+                if (raw != _rangeRaw)
+                {
+                    _rangeRaw = raw;
+                    _range = Mathf.Max(1f, ParseNumber(raw, 200f));
+                }
+
+                return _range;
+            }
 
             public void Ensure(BasePlayer player)
             {
@@ -3093,15 +3284,7 @@ namespace Oxide.Plugins
             {
                 crate.CancelInvoke(crate.HackProgress);
                 crate.hackSeconds = HackableLockedCrate.requiredHackSeconds;
-                using (var flags = crate.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
-                {
-                    flags.Set(BaseEntity.Flags.Reserved1, true);
-                    flags.Set(BaseEntity.Flags.Reserved2, true);
-                }
-
-                crate.isLootable = true;
-                crate.ClientRPC(RpcTarget.NetworkGroup("UpdateHackProgress"), (int)crate.hackSeconds,
-                    (int)HackableLockedCrate.requiredHackSeconds);
+                crate.HackProgress();
             }
 
             public static void SetTimer(HackableLockedCrate crate, int remaining)
@@ -3313,7 +3496,7 @@ namespace Oxide.Plugins
                         items.Total++;
                         if (items.Rows.Count >= ListLimit)
                             continue;
-                        items.Rows.Add(new Row { Label = "", Value = $"{item.amount}x {item.info.displayName.english}", ItemId = item.info.itemid });
+                        items.Rows.Add(new Row { Label = "", Value = $"{item.amount}x {_plugin.LocalizedItemName(item.info, admin)}", ItemId = item.info.itemid });
                     }
                 }
 
@@ -3399,6 +3582,8 @@ namespace Oxide.Plugins
         [PluginReference("ServerRewards")] private Plugin _serverRewardsPlugin;
         [PluginReference("IQEconomic")] private Plugin _iqEconomicPlugin;
         [PluginReference("SkillTree")] private Plugin _skillTreePlugin;
+        [PluginReference("LangAPI")] private Plugin _langApiPlugin;
+        private bool _isLangAPIReady;
 
         private readonly List<ExtSection> _extSections = new();
 
@@ -3410,6 +3595,9 @@ namespace Oxide.Plugins
         private List<EconomyProvider> _economyProviders;
 
         private List<ConsoleSystem.Command> _convarList;
+
+        private readonly Dictionary<string, PluginUpdateInfo> _pluginUpdates = new(StringComparer.OrdinalIgnoreCase);
+        private bool _pluginUpdatesChecking;
 
         private Timer _mapTimer;
         private Timer _toolSyncTimer;
@@ -3440,6 +3628,7 @@ namespace Oxide.Plugins
 
 
         private const int LogsPageSize = 80;
+        private const int ItemsGivePageSize = 20;
 
 
         private bool _storageBusy;
@@ -3474,9 +3663,6 @@ namespace Oxide.Plugins
             _discordBridge ??= new DiscordBridge(() => plugins.Find("PowerfulAdminDiscord"));
 
 
-        private HarmonyLib.Harmony
-            _harmony;
-
         private static PowerfulAdmin Instance;
         private static readonly HashSet<ulong> GodActive = new();
 
@@ -3498,7 +3684,8 @@ namespace Oxide.Plugins
                 {
                     new() { Id = "dashboard", Icon = "assets/icons/home.png", LabelKey = TranslateKey.NavigationDashboard },
                     new() { Id = "console", Icon = "assets/icons/broadcast.png", LabelKey = TranslateKey.NavigationConsole, Badge = "12", BadgeColor = Colors.CInfo },
-                    new() { Id = "players", Icon = "assets/icons/clan.png", LabelKey = TranslateKey.NavigationPlayers, Badge = "142", BadgeColor = Colors.CInfo }
+                    new() { Id = "players", Icon = "assets/icons/clan.png", LabelKey = TranslateKey.NavigationPlayers, Badge = "142", BadgeColor = Colors.CInfo },
+                    new() { Id = "items", Icon = "assets/icons/crate.png", LabelKey = TranslateKey.NavigationItems }
                 }
             },
             new NavCategory
@@ -3598,7 +3785,7 @@ namespace Oxide.Plugins
 
         private readonly Dictionary<string, string> _managedConvars = new();
 
-        private static readonly HashSet<string> PublicCommands = new() { "pa.open", "pa.toggle", "pa.pie", "pa.setup", "pa.debugspawn", "pa.debugclear" };
+        private static readonly HashSet<string> PublicCommands = new() { "pa.open", "pa.toggle", "pa.pie", "pa.setup", "pa.debugspawn", "pa.debugclear", "pa.dcconnect" };
 
         private const string DashConsoleCard = "pa.dash.con";
 
@@ -3623,11 +3810,19 @@ namespace Oxide.Plugins
 
         private const string VanishUnlockKey = "v.unlock";
         private const string VanishNoclipKey = "v.noclip";
+        private const string VanishNoclipOffKey = "v.noclipoff";
         private const string VanishKey = "vanish";
 
         private const string PermTabPanel = Layers.Body + ".prp";
         private const string PermTabContent = PermTabPanel + ".psv.c.l";
         private const string PermUserContent = Layers.Root + ".pop.card.upp.c.l";
+
+        private const string ItemsCatPanel = Layers.Body + ".itc";
+        private const string ItemsGridPanel = Layers.Body + ".itg";
+        private const string ItemsGridList = ItemsGridPanel + ".l";
+        private const string ItemsGridListName = ItemsGridPanel + ".g.c.l";
+        private const string ItemsCartPanel = Layers.Body + ".itcart";
+        private const string ItemsCartList = ItemsCartPanel + ".l";
 
         private readonly Dictionary<string, Oxide.Core.Plugins.Plugin> _permOwnerCache = new();
 
@@ -3648,6 +3843,8 @@ namespace Oxide.Plugins
 
         private const int MapCellCount = 24;
         private const int MapPointLimit = 400;
+        private const int MapHitHalfMin = 14;
+        private const int MapClusterRadius = 16;
 
         private const int LayerPlayers = 1;
         private const int LayerSleepers = 2;
@@ -3820,7 +4017,8 @@ namespace Oxide.Plugins
         private static readonly string[] StrayModals =
         {
             Layers.Root + ".cp", Layers.Root + ".ng", Layers.Root + ".plpop", Layers.Root + ".gc",
-            Layers.Root + ".qbc"
+            Layers.Root + ".qbc", Layers.Root + ".itgv", Layers.Root + ".itinfo", Layers.Root + ".gm",
+            Layers.Root + ".plupd"
         };
 
         private const string SettingsContent = Layers.Body + ".settings.c";
@@ -3878,9 +4076,44 @@ namespace Oxide.Plugins
 
         #region Hooks
 
+        private void OnLangAPIFinished()
+        {
+            _isLangAPIReady = true;
+            foreach (var ad in _admins.Values)
+            {
+                ad.GiveFilterKey = null;
+                ad.ItemsFilterKey = null;
+            }
+        }
+
+        private void OnUpdateCheckerUpdateFound(string name, string currentVersion, string latestVersion, string url, string marketplace)
+        {
+            _pluginUpdates[name] = new PluginUpdateInfo { LatestVersion = latestVersion, Url = url, Marketplace = marketplace };
+            foreach (var p in BasePlayer.activePlayerList)
+                RefreshPluginRow(p, name);
+        }
+
+        private void OnPluginLoaded(Plugin plugin)
+        {
+            if (plugin != null && _pluginUpdates.Remove(plugin.Name))
+                foreach (var p in BasePlayer.activePlayerList)
+                    RefreshPlugins(p);
+        }
+
+        private IEnumerator ResetPluginUpdatesCheckingRoutine()
+        {
+            yield return new WaitForSeconds(90f);
+            _pluginUpdatesChecking = false;
+            foreach (var p in BasePlayer.activePlayerList)
+                RefreshPluginsCheckButton(p);
+        }
+
         private void OnServerInitialized(bool initial)
         {
             Instance = this;
+
+            if (_langApiPlugin != null && _langApiPlugin.IsLoaded)
+                _isLangAPIReady = _langApiPlugin.Call<bool>("IsReady");
 
             foreach (var perm in Permissions.All)
                 permission.RegisterPermission(perm, this);
@@ -3892,12 +4125,6 @@ namespace Oxide.Plugins
             ServerMgr.Instance.StartCoroutine(Map.BuildMapRegistry());
             _mapTimer = timer.Once(MapInterval(), MapTimerTick);
             _toolSyncTimer = timer.Repeat(2f, 0, ToolSyncTick);
-            if (_harmony == null)
-            {
-                _harmony = new HarmonyLib.Harmony("com.powerfuladmin");
-                _harmony.PatchAll();
-            }
-
             LoadManagedConvars(initial);
 
             Application.logMessageReceived += OnUnityLog;
@@ -3961,16 +4188,6 @@ namespace Oxide.Plugins
             NoclipActive.Clear();
             GodActive.Clear();
 
-            try
-            {
-                _harmony?.UnpatchAll(_harmony.Id);
-            }
-            catch (Exception ex)
-            {
-                PrintWarning($"Harmony unpatch failed: {ex.Message}");
-            }
-
-            _harmony = null;
             _storageRetryTimer?.Destroy();
             _mapTimer?.Destroy();
             _toolSyncTimer?.Destroy();
@@ -4411,6 +4628,20 @@ namespace Oxide.Plugins
             }
         }
 
+        private static string FormatCount(int n) => n > 99 ? ">99" : n.ToString();
+
+        private static float? CenteredScrollPos(int index, int cellH, int gap, int count, int viewH, int inset)
+        {
+            if (index < 0)
+                return null;
+            var contentH = count * (cellH + gap) - gap + inset * 2;
+            if (contentH <= viewH)
+                return null;
+            var rowTop = index * (cellH + gap) + inset;
+            var target = Mathf.Clamp(rowTop + cellH / 2f - viewH / 2f, 0f, contentH - viewH);
+            return 1f - target / (contentH - viewH);
+        }
+
         private void Notify(BasePlayer player, string message) => Notify(player, message, NotifyKind.Success);
 
         private void Notify(BasePlayer player, string message, NotifyKind kind)
@@ -4591,6 +4822,7 @@ namespace Oxide.Plugins
         {
             "console" => IsConsoleAllowed(p),
             "players" => Can(p, Permissions.Players),
+            "items" => Can(p, Permissions.Items),
             "esp" => Can(p, Permissions.Esp),
             "vanish" => Can(p, Permissions.Vanish),
             "logs" => Can(p, Permissions.Logs),
@@ -4615,6 +4847,8 @@ namespace Oxide.Plugins
                 return Can(p, Permissions.Vanish) && Can(p, Permissions.VanishUnlock);
             if (key == VanishNoclipKey)
                 return Can(p, Permissions.Vanish) && Can(p, Permissions.Noclip);
+            if (key == VanishNoclipOffKey)
+                return Can(p, Permissions.Vanish) && Can(p, Permissions.Noclip);
             if (key == VanishKey)
                 return Can(p, Permissions.Vanish);
             if (key.StartsWith("v.", StringComparison.Ordinal))
@@ -4624,6 +4858,8 @@ namespace Oxide.Plugins
                 key.StartsWith("players.", StringComparison.Ordinal) ||
                 key.StartsWith("pv.", StringComparison.Ordinal))
                 return Can(p, Permissions.Players);
+            if (key.StartsWith("items.", StringComparison.Ordinal))
+                return Can(p, Permissions.Items);
             if (key.StartsWith("logs.", StringComparison.Ordinal))
                 return Can(p, Permissions.Logs);
             if (key.StartsWith("perms.", StringComparison.Ordinal) ||
@@ -5170,6 +5406,12 @@ namespace Oxide.Plugins
                 SetNoclip(player);
             }
 
+            if (!on && GetToggle(player, VanishNoclipOffKey, false) && ClientNoclip(player))
+            {
+                SetToggle(player.userID, "f.noclip", false);
+                SetNoclip(player);
+            }
+
             RefreshStatus(player);
         }
 
@@ -5629,6 +5871,24 @@ namespace Oxide.Plugins
         internal Color EspColor(BasePlayer admin, string id)
         {
             var raw = GetInput(admin, EspColorKey(id), null);
+
+            var ad = admin != null ? PeekAdmin(admin.userID) : null;
+            if (ad?.EspColorCache != null && ad.EspColorCache.TryGetValue(id, out var cached) && cached.Raw == raw)
+                return cached.Color;
+
+            var color = ParseEspColor(id, raw);
+
+            if (ad != null)
+            {
+                ad.EspColorCache ??= new Dictionary<string, (string Raw, Color Color)>();
+                ad.EspColorCache[id] = (raw, color);
+            }
+
+            return color;
+        }
+
+        private static Color ParseEspColor(string id, string raw)
+        {
             if (string.IsNullOrEmpty(raw))
                 return EspDefaultColor(id);
 
@@ -5990,6 +6250,11 @@ namespace Oxide.Plugins
             return char.ToUpper(s[0]) + s.Substring(1) + rnd.Next(0, 100);
         }
 
+        private IEnumerable<ulong> DebugGroupMembers(string group) =>
+            group == "default"
+                ? _players.Keys.Where(id => id > 76561190000000000UL && id < 76561190000001000UL)
+                : Enumerable.Empty<ulong>();
+
         [ConsoleCommand("pa.debugspawn")]
         private void CommandDebugSpawn(ConsoleSystem.Arg arg)
         {
@@ -6022,6 +6287,62 @@ namespace Oxide.Plugins
                 return;
             DebugClearBots();
             Notify(player, "[debug] cleared spawned bots");
+        }
+
+        [ConsoleCommand("pa.debugcluster")]
+        private void CommandDebugCluster(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !permission.UserHasPermission(player.UserIDString, Permissions.Use))
+                return;
+            var empty = MapBuildClusters(new List<Vector2>(), p => p, 16f);
+            if (empty.Count != 0)
+                PrintError($"[debug] cluster empty input produced {empty.Count} groups, expected 0");
+            var points = new List<Vector2>
+            {
+                new(100f, 100f), new(104f, 103f), new(97f, 96f), new(300f, 300f), new(307f, 300f), new(600f, 100f)
+            };
+            var groups = MapBuildClusters(points, p => p, 16f);
+            if (groups.Count != 3)
+            {
+                PrintError($"[debug] cluster count {groups.Count}, expected 3");
+                Notify(player, "[debug] cluster self-check FAILED", NotifyKind.Error);
+                return;
+            }
+
+            if (groups[0].Members.Count != 3)
+                PrintError($"[debug] cluster 0 size {groups[0].Members.Count}, expected 3");
+            if (groups[1].Members.Count != 2)
+                PrintError($"[debug] cluster 1 size {groups[1].Members.Count}, expected 2");
+            if (groups[2].Members.Count != 1)
+                PrintError($"[debug] cluster 2 size {groups[2].Members.Count}, expected 1");
+            if (Mathf.Abs(groups[0].Center.x - 100.333f) > 0.05f || Mathf.Abs(groups[0].Center.y - 99.667f) > 0.05f)
+                PrintError($"[debug] cluster 0 centroid {groups[0].Center}, expected 100.33 99.67");
+            if (Mathf.Abs(groups[1].Center.x - 303.5f) > 0.05f || Mathf.Abs(groups[1].Center.y - 300f) > 0.05f)
+                PrintError($"[debug] cluster 1 centroid {groups[1].Center}, expected 303.5 300");
+            if (Mathf.Abs(groups[2].Center.x - 600f) > 0.01f || Mathf.Abs(groups[2].Center.y - 100f) > 0.01f)
+                PrintError($"[debug] cluster 2 centroid {groups[2].Center}, expected 600 100");
+            var edge = new List<Vector2> { new(0f, 0f), new(16f, 0f), new(33f, 0f) };
+            var edgeGroups = MapBuildClusters(edge, p => p, 16f);
+            if (edgeGroups.Count != 2)
+                PrintError($"[debug] cluster edge count {edgeGroups.Count}, expected 2");
+            var same = new List<Vector2> { new(50f, 50f), new(50f, 50f), new(50f, 50f) };
+            var sameGroups = MapBuildClusters(same, p => p, 16f);
+            if (sameGroups.Count != 1)
+                PrintError($"[debug] cluster identical points made {sameGroups.Count} groups, expected 1");
+            if (sameGroups.Count == 1 && sameGroups[0].Members.Count != 3)
+                PrintError($"[debug] cluster identical points size {sameGroups[0].Members.Count}, expected 3");
+            if (MapBuildClusters(same, p => p, 0f).Count != 3)
+                PrintError("[debug] cluster radius 0 merged identical points, expected 3 singles");
+            var keyA = MapCluKey("p", new List<ulong> { 3uL, 1uL, 2uL }, v => v);
+            var keyB = MapCluKey("p", new List<ulong> { 2uL, 3uL, 1uL }, v => v);
+            if (keyA != keyB)
+                PrintError($"[debug] cluster key order dependent: {keyA} vs {keyB}");
+            if (keyA == MapCluKey("s", new List<ulong> { 3uL, 1uL, 2uL }, v => v))
+                PrintError("[debug] cluster key ignores category prefix");
+            if (keyA == MapCluKey("p", new List<ulong> { 3uL, 1uL, 4uL }, v => v))
+                PrintError("[debug] cluster key ignores member ids");
+            Notify(player, "[debug] cluster self-check done, check console for errors");
         }
 
         private void DebugClearBots()
@@ -6264,6 +6585,24 @@ namespace Oxide.Plugins
             return string.IsNullOrEmpty(n) ? d.shortname : n;
         }
 
+        private string LocalizedItemName(ItemDefinition d, BasePlayer viewer)
+        {
+            var english = ItemName(d);
+            if (viewer == null || _langApiPlugin == null || !_langApiPlugin.IsLoaded || !_isLangAPIReady)
+                return english;
+            if (!_langApiPlugin.Call<bool>("IsDefaultDisplayName", english))
+                return english;
+            return _langApiPlugin.Call<string>("GetItemDisplayName", d.shortname, english, viewer.UserIDString) ?? english;
+        }
+
+        private string LocalizedItemDescription(ItemDefinition d, BasePlayer viewer)
+        {
+            var english = d.displayDescription.english ?? "";
+            if (viewer == null || _langApiPlugin == null || !_langApiPlugin.IsLoaded || !_isLangAPIReady)
+                return english;
+            return _langApiPlugin.Call<string>("GetItemDescription", d.shortname, english, viewer.UserIDString) ?? english;
+        }
+
         private List<string> GiveCategories()
         {
             if (_giveCategoriesCache == null)
@@ -6284,31 +6623,67 @@ namespace Oxide.Plugins
 
         private HashSet<string> GiveFav(ulong uid) => GetAdmin(uid).GiveFav ??= new HashSet<string>();
 
-        private List<CartEntry> SavedCustoms(ulong uid) => GetAdmin(uid).Customs ??= new List<CartEntry>();
+        private List<CartEntry> SavedCustoms(ulong uid)
+        {
+            var list = GetAdmin(uid).Customs ??= new List<CartEntry>();
+            foreach (var e in list)
+            {
+                if (e.IsCustomNamed || string.IsNullOrEmpty(e.DisplayName))
+                    continue;
+                var def = FindItem(e.Shortname);
+                if (def != null && e.DisplayName != ItemName(def))
+                    e.IsCustomNamed = true;
+            }
+
+            return list;
+        }
+
+        private List<CartEntry> FilterItemDefs(string curCat, string search, HashSet<string> fav, BasePlayer player) =>
+            AllItems()
+                .Where(d => search.Length > 0
+                    ? ItemName(d).ToLowerInvariant().Contains(search) || d.shortname.ToLowerInvariant().Contains(search)
+                    : curCat == "_fav" ? fav != null && fav.Contains(d.shortname) : d.category.ToString() == curCat)
+                .Select(d => new CartEntry { Shortname = d.shortname, ItemId = d.itemid, Amount = 1, SkinId = 0, DisplayName = LocalizedItemName(d, player) })
+                .ToList();
 
         private List<CartEntry> GiveFiltered(BasePlayer player)
         {
             var curCat = GetSelect(player, FieldKey.GiveCat, GiveCategories().FirstOrDefault() ?? "_fav");
             var sl = GetInput(player, FieldKey.GiveSearch, "").Trim().ToLowerInvariant();
             var fav = GiveFav(player.userID);
-            var key = curCat + "" + sl;
+            var key = curCat + "\x01" + sl;
             if (curCat == "_fav")
                 key += "" + fav.Count + "" + string.Join(",", fav);
             var ad = GetAdmin(player.userID);
             if (ad.GiveFilterKey == key && ad.GiveFilterCache != null)
                 return ad.GiveFilterCache;
 
-            var result = AllItems()
-                .Where(d => (curCat == "_fav" ? fav.Contains(d.shortname) : d.category.ToString() == curCat) &&
-                            (sl.Length == 0 || ItemName(d).ToLowerInvariant().Contains(sl) ||
-                             d.shortname.ToLowerInvariant().Contains(sl)))
-                .Select(d => new CartEntry { Shortname = d.shortname, ItemId = d.itemid, Amount = 1, SkinId = 0, DisplayName = ItemName(d) })
-                .ToList();
+            var result = FilterItemDefs(curCat, sl, fav, player);
             ad.GiveFilterKey = key;
             ad.GiveFilterCache = result;
             return result;
         }
 
+        private List<CartEntry> ItemsCart(ulong uid) => GetAdmin(uid).ItemsCart ??= new List<CartEntry>();
+
+        private List<CartEntry> ItemsFiltered(BasePlayer player)
+        {
+            var cats = GiveCategories();
+            var curCat = GetSelect(player, FieldKey.ItemsCat, cats.FirstOrDefault() ?? "");
+            var sl = GetInput(player, FieldKey.ItemsSearch, "").Trim().ToLowerInvariant();
+            var fav = GiveFav(player.userID);
+            var key = curCat + "\x01" + sl;
+            if (curCat == "_fav")
+                key += "" + fav.Count + "" + string.Join(",", fav);
+            var ad = GetAdmin(player.userID);
+            if (ad.ItemsFilterKey == key && ad.ItemsFilterCache != null)
+                return ad.ItemsFilterCache;
+
+            var result = FilterItemDefs(curCat, sl, fav, player);
+            ad.ItemsFilterKey = key;
+            ad.ItemsFilterCache = result;
+            return result;
+        }
 
         private PickerLayout GiveLayout()
         {
@@ -7456,7 +7831,16 @@ namespace Oxide.Plugins
             var ad = GetAdmin(player.userID);
             ad.MapPaused = !ad.MapPaused;
             SaveSoon();
-            UI_MapPauseRepaint(player, ad);
+            UI_MapToggleRepaint(player, Layers.MapPause, "pa.mappause", ad.MapPaused, Colors.CWarn);
+        }
+
+        [ServiceCommand("pa.mapclusters")]
+        private void CommandMapClusters(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !Can(player, Permissions.Map))
+                return;
+            ToggleMapClusters(player);
         }
 
         [ServiceCommand("pa.maprefresh")]
@@ -7518,7 +7902,7 @@ namespace Oxide.Plugins
                 return;
             var kind = arg.GetString(0);
             var netId = arg.GetULong(1);
-            var entity = FindMapObject(kind, netId);
+            var entity = FindMapObject(kind, netId, true);
             if (entity == null)
                 return;
             TeleportPlayer(player, entity.transform.position);
@@ -7581,6 +7965,31 @@ namespace Oxide.Plugins
             if (storage == null)
                 return;
             OpenContainer(player, storage);
+        }
+
+        [ServiceCommand("pa.mapclu")]
+        private void CommandMapCluster(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !arg.HasArgs() || !Can(player, Permissions.Map))
+                return;
+            var key = arg.GetString(0);
+            if (string.IsNullOrEmpty(key))
+                return;
+            var ad = GetAdmin(player.userID);
+            ad.MapCluOpen = ad.MapCluOpen == key ? null : key;
+            UI_MapRefresh(player);
+        }
+
+        [ServiceCommand("pa.mapcluclose")]
+        private void CommandMapClusterClose(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !Can(player, Permissions.Map))
+                return;
+            var ad = GetAdmin(player.userID);
+            ad.MapCluOpen = null;
+            UI_MapRefresh(player);
         }
 
         [ServiceCommand("pa.qbrun")]
@@ -7845,6 +8254,19 @@ namespace Oxide.Plugins
             UI_Open(player);
         }
 
+        [ServiceCommand("pa.permcollapse")]
+        private void CommandPermsCollapse(ConsoleSystem.Arg arg)
+        {
+            if (!TryAuth(arg, out var player, 1, Permissions.Perms))
+                return;
+            var key = arg.HasArgs() ? string.Join(" ", arg.Args) : "";
+            var set = GetAdmin(player.userID).PermsCollapsed ??= new HashSet<string>();
+
+            if (!set.Remove(key))
+                set.Add(key);
+            UI_Open(player);
+        }
+
         [ConsoleCommand("pa.toggle")]
         private void CommandToggle(ConsoleSystem.Arg arg)
         {
@@ -8017,10 +8439,17 @@ namespace Oxide.Plugins
             }
 
             SetInput(player.userID, id, value);
-            if (id == FieldKey.PermsSearch || id == FieldKey.UserpermSearch)
+            if (id == FieldKey.PermsSearch || id == FieldKey.UserpermSearch || id == FieldKey.GroupMembersSearch)
                 UI_Open(player);
+            else if (id == FieldKey.ItemsGiveSearch)
+            {
+                GetAdmin(player.userID).ItemsGiveShown = ItemsGivePageSize;
+                UI_Open(player);
+            }
             else if (id == FieldKey.MapSearch)
                 RefreshBody(player);
+            else if (id == FieldKey.ItemsSearch)
+                UI_Open(player);
             else if (id.StartsWith(BindKeyPrefix, StringComparison.Ordinal))
                 RefreshBody(player);
             else if (id == FieldKey.SecLogmax)
@@ -8143,6 +8572,54 @@ namespace Oxide.Plugins
                 AddLog(LogCategory.Cmd, $"{player.displayName}: {sid} added to group {g}");
             }
 
+            UI_Open(player);
+        }
+
+        [ServiceCommand("pa.groupview")]
+        private void CommandGroupView(ConsoleSystem.Arg arg)
+        {
+            if (!TryAuth(arg, out var player, 1, Permissions.Perms))
+                return;
+            var group = arg.GetString(0);
+            var ad = GetAdmin(player.userID);
+            if (ad.GroupMembersView == group)
+                ad.GroupMembersView = null;
+            else
+            {
+                ad.GroupMembersView = group;
+                SetInput(player.userID, FieldKey.GroupMembersSearch, "");
+            }
+
+            UI_Open(player);
+        }
+
+        [ServiceCommand("pa.groupremove")]
+        private void CommandGroupRemove(ConsoleSystem.Arg arg)
+        {
+            if (!TryAuth(arg, out var player, 1, Permissions.Perms))
+                return;
+            var group = PeekAdmin(player.userID)?.GroupMembersView;
+            if (string.IsNullOrEmpty(group))
+                return;
+            var id = arg.GetString(0);
+            permission.RemoveUserGroup(id, group);
+            AddLog(LogCategory.Cmd, $"{player.displayName}: {id} removed from group {group}");
+            UI_Open(player);
+        }
+
+        [ServiceCommand("pa.groupopencard")]
+        private void CommandGroupOpenCard(ConsoleSystem.Arg arg)
+        {
+            if (!TryAuth(arg, out var player, 1, Permissions.Perms))
+                return;
+            if (!Can(player, Permissions.Players))
+                return;
+            if (!ulong.TryParse(arg.GetString(0), out var targetId))
+                return;
+            var ad = GetAdmin(player.userID);
+            ad.GroupMembersView = null;
+            ad.Popup = targetId;
+            ad.PopupAction = null;
             UI_Open(player);
         }
 
@@ -8598,13 +9075,33 @@ namespace Oxide.Plugins
                         amt = hmode == "set" ? target.health : 0f;
                     var newHp = hmode switch
                     {
-                        "max" => max,
+                        "max" or "full" => max,
                         "add" => target.health + amt,
                         "sub" => target.health - amt,
                         _ => amt
                     };
                     target.health = Mathf.Clamp(newHp, 1f, max);
                     target.SendNetworkUpdate();
+                    if (hmode == "full")
+                    {
+                        if (target.IsWounded())
+                            target.StopWounded();
+                        var m = target.metabolism;
+                        if (m != null)
+                        {
+                            m.bleeding.value = 0f;
+                            m.poison.value = 0f;
+                            m.radiation_poison.value = 0f;
+                            m.radiation_level.value = 0f;
+                            m.wetness.value = 0f;
+                            m.calories.value = m.calories.max;
+                            m.hydration.value = m.hydration.max;
+                            m.oxygen.value = m.oxygen.max;
+                            m.isDirty = true;
+                            m.SendChanges();
+                        }
+                    }
+
                     SetInput(player.userID, FieldKey.PopupHealAmt, "");
                     Notify(player,
                         SafeFormat(GetLocalizedMessage(TranslateKey.MessageHealed, player), name,
@@ -8767,6 +9264,20 @@ namespace Oxide.Plugins
             UI_Open(player);
         }
 
+        private static void MutateCartAmount(List<CartEntry> cart, string op, int idx, int amt)
+        {
+            if (op == "inc")
+                cart[idx].Amount += amt;
+            else if (op == "dec")
+            {
+                cart[idx].Amount -= amt;
+                if (cart[idx].Amount <= 0)
+                    cart.RemoveAt(idx);
+            }
+            else if (op == "rem")
+                cart.RemoveAt(idx);
+        }
+
         [ServiceCommand("pa.give")]
         private void CommandGive(ConsoleSystem.Arg arg)
         {
@@ -8791,11 +9302,15 @@ namespace Oxide.Plugins
             string partialItem = null;
             if (op == "fav" && arg.HasArgs(2))
             {
-                var fav = GiveFav(player.userID);
-                if (!fav.Remove(arg.GetString(1)))
-                    fav.Add(arg.GetString(1));
-                partial = curCat != "_fav";
-                partialItem = arg.GetString(1);
+                var favDef = ItemManager.FindItemDefinition(arg.GetInt(1, 0));
+                if (favDef != null)
+                {
+                    var fav = GiveFav(player.userID);
+                    if (!fav.Remove(favDef.shortname))
+                        fav.Add(favDef.shortname);
+                    partial = curCat != "_fav";
+                    partialItem = favDef.shortname;
+                }
             }
             else if (op == "addcustom")
             {
@@ -8808,7 +9323,7 @@ namespace Oxide.Plugins
                     {
                         Shortname = s.Shortname, ItemId = s.ItemId, Amount = s.Amount < 1 ? 1 : s.Amount,
                         SkinId = s.SkinId,
-                        DisplayName = s.DisplayName
+                        DisplayName = s.DisplayName, IsCustomNamed = s.IsCustomNamed
                     });
                     partial = true;
                     partialItem = "";
@@ -8870,16 +9385,18 @@ namespace Oxide.Plugins
                     var entry = new CartEntry
                     {
                         Shortname = def.shortname, ItemId = def.itemid, Amount = q, SkinId = skin,
-                        DisplayName = nm.Length > 0 ? nm : ItemName(def)
+                        DisplayName = nm.Length > 0 ? nm : LocalizedItemName(def, player), IsCustomNamed = nm.Length > 0
                     };
-                    cart.Add(entry);
+                    var ad = GetAdmin(player.userID);
+                    var targetCart = ad.Popup != 0 && ad.PopupAction == "give" ? cart : ItemsCart(player.userID);
+                    targetCart.Add(entry);
                     if (GetToggle(player, "give.cust.save", false))
                     {
                         SavedCustoms(player.userID).Add(new CartEntry
                         {
                             Shortname = entry.Shortname, ItemId = entry.ItemId, Amount = entry.Amount,
                             SkinId = entry.SkinId,
-                            DisplayName = entry.DisplayName
+                            DisplayName = entry.DisplayName, IsCustomNamed = entry.IsCustomNamed
                         });
                         SaveSoon();
                     }
@@ -8893,7 +9410,7 @@ namespace Oxide.Plugins
             }
             else if (op == "add" && arg.HasArgs(2))
             {
-                var def = FindItem(arg.GetString(1));
+                var def = ItemManager.FindItemDefinition(arg.GetInt(1, 0));
                 if (def != null)
                 {
                     var amt = arg.GetInt(2, 1);
@@ -8906,7 +9423,7 @@ namespace Oxide.Plugins
                         cart.Add(new CartEntry
                         {
                             Shortname = def.shortname, ItemId = def.itemid, Amount = amt, SkinId = 0,
-                            DisplayName = ItemName(def), Blueprint = asBp
+                            DisplayName = LocalizedItemName(def, player), Blueprint = asBp
                         });
                     partial = true;
                     partialItem = def.shortname;
@@ -8943,18 +9460,7 @@ namespace Oxide.Plugins
                 if (idx >= 0 && idx < cart.Count)
                 {
                     var sn = cart[idx].Shortname;
-                    var amt = arg.GetInt(2, 1);
-                    if (op == "inc")
-                        cart[idx].Amount += amt;
-                    else if (op == "dec")
-                    {
-                        cart[idx].Amount -= amt;
-                        if (cart[idx].Amount <= 0)
-                            cart.RemoveAt(idx);
-                    }
-                    else if (op == "rem")
-                        cart.RemoveAt(idx);
-
+                    MutateCartAmount(cart, op, idx, arg.GetInt(2, 1));
                     partial = true;
                     partialItem = sn;
                 }
@@ -8962,6 +9468,208 @@ namespace Oxide.Plugins
 
             if (partial)
                 GivePartial(player, partialItem);
+            else
+                UI_Open(player);
+        }
+
+        [ServiceCommand("pa.items")]
+        private void CommandItems(ConsoleSystem.Arg arg)
+        {
+            if (!TryAuth(arg, out var player, 1, Permissions.Items))
+                return;
+
+            var op = arg.GetString(0);
+            var cart = ItemsCart(player.userID);
+            var partial = false;
+            string partialItem = null;
+            var curCat = GetSelect(player, FieldKey.ItemsCat, GiveCategories().FirstOrDefault() ?? "");
+
+            if (op == "fav" && arg.HasArgs(2))
+            {
+                var favDef = ItemManager.FindItemDefinition(arg.GetInt(1, 0));
+                if (favDef != null)
+                {
+                    var fav = GiveFav(player.userID);
+                    if (!fav.Remove(favDef.shortname))
+                        fav.Add(favDef.shortname);
+                    partial = curCat != "_fav";
+                    partialItem = favDef.shortname;
+                }
+            }
+            else if (op == "add" && arg.HasArgs(2))
+            {
+                var def = ItemManager.FindItemDefinition(arg.GetInt(1, 0));
+                if (def != null)
+                {
+                    var amt = arg.GetInt(2, 1);
+                    var e = cart.FirstOrDefault(x => x.Shortname == def.shortname && x.SkinId == 0);
+                    if (e != null)
+                        e.Amount += amt;
+                    else
+                        cart.Add(new CartEntry
+                        {
+                            Shortname = def.shortname, ItemId = def.itemid, Amount = amt, SkinId = 0,
+                            DisplayName = LocalizedItemName(def, player)
+                        });
+                    partial = true;
+                    partialItem = def.shortname;
+                }
+            }
+            else if (op == "setamt")
+            {
+                var idx = arg.GetInt(1, -1);
+                if (idx >= 0 && idx < cart.Count)
+                {
+                    var raw = arg.GetString(2, "").Trim();
+                    if (int.TryParse(raw, out var qty) && qty > 0)
+                        cart[idx].Amount = qty;
+                    else
+                        Notify(player, GetLocalizedMessage(TranslateKey.GiveAmtBad, player), NotifyKind.Error);
+                    partial = true;
+                    partialItem = cart[idx].Shortname;
+                }
+            }
+            else if (op == "inc" || op == "dec" || op == "rem")
+            {
+                var idx = arg.GetInt(1, -1);
+                if (idx >= 0 && idx < cart.Count)
+                {
+                    var sn = cart[idx].Shortname;
+                    MutateCartAmount(cart, op, idx, arg.GetInt(2, 1));
+                    partial = true;
+                    partialItem = sn;
+                }
+            }
+            else if (op == "clear")
+            {
+                cart.Clear();
+                partial = true;
+            }
+            else if (op == "addcustom")
+            {
+                var saved = SavedCustoms(player.userID);
+                var cidx = arg.GetInt(1, -1);
+                if (cidx >= 0 && cidx < saved.Count)
+                {
+                    var s = saved[cidx];
+                    cart.Add(new CartEntry
+                    {
+                        Shortname = s.Shortname, ItemId = s.ItemId, Amount = s.Amount < 1 ? 1 : s.Amount,
+                        SkinId = s.SkinId, DisplayName = s.DisplayName, IsCustomNamed = s.IsCustomNamed
+                    });
+                    partial = true;
+                    partialItem = "";
+                }
+            }
+            else if (op == "delcustom")
+            {
+                var saved = SavedCustoms(player.userID);
+                var didx = arg.GetInt(1, -1);
+                if (didx >= 0 && didx < saved.Count)
+                {
+                    saved.RemoveAt(didx);
+                    SaveSoon();
+                }
+            }
+            else if (op == "giveopen")
+            {
+                if (cart.Count == 0)
+                {
+                    Notify(player, GetLocalizedMessage(TranslateKey.ItemsGiveEmptyCart, player), NotifyKind.Error);
+                    return;
+                }
+
+                GetAdmin(player.userID).ItemsGiveOpen = true;
+                GetAdmin(player.userID).ItemsGiveShown = ItemsGivePageSize;
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "givemore")
+            {
+                GetAdmin(player.userID).ItemsGiveShown = (PeekAdmin(player.userID)?.ItemsGiveShown > 0
+                    ? GetAdmin(player.userID).ItemsGiveShown : ItemsGivePageSize) + ItemsGivePageSize;
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "giveclose")
+            {
+                GetAdmin(player.userID).ItemsGiveOpen = false;
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "target" && arg.HasArgs(2) && ulong.TryParse(arg.GetString(1), out var tsid))
+            {
+                var targets = GetAdmin(player.userID).ItemsGiveTargets ??= new HashSet<ulong>();
+                if (!targets.Remove(tsid))
+                    targets.Add(tsid);
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "selectall")
+            {
+                var targets = GetAdmin(player.userID).ItemsGiveTargets ??= new HashSet<ulong>();
+                targets.Clear();
+                foreach (var p in BasePlayer.activePlayerList)
+                    if (p != null)
+                        targets.Add(p.userID);
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "clearsel")
+            {
+                GetAdmin(player.userID).ItemsGiveTargets?.Clear();
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "giveconfirm")
+            {
+                var targets = GetAdmin(player.userID).ItemsGiveTargets;
+                if (targets == null || targets.Count == 0)
+                {
+                    Notify(player, GetLocalizedMessage(TranslateKey.ItemsGiveNoneSelected, player), NotifyKind.Error);
+                    return;
+                }
+
+                var given = 0;
+                foreach (var sid in targets)
+                {
+                    var target = FindOnline(sid);
+                    if (target == null)
+                        continue;
+                    foreach (var e in cart)
+                    {
+                        var item = e.GetItem(FindItem(e.Shortname));
+                        if (item == null)
+                            continue;
+                        target.GiveItem(item, BaseEntity.GiveItemReason.PickedUp);
+                    }
+
+                    given++;
+                }
+
+                Notify(player, SafeFormat(GetLocalizedMessage(TranslateKey.MessageItemsGiven, player), given));
+                AddLog(LogCategory.Cmd, $"{player.displayName}: gave items to {given} player(s)");
+                targets.Clear();
+                GetAdmin(player.userID).ItemsGiveOpen = false;
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "info")
+            {
+                GetAdmin(player.userID).ItemsInfoShortname =
+                    ItemManager.FindItemDefinition(arg.GetInt(1, 0))?.shortname;
+                partial = true;
+                partialItem = "";
+            }
+            else if (op == "infoclose")
+            {
+                GetAdmin(player.userID).ItemsInfoShortname = null;
+                partial = true;
+                partialItem = "";
+            }
+
+            if (partial)
+                ItemsPartial(player, partialItem);
             else
                 UI_Open(player);
         }
@@ -9006,7 +9714,7 @@ namespace Oxide.Plugins
 
             if (op == "unlock")
             {
-                var def = FindItem(arg.GetString(1));
+                var def = ItemManager.FindItemDefinition(arg.GetInt(1, 0));
                 if (def?.Blueprint != null)
                 {
                     if (target.blueprints.IsUnlocked(def))
@@ -9274,6 +9982,7 @@ namespace Oxide.Plugins
                         maxChanged = !Mathf.Approximately(maxVal, prevMax);
                     }
 
+                    a.min = Mathf.Min(a.min, val);
                     a.value = Mathf.Clamp(val, a.min, a.max);
                     target.metabolism.isDirty = true;
                     target.metabolism.SendChanges();
@@ -9647,6 +10356,54 @@ namespace Oxide.Plugins
             if (player == null || !arg.HasArgs() || !Can(player, Permissions.Plugins))
                 return;
             PluginActed(player, "load", arg.GetString(0));
+        }
+
+        [ServiceCommand("pa.plcheckupdates")]
+        private void CommandPluginCheckUpdates(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !Can(player, Permissions.Plugins))
+                return;
+            if (plugins.Find("UpdateChecker") == null)
+            {
+                Notify(player, GetLocalizedMessage(TranslateKey.PluginsUpdatecheckerMissing, player), NotifyKind.Error);
+                return;
+            }
+
+            if (_pluginUpdatesChecking)
+                return;
+
+            _pluginUpdates.Clear();
+            _pluginUpdatesChecking = true;
+            ServerMgr.Instance.StartCoroutine(ResetPluginUpdatesCheckingRoutine());
+            AddLog(LogCategory.Cmd, $"{player.displayName}: checked plugin updates");
+            ConsoleSystem.Run(ConsoleSystem.Option.Server, "checkupdates");
+            Notify(player, GetLocalizedMessage(TranslateKey.MessageUpdatecheckStarted, player));
+            foreach (var p in BasePlayer.activePlayerList)
+                RefreshPlugins(p);
+        }
+
+        [ServiceCommand("pa.plupdatelink")]
+        private void CommandPluginUpdateLink(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null || !arg.HasArgs() || !Can(player, Permissions.Plugins))
+                return;
+            var name = arg.GetString(0);
+            if (!_pluginUpdates.ContainsKey(name))
+                return;
+            var container = new CuiElementContainer();
+            UI_PluginUpdatePopup(container, player, name);
+            CuiHelper.AddUi(player, container);
+        }
+
+        [ServiceCommand("pa.plupdatelinkclose")]
+        private void CommandPluginUpdateLinkClose(ConsoleSystem.Arg arg)
+        {
+            var player = arg?.Player();
+            if (player == null)
+                return;
+            CuiHelper.DestroyUi(player, Layers.Root + ".plupd");
         }
 
         [ServiceCommand("pa.plcmds")]
@@ -11302,6 +12059,7 @@ namespace Oxide.Plugins
             "dashboard" => TranslateKey.TipNavDashboard,
             "console" => TranslateKey.TipNavConsole,
             "players" => TranslateKey.TipNavPlayers,
+            "items" => TranslateKey.TipNavItems,
             "vanish" => TranslateKey.TipNavVanish,
             "esp" => TranslateKey.TipNavEsp,
             "perms" => TranslateKey.TipNavPerms,
@@ -11943,6 +12701,11 @@ namespace Oxide.Plugins
                 case "players":
                 {
                     UI_PagePlayers(container, player);
+                    break;
+                }
+                case "items":
+                {
+                    UI_PageItems(container, player);
                     break;
                 }
                 case "vanish":
@@ -13107,6 +13870,9 @@ namespace Oxide.Plugins
             UI_Toggle(container, p1, player, VanishNoclipKey, GetLocalizedMessage(TranslateKey.VanishNoclip, player),
                 GetLocalizedMessage(TranslateKey.VanishNoclipD, player), false, 16, -162,
                 half - 32, !Can(player, Permissions.Noclip));
+            UI_Toggle(container, p1, player, VanishNoclipOffKey, GetLocalizedMessage(TranslateKey.VanishNoclipOff, player),
+                GetLocalizedMessage(TranslateKey.VanishNoclipOffD, player), false, 16, -200,
+                half - 32, !Can(player, Permissions.Noclip));
 
             var p2 = UI_Card(container, Layers.Body, GetLocalizedMessage(TranslateKey.VanishAppearance, player),
                 Positions.Pad + half + 14, -60, half, Positions.Dash.VanishCardH);
@@ -13437,24 +14203,47 @@ namespace Oxide.Plugins
         {
             var list = new List<PermEntry>();
             var perms = (permission.GetPermissions() ?? Array.Empty<string>())
-                .Where(p => !string.IsNullOrEmpty(p) && (search.Length == 0 || p.ToLowerInvariant().Contains(search)));
+                .Where(p => !string.IsNullOrEmpty(p));
             foreach (var grp in perms.GroupBy(PermGroupKey).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
             {
-                list.Add(new PermEntry(true, grp.Key + "\x01" + grp.Count()));
-                foreach (var p in grp.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                var matchAll = search.Length == 0 || grp.Key.ToLowerInvariant().Contains(search);
+                var rows = grp.Where(p => matchAll || p.ToLowerInvariant().Contains(search))
+                    .OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+                if (rows.Count == 0)
+                    continue;
+                list.Add(new PermEntry(true, grp.Key + "\x01" + rows.Count));
+                foreach (var p in rows)
                     list.Add(new PermEntry(false, p));
             }
 
             return list;
         }
 
-        private int PermContentHeight(List<PermEntry> entries) =>
-            entries.Sum(e => e.Header ? Positions.Perm.HdrH : Positions.Perm.RowH) + 8;
+        private static string PermEntryGroup(PermEntry e) => e.Header ? e.Text.Split('\x01')[0] : null;
+
+        private int PermContentHeight(List<PermEntry> entries, HashSet<string> collapsed = null)
+        {
+            var h = 8;
+            var skip = false;
+            foreach (var e in entries)
+            {
+                if (e.Header)
+                {
+                    skip = collapsed != null && collapsed.Contains(PermEntryGroup(e));
+                    h += Positions.Perm.HdrH;
+                }
+                else if (!skip)
+                    h += Positions.Perm.RowH;
+            }
+
+            return h;
+        }
 
         private void UI_PermList(CuiElementContainer container, string content, List<PermEntry> entries,
-            Func<string, bool> isOn, string cmd, Func<string, string> inheritedFrom = null)
+            Func<string, bool> isOn, string cmd, Func<string, string> inheritedFrom = null, HashSet<string> collapsed = null)
         {
             var index = 0;
+            var skip = false;
             foreach (var e in entries)
             {
                 if (e.Header)
@@ -13462,6 +14251,7 @@ namespace Oxide.Plugins
                     var parts = e.Text.Split('\x01');
                     var title = parts[0];
                     var count = parts.Length > 1 ? parts[1] : "";
+                    skip = collapsed != null && collapsed.Contains(title);
                     var hn = content + ".hbar." + title;
                     var headerEl = new CuiElement
                     {
@@ -13477,14 +14267,15 @@ namespace Oxide.Plugins
                             Image = { Color = Palette.CAccent },
                             RectTransform = { AnchorMin = "0 0", AnchorMax = "0 1", OffsetMin = "0 0", OffsetMax = "3 0" }
                         }, hn);
-                    UI_Text(container, hn, title, 11, Fonts.Title, TextAnchor.MiddleLeft, Palette.CText, "0 0", "1 1", "14 0",
-                        "-52 0");
+                    UI_Text(container, hn, (skip ? "▸ " : "▾ ") + title, 11, Fonts.Title, TextAnchor.MiddleLeft, Palette.CText,
+                        "0 0", "1 1", "14 0", "-52 0");
                     if (count.Length > 0)
                         UI_Text(container, hn, count, 10, Fonts.Console, TextAnchor.MiddleRight, Palette.CText3, "0 0", "1 1",
                             "0 0", "-12 0");
+                    UI_Btn(container, hn, $"pa.permcollapse {title}", Colors.Clear, "0 0", "1 1");
                     index++;
                 }
-                else
+                else if (!skip)
                 {
                     UI_PermRow(container, content, e.Text, isOn(e.Text), index, cmd, inheritedFrom?.Invoke(e.Text));
                     index++;
@@ -13688,8 +14479,25 @@ namespace Oxide.Plugins
                     "-4 0");
                 UI_Text(container, row, g, 12, Fonts.Title, TextAnchor.MiddleLeft, on ? Palette.CAccent : Palette.CText, "0 0",
                     "1 1", "28 0", "-40 0");
-                UI_Text(container, row, (permission.GetUsersInGroup(g)?.Length ?? 0).ToString(), 10, Fonts.Body,
-                    TextAnchor.MiddleRight, Palette.CText2, "0 0", "1 1", "0 0", "-12 0");
+
+                var memberCount = GroupMemberIds(g).Count;
+                container.Add(new CuiPanel
+                {
+                    Image = { Color = Palette.CAccentSoft },
+                    RectTransform = { AnchorMin = "1 0.5", AnchorMax = "1 0.5", OffsetMin = "-48 -9", OffsetMax = "-6 9" }
+                }, row);
+                container.Add(new CuiElement
+                {
+                    Parent = row,
+                    Components =
+                    {
+                        new CuiImageComponent { Color = Palette.CAccent, Sprite = "assets/icons/clan.png" },
+                        new CuiRectTransformComponent { AnchorMin = "1 0.5", AnchorMax = "1 0.5", OffsetMin = "-42 -6", OffsetMax = "-30 6" }
+                    }
+                });
+                UI_Text(container, row, FormatCount(memberCount), 10, Fonts.Title, TextAnchor.MiddleRight,
+                    Palette.CAccent, "1 0.5", "1 0.5", "-28 -9", "-10 9");
+                UI_Btn(container, row, $"pa.groupview {g}", Colors.Clear, "1 0.5", "1 0.5", "-48 -9", "-6 9");
             }
 
             container.Add(new CuiElement
@@ -13717,16 +14525,20 @@ namespace Oxide.Plugins
 
             var search = GetInput(player, FieldKey.PermsSearch, "").Trim().ToLowerInvariant();
             var entries = PermEntries(search);
+            var collapsed = GetAdmin(player.userID).PermsCollapsed ??= new HashSet<string>();
             var content = UI_ScrollStack(container, PermTabPanel, "psv", 2, -74, rightW - 4, ph - 94,
-                PermContentHeight(entries), 0, 4, null, null);
+                PermContentHeight(entries, collapsed), 0, 4, null, null);
             if (entries.Count == 0)
                 UI_Text(container, content, GetLocalizedMessage(TranslateKey.PermsNone, player), 11, Fonts.Body,
                     TextAnchor.MiddleCenter, Palette.CText3, "0 1", "1 1", "0 -80", "0 -20");
             UI_PermList(container, content, entries, p => permission.GroupHasPermission(curG, p), "pa.permgroup",
-                p => GroupInheritedFrom(curG, p));
+                p => GroupInheritedFrom(curG, p), collapsed);
 
             if (PeekAdmin(player.userID)?.NewGroupOpen == true)
                 UI_NewGroupDialog(container, player);
+
+            if (!string.IsNullOrEmpty(PeekAdmin(player.userID)?.GroupMembersView))
+                UI_GroupMembersPopup(container, player);
         }
 
         private void RefreshNewGroup(BasePlayer player)
@@ -13795,6 +14607,126 @@ namespace Oxide.Plugins
                 Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "1 0", "1 0", "-188 16", "-108 44");
             UI_Btn(container, ngc, GetLocalizedMessage(TranslateKey.PermsCreate, player), "pa.creategroup", Palette.CAccent,
                 11, Fonts.Title, TextAnchor.MiddleCenter, Palette.CAccentText, "1 0", "1 0", "-100 16", "-18 44");
+        }
+
+        private List<ulong> GroupMemberIds(string group)
+        {
+            var ids = (permission.GetUsersInGroup(group) ?? Array.Empty<string>())
+                .Select(s => ulong.TryParse(s.Split(' ')[0], out var v) ? v : 0uL)
+                .Where(id => id != 0uL)
+                .ToList();
+#if DEBUG_SERVER
+            ids.AddRange(DebugGroupMembers(group));
+#endif
+            return ids;
+        }
+
+        private void UI_GroupMembersPopup(CuiElementContainer container, BasePlayer player)
+        {
+            var group = GetAdmin(player.userID).GroupMembersView;
+            if (string.IsNullOrEmpty(group))
+                return;
+
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Root, Name = Layers.Root + ".gm", DestroyUi = Layers.Root + ".gm",
+                Components =
+                {
+                    new CuiImageComponent { Color = "0 0 0 0.6" }, new CuiNeedsCursorComponent(),
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            UI_Btn(container, Layers.Root + ".gm", $"pa.groupview {group}", Colors.Clear, "0 0", "1 1",
+                name: Layers.Root + ".gm" + ".AGR4ZQN=");
+
+            const int w = 440, h = 460;
+            var gmc = Layers.Root + ".gm.card";
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Root + ".gm", Name = gmc,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = $"{-w / 2} {-h / 2}", OffsetMax = $"{w / 2} {h / 2}" }
+                }
+            });
+
+            var memberIds = GroupMemberIds(group);
+
+            UI_Text(container, gmc, SafeFormat(GetLocalizedMessage(TranslateKey.PermsGroupMembers, player), group), 15,
+                Fonts.Title, TextAnchor.UpperLeft, Palette.CText, "0 1", "1 1", "18 -36", "-46 -14");
+            UI_Text(container, gmc,
+                SafeFormat(GetLocalizedMessage(TranslateKey.PermsGroupMembersCount, player), memberIds.Count), 10,
+                Fonts.Body, TextAnchor.UpperLeft, Palette.CText2, "0 1", "1 1", "18 -54", "-46 -38");
+            UI_CloseX(container, gmc, $"pa.groupview {group}", "1 1", "1 1", "-34 -34", "-10 -10", gmc + ".x");
+
+            UI_Input(container, gmc, player, FieldKey.GroupMembersSearch,
+                GetLocalizedMessage(TranslateKey.PermsGroupMembersSearchPh, player), 18, -78, w - 36, 28);
+
+            var search = GetInput(player, FieldKey.GroupMembersSearch, "").Trim();
+            var entries = memberIds.Select(GetDropdownEntry)
+                .Where(e => string.IsNullOrEmpty(search) || e.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0)
+                .OrderBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            const int gridY = -112, gridH = h - 130, gridGap = 8, gridInset = 6, cardH = 53;
+            var colW = (w - 36 - 2 - gridInset * 2 - gridGap) / 2;
+
+            if (entries.Count == 0)
+            {
+                UI_Text(container, gmc,
+                    memberIds.Count == 0
+                        ? GetLocalizedMessage(TranslateKey.PermsGroupMembersEmpty, player)
+                        : SafeFormat(GetLocalizedMessage(TranslateKey.PermsGroupMembersNomatch, player), search),
+                    11, Fonts.Body, TextAnchor.MiddleCenter, Palette.CText3, "0 1", "1 1", $"18 {gridY - gridH}",
+                    $"-18 {gridY}");
+                return;
+            }
+
+            var grid = UI_ScrollList(container, gmc, "gl", 18, gridY, w - 36, gridH, cardH, gridGap, entries.Count,
+                gridInset, 2, Palette.CPage, Palette.CBorder);
+            var canOpen = Can(player, Permissions.Players);
+
+            for (var i = 0; i < entries.Count; i++)
+            {
+                var e = entries[i];
+                var cx = gridInset + i % 2 * (colW + gridGap);
+                var cy = -gridInset - i / 2 * (cardH + gridGap);
+                var cardName = grid + ".c" + i;
+
+                container.Add(new CuiElement
+                {
+                    Parent = grid, Name = cardName,
+                    Components =
+                    {
+                        new CuiImageComponent { Color = Palette.CElev },
+                        new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                        new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{cx} {cy - cardH}", OffsetMax = $"{cx + colW} {cy}" }
+                    }
+                });
+
+                var body = cardName;
+                if (canOpen)
+                {
+                    body = cardName + ".click";
+                    UI_Btn(container, cardName, $"pa.groupopencard {e.SteamId}", Colors.Clear, "0 0", "1 1", name: body);
+                    UI_Tip(container, GetLocalizedMessage(TranslateKey.PermsGroupMembersTip, player));
+                }
+
+                UI_Avatar(container, body, e.SteamId, 8, -9, 36);
+
+                var online = ulong.TryParse(e.SteamId, out var sid) && FindOnline(sid) != null;
+                UI_Text(container, body, "●", 9, Fonts.Title, TextAnchor.MiddleLeft,
+                    online ? Colors.CSuccess : Colors.CDanger, "0 1", "0 1", "52 -25", "60 -15");
+                UI_Text(container, body, e.DisplayName, 11, Fonts.Body, TextAnchor.UpperLeft, Palette.CText,
+                    "0 1", "0 1", "66 -28", $"{colW - 32} -14");
+                UI_Text(container, body, e.SteamId, 9, Fonts.Body, TextAnchor.UpperLeft, Palette.CText3,
+                    "0 1", "0 1", "52 -41", $"{colW - 32} -29");
+
+                UI_Btn(container, cardName, "✕", $"pa.groupremove {e.SteamId}", Colors.Clear, 11, Fonts.Title,
+                    TextAnchor.MiddleCenter, Colors.CDanger, "1 0.5", "1 0.5", "-26 -13", "-6 13", cardName + ".rm");
+            }
         }
 
         private void UI_PageLogs(CuiElementContainer container, BasePlayer player)
@@ -13936,6 +14868,8 @@ namespace Oxide.Plugins
             UI_Text(container, n, label, 10, Fonts.Title, TextAnchor.MiddleCenter, txt, "0 0", "1 1");
             return x + w + 8;
         }
+
+        private static int UI_PluginMetaBadgeW(string meta) => meta.Length * 5 + 8;
 
         private bool IsSelfPlugin(string pluginName) =>
             string.Equals(pluginName, Name, StringComparison.OrdinalIgnoreCase);
@@ -14945,6 +15879,19 @@ namespace Oxide.Plugins
                 11, Fonts.Title, TextAnchor.MiddleCenter, Palette.CAccentText, "1 0", "1 0", "-178 16", "-18 44");
         }
 
+        private void UI_PluginsCheckButton(CuiElementContainer container, BasePlayer player)
+        {
+            var pw = Positions.BodyW - Positions.Pad * 2;
+            var checkX0 = Positions.Pad + pw - 260 - 8 - 130;
+            var checkX1 = Positions.Pad + pw - 260 - 8;
+            UI_Btn(container, Layers.Body,
+                GetLocalizedMessage(_pluginUpdatesChecking ? TranslateKey.PluginsChecking : TranslateKey.PluginsCheckUpdates, player),
+                _pluginUpdatesChecking ? "" : "pa.plcheckupdates",
+                _pluginUpdatesChecking ? Palette.CElev2 : Palette.CAccent, 11, Fonts.Title, TextAnchor.MiddleCenter,
+                _pluginUpdatesChecking ? Palette.CText3 : Palette.CAccentText, "0 1", "0 1", $"{checkX0} -38",
+                $"{checkX1} -14", Layers.Body + ".plcheckbtn");
+        }
+
         private void UI_PagePlugins(CuiElementContainer container, BasePlayer player)
         {
             UI_Head(container, player, TranslateKey.PluginsTitle, TranslateKey.PluginsSub);
@@ -14955,6 +15902,7 @@ namespace Oxide.Plugins
             }
 
             var pw = Positions.BodyW - Positions.Pad * 2;
+            UI_PluginsCheckButton(container, player);
             var searchBox = Layers.Body + ".plsearch";
             var search = GetInput(player, FieldKey.PluginSearch, "").Trim();
             container.Add(new CuiElement
@@ -15002,6 +15950,7 @@ namespace Oxide.Plugins
             if (search.Length > 0)
                 rows = rows.Where(p => p.Title.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 ||
                                        p.Name.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            GetAdmin(player.userID).PluginListOrder = rows.Select(p => p.Name).ToList();
             const int rh = 84;
             const int gap = 8;
             var content = UI_ScrollList(container, Layers.Body, "plist", Positions.Pad, -64, pw, ph, rh, gap, rows.Count,
@@ -15034,11 +15983,33 @@ namespace Oxide.Plugins
                     "0 1", "12 -48", "48 -12");
                 UI_Text(container, card, p.Title, 12, Fonts.Title, TextAnchor.MiddleLeft, Palette.CText, "0 1", "1 1",
                     "58 -30", "-200 -10");
+                _pluginUpdates.TryGetValue(p.Name, out var upd);
+                var hasUpdate = p.Loaded && upd != null;
                 var meta = p.Loaded
-                    ? "v" + p.Version + (string.IsNullOrEmpty(p.Author) ? "" : "  ·  " + p.Author)
+                    ? (hasUpdate ? $"v{p.Version} → v{upd!.LatestVersion}" : "v" + p.Version) +
+                      (string.IsNullOrEmpty(p.Author) ? "" : "  ·  " + p.Author)
                     : GetLocalizedMessage(TranslateKey.PluginsUnloaded, player);
-                UI_Text(container, card, meta, 10, Fonts.Body, TextAnchor.MiddleLeft, Palette.CText2, "0 1", "1 1",
-                    "58 -48", "-200 -30");
+                if (hasUpdate)
+                {
+                    container.Add(new CuiElement
+                    {
+                        Parent = card, Name = card + ".meta", DestroyUi = card + ".meta",
+                        Components =
+                        {
+                            new CuiButtonComponent { Command = ProtectCommand($"pa.plupdatelink {p.Name}"), Color = Colors.CWarnSoft },
+                            new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = "58 -48", OffsetMax = $"{58 + UI_PluginMetaBadgeW(meta)} -30" }
+                        }
+                    });
+                    UI_Text(container, card + ".meta", meta, 10, Fonts.Body, TextAnchor.MiddleLeft, Colors.CWarn,
+                        "0 0", "1 1", "4 0", "-4 0");
+                }
+                else
+                {
+                    UI_Text(container, card, meta, 10, Fonts.Body, TextAnchor.MiddleLeft, Palette.CText2, "0 1", "1 1",
+                        "58 -48", "-200 -30", card + ".meta");
+                    UI_Btn(container, card, $"pa.plupdatelink {p.Name}", Colors.Clear, "0 1", "1 1", "58 -48",
+                        "-200 -30", card + ".metalink");
+                }
                 UI_Text(container, card, "●", 12, Fonts.Title, TextAnchor.MiddleLeft,
                     p.Loaded ? Colors.CSuccess : Palette.CText3, "1 1", "1 1", "-110 -32", "-96 -18");
                 UI_Text(container, card,
@@ -15049,24 +16020,61 @@ namespace Oxide.Plugins
                 if (canManage && p.Loaded)
                 {
                     bx = UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.ButtonCommands, player),
-                        $"pa.plcmds {p.Name}", Palette.CElev, Palette.CText2, bx, 82);
+                        $"pa.plcmds {p.Name}", Palette.CElev, Palette.CText2, bx, 72);
                     bx = UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.ButtonReload, player),
-                        $"pa.plreload {p.Name}", Palette.CElev, Palette.CText, bx, 82);
+                        $"pa.plreload {p.Name}", Palette.CElev, Palette.CText, bx, 72);
                     if (!IsSelfPlugin(p.Name))
                         bx = UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.ButtonUnload, player),
-                            $"pa.plunload {p.Name}", Colors.CDangerSoft, Colors.CDanger, bx, 82);
+                            $"pa.plunload {p.Name}", Colors.CDangerSoft, Colors.CDanger, bx, 72);
                 }
                 else if (canManage)
                     bx = UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.ButtonLoad, player),
-                        $"pa.plload {p.Name}", Palette.CAccentSoft, Palette.CAccent, bx, 82);
+                        $"pa.plload {p.Name}", Palette.CAccentSoft, Palette.CAccent, bx, 72);
 
                 if (!canEditCfg || !p.Loaded || IsSelfPlugin(p.Name))
                     continue;
                 bx = UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.PluginsCfgBtn, player),
-                    $"pa.cfgopen {p.Name} config", Palette.CElev, Palette.CText2, bx, 110);
+                    $"pa.cfgopen {p.Name} config", Palette.CElev, Palette.CText2, bx, 96);
                 UI_PluginRowButton(container, card, GetLocalizedMessage(TranslateKey.PluginsLangBtn, player),
-                    $"pa.cfgopen {p.Name} lang", Palette.CElev, Palette.CText2, bx, 140);
+                    $"pa.cfgopen {p.Name} lang", Palette.CElev, Palette.CText2, bx, 118);
             }
+        }
+
+        private void UI_PluginUpdatePopup(CuiElementContainer container, BasePlayer player, string name)
+        {
+            if (!_pluginUpdates.TryGetValue(name, out var upd))
+                return;
+
+            var scrim = Layers.Root + ".plupd";
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Root, Name = scrim, DestroyUi = scrim,
+                Components =
+                {
+                    new CuiImageComponent { Color = "0 0 0 0.6" }, new CuiNeedsCursorComponent(),
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            UI_Btn(container, scrim, "pa.plupdatelinkclose", Colors.Clear, "0 0", "1 1");
+            var card = scrim + ".card";
+            container.Add(new CuiElement
+            {
+                Parent = scrim, Name = card,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-220 -54", OffsetMax = "220 54" }
+                }
+            });
+            UI_Text(container, card, SafeFormat(GetLocalizedMessage(TranslateKey.PluginsUpdateAvailable, player),
+                plugins.Find(name)?.Version.ToString() ?? "?", upd.LatestVersion), 12, Fonts.Title, TextAnchor.UpperLeft,
+                Palette.CText, "0 1", "1 1", "16 -30", "-16 -10");
+            UI_ReadonlyField(container, card, string.IsNullOrEmpty(upd.Url) ? name : upd.Url, "0 1", "1 1", "16 -66",
+                "-16 -36");
+            UI_Btn(container, card, GetLocalizedMessage(TranslateKey.DropdownCancel, player), "pa.plupdatelinkclose",
+                Palette.CElev, 11, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0.5 0", "0.5 0", "-50 8",
+                "50 30");
         }
 
         private List<ConsoleSystem.Command> ConVarList()
@@ -15230,7 +16238,67 @@ namespace Oxide.Plugins
             if (!Can(player, Permissions.Plugins))
                 return;
             var container = new CuiElementContainer();
+            UI_PluginsCheckButton(container, player);
             UI_PluginList(container, player);
+            CuiHelper.AddUi(player, container);
+        }
+
+        private void RefreshPluginsCheckButton(BasePlayer player)
+        {
+            if (player == null || PeekAdmin(player.userID)?.UiOpen != true || GetPage(player) != "plugins")
+                return;
+            if (!Can(player, Permissions.Plugins))
+                return;
+            var container = new CuiElementContainer();
+            UI_PluginsCheckButton(container, player);
+            CuiHelper.AddUi(player, container);
+        }
+
+        private void RefreshPluginRow(BasePlayer player, string name)
+        {
+            if (player == null || PeekAdmin(player.userID)?.UiOpen != true || GetPage(player) != "plugins")
+                return;
+            if (!Can(player, Permissions.Plugins))
+                return;
+            var order = PeekAdmin(player.userID)?.PluginListOrder;
+            var i = order?.IndexOf(name) ?? -1;
+            if (i < 0)
+                return;
+            var p = PluginRows().FirstOrDefault(r => r.Name == name);
+            if (p == null || !p.Loaded || !_pluginUpdates.TryGetValue(name, out var upd))
+                return;
+            var meta = $"v{p.Version} → v{upd.LatestVersion}" + (string.IsNullOrEmpty(p.Author) ? "" : "  ·  " + p.Author);
+            var card = Layers.Body + ".plist.c.l.pl" + i;
+            var container = new CuiElementContainer();
+            container.Add(new CuiElement
+            {
+                Parent = card, Name = card + ".metabg", DestroyUi = card + ".metabg",
+                Components =
+                {
+                    new CuiImageComponent { Color = Colors.Clear },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "0 0", OffsetMax = "0 0" }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = card, Name = card + ".metalink", DestroyUi = card + ".metalink",
+                Components =
+                {
+                    new CuiImageComponent { Color = Colors.Clear },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "0 0", OffsetMax = "0 0" }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = card, Name = card + ".meta", DestroyUi = card + ".meta",
+                Components =
+                {
+                    new CuiButtonComponent { Command = ProtectCommand($"pa.plupdatelink {name}"), Color = Colors.CWarnSoft },
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = "58 -48", OffsetMax = $"{58 + UI_PluginMetaBadgeW(meta)} -30" }
+                }
+            });
+            UI_Text(container, card + ".meta", meta, 10, Fonts.Body, TextAnchor.MiddleLeft, Colors.CWarn,
+                "0 0", "1 1", "4 0", "-4 0");
             CuiHelper.AddUi(player, container);
         }
 
@@ -15564,7 +16632,7 @@ namespace Oxide.Plugins
 
         private static DeepSeaManager DeepSea() => PointEntity<DeepSeaManager>.ServerInstance;
 
-        private static BaseEntity FindMapObject(string kind, ulong netId)
+        private static BaseEntity FindMapObject(string kind, ulong netId, bool markers = false)
         {
             var entity = BaseNetworkable.serverEntities.Find(new NetworkableId(netId)) as BaseEntity;
             if (entity == null || entity.IsDestroyed)
@@ -15574,8 +16642,44 @@ namespace Oxide.Plugins
                 "tc" => entity as BuildingPrivlidge,
                 "bag" => entity as SleepingBag,
                 "st" => entity as StashContainer,
+                "mk" when markers && entity is MapMarker or BaseVehicle or HotAirBalloon or DeepSeaFloatingCity
+                    or BoatBuildingStation or ExcavatorSignalComputer => entity,
                 _ => null
             };
+        }
+
+        private static BaseEntity MapPointSubject(BaseEntity entity)
+        {
+            if (entity is VendingMachineMapMarker vending && vending.server_vendingMachine != null)
+                return vending.server_vendingMachine;
+            var parent = entity is MapMarker ? entity.GetParentEntity() : null;
+            return parent != null ? parent : entity;
+        }
+
+        private static string MarkerLayerKey(MapMarkerKind kind) => MarkerLayer(kind) switch
+        {
+            LayerCars => TranslateKey.MapLayerCars,
+            LayerHorses => TranslateKey.MapLayerHorses,
+            LayerAir => TranslateKey.MapLayerAir,
+            LayerShops => TranslateKey.MapLayerShops,
+            _ => TranslateKey.MapLayerEvents
+        };
+
+        private string MapPointRowText(MapMarkerPoint point, BasePlayer player)
+        {
+            var text = GetLocalizedMessage(MarkerLayerKey(point.Kind), player);
+            var entity = FindMapObject("mk", point.NetId, true);
+            if (entity != null)
+            {
+                var subject = MapPointSubject(entity);
+                text += entity is VendingMachineMapMarker vending && !string.IsNullOrEmpty(vending.markerShopName)
+                    ? $" · {vending.markerShopName}"
+                    : $" · {subject.ShortPrefabName}";
+                if (subject.OwnerID != 0uL)
+                    text += $" · {PlayerNameOf(subject.OwnerID)}";
+            }
+
+            return $"{text} · {MapHelper.PositionToString(point.Position)}";
         }
 
         private string PlayerNameOf(ulong id) =>
@@ -16299,36 +17403,67 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void UI_MapPauseRepaint(BasePlayer player, AdminData ad)
+        private void UI_MapToggleRepaint(BasePlayer player, string name, string command, bool on, string onColor)
         {
-            var paused = ad.MapPaused;
             var container = new CuiElementContainer();
             container.Add(new CuiElement
             {
-                Name = Layers.MapPause, Update = true,
-                Components = { new CuiButtonComponent { Command = ProtectCommand("pa.mappause"), Color = paused ? Colors.CWarn : Palette.CElev } }
+                Name = name, Update = true,
+                Components = { new CuiButtonComponent { Command = ProtectCommand(command), Color = on ? onColor : Palette.CElev } }
             });
             container.Add(new CuiElement
             {
-                Name = Layers.MapPause + ".lbl", Update = true,
-                Components = { new CuiTextComponent { Color = paused ? Palette.CAccentText : Palette.CText2 } }
+                Name = name + ".lbl", Update = true,
+                Components = { new CuiTextComponent { Color = on ? Palette.CAccentText : Palette.CText2 } }
             });
             CuiHelper.AddUi(player, container);
         }
 
+        private void UI_MapToggle(CuiElementContainer container, BasePlayer player, string name, string command,
+            string labelKey, bool on, string onColor, int left, int right)
+        {
+            UI_Btn(container, Layers.Body, command, on ? onColor : Palette.CElev, "0 1", "0 1",
+                $"{left} {Positions.Map.BarTop - 24}", $"{right} {Positions.Map.BarTop}", name);
+            container.Add(new CuiElement
+            {
+                Parent = name, Name = name + ".lbl",
+                Components =
+                {
+                    new CuiTextComponent
+                    {
+                        Text = GetLocalizedMessage(labelKey, player), FontSize = 10, Font = Fonts.Title,
+                        Align = TextAnchor.MiddleCenter, Color = on ? Palette.CAccentText : Palette.CText2,
+                        BlocksRaycast = false
+                    },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+        }
+
+        private void ToggleMapClusters(BasePlayer player)
+        {
+            var ad = GetAdmin(player.userID);
+            ad.MapNoClusters = !ad.MapNoClusters;
+            ad.MapCluOpen = null;
+            SaveSoon();
+            UI_MapToggleRepaint(player, Layers.MapClusters, "pa.mapclusters", !ad.MapNoClusters, Palette.CAccent);
+            UI_MapRefresh(player);
+        }
+
+        private static float GetMapClusterRadius(AdminData ad, int zoom) =>
+            ad.MapNoClusters ? 0f : ZoomedSize(MapClusterRadius, zoom);
+
         private void UI_MapControlBar(CuiElementContainer container, BasePlayer player, AdminData ad)
         {
-            var paused = ad.MapPaused;
-            UI_Btn(container, Layers.Body, "pa.mappause", paused ? Colors.CWarn : Palette.CElev, "0 1", "0 1",
-                $"18 {Positions.Map.BarTop - 24}", $"82 {Positions.Map.BarTop}", Layers.MapPause);
-            UI_Text(container, Layers.MapPause, GetLocalizedMessage(TranslateKey.MapPause, player), 10, Fonts.Title,
-                TextAnchor.MiddleCenter, paused ? Palette.CAccentText : Palette.CText2, "0 0", "1 1",
-                name: Layers.MapPause + ".lbl");
+            UI_MapToggle(container, player, Layers.MapPause, "pa.mappause", TranslateKey.MapPause, ad.MapPaused,
+                Colors.CWarn, 18, 82);
             UI_Btn(container, Layers.Body, GetLocalizedMessage(TranslateKey.MapRefresh, player), "pa.maprefresh",
                 Palette.CElev, 10, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0 1", "0 1",
                 $"88 {Positions.Map.BarTop - 24}", $"156 {Positions.Map.BarTop}");
             UI_Text(container, Layers.Body, MapReadout(ad), 9, Fonts.Console, TextAnchor.MiddleLeft, Palette.CText3, "0 1",
-                "0 1", $"166 {Positions.Map.BarTop - 24}", $"330 {Positions.Map.BarTop}");
+                "0 1", $"166 {Positions.Map.BarTop - 24}", $"256 {Positions.Map.BarTop}");
+            UI_MapToggle(container, player, Layers.MapClusters, "pa.mapclusters", TranslateKey.MapClusters,
+                !ad.MapNoClusters, Palette.CAccent, 262, 330);
 
             int[] zooms = { 1, 2, 4 };
             for (var i = 0; i < zooms.Length; i++)
@@ -16451,7 +17586,7 @@ namespace Oxide.Plugins
                 Parent = parent, Name = name,
                 Components =
                 {
-                    new CuiImageComponent { Color = WithAlpha(color, 0.75f), Sprite = ArrowSprite },
+                    new CuiImageComponent { Color = WithAlpha(color, 0.75f), Sprite = ArrowSprite, BlocksRaycast = false },
                     new CuiOutlineComponent { Color = MarkerOutline, Distance = "1 1" },
                     new CuiRectTransformComponent
                     {
@@ -16464,15 +17599,61 @@ namespace Oxide.Plugins
             });
         }
 
-        private void UI_MapVehicle(CuiElementContainer container, MapMarkerPoint marker, string name, string headingName,
-            int zoom)
+        private void UI_MapVehicleLayer(CuiElementContainer container, BasePlayer player, AdminData ad,
+            List<MapMarkerPoint> points, int zoom, string prefix)
         {
-            var px = NormToCanvas(WorldToNorm(marker.Position), zoom);
-            var size = ZoomedSize(MarkerSize(marker.Kind), zoom);
-            var color = marker.Color ?? MarkerColor(marker.Kind);
-            UI_MapSprite(container, Layers.MapMarkers, name, px, size, color, MarkerSprite(marker.Kind), null,
-                MarkerRotation(marker.Kind, marker.Forward));
-            UI_MapHeading(container, Layers.MapMarkers, headingName, px, size, color, marker.Kind, marker.Forward);
+            if (points.Count == 0)
+                return;
+            var canTeleport = Can(player, Permissions.MapTeleport);
+            var buckets = new Dictionary<MapMarkerKind, List<MapMarkerPoint>>();
+            for (var i = 0; i < points.Count; i++)
+            {
+                var point = points[i];
+                if ((ad.MapLayers & MarkerLayer(point.Kind)) == 0)
+                    continue;
+                if (!buckets.TryGetValue(point.Kind, out var bucket))
+                {
+                    bucket = new List<MapMarkerPoint>();
+                    buckets[point.Kind] = bucket;
+                }
+
+                bucket.Add(point);
+            }
+
+            var index = 0;
+            var radius = GetMapClusterRadius(ad, zoom);
+            foreach (var bucket in buckets.Values)
+            {
+                var groups = MapBuildClusters(bucket, p => NormToCanvas(WorldToNorm(p.Position), zoom), radius);
+                for (var g = 0; g < groups.Count; g++)
+                {
+                    if (!Map.MapTake())
+                        return;
+                    var group = groups[g];
+                    var head = group.Members[0];
+                    var size = ZoomedSize(MarkerSize(head.Kind), zoom);
+                    var color = head.Color ?? MarkerColor(head.Kind);
+                    var name = $"{Layers.MapMarkers}.{prefix}{index}";
+                    if (group.Members.Count == 1)
+                    {
+                        UI_MapSprite(container, Layers.MapMarkers, name, group.Center, size, color,
+                            MarkerSprite(head.Kind), null, MarkerRotation(head.Kind, head.Forward));
+                        UI_MapHeading(container, Layers.MapMarkers, $"{Layers.MapMarkers}.{prefix}h{index}",
+                            group.Center, size, color, head.Kind, head.Forward);
+                        index++;
+                        continue;
+                    }
+
+                    var key = MapCluKey(prefix, group.Members, p => p.NetId);
+                    UI_MapSprite(container, Layers.MapMarkers, name, group.Center, size, color,
+                        MarkerSprite(head.Kind), $"pa.mapclu {key}");
+                    UI_MapClusterBadge(container, Layers.MapMarkers, name, group.Center, size, group.Members.Count,
+                        false, $"pa.mapclu {key}");
+                    UI_MapCluExpand(container, player, ad, key, group, p => new MapCluRow(MapPointRowText(p, player),
+                        canTeleport ? $"pa.mapobjtp mk {p.NetId}" : null));
+                    index++;
+                }
+            }
         }
 
         private void UI_MapSprite(CuiElementContainer container, string parent, string name, Vector2 px, int size,
@@ -16485,7 +17666,7 @@ namespace Oxide.Plugins
                 Parent = parent, Name = name,
                 Components =
                 {
-                    new CuiImageComponent { Color = color, Sprite = sprite },
+                    new CuiImageComponent { Color = color, Sprite = sprite, BlocksRaycast = false },
                     new CuiRectTransformComponent
                     {
                         AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = $"{px.x - half} {px.y - halfY}",
@@ -16498,8 +17679,137 @@ namespace Oxide.Plugins
             container.Add(element);
             if (string.IsNullOrEmpty(command))
                 return;
-            UI_Btn(container, parent, command, Colors.Clear, "0 0", "0 0", $"{px.x - half - 3} {px.y - halfY - 3}",
-                $"{px.x + half + 3} {px.y + halfY + 3}", name + ".b");
+            var hitX = Mathf.Max(half + 3, MapHitHalfMin);
+            var hitY = Mathf.Max(halfY + 3, MapHitHalfMin);
+            UI_Btn(container, parent, command, Colors.Clear, "0 0", "0 0", $"{px.x - hitX} {px.y - hitY}",
+                $"{px.x + hitX} {px.y + hitY}", name + ".b");
+        }
+
+        private static long MapCellKey(int cx, int cy) => ((long)cx << 32) ^ (uint)cy;
+
+        private static long MapCellKey(Vector2 point, float cell) =>
+            MapCellKey(Mathf.FloorToInt(point.x / cell), Mathf.FloorToInt(point.y / cell));
+
+        private static List<MapClusterGroup<T>> MapBuildClusters<T>(List<T> items, Func<T, Vector2> screenPos,
+            float radius)
+        {
+            var result = new List<MapClusterGroup<T>>();
+            if (items.Count == 0)
+                return result;
+            if (radius <= 0f)
+            {
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var single = new MapClusterGroup<T> { Center = screenPos(items[i]) };
+                    single.Members.Add(items[i]);
+                    result.Add(single);
+                }
+
+                return result;
+            }
+
+            var cell = Mathf.Max(1f, radius);
+            var points = new Vector2[items.Count];
+            var grid = new Dictionary<long, List<int>>();
+            for (var i = 0; i < items.Count; i++)
+            {
+                points[i] = screenPos(items[i]);
+                var key = MapCellKey(points[i], cell);
+                if (!grid.TryGetValue(key, out var bucket))
+                {
+                    bucket = new List<int>();
+                    grid[key] = bucket;
+                }
+
+                bucket.Add(i);
+            }
+
+            var taken = new bool[items.Count];
+            var limit = radius * radius;
+            for (var i = 0; i < items.Count; i++)
+            {
+                if (taken[i])
+                    continue;
+                taken[i] = true;
+                var group = new MapClusterGroup<T>();
+                group.Members.Add(items[i]);
+                var sum = points[i];
+                var cx = Mathf.FloorToInt(points[i].x / cell);
+                var cy = Mathf.FloorToInt(points[i].y / cell);
+                for (var ox = -1; ox <= 1; ox++)
+                for (var oy = -1; oy <= 1; oy++)
+                {
+                    if (!grid.TryGetValue(MapCellKey(cx + ox, cy + oy), out var bucket))
+                        continue;
+                    for (var b = 0; b < bucket.Count; b++)
+                    {
+                        var j = bucket[b];
+                        if (taken[j] || (points[j] - points[i]).sqrMagnitude > limit)
+                            continue;
+                        taken[j] = true;
+                        group.Members.Add(items[j]);
+                        sum += points[j];
+                    }
+                }
+
+                group.Center = sum / group.Members.Count;
+                result.Add(group);
+            }
+
+            return result;
+        }
+
+        private static string MapCluKey<T>(string category, List<T> members, Func<T, ulong> id)
+        {
+            var ids = new ulong[members.Count];
+            for (var i = 0; i < members.Count; i++)
+                ids[i] = id(members[i]);
+            Array.Sort(ids);
+            var hash = 2166136261u;
+            for (var i = 0; i < ids.Length; i++)
+            {
+                hash = (hash ^ (uint)ids[i]) * 16777619u;
+                hash = (hash ^ (uint)(ids[i] >> 32)) * 16777619u;
+            }
+
+            return category + hash;
+        }
+
+        private void UI_MapClusterBadge(CuiElementContainer container, string parent, string name, Vector2 px, int size,
+            int count, bool accent, string command = null)
+        {
+            var pill = name + ".cb";
+            var left = (int)px.x + size / 2 - 4;
+            var bottom = (int)px.y + size / 2 - 4;
+            container.Add(new CuiElement
+            {
+                Parent = parent, Name = pill,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CAccentSoft, BlocksRaycast = false },
+                    new CuiOutlineComponent { Color = accent ? Palette.CAccent : MarkerOutline, Distance = "1 1" },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = $"{left} {bottom}",
+                        OffsetMax = $"{left + 22} {bottom + 13}"
+                    }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = pill,
+                Components =
+                {
+                    new CuiTextComponent
+                    {
+                        Text = FormatCount(count), FontSize = 9, Font = Fonts.Title, Align = TextAnchor.MiddleCenter,
+                        Color = Palette.CAccent, BlocksRaycast = false
+                    },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            if (!string.IsNullOrEmpty(command))
+                UI_Btn(container, pill, command, Colors.Clear, "0 0", "1 1");
         }
 
         private static int[] BinPoints(List<Vector3> points, int cellCount) =>
@@ -16540,7 +17850,11 @@ namespace Oxide.Plugins
                     Parent = parent, Name = $"{parent}.ht{slot++}",
                     Components =
                     {
-                        new CuiImageComponent { Color = WithAlpha(color, alpha), Sprite = "assets/icons/circle_gradient.png" },
+                        new CuiImageComponent
+                        {
+                            Color = WithAlpha(color, alpha), Sprite = "assets/icons/circle_gradient.png",
+                            BlocksRaycast = false
+                        },
                         new CuiRectTransformComponent
                         {
                             AnchorMin = "0 0", AnchorMax = "0 0",
@@ -16552,24 +17866,50 @@ namespace Oxide.Plugins
             }
         }
 
+        private string _mapCluDrawn;
+        private Vector2 _mapCluCenter;
+        private List<MapCluRow> _mapCluRows;
+
         private void UI_MapCluster(CuiElementContainer container, string parent, string prefix, List<MapTool.MapOwnedPoint> points,
-            int zoom, string color, string sprite, int size, bool group, string kind, ulong selected, ref int slot)
+            int zoom, string color, string sprite, int size, bool group, string kind, BasePlayer player, AdminData ad,
+            ref int slot)
         {
             if (points.Count == 0)
                 return;
+            var selected = ad.MapSelected;
             var canvas = MapCanvasSize(zoom);
             if (!group || zoom >= 4)
             {
+                var spriteSize = ZoomedSize(size, zoom);
+                var capped = points.Count > MapPointLimit ? points.GetRange(0, MapPointLimit) : points;
+                var clusters = MapBuildClusters(capped, p => NormToCanvas(WorldToNorm(p.Position), zoom),
+                    GetMapClusterRadius(ad, zoom));
                 var drawn = 0;
-                for (var i = 0; i < points.Count && drawn < MapPointLimit && Map.MapTake(); i++)
+                for (var i = 0; i < clusters.Count && drawn < MapPointLimit && Map.MapTake(); i++)
                 {
-                    var point = points[i];
-                    var px = NormToCanvas(WorldToNorm(point.Position), zoom);
-                    var tint = selected != 0 && Array.IndexOf(point.OwnerIds, selected) >= 0
-                        ? Palette.CAccent
-                        : color;
-                    UI_MapSprite(container, parent, $"{parent}.{prefix}{drawn}", px, ZoomedSize(size, zoom), tint,
-                        sprite, $"pa.mapobj {kind} {point.NetId}");
+                    var cluster = clusters[i];
+                    var owned = false;
+                    for (var m = 0; m < cluster.Members.Count; m++)
+                        if (selected != 0 && Array.IndexOf(cluster.Members[m].OwnerIds, selected) >= 0)
+                            owned = true;
+                    var name = $"{parent}.{prefix}{drawn}";
+                    if (cluster.Members.Count > 1)
+                    {
+                        var key = MapCluKey(kind, cluster.Members, p => p.NetId);
+                        UI_MapSprite(container, parent, name, cluster.Center, spriteSize, color, sprite,
+                            $"pa.mapclu {key}");
+                        UI_MapClusterBadge(container, parent, name, cluster.Center, spriteSize,
+                            cluster.Members.Count, owned, $"pa.mapclu {key}");
+                        UI_MapCluExpand(container, player, ad, key, cluster, p => new MapCluRow(
+                            p.OwnerIds.Length > 0 ? OwnerRowText(p.OwnerIds[0]) : MapHelper.PositionToString(p.Position),
+                            $"pa.mapobj {kind} {p.NetId}"));
+                        drawn++;
+                        continue;
+                    }
+
+                    var tint = owned ? Palette.CAccent : color;
+                    UI_MapSprite(container, parent, name, cluster.Center, spriteSize, tint, sprite,
+                        $"pa.mapobj {kind} {cluster.Members[0].NetId}");
                     drawn++;
                 }
 
@@ -16595,7 +17935,7 @@ namespace Oxide.Plugins
                     Parent = parent, Name = cell,
                     Components =
                     {
-                        new CuiImageComponent { Color = WithAlpha(color, alpha) },
+                        new CuiImageComponent { Color = WithAlpha(color, alpha), BlocksRaycast = false },
                         new CuiRectTransformComponent
                         {
                             AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = $"{cx * cellW} {cy * cellW}",
@@ -16603,7 +17943,19 @@ namespace Oxide.Plugins
                         }
                     }
                 });
-                UI_Text(container, cell, count.ToString(), 8, Fonts.Title, TextAnchor.MiddleCenter, "1 1 1 0.85", "0 0", "1 1");
+                container.Add(new CuiElement
+                {
+                    Parent = cell,
+                    Components =
+                    {
+                        new CuiTextComponent
+                        {
+                            Text = count.ToString(), FontSize = 8, Font = Fonts.Title, Align = TextAnchor.MiddleCenter,
+                            Color = "1 1 1 0.85", BlocksRaycast = false
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                    }
+                });
             }
         }
 
@@ -16614,41 +17966,91 @@ namespace Oxide.Plugins
             return FindActiveOrSleeping(ad.MapSelected)?.currentTeam ?? 0uL;
         }
 
-        private void UI_DrawSleepers(CuiElementContainer container, int zoom, bool deep, string namePrefix)
+        private void UI_DrawSleepers(CuiElementContainer container, BasePlayer player, AdminData ad, int zoom, bool deep,
+            string namePrefix)
         {
-            var index = 0;
+            var sleepers = new List<BasePlayer>();
             foreach (var sleeper in BasePlayer.sleepingPlayerList)
             {
                 if (sleeper == null || IsDeepSeaPosition(sleeper.transform.position) != deep)
                     continue;
+                sleepers.Add(sleeper);
+                if (sleepers.Count >= MapPointLimit)
+                    break;
+            }
+
+            var size = ZoomedSize(11, zoom);
+            var groups = MapBuildClusters(sleepers,
+                s => NormToCanvas(deep ? DeepToNorm(s.transform.position) : WorldToNorm(s.transform.position), zoom),
+                GetMapClusterRadius(ad, zoom));
+            for (var i = 0; i < groups.Count; i++)
+            {
                 if (!Map.MapTake())
-                    break;
-                var norm = deep ? DeepToNorm(sleeper.transform.position) : WorldToNorm(sleeper.transform.position);
-                var px = NormToCanvas(norm, zoom);
-                UI_MapSprite(container, Layers.MapMarkers, $"{Layers.MapMarkers}.{namePrefix}{index++}", px,
-                    ZoomedSize(11, zoom), "0.45 0.42 0.40 0.9", "assets/icons/sleeping.png",
-                    $"pa.mapsel {sleeper.userID}");
-                if (index >= MapPointLimit)
-                    break;
+                    return;
+                var group = groups[i];
+                var name = $"{Layers.MapMarkers}.{namePrefix}{i}";
+                if (group.Members.Count == 1)
+                {
+                    UI_MapSprite(container, Layers.MapMarkers, name, group.Center, size, "0.45 0.42 0.40 0.9",
+                        "assets/icons/sleeping.png", $"pa.mapsel {group.Members[0].userID}");
+                    continue;
+                }
+
+                var key = MapCluKey("s", group.Members, s => s.userID);
+                UI_MapSprite(container, Layers.MapMarkers, name, group.Center, size, "0.45 0.42 0.40 0.9",
+                    "assets/icons/sleeping.png", $"pa.mapclu {key}");
+                UI_MapClusterBadge(container, Layers.MapMarkers, name, group.Center, size, group.Members.Count, false,
+                    $"pa.mapclu {key}");
+                UI_MapCluExpand(container, player, ad, key, group,
+                    s => new MapCluRow(s.displayName, $"pa.mapsel {s.userID}"));
             }
         }
 
-        private void UI_DrawPlayerMarkers(CuiElementContainer container, AdminData ad, int zoom, bool deep, string namePrefix,
-            bool enforcePointLimit)
+        private void UI_DrawPlayerMarkers(CuiElementContainer container, BasePlayer player, AdminData ad, int zoom,
+            bool deep, string namePrefix, bool enforcePointLimit)
         {
-            var pi = 0;
             var selTeam = MapSelectedTeam(ad);
+            var targets = new List<BasePlayer>();
             foreach (var target in BasePlayer.activePlayerList)
             {
                 if (target == null || target.IsNpc || IsDeepSeaPosition(target.transform.position) != deep)
                     continue;
-                if (!Map.MapTake())
+                targets.Add(target);
+                if (enforcePointLimit && targets.Count >= MapPointLimit)
                     break;
-                var norm = deep ? DeepToNorm(target.transform.position) : WorldToNorm(target.transform.position);
-                var px = NormToCanvas(norm, zoom);
+            }
+
+            var groups = MapBuildClusters(targets,
+                t => NormToCanvas(deep ? DeepToNorm(t.transform.position) : WorldToNorm(t.transform.position), zoom),
+                GetMapClusterRadius(ad, zoom));
+            for (var i = 0; i < groups.Count; i++)
+            {
+                if (!Map.MapTake())
+                    return;
+                var group = groups[i];
+                var name = $"{Layers.MapMarkers}.{namePrefix}{i}";
+                if (group.Members.Count > 1)
+                {
+                    var accent = false;
+                    for (var m = 0; m < group.Members.Count; m++)
+                        if (ad.MapSelected != 0uL && group.Members[m].userID == ad.MapSelected ||
+                            selTeam != 0uL && group.Members[m].currentTeam == selTeam)
+                            accent = true;
+                    var key = MapCluKey("p", group.Members, t => t.userID);
+                    var clusterSize = ZoomedSize(11, zoom);
+                    UI_MapSprite(container, Layers.MapMarkers, name, group.Center, clusterSize, TeamColor(0uL),
+                        "assets/content/ui/waypoint.inner.png", $"pa.mapclu {key}");
+                    UI_MapClusterBadge(container, Layers.MapMarkers, name, group.Center, clusterSize,
+                        group.Members.Count, accent, $"pa.mapclu {key}");
+                    UI_MapCluExpand(container, player, ad, key, group,
+                        t => new MapCluRow(t.displayName, $"pa.mapsel {t.userID}"));
+                    continue;
+                }
+
+                var target = group.Members[0];
+                var px = group.Center;
                 var selected = ad.MapSelected == target.userID;
                 var color = selected ? Palette.CAccent : TeamColor(target.currentTeam);
-                var name = $"{Layers.MapMarkers}.{namePrefix}{pi++}";
                 if (selTeam != 0uL && target.currentTeam == selTeam)
                     UI_MapSprite(container, Layers.MapMarkers, name + ".t", px, ZoomedSize(selected ? 18 : 14, zoom), color,
                         "assets/content/ui/waypoint.outline.team.png", null);
@@ -16662,7 +18064,7 @@ namespace Oxide.Plugins
                         new CuiTextComponent
                         {
                             Text = target.displayName, FontSize = 9, Font = Fonts.Title,
-                            Align = TextAnchor.LowerCenter, Color = color
+                            Align = TextAnchor.LowerCenter, Color = color, BlocksRaycast = false
                         },
                         new CuiOutlineComponent { Color = "0 0 0 0.9", Distance = "1 -1" },
                         new CuiRectTransformComponent
@@ -16672,14 +18074,13 @@ namespace Oxide.Plugins
                         }
                     }
                 });
-                if (enforcePointLimit && pi >= MapPointLimit)
-                    break;
             }
         }
 
         private void UI_MapMarkers(CuiElementContainer container, BasePlayer player)
         {
             var ad = GetAdmin(player.userID);
+            _mapCluDrawn = null;
             container.Add(new CuiElement
             {
                 Parent = Layers.MapCanvas, Name = Layers.MapMarkers, DestroyUi = Layers.MapMarkers,
@@ -16694,17 +18095,17 @@ namespace Oxide.Plugins
 
             if ((ad.MapLayers & LayerTc) != 0)
                 UI_MapCluster(container, Layers.MapMarkers, "tc", Map.MapTcPoints(), zoom, Colors.CWarn,
-                    "assets/icons/authorize.png", 12, GetToggle(player, GroupKeyTc, false), "tc", ad.MapSelected,
+                    "assets/icons/authorize.png", 12, GetToggle(player, GroupKeyTc, false), "tc", player, ad,
                     ref slot);
 
             if ((ad.MapLayers & LayerBags) != 0)
                 UI_MapCluster(container, Layers.MapMarkers, "bag", Map.MapBagPoints(), zoom, Colors.CInfo,
-                    "assets/icons/sleepingbag.png", 11, GetToggle(player, GroupKeyBags, false), "bag",
-                    ad.MapSelected, ref slot);
+                    "assets/icons/sleepingbag.png", 11, GetToggle(player, GroupKeyBags, false), "bag", player, ad,
+                    ref slot);
 
             if ((ad.MapLayers & LayerStashes) != 0)
                 UI_MapCluster(container, Layers.MapMarkers, "st", Map.MapStashPoints(), zoom, Colors.CDiscord,
-                    "assets/icons/loot.png", 11, GetToggle(player, GroupKeyStashes, false), "st", ad.MapSelected,
+                    "assets/icons/loot.png", 11, GetToggle(player, GroupKeyStashes, false), "st", player, ad,
                     ref slot);
 
             if ((ad.MapLayers & LayerPvp) != 0)
@@ -16724,20 +18125,45 @@ namespace Oxide.Plugins
             if ((ad.MapLayers & LayerNotes) != 0)
             {
                 var notes = MapNotes(player);
+                var noteIndices = new List<int>();
                 for (var i = 0; i < notes.Count; i++)
                 {
-                    var note = notes[i];
-                    if (note == null || IsDeepSeaPosition(note.worldPosition))
+                    if (notes[i] == null || IsDeepSeaPosition(notes[i].worldPosition))
                         continue;
-                    var px = NormToCanvas(WorldToNorm(note.worldPosition), zoom);
-                    var color = NoteColor(note.colourIndex);
-                    var icon = NoteIcon(note);
-                    UI_MapSprite(container, Layers.MapMarkers, $"{Layers.MapMarkers}.n{i}", px, ZoomedSize(13, zoom), color,
-                        icon, $"pa.notetp {i}");
-                    var caption = string.IsNullOrEmpty(note.label)
-                        ? MapHelper.PositionToString(note.worldPosition)
-                        : note.label;
-                    var capY = px.y - SpriteHeight(icon, ZoomedSize(13, zoom)) / 2;
+                    noteIndices.Add(i);
+                }
+
+                var noteSize = ZoomedSize(13, zoom);
+                var noteGroups = MapBuildClusters(noteIndices,
+                    i => NormToCanvas(WorldToNorm(notes[i].worldPosition), zoom), GetMapClusterRadius(ad, zoom));
+                for (var g = 0; g < noteGroups.Count; g++)
+                {
+                    var group = noteGroups[g];
+                    var head = notes[group.Members[0]];
+                    var px = group.Center;
+                    var color = NoteColor(head.colourIndex);
+                    var icon = NoteIcon(head);
+                    var name = $"{Layers.MapMarkers}.n{g}";
+                    if (group.Members.Count > 1)
+                    {
+                        var key = MapCluKey("n", group.Members, i => (ulong)i);
+                        UI_MapSprite(container, Layers.MapMarkers, name, px, noteSize, color, icon,
+                            $"pa.mapclu {key}");
+                        UI_MapClusterBadge(container, Layers.MapMarkers, name, px, noteSize, group.Members.Count,
+                            false, $"pa.mapclu {key}");
+                        UI_MapCluExpand(container, player, ad, key, group, i => new MapCluRow(
+                            string.IsNullOrEmpty(notes[i].label)
+                                ? MapHelper.PositionToString(notes[i].worldPosition)
+                                : notes[i].label, $"pa.notetp {i}"));
+                        continue;
+                    }
+
+                    UI_MapSprite(container, Layers.MapMarkers, name, px, noteSize, color, icon,
+                        $"pa.notetp {group.Members[0]}");
+                    var caption = string.IsNullOrEmpty(head.label)
+                        ? MapHelper.PositionToString(head.worldPosition)
+                        : head.label;
+                    var capY = px.y - SpriteHeight(icon, noteSize) / 2;
                     container.Add(new CuiElement
                     {
                         Parent = Layers.MapMarkers,
@@ -16746,7 +18172,7 @@ namespace Oxide.Plugins
                             new CuiTextComponent
                             {
                                 Text = caption, FontSize = 9, Font = Fonts.Title,
-                                Align = TextAnchor.UpperCenter, Color = color
+                                Align = TextAnchor.UpperCenter, Color = color, BlocksRaycast = false
                             },
                             new CuiOutlineComponent { Color = "0 0 0 0.9", Distance = "1 -1" },
                             new CuiRectTransformComponent
@@ -16759,54 +18185,41 @@ namespace Oxide.Plugins
                 }
             }
 
-            var markers = Map.MapMarkerPoints(false);
-            for (var i = 0; i < markers.Count && Map.MapTake(); i++)
-            {
-                var marker = markers[i];
-                if ((ad.MapLayers & MarkerLayer(marker.Kind)) == 0)
-                    continue;
-                UI_MapVehicle(container, marker, $"{Layers.MapMarkers}.mk{i}", $"{Layers.MapMarkers}.mh{i}", zoom);
-            }
+            UI_MapVehicleLayer(container, player, ad, Map.MapMarkerPoints(false), zoom, "mk");
 
             if ((ad.MapLayers & LayerAir) != 0)
-            {
-                var air = Map.AirPoints(false);
-                for (var i = 0; i < air.Count && Map.MapTake(); i++)
-                    UI_MapVehicle(container, air[i], $"{Layers.MapMarkers}.air{i}", $"{Layers.MapMarkers}.airh{i}", zoom);
-            }
+                UI_MapVehicleLayer(container, player, ad, Map.AirPoints(false), zoom, "air");
 
             if ((ad.MapLayers & LayerHorses) != 0)
-            {
-                var horses = Map.HorsePoints(false);
-                for (var i = 0; i < horses.Count && Map.MapTake(); i++)
-                    UI_MapVehicle(container, horses[i], $"{Layers.MapMarkers}.hrs{i}", $"{Layers.MapMarkers}.hrsh{i}", zoom);
-            }
+                UI_MapVehicleLayer(container, player, ad, Map.HorsePoints(false), zoom, "hrs");
 
             if ((ad.MapLayers & LayerCars) != 0)
-            {
-                var cars = Map.CarPoints(false);
-                for (var i = 0; i < cars.Count && Map.MapTake(); i++)
-                    UI_MapVehicle(container, cars[i], $"{Layers.MapMarkers}.car{i}", $"{Layers.MapMarkers}.carh{i}", zoom);
-            }
+                UI_MapVehicleLayer(container, player, ad, Map.CarPoints(false), zoom, "car");
 
             if ((ad.MapLayers & LayerSleepers) != 0)
-                UI_DrawSleepers(container, zoom, false, "s");
+                UI_DrawSleepers(container, player, ad, zoom, false, "s");
 
-            if ((ad.MapLayers & LayerPlayers) == 0)
-                return;
-#if DEBUG_SERVER
-            for (var i = 0; i < MapDebugNames.Length; i++)
+            if ((ad.MapLayers & LayerPlayers) != 0)
             {
-                var norm = new Vector2(0.18f + i % 5 * 0.16f, 0.22f + i / 5 * 0.3f);
-                var dpx = NormToCanvas(norm, zoom);
-                var dcolor = TeamColor((ulong)(i % 4 + 1));
-                UI_MapSprite(container, Layers.MapMarkers, $"{Layers.MapMarkers}.d{i}", dpx, 9, dcolor,
-                    "assets/icons/circle_closed.png", null);
-                UI_Text(container, Layers.MapMarkers, MapDebugNames[i], 8, Fonts.Body, TextAnchor.LowerCenter, dcolor, "0 0",
-                    "0 0", $"{dpx.x - 60} {dpx.y + 5}", $"{dpx.x + 60} {dpx.y + 19}");
-            }
+#if DEBUG_SERVER
+                for (var i = 0; i < MapDebugNames.Length; i++)
+                {
+                    var norm = new Vector2(0.18f + i % 5 * 0.16f, 0.22f + i / 5 * 0.3f);
+                    var dpx = NormToCanvas(norm, zoom);
+                    var dcolor = TeamColor((ulong)(i % 4 + 1));
+                    UI_MapSprite(container, Layers.MapMarkers, $"{Layers.MapMarkers}.d{i}", dpx, 9, dcolor,
+                        "assets/icons/circle_closed.png", null);
+                    UI_Text(container, Layers.MapMarkers, MapDebugNames[i], 8, Fonts.Body, TextAnchor.LowerCenter, dcolor,
+                        "0 0", "0 0", $"{dpx.x - 60} {dpx.y + 5}", $"{dpx.x + 60} {dpx.y + 19}");
+                }
 #endif
-            UI_DrawPlayerMarkers(container, ad, zoom, false, "p", false);
+                UI_DrawPlayerMarkers(container, player, ad, zoom, false, "p", false);
+            }
+
+            if (_mapCluDrawn != null)
+                UI_MapCluPanel(container, player, _mapCluCenter, _mapCluRows);
+            else if (!string.IsNullOrEmpty(ad.MapCluOpen) && Map._mapBudget > 0)
+                ad.MapCluOpen = null;
         }
 
         private void UI_MapDeepBackground(CuiElementContainer container, BasePlayer player, AdminData ad)
@@ -16859,6 +18272,7 @@ namespace Oxide.Plugins
 
         private void UI_MapDeepMarkers(CuiElementContainer container, BasePlayer player, AdminData ad)
         {
+            _mapCluDrawn = null;
             container.Add(new CuiElement
             {
                 Parent = Layers.MapCanvas, Name = Layers.MapMarkers, DestroyUi = Layers.MapMarkers,
@@ -16882,11 +18296,13 @@ namespace Oxide.Plugins
             }
 
             if ((ad.MapLayersDeep & LayerSleepers) != 0)
-                UI_DrawSleepers(container, zoom, true, "ds");
+                UI_DrawSleepers(container, player, ad, zoom, true, "ds");
 
-            if ((ad.MapLayersDeep & LayerPlayers) == 0)
-                return;
-            UI_DrawPlayerMarkers(container, ad, zoom, true, "dp", true);
+            if ((ad.MapLayersDeep & LayerPlayers) != 0)
+                UI_DrawPlayerMarkers(container, player, ad, zoom, true, "dp", true);
+
+            if (_mapCluDrawn != null)
+                UI_MapCluPanel(container, player, _mapCluCenter, _mapCluRows);
         }
 
         private void UI_MapSide(CuiElementContainer container, BasePlayer player, AdminData ad)
@@ -17289,6 +18705,66 @@ namespace Oxide.Plugins
 
             y -= margin;
             panelRect.OffsetMin = $"{px.x + 12} {px.y + y}";
+        }
+
+        private void UI_MapCluExpand<T>(CuiElementContainer container, BasePlayer player, AdminData ad, string key,
+            MapClusterGroup<T> group, Func<T, MapCluRow> row)
+        {
+            if (ad.MapCluOpen != key)
+                return;
+            _mapCluDrawn = key;
+            _mapCluCenter = group.Center;
+            _mapCluRows = new List<MapCluRow>(group.Members.Count);
+            for (var i = 0; i < group.Members.Count; i++)
+                _mapCluRows.Add(row(group.Members[i]));
+        }
+
+        private void UI_MapCluPanel(CuiElementContainer container, BasePlayer player, Vector2 px, List<MapCluRow> rows)
+        {
+            const int rowH = 18, margin = 8, titleH = 16, overflowH = 14, maxRows = 10;
+            var shown = Math.Min(rows.Count, maxRows);
+            var height = margin * 2 + titleH + shown * rowH + (rows.Count > shown ? overflowH : 0);
+            var left = (int)px.x + 12;
+            var top = (int)px.y + 12;
+            container.Add(new CuiElement
+            {
+                Parent = Layers.MapMarkers, Name = Layers.MapClu, DestroyUi = Layers.MapClu,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = $"{left} {top - height}",
+                        OffsetMax = $"{left + 200} {top}"
+                    }
+                }
+            });
+
+            UI_CloseX(container, Layers.MapClu, "pa.mapcluclose", "1 1", "1 1", "-22 -22", "0 0", Layers.MapClu + ".x");
+
+            var y = -margin;
+            UI_Text(container, Layers.MapClu,
+                SafeFormat(GetLocalizedMessage(TranslateKey.MapCluTitle, player), rows.Count), 10, Fonts.Title,
+                TextAnchor.UpperLeft, Palette.CText, "0 1", "1 1", $"10 {y - titleH}", $"-28 {y}");
+            y -= titleH;
+
+            for (var i = 0; i < shown; i++)
+            {
+                if (string.IsNullOrEmpty(rows[i].Command))
+                    UI_Text(container, Layers.MapClu, rows[i].Label, 9, Fonts.Title, TextAnchor.MiddleLeft,
+                        Palette.CText3, "0 1", "1 1", $"10 {y - rowH + 2}", $"-10 {y}", Layers.MapClu + ".r" + i);
+                else
+                    UI_Btn(container, Layers.MapClu, rows[i].Label, rows[i].Command, Palette.CElev, 9, Fonts.Title,
+                        TextAnchor.MiddleLeft, Palette.CText, "0 1", "1 1", $"10 {y - rowH + 2}", $"-10 {y}",
+                        Layers.MapClu + ".r" + i);
+                y -= rowH;
+            }
+
+            if (rows.Count > shown)
+                UI_Text(container, Layers.MapClu,
+                    SafeFormat(GetLocalizedMessage(TranslateKey.MapObjOwnersMore, player), rows.Count - shown), 8,
+                    Fonts.Console, TextAnchor.UpperLeft, Palette.CText3, "0 1", "1 1", $"10 {y - overflowH}", $"-10 {y}");
         }
 
         private void UI_MapCard(CuiElementContainer container, BasePlayer player)
@@ -18939,7 +20415,7 @@ namespace Oxide.Plugins
                 UI_Text(container, st,
                     pendingSwitch ? GetLocalizedMessage(TranslateKey.StorageMigrateQ, player) : GetLocalizedMessage(TranslateKey.StorageNote, player),
                     9, Fonts.Body, TextAnchor.MiddleLeft, Palette.CText3, "0 1", "1 1", "316 -72", "-190 -46",
-                    st + ".mig" + ".1790277387");
+                    st + ".mig" + ".1794427566");
                 if (pendingSwitch && PeekAdmin(player.userID)?.StorageConfirm == true)
                 {
                     UI_Btn(container, st, GetLocalizedMessage(TranslateKey.ConfirmNo, player), "pa.storagemig 0",
@@ -19421,10 +20897,11 @@ namespace Oxide.Plugins
                 rightX, top - 18, rightW, 26);
             var search = GetInput(player, FieldKey.UserpermSearch, "").Trim().ToLowerInvariant();
             var entries = PermEntries(search);
+            var collapsed = GetAdmin(player.userID).PermsCollapsed ??= new HashSet<string>();
             var pScroll = UI_ScrollStack(container, card, "upp", rightX, top - 50, rightW, colH - 50,
-                PermContentHeight(entries), 0, 4, Palette.CPage, Palette.CBorder);
+                PermContentHeight(entries, collapsed), 0, 4, Palette.CPage, Palette.CBorder);
             UI_PermList(container, pScroll, entries, p => permission.UserHasPermission(id, p), "pa.userperm",
-                p => UserInheritedFrom(id, p));
+                p => UserInheritedFrom(id, p), collapsed);
         }
 
         private void UI_PopupBack(CuiElementContainer container, string card, BasePlayer player)
@@ -19919,16 +21396,17 @@ namespace Oxide.Plugins
                     UI_Text(container, frame,
                         SafeFormat(GetLocalizedMessage(TranslateKey.PopupHealCur, player), curHp, maxHp), 11,
                         Fonts.Body, TextAnchor.UpperLeft, Palette.CText2, "0 1", "1 1", "16 -28", "-16 -12");
-                    string[] hk = { "set", "max", "add", "sub" };
+                    string[] hk = { "set", "max", "add", "sub", "full" };
                     string[] hl =
                     {
                         GetLocalizedMessage(TranslateKey.PopupHealSet, player),
                         GetLocalizedMessage(TranslateKey.PopupHealMax, player),
                         GetLocalizedMessage(TranslateKey.PopupHealAdd, player),
-                        GetLocalizedMessage(TranslateKey.PopupHealSub, player)
+                        GetLocalizedMessage(TranslateKey.PopupHealSub, player),
+                        GetLocalizedMessage(TranslateKey.PopupHealFull, player)
                     };
                     UI_SegmentRow(container, frame, player, FieldKey.PopupHealmode, "set", hk, hl, 16, -40, fw - 32, 26);
-                    if (GetSelect(player, FieldKey.PopupHealmode, "set") != "max")
+                    if (GetSelect(player, FieldKey.PopupHealmode, "set") is not "max" and not "full")
                         UI_SettingsLabelInput(container, frame, player, FieldKey.PopupHealAmt,
                             GetLocalizedMessage(TranslateKey.PopupHealAmt, player), curHp.ToString(), 16,
                             -78, fw - 32);
@@ -20119,7 +21597,7 @@ namespace Oxide.Plugins
             var grid = UI_ScrollList(container, card, "bpitems", geo.MidX, geo.GridY, geo.MidW, geo.GridH, geo.CellH,
                 geo.Gap, items.Count, 4, geo.Gcols, Palette.CPage, Palette.CBorder);
             for (var j = 0; j < items.Count; j++)
-                UI_BlueprintCell(container, geo, grid, items[j], j, target);
+                UI_BlueprintCell(container, geo, grid, items[j], j, target, player);
 
             var colName = card + ".bpcol";
             container.Add(new CuiElement
@@ -20203,11 +21681,11 @@ namespace Oxide.Plugins
         }
 
         private void UI_BlueprintCell(CuiElementContainer container, PickerLayout geo, string grid, ItemDefinition def, int j,
-            BasePlayer target)
+            BasePlayer target, BasePlayer player)
         {
             var rn = grid + ".b" + j;
             var unlocked = target != null && target.blueprints.IsUnlocked(def);
-            UI_CellSkeleton(container, grid, rn, j, def.itemid, ItemName(def), unlocked ? Palette.CText : Palette.CText2,
+            UI_CellSkeleton(container, grid, rn, j, def.itemid, LocalizedItemName(def, player), unlocked ? Palette.CText : Palette.CText2,
                 unlocked ? Palette.CAccent : Palette.CBorder, BlueprintItemId);
             container.Add(
                 new CuiPanel
@@ -20226,7 +21704,7 @@ namespace Oxide.Plugins
             });
             UI_Text(container, rn + ".chip", "+", 12, Fonts.Title, TextAnchor.MiddleCenter,
                 unlocked ? Colors.Clear : Palette.CText2, "0 0", "1 1", name: rn + ".chip.t");
-            UI_Btn(container, rn, $"pa.bp unlock {def.shortname}", Colors.Clear, "0 0", "1 1");
+            UI_Btn(container, rn, $"pa.bp unlock {def.itemid}", Colors.Clear, "0 0", "1 1");
         }
 
         private static void UI_BlueprintCellState(CuiElementContainer container, string rn, bool unlocked)
@@ -21212,8 +22690,8 @@ namespace Oxide.Plugins
             UI_Text(container, rn + ".chip", inCart ? ce.Amount.ToString() : "+", inCart ? 8 : 12, Fonts.Title,
                 TextAnchor.MiddleCenter, inCart ? Palette.CAccentText : Palette.CText2, "0 0", "1 1",
                 name: rn + ".chip.t");
-            UI_Btn(container, rn, $"pa.give add {it.Shortname} {step}", Colors.Clear, "0 0", "1 1");
-            UI_Btn(container, rn, $"pa.give fav {it.Shortname}", Colors.Clear, "0 1", "0 1", "2 -20", "20 -2", rn + ".pin");
+            UI_Btn(container, rn, $"pa.give add {it.ItemId} {step}", Colors.Clear, "0 0", "1 1");
+            UI_Btn(container, rn, $"pa.give fav {it.ItemId}", Colors.Clear, "0 1", "0 1", "2 -20", "20 -2", rn + ".pin");
             container.Add(new CuiElement
             {
                 Parent = rn + ".pin", Name = rn + ".pin.i",
@@ -21261,7 +22739,9 @@ namespace Oxide.Plugins
             int j)
         {
             var rn = grid + ".it" + j;
-            UI_CellSkeleton(container, grid, rn, j, e.ItemId, e.DisplayName, Palette.CText2, Palette.CBorder,
+            var itemDef = e.IsCustomNamed ? null : FindItem(e.Shortname);
+            var label = itemDef != null ? LocalizedItemName(itemDef, player) : e.DisplayName;
+            UI_CellSkeleton(container, grid, rn, j, e.ItemId, label, Palette.CText2, Palette.CBorder,
                 namedLabel: false);
             UI_Btn(container, rn, $"pa.give addcustom {j}", Colors.Clear, "0 0", "1 1");
             UI_Btn(container, rn, $"pa.give delcustom {j}", Colors.CDanger, "1 1", "1 1", "-18 -18", "-2 -2", rn + ".del");
@@ -21274,6 +22754,70 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-5 -5", OffsetMax = "5 5" }
                 }
             });
+        }
+
+        private void UI_CartItemRow(CuiElementContainer container, string parent, int ci, CartEntry e, int step,
+            string cmdVerb, bool supportsBlueprint)
+        {
+            var rn = parent + ".r" + ci;
+            var bp = supportsBlueprint && e.Blueprint;
+            container.Add(new CuiElement { Parent = parent, Name = rn, Components = { new CuiImageComponent { Color = Palette.CElev } } });
+            if (bp)
+                container.Add(new CuiElement
+                {
+                    Parent = rn,
+                    Components =
+                    {
+                        new CuiImageComponent { ItemId = BlueprintItemId },
+                        new CuiRectTransformComponent { AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = "2 -13", OffsetMax = "28 13" }
+                    }
+                });
+            container.Add(new CuiElement
+            {
+                Parent = rn,
+                Components =
+                {
+                    new CuiImageComponent { ItemId = e.ItemId },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = $"{(bp ? 6 : 4)} -10",
+                        OffsetMax = $"{(bp ? 24 : 26)} 10"
+                    }
+                }
+            });
+            if (supportsBlueprint)
+                UI_Btn(container, rn, $"{cmdVerb} bp {ci}", Colors.Clear, "0 0.5", "0 0.5", "2 -13", "28 13");
+            UI_Text(container, rn, bp ? e.DisplayName + " (BP)" : e.DisplayName, 8, Fonts.Title,
+                TextAnchor.MiddleLeft, bp ? Colors.CSuccess : Palette.CText, "0 0", "1 1", "30 0", "-72 0");
+            UI_Btn(container, rn, "-", $"{cmdVerb} dec {ci} {step}", Palette.CPage, 13, Fonts.Title, TextAnchor.MiddleCenter,
+                Palette.CText2, "1 0.5", "1 0.5", "-70 -11", "-52 11");
+            var qtyName = rn + ".qty";
+            container.Add(new CuiElement
+            {
+                Parent = rn, Name = qtyName,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CPage },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "1 0.5", AnchorMax = "1 0.5", OffsetMin = "-50 -11", OffsetMax = "-26 11" }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = qtyName,
+                Components =
+                {
+                    new CuiInputFieldComponent
+                    {
+                        Text = e.Amount.ToString(), FontSize = 9, Font = Fonts.Title,
+                        Align = TextAnchor.MiddleCenter, Color = Palette.CText, CharsLimit = 10,
+                        NeedsKeyboard = true, Command = ProtectCommand($"{cmdVerb} setamt {ci} ")
+                    },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            UI_Btn(container, rn, "+", $"{cmdVerb} inc {ci} {step}", Palette.CPage, 13, Fonts.Title, TextAnchor.MiddleCenter,
+                Palette.CText2, "1 0.5", "1 0.5", "-24 -11", "-6 11");
         }
 
         private void UI_GiveCartCol(CuiElementContainer container, BasePlayer player, PickerLayout geo)
@@ -21305,67 +22849,7 @@ namespace Oxide.Plugins
             var cartContent = UI_ScrollList(container, colName, "gcart", 0, -54, cartW, cartListH, 30, 2, cart.Count, 2, 1,
                 Palette.CPage, Palette.CBorder);
             for (var ci = 0; ci < cart.Count; ci++)
-            {
-                var e = cart[ci];
-                var rn = cartContent + ".r" + ci;
-                container.Add(new CuiElement { Parent = cartContent, Name = rn, Components = { new CuiImageComponent { Color = Palette.CElev } } });
-                if (e.Blueprint)
-                    container.Add(new CuiElement
-                    {
-                        Parent = rn,
-                        Components =
-                        {
-                            new CuiImageComponent { ItemId = BlueprintItemId },
-                            new CuiRectTransformComponent { AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = "2 -13", OffsetMax = "28 13" }
-                        }
-                    });
-                container.Add(new CuiElement
-                {
-                    Parent = rn,
-                    Components =
-                    {
-                        new CuiImageComponent { ItemId = e.ItemId },
-                        new CuiRectTransformComponent
-                        {
-                            AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = $"{(e.Blueprint ? 6 : 4)} -10",
-                            OffsetMax = $"{(e.Blueprint ? 24 : 26)} 10"
-                        }
-                    }
-                });
-                UI_Btn(container, rn, $"pa.give bp {ci}", Colors.Clear, "0 0.5", "0 0.5", "2 -13", "28 13");
-                UI_Text(container, rn, e.Blueprint ? e.DisplayName + " (BP)" : e.DisplayName, 8, Fonts.Title,
-                    TextAnchor.MiddleLeft, e.Blueprint ? Colors.CSuccess : Palette.CText, "0 0", "1 1", "30 0",
-                    "-72 0");
-                UI_Btn(container, rn, "-", $"pa.give dec {ci} {step}", Palette.CPage, 13, Fonts.Title, TextAnchor.MiddleCenter,
-                    Palette.CText2, "1 0.5", "1 0.5", "-70 -11", "-52 11");
-                var qtyName = rn + ".qty";
-                container.Add(new CuiElement
-                {
-                    Parent = rn, Name = qtyName,
-                    Components =
-                    {
-                        new CuiImageComponent { Color = Palette.CPage },
-                        new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
-                        new CuiRectTransformComponent { AnchorMin = "1 0.5", AnchorMax = "1 0.5", OffsetMin = "-50 -11", OffsetMax = "-26 11" }
-                    }
-                });
-                container.Add(new CuiElement
-                {
-                    Parent = qtyName,
-                    Components =
-                    {
-                        new CuiInputFieldComponent
-                        {
-                            Text = e.Amount.ToString(), FontSize = 9, Font = Fonts.Title,
-                            Align = TextAnchor.MiddleCenter, Color = Palette.CText, CharsLimit = 10,
-                            NeedsKeyboard = true, Command = ProtectCommand($"pa.give setamt {ci} ")
-                        },
-                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
-                    }
-                });
-                UI_Btn(container, rn, "+", $"pa.give inc {ci} {step}", Palette.CPage, 13, Fonts.Title, TextAnchor.MiddleCenter,
-                    Palette.CText2, "1 0.5", "1 0.5", "-24 -11", "-6 11");
-            }
+                UI_CartItemRow(container, cartContent, ci, cart[ci], step, "pa.give", true);
 
             var fyr = 4 - geo.ColH;
             UI_Btn(container, colName, GetLocalizedMessage(TranslateKey.GiveClear, player), "pa.give clear", Palette.CElev, 10,
@@ -21507,6 +22991,638 @@ namespace Oxide.Plugins
             UI_Text(container, gc, lab, 10, Fonts.Body, TextAnchor.UpperLeft, Palette.CText2, "0 1", "0 1", $"{x} {y - 14}",
                 $"{x + w} {y}");
             UI_Input(container, gc, player, id, ph, x, y - 16, w, 28, false, 64, cmd);
+        }
+
+        private const int ItemsPh = Positions.BodyH - 84;
+        private const int ItemsCatW = 150;
+        private const int ItemsCartW = 190;
+        private const int ItemsCatX = Positions.Pad;
+        private const int ItemsCartX = Positions.BodyW - Positions.Pad - ItemsCartW;
+        private const int ItemsGridX = ItemsCatX + ItemsCatW + 12;
+        private const int ItemsGridW = ItemsCartX - 12 - ItemsGridX;
+
+        private void UI_PageItems(CuiElementContainer container, BasePlayer player)
+        {
+            UI_Head(container, player, TranslateKey.ItemsTitle, TranslateKey.ItemsSub);
+            if (!Can(player, Permissions.Items))
+            {
+                UI_Locked(container, player, TranslateKey.LockedFeat, "assets/icons/crate.png");
+                return;
+            }
+
+            var realCats = GiveCategories();
+            var cats = new List<string> { "_fav", "_custom" };
+            cats.AddRange(realCats);
+            var curCat = GetSelect(player, FieldKey.ItemsCat, realCats.FirstOrDefault() ?? "");
+
+            UI_Card(container, Layers.Body, null, ItemsCatX, -60, ItemsCatW, ItemsPh, ItemsCatPanel);
+            var catVpos = CenteredScrollPos(cats.IndexOf(curCat), 30, 4, cats.Count, ItemsPh - 4, 4);
+            var catList = UI_ScrollList(container, ItemsCatPanel, "l", 2, -2, ItemsCatW - 4, ItemsPh - 4, 30, 4, cats.Count, 4, 1, null, null, catVpos);
+            UI_GiveCategoryRows(container, player, catList, cats, curCat, $"pa.select {FieldKey.ItemsCat}");
+
+            UI_Card(container, Layers.Body, null, ItemsGridX, -60, ItemsGridW, ItemsPh, ItemsGridPanel);
+            UI_Input(container, ItemsGridPanel, player, FieldKey.ItemsSearch, GetLocalizedMessage(TranslateKey.ItemsSearchPh, player),
+                8, -8, ItemsGridW - 16, 28);
+            UI_ItemsGrid(container, player, curCat);
+
+            UI_ItemsCartCol(container, player);
+
+            if (PeekAdmin(player.userID)?.ItemsGiveOpen == true)
+                UI_ItemsGivePopup(container, player);
+            var infoShort = PeekAdmin(player.userID)?.ItemsInfoShortname;
+            if (!string.IsNullOrEmpty(infoShort))
+            {
+                try
+                {
+                    UI_ItemsInfoPopup(container, player, infoShort);
+                }
+                catch (Exception ex)
+                {
+                    PrintError($"UI_ItemsInfoPopup threw for '{infoShort}': {ex}");
+                    GetAdmin(player.userID).ItemsInfoShortname = null;
+                }
+            }
+            if (PeekAdmin(player.userID)?.GiveCustomOpen == true)
+                UI_GiveCustom(container, player);
+        }
+
+        private void ItemsPartial(BasePlayer player, string only = null)
+        {
+            ApplyTheme(player);
+            var container = new CuiElementContainer();
+            UI_ItemsCartCol(container, player);
+
+            if (only != "")
+            {
+                var cart = ItemsCart(player.userID);
+                var filtered = ItemsFiltered(player);
+                if (only == null)
+                {
+                    var fav = GiveFav(player.userID);
+                    for (var j = 0; j < filtered.Count; j++)
+                        UI_ItemsCell(container, player, ItemsGridListName, filtered[j], j, cart, fav);
+                }
+                else
+                {
+                    var j = filtered.FindIndex(it => it.Shortname == only);
+                    if (j >= 0)
+                    {
+                        var entry = cart.FirstOrDefault(x => x.Shortname == filtered[j].Shortname &&
+                                                             x.SkinId == filtered[j].SkinId);
+                        var pinned = GiveFav(player.userID).Contains(filtered[j].Shortname);
+                        UI_ItemsCellState(container, ItemsGridListName + ".it" + j, entry != null, entry?.Amount ?? 0,
+                            pinned);
+                    }
+                }
+            }
+
+            var infoShort = PeekAdmin(player.userID)?.ItemsInfoShortname;
+            if (!string.IsNullOrEmpty(infoShort))
+            {
+                try
+                {
+                    UI_ItemsInfoPopup(container, player, infoShort);
+                }
+                catch (Exception ex)
+                {
+                    PrintError($"UI_ItemsInfoPopup threw for '{infoShort}': {ex}");
+                    GetAdmin(player.userID).ItemsInfoShortname = null;
+                }
+            }
+            else
+                container.Add(new CuiElement
+                {
+                    Parent = Layers.Root, Name = Layers.Root + ".itinfo", DestroyUi = Layers.Root + ".itinfo",
+                    Components =
+                    {
+                        new CuiImageComponent { Color = Colors.Clear },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "0 0", OffsetMax = "0 0" }
+                    }
+                });
+
+            if (PeekAdmin(player.userID)?.ItemsGiveOpen == true)
+                UI_ItemsGivePopup(container, player);
+            else
+                container.Add(new CuiElement
+                {
+                    Parent = Layers.Root, Name = Layers.Root + ".itgv", DestroyUi = Layers.Root + ".itgv",
+                    Components =
+                    {
+                        new CuiImageComponent { Color = Colors.Clear },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "0 0", OffsetMax = "0 0" }
+                    }
+                });
+
+            CuiHelper.AddUi(player, container);
+        }
+
+        private void UI_ItemsGrid(CuiElementContainer container, BasePlayer player, string curCat)
+        {
+            if (curCat == "_custom")
+            {
+                var customs = SavedCustoms(player.userID);
+                var customGrid = UI_ScrollList(container, ItemsGridPanel, "g", 8, -44, ItemsGridW - 16, ItemsPh - 52, 82,
+                    6, customs.Count, 2, 3, null, null);
+                for (var j = 0; j < customs.Count; j++)
+                    UI_ItemsCustomCell(container, player, customGrid, customs[j], j);
+                if (customs.Count == 0)
+                    UI_Text(container, ScrollOf(customGrid), GetLocalizedMessage(TranslateKey.GiveNocustom, player), 11,
+                        Fonts.Body, TextAnchor.MiddleCenter, Palette.CText3, "0 0", "1 1");
+                return;
+            }
+
+            var filtered = ItemsFiltered(player);
+            var cart = ItemsCart(player.userID);
+            var fav = GiveFav(player.userID);
+            var cellH = curCat == "_fav" ? 64 : 82;
+            var cols = curCat == "_fav" ? 4 : 3;
+            var grid = UI_ScrollList(container, ItemsGridPanel, "g", 8, -44, ItemsGridW - 16, ItemsPh - 52, cellH, 6,
+                filtered.Count, 2, cols, null, null);
+            for (var j = 0; j < filtered.Count; j++)
+                UI_ItemsCell(container, player, grid, filtered[j], j, cart, fav);
+            if (filtered.Count == 0)
+                UI_Text(container, ScrollOf(grid),
+                    GetLocalizedMessage(curCat == "_fav" ? TranslateKey.GiveNofav : TranslateKey.ItemsNoitems, player),
+                    11, Fonts.Body, TextAnchor.MiddleCenter, Palette.CText3, "0 0", "1 1");
+        }
+
+        private void UI_ItemsCell(CuiElementContainer container, BasePlayer player, string grid, CartEntry it, int j,
+            List<CartEntry> cart, HashSet<string> fav)
+        {
+            var rn = grid + ".it" + j;
+            var ce = cart.FirstOrDefault(x => x.Shortname == it.Shortname && x.SkinId == it.SkinId);
+            var inCart = ce != null;
+            UI_CellSkeleton(container, grid, rn, j, it.ItemId, it.DisplayName, inCart ? Palette.CText : Palette.CText2,
+                inCart ? Palette.CAccent : Palette.CBorder);
+            container.Add(
+                new CuiPanel
+                {
+                    Image = { Color = inCart ? Palette.CAccent : Palette.CElev2 },
+                    RectTransform = { AnchorMin = "1 1", AnchorMax = "1 1", OffsetMin = "-19 -17", OffsetMax = "-3 -3" }
+                }, rn, rn + ".chip");
+            UI_Text(container, rn + ".chip", inCart ? ce.Amount.ToString() : "+", inCart ? 8 : 12, Fonts.Title,
+                TextAnchor.MiddleCenter, inCart ? Palette.CAccentText : Palette.CText2, "0 0", "1 1",
+                name: rn + ".chip.t");
+            UI_Btn(container, rn, $"pa.items add {it.ItemId} 1", Colors.Clear, "0 0", "1 1");
+            var pinned = fav.Contains(it.Shortname);
+            UI_Btn(container, rn, $"pa.items fav {it.ItemId}", Colors.Clear, "0 0", "0 0", "2 2", "20 20", rn + ".pin");
+            container.Add(new CuiElement
+            {
+                Parent = rn + ".pin", Name = rn + ".pin.i",
+                Components =
+                {
+                    new CuiImageComponent { Color = pinned ? Colors.CDanger : Palette.CText3, Sprite = "assets/icons/heart-white.png" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-7 -7", OffsetMax = "7 7" }
+                }
+            });
+            UI_Btn(container, rn, GetLocalizedMessage(TranslateKey.ItemsInfoBtn, player), $"pa.items info {it.ItemId}",
+                Palette.CElev2, 9, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0 1", "0 1", "2 -18", "18 -2",
+                rn + ".info");
+        }
+
+        private static void UI_ItemsCellState(CuiElementContainer container, string rn, bool inCart, int amount,
+            bool pinned)
+        {
+            container.Add(new CuiElement
+            {
+                Name = rn, Update = true,
+                Components = { new CuiOutlineComponent { Color = inCart ? Palette.CAccent : Palette.CBorder, Distance = "1 1" } }
+            });
+            container.Add(new CuiElement
+            {
+                Name = rn + ".chip", Update = true,
+                Components = { new CuiImageComponent { Color = inCart ? Palette.CAccent : Palette.CElev2 } }
+            });
+            container.Add(new CuiElement
+            {
+                Name = rn + ".chip.t", Update = true,
+                Components =
+                {
+                    new CuiTextComponent
+                    {
+                        Text = inCart ? amount.ToString() : "+", FontSize = inCart ? 8 : 12, Font = Fonts.Title,
+                        Align = TextAnchor.MiddleCenter, Color = inCart ? Palette.CAccentText : Palette.CText2
+                    }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Name = rn + ".pin.i", Update = true,
+                Components = { new CuiImageComponent { Color = pinned ? Colors.CDanger : Palette.CText3, Sprite = "assets/icons/heart-white.png" } }
+            });
+        }
+
+        private void UI_ItemsCustomCell(CuiElementContainer container, BasePlayer player, string grid, CartEntry e, int j)
+        {
+            var rn = grid + ".it" + j;
+            var itemDef = e.IsCustomNamed ? null : FindItem(e.Shortname);
+            var label = itemDef != null ? LocalizedItemName(itemDef, player) : e.DisplayName;
+            UI_CellSkeleton(container, grid, rn, j, e.ItemId, label, Palette.CText2, Palette.CBorder, namedLabel: false);
+            UI_Btn(container, rn, $"pa.items addcustom {j}", Colors.Clear, "0 0", "1 1");
+            UI_Btn(container, rn, $"pa.items delcustom {j}", Colors.CDanger, "1 1", "1 1", "-18 -18", "-2 -2", rn + ".del");
+            container.Add(new CuiElement
+            {
+                Parent = rn + ".del",
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CAccentText, Sprite = "assets/icons/close.png" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-5 -5", OffsetMax = "5 5" }
+                }
+            });
+        }
+
+        private void UI_ItemsCartCol(CuiElementContainer container, BasePlayer player)
+        {
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Body, Name = ItemsCartPanel, DestroyUi = ItemsCartPanel,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{ItemsCartX} {-60 - ItemsPh}",
+                        OffsetMax = $"{ItemsCartX + ItemsCartW} -60"
+                    }
+                }
+            });
+
+            var cart = ItemsCart(player.userID);
+            UI_Text(container, ItemsCartPanel, $"{GetLocalizedMessage(TranslateKey.ItemsCart, player)} ({cart.Count})", 11,
+                Fonts.Title, TextAnchor.MiddleLeft, Palette.CText, "0 1", "0 1", "12 -24", $"{ItemsCartW - 12} -4");
+            UI_Btn(container, ItemsCartPanel, "+ " + GetLocalizedMessage(TranslateKey.GiveCustom, player), "pa.givecustom",
+                Palette.CElev, 10, Fonts.Title, TextAnchor.MiddleCenter, Palette.CAccent, "0 1", "0 1", "4 -54",
+                $"{ItemsCartW - 4} -30");
+
+            var listH = ItemsPh - 56 - 36 - 28;
+            var content = UI_ScrollList(container, ItemsCartPanel, "l", 4, -60, ItemsCartW - 8, listH, 30, 2, cart.Count, 2,
+                1, Palette.CPage, Palette.CBorder);
+            for (var ci = 0; ci < cart.Count; ci++)
+                UI_CartItemRow(container, content, ci, cart[ci], 1, "pa.items", false);
+
+            if (cart.Count == 0)
+                UI_Text(container, ItemsCartPanel, GetLocalizedMessage(TranslateKey.ItemsGiveEmptyCart, player), 10,
+                    Fonts.Body, TextAnchor.UpperCenter, Palette.CText3, "0 1", "1 1", "8 -68", $"{ItemsCartW - 8} -88");
+
+            var fyr = 4 - ItemsPh;
+            var half = (ItemsCartW - 8) / 2;
+            const int rowShift = 3;
+            UI_Btn(container, ItemsCartPanel, GetLocalizedMessage(TranslateKey.ItemsClear, player), "pa.items clear",
+                Palette.CElev, 10, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0 1", "0 1", $"{rowShift} {fyr}",
+                $"{half + rowShift} {fyr + 28}");
+            UI_Btn(container, ItemsCartPanel, GetLocalizedMessage(TranslateKey.ItemsGive, player), "pa.items giveopen",
+                cart.Count > 0 ? Colors.CSuccess : Palette.CElev2, 11, Fonts.Title, TextAnchor.MiddleCenter,
+                cart.Count > 0 ? Palette.CAccentText : Palette.CText3, "0 1", "0 1", $"{half + 4 + rowShift} {fyr}",
+                $"{ItemsCartW - 4 + rowShift} {fyr + 28}");
+        }
+
+        private void UI_ItemsGivePopup(CuiElementContainer container, BasePlayer player)
+        {
+            const int w = 440, h = 520;
+            var scrim = Layers.Root + ".itgv";
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Root, Name = scrim, DestroyUi = scrim,
+                Components =
+                {
+                    new CuiImageComponent { Color = "0 0 0 0.6" }, new CuiNeedsCursorComponent(),
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            UI_Btn(container, scrim, "pa.items giveclose", Colors.Clear, "0 0", "1 1");
+            var card = scrim + ".card";
+            container.Add(new CuiElement
+            {
+                Parent = scrim, Name = card,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = $"{-w / 2} {-h / 2}", OffsetMax = $"{w / 2} {h / 2}" }
+                }
+            });
+            UI_Text(container, card, GetLocalizedMessage(TranslateKey.ItemsGiveTitle, player), 15, Fonts.Title,
+                TextAnchor.UpperLeft, Palette.CText, "0 1", "1 1", "18 -38", "-18 -16");
+            UI_Text(container, card, GetLocalizedMessage(TranslateKey.ItemsGiveSub, player), 9, Fonts.Body,
+                TextAnchor.UpperLeft, Palette.CText2, "0 1", "1 1", "18 -56", "-18 -42");
+
+            UI_Input(container, card, player, FieldKey.ItemsGiveSearch,
+                GetLocalizedMessage(TranslateKey.ItemsGiveSearchPh, player), 18, -58, w - 36, 28);
+
+            UI_Btn(container, card, GetLocalizedMessage(TranslateKey.ItemsGiveSelectall, player), "pa.items selectall",
+                Palette.CElev, 9, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0 1", "0 1", "18 -114", "216 -96");
+            UI_Btn(container, card, GetLocalizedMessage(TranslateKey.ItemsGiveClearsel, player), "pa.items clearsel",
+                Palette.CElev, 9, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0 1", "0 1", "224 -114", $"{w - 18} -96");
+
+            var targets = GetAdmin(player.userID).ItemsGiveTargets ??= new HashSet<ulong>();
+            var search = GetInput(player, FieldKey.ItemsGiveSearch, "").Trim();
+            var online = BasePlayer.activePlayerList.Where(p => p != null &&
+                    (search.Length == 0 || p.displayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0))
+                .OrderBy(p => p.displayName, StringComparer.OrdinalIgnoreCase).ToList();
+
+            var shown = Mathf.Min(online.Count, PeekAdmin(player.userID)?.ItemsGiveShown > 0
+                ? GetAdmin(player.userID).ItemsGiveShown : ItemsGivePageSize);
+            var moreLeft = online.Count - shown;
+
+            const int gridY = -124, gridH = 280;
+            var grid = UI_ScrollList(container, card, "pl", 18, gridY, w - 36, gridH, 56, 8, shown, 4, 2, Palette.CPage,
+                Palette.CBorder);
+            if (online.Count == 0)
+                UI_Text(container, ScrollOf(grid),
+                    search.Length == 0 || !BasePlayer.activePlayerList.Any(p => p != null)
+                        ? GetLocalizedMessage(TranslateKey.ItemsGiveNoOnline, player)
+                        : SafeFormat(GetLocalizedMessage(TranslateKey.ItemsGiveNoMatch, player), search),
+                    10, Fonts.Body, TextAnchor.MiddleCenter, Palette.CText3, "0 0", "1 1");
+            for (var i = 0; i < shown; i++)
+                UI_ItemsGiveCard(container, grid, i, online[i], targets.Contains(online[i].userID));
+
+            if (moreLeft > 0)
+                UI_Btn(container, card,
+                    SafeFormat(GetLocalizedMessage(TranslateKey.ItemsGiveLoadmore, player), moreLeft),
+                    "pa.items givemore", Palette.CElev, 9, Fonts.Title, TextAnchor.MiddleCenter, Palette.CAccent,
+                    "0 1", "0 1", $"18 {gridY - gridH - 26}", $"{w - 18} {gridY - gridH}");
+
+            UI_Btn(container, card, GetLocalizedMessage(TranslateKey.DropdownCancel, player), "pa.items giveclose",
+                Palette.CElev, 11, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "1 0", "1 0", "-188 16", "-108 44");
+            UI_Btn(container, card, SafeFormat(GetLocalizedMessage(TranslateKey.ItemsGiveConfirm, player), targets.Count),
+                "pa.items giveconfirm", targets.Count > 0 ? Colors.CSuccess : Palette.CElev2, 11, Fonts.Title,
+                TextAnchor.MiddleCenter, targets.Count > 0 ? Palette.CAccentText : Palette.CText3, "1 0", "1 0", "-100 16",
+                "-18 44");
+        }
+
+        private void UI_ItemsGiveCard(CuiElementContainer container, string grid, int j, BasePlayer p, bool selected)
+        {
+            var rn = grid + ".p" + j;
+            container.Add(new CuiElement
+            {
+                Parent = grid, Name = rn, DestroyUi = rn,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CElev },
+                    new CuiOutlineComponent { Color = selected ? Palette.CAccent : Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { SetTransformIndex = j }
+                }
+            });
+            UI_Avatar(container, rn, p.UserIDString, 8, -8, 36);
+            UI_Text(container, rn, p.displayName, 11, Fonts.Body, TextAnchor.MiddleLeft,
+                selected ? Palette.CAccent : Palette.CText, "0 1", "1 1", "52 -26", "-8 -8");
+            UI_Text(container, rn, p.UserIDString, 9, Fonts.Body, TextAnchor.MiddleLeft, Palette.CText3,
+                "0 1", "1 1", "52 -42", "-8 -28");
+            UI_Btn(container, rn, $"pa.items target {p.userID}", Colors.Clear, "0 0", "1 1");
+        }
+
+        private void UI_ItemsInfoPopup(CuiElementContainer container, BasePlayer player, string shortname)
+        {
+            var def = FindItem(shortname);
+            if (def == null)
+                return;
+
+            var scrim = Layers.Root + ".itinfo";
+            container.Add(new CuiElement
+            {
+                Parent = Layers.Root, Name = scrim, DestroyUi = scrim,
+                Components =
+                {
+                    new CuiImageComponent { Color = "0 0 0 0.6" }, new CuiNeedsCursorComponent(),
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                }
+            });
+            UI_Btn(container, scrim, "pa.items infoclose", Colors.Clear, "0 0", "1 1");
+            var card = scrim + ".card";
+            container.Add(new CuiElement
+            {
+                Parent = scrim, Name = card,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CSurface },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-205 -240", OffsetMax = "205 240" }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = card,
+                Components =
+                {
+                    new CuiImageComponent { ItemId = def.itemid },
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = "18 -70", OffsetMax = "58 -30" }
+                }
+            });
+            UI_Text(container, card, LocalizedItemName(def, player), 14, Fonts.Title, TextAnchor.UpperLeft, Palette.CText,
+                "0 1", "1 1", "66 -40", "-18 -18");
+            UI_Text(container, card, GetLocalizedMessage(TranslateKey.ItemsInfoShortname, player) + ":", 10, Fonts.Body,
+                TextAnchor.MiddleLeft, Palette.CText2, "0 1", "0 1", "66 -60", "132 -42");
+            UI_ReadonlyField(container, card, def.shortname, "0 1", "1 1", "136 -62", "-18 -40");
+
+            var rows = new List<(string Label, string Value, bool Tall)>
+            {
+                (GetLocalizedMessage(TranslateKey.ItemsInfoId, player), def.itemid.ToString(), false),
+                (GetLocalizedMessage(TranslateKey.ItemsInfoCategory, player), def.category.ToString(), false),
+                (GetLocalizedMessage(TranslateKey.ItemsInfoRarity, player), def.rarity.ToString(), false),
+                (GetLocalizedMessage(TranslateKey.ItemsInfoStack, player), def.stackable.ToString(), false)
+            };
+            if (def.condition.enabled)
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoDurability, player), def.condition.max.ToString("0.#"), false));
+
+            var desc = LocalizedItemDescription(def, player);
+            if (!string.IsNullOrEmpty(desc))
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoDescription, player), desc, true));
+
+            if (def.Blueprint != null)
+            {
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoBlueprint, player), "", false));
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoWorkbench, player), def.Blueprint.workbenchLevelRequired.ToString(), false));
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoCrafttime, player), def.Blueprint.time.ToString("0.#") + "s", false));
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoScrap, player), def.Blueprint.scrapFromRecycle.ToString(), false));
+            }
+
+            if (def.itemMods != null && def.itemMods.Length > 0)
+                rows.Add((GetLocalizedMessage(TranslateKey.ItemsInfoMods, player),
+                    string.Join(", ", def.itemMods.Select(m => m.GetType().Name)), true));
+
+            var bp = def.Blueprint;
+            var ingredients = bp?.ingredients?.Where(a => a.itemDef != null)
+                .Select(a => (Amount: Mathf.CeilToInt(a.amount).ToString(), Def: a.itemDef)).ToList()
+                ?? new List<(string Amount, ItemDefinition Def)>();
+            var recycleGreen = RecycleOutput(bp, RecyclerConfig.RecyclerType.Green);
+            var recycleYellow = RecycleOutput(bp, RecyclerConfig.RecyclerType.Yellow);
+            var recycleRed = RecycleOutput(bp, RecyclerConfig.RecyclerType.Red);
+
+            const int shortRowH = 26;
+            const int tallRowH = 60;
+            const int contentW = 374;
+            var iconBlockCounts = new[] { ingredients.Count, recycleGreen.Count, recycleYellow.Count, recycleRed.Count };
+            var childCount = rows.Count + iconBlockCounts.Count(c => c > 0);
+            var totalH = rows.Sum(r => r.Tall ? tallRowH : shortRowH);
+            totalH += IconBlockHeight(ingredients.Count, contentW) + IconBlockHeight(recycleGreen.Count, contentW)
+                + IconBlockHeight(recycleYellow.Count, contentW) + IconBlockHeight(recycleRed.Count, contentW);
+            totalH += 6 * Mathf.Max(0, childCount - 1);
+            var content = UI_ScrollStack(container, card, "sv", 18, -80, contentW, 336, totalH, 6, 0, null, null);
+            for (var ri = 0; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                var lh = row.Tall ? tallRowH : shortRowH;
+                var block = content + ".r" + ri;
+                var blockEl = new CuiElement
+                {
+                    Parent = content, Name = block,
+                    Components = { new CuiImageComponent { Color = Colors.Clear } }
+                };
+                blockEl.Components.Add(new CuiLayoutElementComponent { MinHeight = lh, PreferredHeight = lh });
+                container.Add(blockEl);
+
+                if (string.IsNullOrEmpty(row.Value))
+                    UI_Text(container, block, row.Label, 11, Fonts.Title, TextAnchor.MiddleLeft, Palette.CAccent, "0 0",
+                        "1 1", "4 4", "-4 -4");
+                else
+                {
+                    UI_Text(container, block, row.Label, 10, Fonts.Title,
+                        row.Tall ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft, Palette.CText2, "0 0", "0 1", "4 4",
+                        "140 -4");
+                    UI_ReadonlyField(container, block, row.Value, "0 0", "1 1", "144 2", "-4 -2", row.Tall);
+                }
+            }
+
+            UI_ItemIconRow(container, content, GetLocalizedMessage(TranslateKey.ItemsInfoIngredients, player),
+                ingredients, contentW);
+            UI_ItemIconRow(container, content, GetLocalizedMessage(TranslateKey.ItemsInfoRecycleGreen, player),
+                recycleGreen, contentW);
+            UI_ItemIconRow(container, content, GetLocalizedMessage(TranslateKey.ItemsInfoRecycleYellow, player),
+                recycleYellow, contentW);
+            UI_ItemIconRow(container, content, GetLocalizedMessage(TranslateKey.ItemsInfoRecycleRed, player),
+                recycleRed, contentW);
+
+            UI_Btn(container, card, GetLocalizedMessage(TranslateKey.DropdownCancel, player), "pa.items infoclose",
+                Palette.CElev, 11, Fonts.Title, TextAnchor.MiddleCenter, Palette.CText2, "0.5 0", "0.5 0", "-60 16",
+                "60 44");
+        }
+
+        private List<(string Amount, ItemDefinition Def)> RecycleOutput(ItemBlueprint bp,
+            RecyclerConfig.RecyclerType type)
+        {
+            var result = new List<(string Amount, ItemDefinition Def)>();
+            if (bp == null)
+                return result;
+            var config = RecyclerConfig.instance;
+            if (config == null)
+                return result;
+            if (!config.TryGetConfigForType(type, out var typeConfig))
+                return result;
+            var efficiency = typeConfig.efficiency;
+            if (efficiency <= 0f)
+                return result;
+            if (bp.scrapFromRecycle > 0)
+            {
+                var scrapDef = FindItem("scrap");
+                if (scrapDef != null)
+                    result.Add(((bp.scrapFromRecycle * (efficiency / 0.5f)).ToString("0.#"), scrapDef));
+            }
+
+            if (bp.ingredients == null)
+                return result;
+            var amountToCreate = Mathf.Max(1, bp.amountToCreate);
+            result.AddRange(bp.ingredients.Where(a => a.itemDef != null && a.itemDef.shortname != "scrap")
+                .Select(a => (Amount: (a.amount / amountToCreate * efficiency).ToString("0.#"), Def: a.itemDef)));
+            return result;
+        }
+
+        private static int IconBlockHeight(int count, int width)
+        {
+            if (count == 0)
+                return 0;
+            const int size = 40, gap = 8;
+            var perRow = Mathf.Max(1, (width + gap) / (size + gap));
+            var rows = Mathf.CeilToInt(count / (float)perRow);
+            return 20 + rows * (size + gap) - gap + 10 + 6;
+        }
+
+        private void UI_ItemIconRow(CuiElementContainer container, string parent,
+            string label, List<(string Amount, ItemDefinition Def)> items, int width)
+        {
+            if (items.Count == 0)
+                return;
+
+            var h = IconBlockHeight(items.Count, width);
+            var block = parent + "." + CuiHelper.GetGuid();
+            var blockEl = new CuiElement
+            {
+                Parent = parent, Name = block,
+                Components = { new CuiImageComponent { Color = Colors.Clear } }
+            };
+            blockEl.Components.Add(new CuiLayoutElementComponent { MinHeight = h, PreferredHeight = h });
+            container.Add(blockEl);
+
+            UI_Text(container, block, label, 10, Fonts.Title, TextAnchor.UpperLeft, Palette.CText2, "0 1", "1 1",
+                "4 -14", "-4 0");
+
+            const int size = 40, gap = 8;
+            var perRow = Mathf.Max(1, (width + gap) / (size + gap));
+            for (var i = 0; i < items.Count; i++)
+            {
+                var col = i % perRow;
+                var row = i / perRow;
+                UI_ItemIconCell(container, block, 4 + col * (size + gap), -18 - row * (size + gap), size,
+                    items[i].Def.itemid, items[i].Amount + "x");
+            }
+        }
+
+        private void UI_ItemIconCell(CuiElementContainer container, string parent, int x, int y, int size,
+            int itemId, string qtyText)
+        {
+            container.Add(new CuiElement
+            {
+                Parent = parent,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CElev },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x} {y - size}", OffsetMax = $"{x + size} {y}" }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = parent,
+                Components =
+                {
+                    new CuiImageComponent { ItemId = itemId },
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x + 4} {y - size + 4}", OffsetMax = $"{x + size - 4} {y - 4}" }
+                }
+            });
+            if (!string.IsNullOrEmpty(qtyText))
+                UI_Text(container, parent, qtyText, 9, Fonts.Title, TextAnchor.LowerRight, Palette.CText2, "0 1", "0 1",
+                    $"{x} {y - size}", $"{x + size - 2} {y - size + 14}");
+        }
+
+        private static void UI_ReadonlyField(CuiElementContainer container, string parent, string value, string aMin,
+            string aMax, string oMin, string oMax, bool multiline = false)
+        {
+            var name = parent + "." + CuiHelper.GetGuid();
+            container.Add(new CuiElement
+            {
+                Parent = parent, Name = name,
+                Components =
+                {
+                    new CuiImageComponent { Color = Palette.CPage },
+                    new CuiOutlineComponent { Color = Palette.CBorder, Distance = "1 1" },
+                    new CuiRectTransformComponent { AnchorMin = aMin, AnchorMax = aMax, OffsetMin = oMin, OffsetMax = oMax }
+                }
+            });
+            container.Add(new CuiElement
+            {
+                Parent = name,
+                Components =
+                {
+                    new CuiInputFieldComponent
+                    {
+                        Text = value, FontSize = 10, Font = Fonts.Body,
+                        Align = multiline ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft, Color = Palette.CText,
+                        CharsLimit = 512, NeedsKeyboard = true, ReadOnly = true,
+                        LineType = multiline ? InputField.LineType.MultiLineNewline : InputField.LineType.SingleLine
+                    },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 2", OffsetMax = "-4 -2" }
+                }
+            });
         }
 
 
@@ -22442,6 +24558,11 @@ namespace Oxide.Plugins
         {
             lang.RegisterMessages(_en, this, "en");
             lang.RegisterMessages(_ru, this, "ru");
+            lang.RegisterMessages(_ptBr, this, "pt-BR");
+            lang.RegisterMessages(_es, this, "es");
+            lang.RegisterMessages(_de, this, "de");
+            lang.RegisterMessages(_fr, this, "fr");
+            lang.RegisterMessages(_zhCn, this, "zh-CN");
         }
 
         private static class FieldKey
@@ -22471,8 +24592,11 @@ namespace Oxide.Plugins
             public const string GiveCustShort = "give.cust.short";
             public const string GiveCustSkin = "give.cust.skin";
             public const string GiveSearch = "give.search";
+            public const string ItemsSearch = "items.search";
+            public const string ItemsGiveSearch = "items.give_search";
             public const string NewgroupName = "newgroup.name";
             public const string PermsSearch = "perms.search";
+            public const string GroupMembersSearch = "perms.group_members_search";
             public const string PopupComment = "pop.comment";
             public const string PopupHealAmt = "pop.heal_amt";
             public const string EconomyAmount = "eco.amount";
@@ -22521,6 +24645,7 @@ namespace Oxide.Plugins
             public const string GiveCat = "give.cat";
             public const string GivePage = "give.page";
             public const string GiveStep = "give.step";
+            public const string ItemsCat = "items.cat";
             public const string LogsFilter = "logs.filter";
             public const string NewgroupParent = "newgroup.parent";
             public const string PermsGroup = "perms.group";
@@ -22785,6 +24910,45 @@ namespace Oxide.Plugins
             public const string GiveSaveD = "give.save.d";
             public const string GiveSearchPh = "give.search_ph";
 
+            public const string ItemsTitle = "items.title";
+            public const string ItemsSub = "items.sub";
+            public const string ItemsSearchPh = "items.search_ph";
+            public const string ItemsCart = "items.cart";
+            public const string ItemsClear = "items.clear";
+            public const string ItemsGive = "items.give";
+            public const string ItemsNoitems = "items.noitems";
+            public const string ItemsInfoBtn = "items.info_btn";
+            public const string ItemsGiveTitle = "items.give_title";
+            public const string ItemsGiveSub = "items.give_sub";
+            public const string ItemsGiveSearchPh = "items.give_search_ph";
+            public const string ItemsGiveSelectall = "items.give_selectall";
+            public const string ItemsGiveClearsel = "items.give_clearsel";
+            public const string ItemsGiveNoOnline = "items.give_no_online";
+            public const string ItemsGiveNoMatch = "items.give_no_match";
+            public const string ItemsGiveConfirm = "items.give_confirm";
+            public const string ItemsGiveLoadmore = "items.give_loadmore";
+            public const string ItemsGiveNoneSelected = "items.give_none_selected";
+            public const string ItemsGiveEmptyCart = "items.give_empty_cart";
+            public const string ItemsInfoTitle = "items.info_title";
+            public const string ItemsInfoShortname = "items.info_shortname";
+            public const string ItemsInfoId = "items.info_id";
+            public const string ItemsInfoCategory = "items.info_category";
+            public const string ItemsInfoRarity = "items.info_rarity";
+            public const string ItemsInfoStack = "items.info_stack";
+            public const string ItemsInfoVolume = "items.info_volume";
+            public const string ItemsInfoDurability = "items.info_durability";
+            public const string ItemsInfoDescription = "items.info_description";
+            public const string ItemsInfoBlueprint = "items.info_blueprint";
+            public const string ItemsInfoWorkbench = "items.info_workbench";
+            public const string ItemsInfoCrafttime = "items.info_crafttime";
+            public const string ItemsInfoScrap = "items.info_scrap";
+            public const string ItemsInfoIngredients = "items.info_ingredients";
+            public const string ItemsInfoRecycle = "items.info_recycle";
+            public const string ItemsInfoRecycleGreen = "items.info_recycle_green";
+            public const string ItemsInfoRecycleYellow = "items.info_recycle_yellow";
+            public const string ItemsInfoRecycleRed = "items.info_recycle_red";
+            public const string ItemsInfoMods = "items.info_mods";
+
             public const string KickBroadcast = "kick.broadcast";
             public const string KickDefault = "kick.default";
 
@@ -22804,6 +24968,7 @@ namespace Oxide.Plugins
 
             public const string MessageBanDisabled = "msg.ban_disabled";
             public const string MessageGave = "msg.gave";
+            public const string MessageItemsGiven = "msg.items_given";
             public const string MessageHealed = "msg.healed";
             public const string MessageKicked = "msg.kicked";
             public const string MessageKilled = "msg.killed";
@@ -22811,6 +24976,7 @@ namespace Oxide.Plugins
             public const string MessageNoperm = "msg.noperm";
             public const string MessageNotfound = "msg.notfound";
             public const string MessageSoon = "msg.soon";
+            public const string MessageUpdatecheckStarted = "msg.updatecheck_started";
             public const string MessageStripped = "msg.stripped";
             public const string MessageTpCoords = "msg.tp_coords";
             public const string MessageTpHere = "msg.tp_here";
@@ -22835,6 +25001,7 @@ namespace Oxide.Plugins
             public const string NavigationLogs = "nav.logs";
             public const string NavigationPerms = "nav.perms";
             public const string NavigationPlayers = "nav.players";
+            public const string NavigationItems = "nav.items";
             public const string NavigationPlugins = "nav.plugins";
             public const string NavigationConvars = "nav.convars";
             public const string NavigationSettings = "nav.settings";
@@ -22849,6 +25016,12 @@ namespace Oxide.Plugins
             public const string PermsDelGroup = "perms.delgroup";
             public const string PermsDelConfirm = "perms.delconfirm";
             public const string PermsGroups = "perms.groups";
+            public const string PermsGroupMembers = "perms.group_members";
+            public const string PermsGroupMembersCount = "perms.group_members_count";
+            public const string PermsGroupMembersSearchPh = "perms.group_members_search_ph";
+            public const string PermsGroupMembersEmpty = "perms.group_members_empty";
+            public const string PermsGroupMembersNomatch = "perms.group_members_nomatch";
+            public const string PermsGroupMembersTip = "perms.group_members_tip";
             public const string PermsInherit = "perms.inherit";
             public const string PermsNewgroup = "perms.newgroup";
             public const string PermsNewgroupD = "perms.newgroup_d";
@@ -22876,6 +25049,10 @@ namespace Oxide.Plugins
             public const string PluginsNone = "plugins.none";
             public const string PluginsCfgBtn = "plugins.cfgbtn";
             public const string PluginsLangBtn = "plugins.langbtn";
+            public const string PluginsCheckUpdates = "plugins.checkupdates";
+            public const string PluginsChecking = "plugins.checking";
+            public const string PluginsUpdatecheckerMissing = "plugins.updatechecker_missing";
+            public const string PluginsUpdateAvailable = "plugins.update_available";
 
             public const string CfgTitle = "cfg.title";
             public const string CfgLangTitle = "cfg.langtitle";
@@ -22899,6 +25076,7 @@ namespace Oxide.Plugins
             public const string TipNavMap = "tip.nav.map";
             public const string TipNavBinds = "tip.nav.binds";
             public const string TipNavQuickButtons = "tip.nav.quickbuttons";
+            public const string TipNavItems = "tip.nav.items";
             public const string CfgFormHint = "cfg.form.hint";
             public const string CfgLangHint = "cfg.lang.hint";
             public const string CfgLangExisting = "cfg.lang.existing";
@@ -23035,6 +25213,7 @@ namespace Oxide.Plugins
             public const string PopupHealAdd = "pop.heal_add";
             public const string PopupHealAmt = "pop.heal_amt";
             public const string PopupHealCur = "pop.heal_cur";
+            public const string PopupHealFull = "pop.heal_full";
             public const string PopupHealMax = "pop.heal_max";
             public const string PopupHealSet = "pop.heal_set";
             public const string PopupHealSub = "pop.heal_sub";
@@ -23219,6 +25398,7 @@ namespace Oxide.Plugins
             public const string MapObjDeleteOk = "map.obj.del.ok";
             public const string MapObjLoot = "map.obj.loot";
             public const string MapObjOwnersMore = "map.obj.owners.more";
+            public const string MapCluTitle = "map.clu.title";
             public const string SecurityHeatWindow = "sec.heatwindow";
             public const string HammerToggle = "toggle.hammer";
             public const string HammerToggleD = "toggle.hammer.d";
@@ -23269,6 +25449,7 @@ namespace Oxide.Plugins
             public const string MapLayerEvents = "map.layer.events";
             public const string MapRefresh = "map.refresh";
             public const string MapPause = "map.pause";
+            public const string MapClusters = "map.clusters";
             public const string MapOnline = "map.online";
             public const string MapNoSelection = "map.noselection";
             public const string MapDetails = "map.details";
@@ -23365,6 +25546,8 @@ namespace Oxide.Plugins
             public const string VanishUnlock = "vanish.unlock";
             public const string VanishNoclip = "vanish.noclip";
             public const string VanishNoclipD = "vanish.noclip.d";
+            public const string VanishNoclipOff = "vanish.noclipoff";
+            public const string VanishNoclipOffD = "vanish.noclipoff.d";
             public const string VanishUnlockD = "vanish.unlock.d";
             public const string VanishEnable = "vanish.enable";
             public const string VanishEnableD = "vanish.enable.d";
@@ -23414,11 +25597,13 @@ namespace Oxide.Plugins
             [TranslateKey.MuteCustom] = "Свой срок",
             [TranslateKey.MuteCustomPh] = "Свой срок (напр. 90, 2h, 1d12h)",
             [TranslateKey.MessageGave] = "Предметы выданы игроку {0}.",
+            [TranslateKey.MessageItemsGiven] = "Выдано игрокам: {0}.",
             [TranslateKey.MessageBanDisabled] = "Бан отключён в этой сборке.",
             [TranslateKey.MessageHealed] = "Игрок {0} вылечен ({1} HP).",
             [TranslateKey.MessageKilled] = "Игрок {0} убит.",
             [TranslateKey.MessageStripped] = "Инвентарь игрока {0} очищен.",
             [TranslateKey.MessageSoon] = "Скоро будет доступно.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Проверка обновлений запущена.",
             [TranslateKey.KickDefault] = "Кик администратором",
             [TranslateKey.KickBroadcast] = "{0} был кикнут: {1}",
             [TranslateKey.MuteBroadcast] = "{0} был замьючен: {1}",
@@ -23436,6 +25621,12 @@ namespace Oxide.Plugins
             [TranslateKey.PopupPerms] = "Права",
             [TranslateKey.PermsSearchPh] = "Поиск права...",
             [TranslateKey.PermsNone] = "Права не зарегистрированы",
+            [TranslateKey.PermsGroupMembers] = "Игроки в группе {0}",
+            [TranslateKey.PermsGroupMembersCount] = "Игроков: {0}",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Поиск по имени...",
+            [TranslateKey.PermsGroupMembersEmpty] = "В группе нет игроков",
+            [TranslateKey.PermsGroupMembersNomatch] = "Нет игроков по запросу «{0}»",
+            [TranslateKey.PermsGroupMembersTip] = "Нажмите, чтобы открыть карточку игрока",
             [TranslateKey.PermsUserperms] = "Личные права игрока",
             [TranslateKey.SettingsStorage] = "Хранилище данных",
             [TranslateKey.StorageNote] = "Смена бэкенда автоматически переносит данные",
@@ -23484,6 +25675,7 @@ namespace Oxide.Plugins
             [TranslateKey.NavigationDashboard] = "Дашборд",
             [TranslateKey.NavigationConsole] = "Live-консоль",
             [TranslateKey.NavigationPlayers] = "Игроки",
+            [TranslateKey.NavigationItems] = "Предметы",
             [TranslateKey.NavigationVanish] = "Vanish",
             [TranslateKey.NavigationEsp] = "ESP",
             [TranslateKey.NavigationPerms] = "Права и группы",
@@ -23546,6 +25738,8 @@ namespace Oxide.Plugins
             [TranslateKey.VanishUnlockD] = "Позволяет невидимому админу открывать запертые ящики и двери",
             [TranslateKey.VanishNoclip] = "Noclip вместе с Vanish",
             [TranslateKey.VanishNoclipD] = "Включает и выключает полёт вместе с невидимостью",
+            [TranslateKey.VanishNoclipOff] = "Выключать Noclip вместе с Vanish",
+            [TranslateKey.VanishNoclipOffD] = "Отключает полёт при выключении невидимости",
             [TranslateKey.VanishAppearance] = "Внешний вид",
             [TranslateKey.VanishOpacity] = "Прозрачность для других админов",
             [TranslateKey.VanishSilColor] = "Цвет силуэта для других админов",
@@ -23728,6 +25922,7 @@ namespace Oxide.Plugins
             [TranslateKey.PopupConfirmD] = "Действие будет применено немедленно.",
             [TranslateKey.PopupHealCur] = "Сейчас: {0} / {1} HP",
             [TranslateKey.PopupHealSet] = "Задать",
+            [TranslateKey.PopupHealFull] = "Полное",
             [TranslateKey.PopupHealMax] = "Максимум",
             [TranslateKey.PopupHealAdd] = "Добавить",
             [TranslateKey.PopupHealSub] = "Отнять",
@@ -23746,6 +25941,44 @@ namespace Oxide.Plugins
             [TranslateKey.GiveModeItem] = "Предмет",
             [TranslateKey.GiveModeBp] = "Чертёж",
             [TranslateKey.GiveNofav] = "Нет избранных предметов. Нажмите на сердечко на предмете.",
+            [TranslateKey.ItemsTitle] = "Предметы",
+            [TranslateKey.ItemsSub] = "Массовая выдача предметов и справочник по ним",
+            [TranslateKey.ItemsSearchPh] = "Поиск предмета...",
+            [TranslateKey.ItemsCart] = "Корзина",
+            [TranslateKey.ItemsClear] = "Очистить",
+            [TranslateKey.ItemsGive] = "Выдать",
+            [TranslateKey.ItemsNoitems] = "Ничего не найдено",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Кому выдать",
+            [TranslateKey.ItemsGiveSub] = "Выберите игроков онлайн",
+            [TranslateKey.ItemsGiveSearchPh] = "Поиск по имени...",
+            [TranslateKey.ItemsGiveSelectall] = "Выбрать всех",
+            [TranslateKey.ItemsGiveClearsel] = "Снять выбор",
+            [TranslateKey.ItemsGiveNoOnline] = "Нет игроков онлайн",
+            [TranslateKey.ItemsGiveNoMatch] = "Нет игроков по запросу «{0}»",
+            [TranslateKey.ItemsGiveConfirm] = "Выдать ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Показать ещё ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Выберите хотя бы одного игрока",
+            [TranslateKey.ItemsGiveEmptyCart] = "Корзина пуста",
+            [TranslateKey.ItemsInfoTitle] = "Информация о предмете",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "Категория",
+            [TranslateKey.ItemsInfoRarity] = "Редкость",
+            [TranslateKey.ItemsInfoStack] = "Макс. стак",
+            [TranslateKey.ItemsInfoVolume] = "Объём (место в ящике)",
+            [TranslateKey.ItemsInfoDurability] = "Прочность",
+            [TranslateKey.ItemsInfoDescription] = "Описание",
+            [TranslateKey.ItemsInfoBlueprint] = "Крафт",
+            [TranslateKey.ItemsInfoWorkbench] = "Верстак",
+            [TranslateKey.ItemsInfoCrafttime] = "Время крафта",
+            [TranslateKey.ItemsInfoScrap] = "Скрап при разборе",
+            [TranslateKey.ItemsInfoIngredients] = "Ингредиенты",
+            [TranslateKey.ItemsInfoRecycle] = "Перерабатывается в",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Перерабатывается в (Зелёный переработчик)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Перерабатывается в (Жёлтый переработчик)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Перерабатывается в (Красный переработчик)",
+            [TranslateKey.ItemsInfoMods] = "Компоненты (mods)",
             [TranslateKey.GiveCustShort] = "Shortname (должен существовать)",
             [TranslateKey.GiveCustName] = "Имя предмета",
             [TranslateKey.GiveCustSkin] = "Skin ID",
@@ -23780,6 +26013,10 @@ namespace Oxide.Plugins
             [TranslateKey.PluginsNone] = "Плагины не найдены",
             [TranslateKey.PluginsCfgBtn] = "Конфиг",
             [TranslateKey.PluginsLangBtn] = "Язык",
+            [TranslateKey.PluginsCheckUpdates] = "Проверить обновления",
+            [TranslateKey.PluginsChecking] = "Проверка...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "Плагин UpdateChecker не установлен.",
+            [TranslateKey.PluginsUpdateAvailable] = "Обновление: v{0} → v{1}",
             [TranslateKey.CfgTitle] = "{0}  ·  Конфиг",
             [TranslateKey.CfgLangTitle] = "{0}  ·  Язык",
             [TranslateKey.CfgSaved] = "Конфигурация сохранена",
@@ -23802,6 +26039,7 @@ namespace Oxide.Plugins
             [TranslateKey.TipNavMap] = "Админ-карта с игроками, метками и действиями прямо на карте",
             [TranslateKey.TipNavBinds] = "Готовые бинды для консоли под админские инструменты",
             [TranslateKey.TipNavQuickButtons] = "Свои кнопки быстрых действий для панели и карты",
+            [TranslateKey.TipNavItems] = "Массовая выдача предметов и справочник по ним",
             [TranslateKey.CfgFormHint] = "Логические значения переключаются, числа и строки правятся в полях, объекты становятся группами, массивы открываются в своём окне",
             [TranslateKey.CfgLangHint] = "Выберите существующий язык или скопируйте его в новый код",
             [TranslateKey.CfgLangExisting] = "Существующие коды языков",
@@ -23885,7 +26123,7 @@ namespace Oxide.Plugins
             [TranslateKey.HammerCrateTimerHint] = "Спросим время и поставим его на таймер",
             [TranslateKey.HammerLoot] = "Содержимое",
             [TranslateKey.HammerModeNone] = "Без режима",
-            [TranslateKey.PopupHealD] = "Восстановить здоровье, голод и жажду полностью",
+            [TranslateKey.PopupHealD] = "Восстанавливает HP. Режим «Полное» также снимает кровотечение и радиацию, наполняет голод и жажду",
             [TranslateKey.PopupNotesD] = "Заметки администраторов об этом игроке",
             [TranslateKey.PopupKillD] = "Мгновенно убить игрока",
             [TranslateKey.PopupStripD] = "Забрать всё из инвентаря, пояса и одежды",
@@ -23963,6 +26201,7 @@ namespace Oxide.Plugins
             [TranslateKey.MapObjDeleteOk] = "Да, точно",
             [TranslateKey.MapObjLoot] = "Открыть инвентарь",
             [TranslateKey.MapObjOwnersMore] = "и ещё {0}",
+            [TranslateKey.MapCluTitle] = "В кластере: {0}",
             [TranslateKey.SecurityHeatWindow] = "Окно теплокарты, мин",
             [TranslateKey.HammerToggle] = "Admin Hammer",
             [TranslateKey.HammerToggleD] = "Данные объекта под прицелом",
@@ -24012,6 +26251,7 @@ namespace Oxide.Plugins
             [TranslateKey.MapLayerEvents] = "Ивенты",
             [TranslateKey.MapRefresh] = "Обновить",
             [TranslateKey.MapPause] = "Пауза",
+            [TranslateKey.MapClusters] = "Кластеры",
             [TranslateKey.MapOnline] = "Онлайн",
             [TranslateKey.MapNoSelection] = "Выбери игрока на карте или в списке",
             [TranslateKey.MapDetails] = "Подробнее",
@@ -24204,11 +26444,13 @@ namespace Oxide.Plugins
             [TranslateKey.MuteCustom] = "Custom duration",
             [TranslateKey.MuteCustomPh] = "Custom duration (e.g. 90, 2h, 1d12h)",
             [TranslateKey.MessageGave] = "Items given to {0}.",
+            [TranslateKey.MessageItemsGiven] = "Given to {0} player(s).",
             [TranslateKey.MessageBanDisabled] = "Ban is disabled in this build.",
             [TranslateKey.MessageHealed] = "{0} has been healed ({1} HP).",
             [TranslateKey.MessageKilled] = "{0} has been killed.",
             [TranslateKey.MessageStripped] = "{0}'s inventory has been stripped.",
             [TranslateKey.MessageSoon] = "Coming soon.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Update check started.",
             [TranslateKey.KickDefault] = "Kicked by admin",
             [TranslateKey.KickBroadcast] = "{0} was kicked: {1}",
             [TranslateKey.MuteBroadcast] = "{0} was muted: {1}",
@@ -24226,6 +26468,12 @@ namespace Oxide.Plugins
             [TranslateKey.PopupPerms] = "Permissions",
             [TranslateKey.PermsSearchPh] = "Search permission...",
             [TranslateKey.PermsNone] = "No permissions registered",
+            [TranslateKey.PermsGroupMembers] = "Players in {0}",
+            [TranslateKey.PermsGroupMembersCount] = "{0} players",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Filter by name...",
+            [TranslateKey.PermsGroupMembersEmpty] = "No players in this group",
+            [TranslateKey.PermsGroupMembersNomatch] = "No players match \"{0}\"",
+            [TranslateKey.PermsGroupMembersTip] = "Click to open the player's admin card",
             [TranslateKey.PermsUserperms] = "Player's direct permissions",
             [TranslateKey.SettingsStorage] = "Data storage",
             [TranslateKey.StorageNote] = "Switching backend auto-migrates the data",
@@ -24274,6 +26522,7 @@ namespace Oxide.Plugins
             [TranslateKey.NavigationDashboard] = "Dashboard",
             [TranslateKey.NavigationConsole] = "Live console",
             [TranslateKey.NavigationPlayers] = "Players",
+            [TranslateKey.NavigationItems] = "Items",
             [TranslateKey.NavigationVanish] = "Vanish",
             [TranslateKey.NavigationEsp] = "ESP",
             [TranslateKey.NavigationPerms] = "Permissions & groups",
@@ -24336,6 +26585,8 @@ namespace Oxide.Plugins
             [TranslateKey.VanishUnlockD] = "Lets an invisible admin open locked boxes and doors",
             [TranslateKey.VanishNoclip] = "Noclip with vanish",
             [TranslateKey.VanishNoclipD] = "Turns flying on and off together with invisibility",
+            [TranslateKey.VanishNoclipOff] = "Turn off noclip with vanish",
+            [TranslateKey.VanishNoclipOffD] = "Disables flying when invisibility is turned off",
             [TranslateKey.VanishAppearance] = "Appearance",
             [TranslateKey.VanishOpacity] = "Opacity for other admins",
             [TranslateKey.VanishSilColor] = "Silhouette color for other admins",
@@ -24518,6 +26769,7 @@ namespace Oxide.Plugins
             [TranslateKey.PopupConfirmD] = "This action will be applied immediately.",
             [TranslateKey.PopupHealCur] = "Current: {0} / {1} HP",
             [TranslateKey.PopupHealSet] = "Set",
+            [TranslateKey.PopupHealFull] = "Full",
             [TranslateKey.PopupHealMax] = "Max",
             [TranslateKey.PopupHealAdd] = "Add",
             [TranslateKey.PopupHealSub] = "Subtract",
@@ -24536,6 +26788,44 @@ namespace Oxide.Plugins
             [TranslateKey.GiveModeItem] = "Item",
             [TranslateKey.GiveModeBp] = "Blueprint",
             [TranslateKey.GiveNofav] = "No favorites yet. Tap the heart on an item.",
+            [TranslateKey.ItemsTitle] = "Items",
+            [TranslateKey.ItemsSub] = "Bulk item giving and item reference",
+            [TranslateKey.ItemsSearchPh] = "Search item...",
+            [TranslateKey.ItemsCart] = "Cart",
+            [TranslateKey.ItemsClear] = "Clear",
+            [TranslateKey.ItemsGive] = "Give",
+            [TranslateKey.ItemsNoitems] = "Nothing found",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Give to",
+            [TranslateKey.ItemsGiveSub] = "Select online players",
+            [TranslateKey.ItemsGiveSearchPh] = "Filter by name...",
+            [TranslateKey.ItemsGiveSelectall] = "Select all",
+            [TranslateKey.ItemsGiveClearsel] = "Clear selection",
+            [TranslateKey.ItemsGiveNoOnline] = "No players online",
+            [TranslateKey.ItemsGiveNoMatch] = "No players match \"{0}\"",
+            [TranslateKey.ItemsGiveConfirm] = "Give ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Show more ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Select at least one player",
+            [TranslateKey.ItemsGiveEmptyCart] = "Cart is empty",
+            [TranslateKey.ItemsInfoTitle] = "Item info",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "Category",
+            [TranslateKey.ItemsInfoRarity] = "Rarity",
+            [TranslateKey.ItemsInfoStack] = "Max stack",
+            [TranslateKey.ItemsInfoVolume] = "Volume (container space)",
+            [TranslateKey.ItemsInfoDurability] = "Durability",
+            [TranslateKey.ItemsInfoDescription] = "Description",
+            [TranslateKey.ItemsInfoBlueprint] = "Crafting",
+            [TranslateKey.ItemsInfoWorkbench] = "Workbench",
+            [TranslateKey.ItemsInfoCrafttime] = "Craft time",
+            [TranslateKey.ItemsInfoScrap] = "Scrap on recycle",
+            [TranslateKey.ItemsInfoIngredients] = "Ingredients",
+            [TranslateKey.ItemsInfoRecycle] = "Recycles into",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Recycles into (Green recycler)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Recycles into (Yellow recycler)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Recycles into (Red recycler)",
+            [TranslateKey.ItemsInfoMods] = "Mods (components)",
             [TranslateKey.GiveCustShort] = "Shortname (must exist)",
             [TranslateKey.GiveCustName] = "Item name",
             [TranslateKey.GiveCustSkin] = "Skin ID",
@@ -24570,6 +26860,10 @@ namespace Oxide.Plugins
             [TranslateKey.PluginsNone] = "No plugins found",
             [TranslateKey.PluginsCfgBtn] = "Config",
             [TranslateKey.PluginsLangBtn] = "Lang",
+            [TranslateKey.PluginsCheckUpdates] = "Check Updates",
+            [TranslateKey.PluginsChecking] = "Checking...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "UpdateChecker plugin is not installed.",
+            [TranslateKey.PluginsUpdateAvailable] = "Update: v{0} → v{1}",
             [TranslateKey.CfgTitle] = "{0}  ·  Config",
             [TranslateKey.CfgLangTitle] = "{0}  ·  Lang",
             [TranslateKey.CfgSaved] = "Configuration saved",
@@ -24592,6 +26886,7 @@ namespace Oxide.Plugins
             [TranslateKey.TipNavMap] = "Admin map with players, markers and actions right on the map",
             [TranslateKey.TipNavBinds] = "Ready-made console binds for the admin tools",
             [TranslateKey.TipNavQuickButtons] = "Your own quick action buttons for the panel and the map",
+            [TranslateKey.TipNavItems] = "Bulk item giving and item reference",
             [TranslateKey.CfgFormHint] = "Booleans toggle, numbers and strings are inputs, objects become groups, arrays open in their own window",
             [TranslateKey.CfgLangHint] = "Pick an existing language, or copy it into a new code",
             [TranslateKey.CfgLangExisting] = "Existing language codes",
@@ -24674,7 +26969,7 @@ namespace Oxide.Plugins
             [TranslateKey.HammerCrateTimerHint] = "Asks for a time and puts it on the timer",
             [TranslateKey.HammerLoot] = "Loot",
             [TranslateKey.HammerModeNone] = "No mode",
-            [TranslateKey.PopupHealD] = "Restore health, hunger and thirst to full",
+            [TranslateKey.PopupHealD] = "Restores HP. Pick Full mode to also clear bleeding/radiation and refill hunger and thirst",
             [TranslateKey.PopupNotesD] = "Admin notes about this player",
             [TranslateKey.PopupKillD] = "Kill the player instantly",
             [TranslateKey.PopupStripD] = "Take everything from inventory, belt and clothing",
@@ -24752,6 +27047,7 @@ namespace Oxide.Plugins
             [TranslateKey.MapObjDeleteOk] = "Yes, destroy",
             [TranslateKey.MapObjLoot] = "Open inventory",
             [TranslateKey.MapObjOwnersMore] = "and {0} more",
+            [TranslateKey.MapCluTitle] = "In cluster: {0}",
             [TranslateKey.SecurityHeatWindow] = "Heatmap window, min",
             [TranslateKey.HammerToggle] = "Admin Hammer",
             [TranslateKey.HammerToggleD] = "Info about the object you look at",
@@ -24801,6 +27097,7 @@ namespace Oxide.Plugins
             [TranslateKey.MapLayerEvents] = "Events",
             [TranslateKey.MapRefresh] = "Refresh",
             [TranslateKey.MapPause] = "Pause",
+            [TranslateKey.MapClusters] = "Clusters",
             [TranslateKey.MapOnline] = "Online",
             [TranslateKey.MapNoSelection] = "Pick a player on the map or in the list",
             [TranslateKey.MapDetails] = "Details",
@@ -24959,6 +27256,4232 @@ namespace Oxide.Plugins
             [TranslateKey.LockedFeat] =
                 "You don't have permission for this section. Ask the server owner or head admin to grant you access.",
             [TranslateKey.MessageNoperm] = "You don't have access to PowerfulAdmin."
+        };
+
+        private readonly Dictionary<string, string> _ptBr = new()
+        {
+            [TranslateKey.DashboardFps] = "FPS DO SERVIDOR",
+            [TranslateKey.DashboardSleeping] = "dormindo",
+            [TranslateKey.DashboardEntities] = "entidades",
+            [TranslateKey.DashboardNonearby] = "Nenhum jogador por perto",
+            [TranslateKey.ConsoleTabAll] = "Tudo",
+            [TranslateKey.ConsoleTabChat] = "Chat",
+            [TranslateKey.ConsoleTabCmd] = "Comandos",
+            [TranslateKey.ConsoleTabConn] = "Conexões",
+            [TranslateKey.ConsoleTabErr] = "Erros",
+            [TranslateKey.ConsoleExport] = "Exportar",
+            [TranslateKey.ConsoleExported] = "Console exportado para oxide/logs/PowerfulAdmin.",
+            [TranslateKey.ConsoleEmpty] = "Nenhum evento ainda",
+            [TranslateKey.WidgetConsoleOff] = "Console desativado",
+            [TranslateKey.PlayersSub2] = "{0} online · {1} conhecidos",
+            [TranslateKey.PlayersShown2] = "Exibindo {0}–{1} de {2}",
+            [TranslateKey.PlayersEmpty] = "Nenhum jogador encontrado",
+            [TranslateKey.MessageNotfound] = "Jogador não encontrado ou offline.",
+            [TranslateKey.MessageTpTo] = "Teleportado para {0}.",
+            [TranslateKey.MessageTpHere] = "{0} foi trazido até você.",
+            [TranslateKey.MessageTpCoords] = "{0} teleportado para as coordenadas ({1}).",
+            [TranslateKey.MessageTpLook] = "{0} teleportado na direção do seu olhar.",
+            [TranslateKey.MessageKicked] = "{0} foi expulso.",
+            [TranslateKey.MessageMuted] = "{0} foi mutado ({1}).",
+            [TranslateKey.MessageUnmuted] = "{0} teve o mute removido.",
+            [TranslateKey.MuteNotice] = "Você não pode usar o chat - está mutado. Motivo: {0}. Tempo restante: {1}.",
+            [TranslateKey.MuteDefault] = "Sem motivo",
+            [TranslateKey.MutePerm] = "permanente",
+            [TranslateKey.MuteCustom] = "Duração personalizada",
+            [TranslateKey.MuteCustomPh] = "Duração personalizada (ex.: 90, 2h, 1d12h)",
+            [TranslateKey.MessageGave] = "Itens entregues a {0}.",
+            [TranslateKey.MessageItemsGiven] = "Entregue a {0} jogador(es).",
+            [TranslateKey.MessageBanDisabled] = "O ban está desativado nesta build.",
+            [TranslateKey.MessageHealed] = "{0} foi curado ({1} HP).",
+            [TranslateKey.MessageKilled] = "{0} foi morto.",
+            [TranslateKey.MessageStripped] = "O inventário de {0} foi esvaziado.",
+            [TranslateKey.MessageSoon] = "Em breve.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Verificação de atualizações iniciada.",
+            [TranslateKey.KickDefault] = "Expulso por um admin",
+            [TranslateKey.KickBroadcast] = "{0} foi expulso: {1}",
+            [TranslateKey.MuteBroadcast] = "{0} foi mutado: {1}",
+            [TranslateKey.PopupSoon] = "em breve",
+            [TranslateKey.GiveCustomCat] = "Meus itens",
+            [TranslateKey.GiveNocustom] = "Nenhum item salvo. Crie um personalizado e ative «Salvar».",
+            [TranslateKey.GiveSave] = "Salvar item",
+            [TranslateKey.GiveSaveD] = "Salva o conjunto entregue na aba Meus itens para reutilizar",
+            [TranslateKey.SecurityConsolePlayer] = "Executar comandos como o jogador",
+            [TranslateKey.SecurityConsolePlayerD] = "Executa comandos de console como o admin, caso contrário rodam como o servidor",
+            [TranslateKey.SecurityConsoleEnabled] = "Console ativado",
+            [TranslateKey.SecurityConsoleEnabledD] =
+                "Desativa o console do servidor para todos, a permissão powerfuladmin.console ainda é necessária",
+            [TranslateKey.ConsoleDisabled] = "O console está desativado ou você não tem acesso",
+            [TranslateKey.PopupPerms] = "Permissões",
+            [TranslateKey.PermsSearchPh] = "Buscar permissão...",
+            [TranslateKey.PermsNone] = "Nenhuma permissão registrada",
+            [TranslateKey.PermsGroupMembers] = "Jogadores no grupo {0}",
+            [TranslateKey.PermsGroupMembersCount] = "{0} jogadores",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Filtrar por nome...",
+            [TranslateKey.PermsGroupMembersEmpty] = "Nenhum jogador neste grupo",
+            [TranslateKey.PermsGroupMembersNomatch] = "Nenhum jogador corresponde a \"{0}\"",
+            [TranslateKey.PermsGroupMembersTip] = "Clique para abrir a ficha do jogador",
+            [TranslateKey.PermsUserperms] = "Permissões diretas do jogador",
+            [TranslateKey.SettingsStorage] = "Armazenamento de dados",
+            [TranslateKey.StorageNote] = "Trocar o backend migra os dados automaticamente",
+            [TranslateKey.StorageDescJson] =
+                "JSON — os dados ficam em arquivos oxide/data/PowerfulAdmin/*.json.\nSimples e legível, bom para servidores pequenos.",
+            [TranslateKey.StorageDescSqlite] =
+                "SQLite — os dados ficam em um arquivo local PowerfulAdmin.db.\nRápido, sem banco externo. A opção padrão.",
+            [TranslateKey.StorageHost] = "Host do MySQL",
+            [TranslateKey.StoragePort] = "Porta",
+            [TranslateKey.StorageDb] = "Banco de dados",
+            [TranslateKey.StorageUser] = "Usuário",
+            [TranslateKey.StoragePass] = "Senha",
+            [TranslateKey.StorageTest] = "Testar MySQL",
+            [TranslateKey.StorageMigrate] = "Migrar",
+            [TranslateKey.StorageMigrateQ] = "Migrar os dados para cá?",
+            [TranslateKey.ConfirmYes] = "Sim",
+            [TranslateKey.ConfirmNo] = "Não",
+            [TranslateKey.StorageStNone] = "Não conectado",
+            [TranslateKey.StorageStConnecting] = "Conectando...",
+            [TranslateKey.StorageStConnected] = "Conectado",
+            [TranslateKey.StorageStMigrating] = "Migrando dados...",
+            [TranslateKey.StorageStFailed] = "Falha na conexão",
+            [TranslateKey.StorageStMigrateFailed] = "Falha ao migrar os dados",
+            [TranslateKey.SettingsNotify] = "Notificações",
+            [TranslateKey.NotifyProviderLabel] = "Provedor de notificações",
+            [TranslateKey.NotifyProviderD] =
+                "Automático usa o primeiro plugin carregado, priorizando o NCP; Desligado silencia só os avisos de sucesso, erros continuam chegando no chat",
+            [TranslateKey.NotifyProviderAuto] = "Automático",
+            [TranslateKey.NotifyProviderNotify] = "Notify",
+            [TranslateKey.NotifyProviderNcp] = "NCP",
+            [TranslateKey.NotifyProviderChat] = "Chat",
+            [TranslateKey.NotifyProviderOff] = "Desligado",
+            [TranslateKey.NotifySubNotify] = "Notify",
+            [TranslateKey.NotifySubNcp] = "NCP",
+            [TranslateKey.NotifyTypeSuccess] = "ID do tipo: sucesso",
+            [TranslateKey.NotifyTypeError] = "ID do tipo: erro",
+            [TranslateKey.NotifyTypePlayer] = "ID do tipo: jogador",
+            [TranslateKey.NcpTypeSuccess] = "ID do tipo: sucesso",
+            [TranslateKey.NcpTypeError] = "ID do tipo: erro",
+            [TranslateKey.NcpTypePlayer] = "ID do tipo: jogador",
+            [TranslateKey.TopSearch] = "Buscar jogador, comando, ID...",
+            [TranslateKey.TopSearchNone] = "Nenhum jogador encontrado",
+            [TranslateKey.NavigationCatMain] = "PRINCIPAL",
+            [TranslateKey.NavigationCatTools] = "FERRAMENTAS",
+            [TranslateKey.NavigationCatManage] = "GESTÃO",
+            [TranslateKey.NavigationDashboard] = "Painel",
+            [TranslateKey.NavigationConsole] = "Console ao vivo",
+            [TranslateKey.NavigationPlayers] = "Jogadores",
+            [TranslateKey.NavigationItems] = "Itens",
+            [TranslateKey.NavigationVanish] = "Vanish",
+            [TranslateKey.NavigationEsp] = "ESP",
+            [TranslateKey.NavigationPerms] = "Permissões e grupos",
+            [TranslateKey.NavigationLogs] = "Logs",
+            [TranslateKey.NavigationPlugins] = "Plugins",
+            [TranslateKey.NavigationConvars] = "ConVars",
+            [TranslateKey.NavigationAppearance] = "Aparência",
+            [TranslateKey.NavigationSettings] = "Configurações",
+            [TranslateKey.AppearanceTitle] = "Aparência",
+            [TranslateKey.AppearanceSub] = "tema de cores do painel",
+            [TranslateKey.ButtonSend] = "Enviar",
+            [TranslateKey.ButtonSave] = "Salvar",
+            [TranslateKey.ButtonReload] = "Recarregar",
+            [TranslateKey.FilterAll] = "Todos",
+            [TranslateKey.FilterOnline] = "Online",
+            [TranslateKey.ColumnPlayer] = "Jogador",
+            [TranslateKey.ColumnTime] = "Tempo",
+            [TranslateKey.ColumnPing] = "Ping",
+            [TranslateKey.ColumnGroup] = "Grupo",
+            [TranslateKey.ColumnActions] = "Ações",
+            [TranslateKey.DashboardTitle] = "Painel",
+            [TranslateKey.DashboardSub] = "visão geral do servidor em tempo real",
+            [TranslateKey.DashboardOnline] = "ONLINE",
+            [TranslateKey.DashboardQueue] = "fila {0} · entrando {1}",
+            [TranslateKey.DashboardAdmins] = "ADMINS ATIVOS",
+            [TranslateKey.DashboardNewplayers] = "NOVOS JOGADORES",
+            [TranslateKey.DashboardNewplayersD] = "em 24h",
+            [TranslateKey.DashboardAllonline] = "todos online",
+            [TranslateKey.DashboardLiveconsole] = "Console ao vivo",
+            [TranslateKey.DashboardNearby] = "Jogadores por perto",
+            [TranslateKey.DashboardQuicktoggles] = "Alternâncias rápidas de admin",
+            [TranslateKey.NearbyAll] = "Todos os jogadores →",
+            [TranslateKey.ToggleVanish] = "Vanish",
+            [TranslateKey.ToggleVanishD] = "Invisível para os jogadores",
+            [TranslateKey.ToggleGodmode] = "Godmode",
+            [TranslateKey.ToggleGodmodeD] = "Imortalidade",
+            [TranslateKey.ToggleEsp] = "ESP",
+            [TranslateKey.ToggleEspD] = "Ligar/desligar (configure na aba ESP)",
+            [TranslateKey.ToggleNoclip] = "Noclip",
+            [TranslateKey.ToggleNoclipD] = "Atravessar paredes",
+            [TranslateKey.ToggleWidget] = "Mini-widget",
+            [TranslateKey.ToggleWidgetD] = "Widget de HUD no jogo",
+            [TranslateKey.ToggleInspect] = "Inspecionar",
+            [TranslateKey.ToggleInspectD] = "De perto: E para inventário, botão direito para o card",
+            [TranslateKey.InspectHintCard] = "Botão direito - card",
+            [TranslateKey.InspectHintInv] = "E - inventário",
+            [TranslateKey.ConsoleTitle] = "Console ao vivo",
+            [TranslateKey.ConsoleSub] = "conexão direta em tempo real com o servidor",
+            [TranslateKey.ConsoleStream] = "Fluxo de eventos",
+            [TranslateKey.ConsolePlaceholder] = "Digite um comando ou texto...",
+            [TranslateKey.PlayersTitle] = "Jogadores",
+            [TranslateKey.VanishTitle] = "Vanish",
+            [TranslateKey.VanishSub] = "invisibilidade e comportamento do admin",
+            [TranslateKey.VanishMain] = "Parâmetros principais",
+            [TranslateKey.VanishEnable] = "Ativar Vanish",
+            [TranslateKey.VanishEnableD] = "Interruptor geral do modo",
+            [TranslateKey.VanishAuto] = "Vanish automático ao entrar",
+            [TranslateKey.VanishAutoD] = "Liga a invisibilidade automaticamente quando o admin conecta",
+            [TranslateKey.VanishUnlock] = "Abrir contêineres trancados",
+            [TranslateKey.VanishUnlockD] = "Permite que um admin invisível abra caixas e portas trancadas",
+            [TranslateKey.VanishNoclip] = "Noclip junto com o vanish",
+            [TranslateKey.VanishNoclipD] = "Liga e desliga o voo junto com a invisibilidade",
+            [TranslateKey.VanishNoclipOff] = "Desligar o noclip junto com o vanish",
+            [TranslateKey.VanishNoclipOffD] = "Desativa o voo ao desligar a invisibilidade",
+            [TranslateKey.VanishAppearance] = "Aparência",
+            [TranslateKey.VanishOpacity] = "Opacidade para outros admins",
+            [TranslateKey.VanishSilColor] = "Cor da silhueta para outros admins",
+            [TranslateKey.VanishLogging] = "Registro",
+            [TranslateKey.VanishLogToggle] = "Registrar cada ativação/desativação",
+            [TranslateKey.VanishLogToggleD] = "Grava cada troca de invisibilidade no histórico e no webhook do Discord",
+            [TranslateKey.VanishLogNotify] = "Notificar outros admins",
+            [TranslateKey.VanishLogNotifyD] = "Avisa no chat aos outros admins quem ficou invisível",
+            [TranslateKey.EspTitle] = "ESP",
+            [TranslateKey.EspSub] = "visualize objetos e jogadores através das paredes",
+            [TranslateKey.EspWhat] = "O que exibir",
+            [TranslateKey.EspMaster] = "Ativar ESP",
+            [TranslateKey.EspMasterD] = "Interruptor geral do ESP, as categorias abaixo só funcionam com ele ligado",
+            [TranslateKey.EspPlayers] = "Jogadores",
+            [TranslateKey.EspLoot] = "Loot (contêineres)",
+            [TranslateKey.EspBoxes] = "Caixas de jogador",
+            [TranslateKey.EspTc] = "Armários de ferramentas",
+            [TranslateKey.EspBeds] = "Sacos / camas",
+            [TranslateKey.EspTraps] = "Armadilhas",
+            [TranslateKey.EspStash] = "Esconderijos",
+            [TranslateKey.EspDrops] = "Itens dropados",
+            [TranslateKey.EspSleepers] = "Dormentes",
+            [TranslateKey.EspTurrets] = "Torretas e armadilhas",
+            [TranslateKey.EspVehicles] = "Veículos",
+            [TranslateKey.EspNpc] = "NPCs e animais",
+            [TranslateKey.EspNodes] = "Nós de minério",
+            [TranslateKey.EspForage] = "Coletáveis",
+            [TranslateKey.EspRender] = "Parâmetros de renderização",
+            [TranslateKey.EspRadius] = "Raio",
+            [TranslateKey.EspBoxopacity] = "Opacidade da caixa",
+            [TranslateKey.EspTextopacity] = "Opacidade do texto",
+            [TranslateKey.EspColors] = "Cores",
+            [TranslateKey.EspColorEdit] = "Cor do marcador",
+            [TranslateKey.EspColorFormat] = "R G B A, valores 0-1",
+            [TranslateKey.EspEnemies] = "Inimigos",
+            [TranslateKey.EspTeam] = "Equipe",
+            [TranslateKey.EspAdmins] = "Admins",
+            [TranslateKey.EspVanishTag] = "[ADMIN EM VANISH]",
+            [TranslateKey.EspExtra] = "Extra",
+            [TranslateKey.EspDistance] = "Distância (m)",
+            [TranslateKey.EspDistanceD] = "Número ao lado do alvo",
+            [TranslateKey.EspHp] = "Vida (HP)",
+            [TranslateKey.EspHpD] = "Barra de vida",
+            [TranslateKey.EspHeld] = "Item na mão",
+            [TranslateKey.EspHeldD] = "Arma/ferramenta nas mãos",
+            [TranslateKey.DropdownTpTitle] = "Teleportar até o jogador",
+            [TranslateKey.DropdownKickTitle] = "Expulsar jogador",
+            [TranslateKey.DropdownMuteTitle] = "Mutar jogador",
+            [TranslateKey.DropdownManageTitle] = "Gestão do jogador",
+            [TranslateKey.DropdownMode] = "Modo",
+            [TranslateKey.DropdownReasonPh] = "Motivo (curto, visível para o jogador)",
+            [TranslateKey.DropdownCommentPh] = "Comentário detalhado (para o log)",
+            [TranslateKey.DropdownTome] = "Até mim",
+            [TranslateKey.DropdownToplayer] = "Eu até o jogador",
+            [TranslateKey.DropdownTocoords] = "Para coordenadas",
+            [TranslateKey.DropdownTolook] = "Para a mira",
+            [TranslateKey.DropdownCoords] = "Coordenadas (X / Y / Z)",
+            [TranslateKey.DropdownCancel] = "Cancelar",
+            [TranslateKey.DropdownTpOk] = "Teleportar",
+            [TranslateKey.DropdownMuteOk] = "Mutar",
+            [TranslateKey.DropdownTemplate] = "Modelo",
+            [TranslateKey.DropdownDuration] = "Duração",
+            [TranslateKey.DropdownNotify] = "Notificar",
+            [TranslateKey.DropdownNotifyPlayer] = "Só o jogador",
+            [TranslateKey.DropdownNotifyDiscord] = "+ para o Discord",
+            [TranslateKey.DropdownNotifyChat] = "Para o chat global",
+            [TranslateKey.DropdownNotifyNotify] = "Via Notify/NCP",
+            [TranslateKey.DropdownKickOk] = "Expulsar",
+            [TranslateKey.Duration1h] = "1h",
+            [TranslateKey.Duration1d] = "1d",
+            [TranslateKey.Duration7d] = "7d",
+            [TranslateKey.Duration30d] = "30d",
+            [TranslateKey.DurationPerm] = "∞",
+            [TranslateKey.PopupHeal] = "Curar",
+            [TranslateKey.PopupKill] = "Matar",
+            [TranslateKey.PopupStrip] = "Esvaziar",
+            [TranslateKey.PopupKick] = "Expulsar",
+            [TranslateKey.PopupBan] = "Banir",
+            [TranslateKey.PopupFreeze] = "Congelar",
+            [TranslateKey.PopupMute] = "Mutar",
+            [TranslateKey.PopupTp] = "Teleportar",
+            [TranslateKey.PopupInv] = "Inventário",
+            [TranslateKey.PopupSpectate] = "Espectar",
+            [TranslateKey.PopupShowMap] = "Mostrar no mapa",
+            [TranslateKey.SpectateExit] = "ESPAÇO / AGACHAR - próximo alvo, R - sair",
+            [TranslateKey.SpectateTarget] = "ESPECTANDO: {0}",
+            [TranslateKey.SpectateLost] = "Não há mais alvos para espectar, modo encerrado",
+            [TranslateKey.PopupGive] = "Dar",
+            [TranslateKey.PopupBlueprints] = "Blueprints",
+            [TranslateKey.BlueprintOffline] = "O jogador precisa estar online",
+            [TranslateKey.BlueprintUnlockedCount] = "Desbloqueados: {0}",
+            [TranslateKey.BlueprintHint] = "Clique em um item para desbloquear a receita para o jogador.",
+            [TranslateKey.BlueprintUnlockAll] = "Desbloquear tudo",
+            [TranslateKey.BlueprintReset] = "Redefinir",
+            [TranslateKey.BlueprintAllConfirm] = "Desbloquear TODOS os blueprints para este jogador?",
+            [TranslateKey.BlueprintResetConfirm] = "Redefinir todos os blueprints deste jogador?",
+            [TranslateKey.BlueprintConfirmYes] = "Confirmar",
+            [TranslateKey.BlueprintConfirmCancel] = "Cancelar",
+            [TranslateKey.PopupModifiers] = "Modificadores",
+            [TranslateKey.ModifierFormatHint] = "O valor é um multiplicador: 1 = 100%, 2 = 200%",
+            [TranslateKey.ModifierClear] = "Limpar tudo",
+            [TranslateKey.ModifierApply] = "Aplicar",
+            [TranslateKey.ModifierColCur] = "Atual",
+            [TranslateKey.ModifierColDur] = "Duração (s)",
+            [TranslateKey.ModifierColVal] = "Multiplicador",
+            [TranslateKey.PopupVitals] = "Vitais",
+            [TranslateKey.PopupEconomy] = "Economia",
+            [TranslateKey.EconomyNoProvider] = "Nenhum plugin de economia carregado",
+            [TranslateKey.EconomyAmountPh] = "Quantia",
+            [TranslateKey.EconomyAmountLabel] = "Valor da operação",
+            [TranslateKey.EconomySource] = "Qual economia debitar e creditar",
+            [TranslateKey.EconomyClear] = "Redefinir",
+            [TranslateKey.EconomyGive] = "Dar",
+            [TranslateKey.EconomyTake] = "Tirar",
+            [TranslateKey.EconomySet] = "Definir",
+            [TranslateKey.EconomyGaveOk] = "O saldo de {0} aumentou em {1}",
+            [TranslateKey.EconomyTookOk] = "{1} retirado de {0}",
+            [TranslateKey.EconomySetOk] = "O saldo de {0} foi definido como {1}",
+            [TranslateKey.EconomyOpFailed] = "A operação falhou",
+            [TranslateKey.EconomyBadAmount] = "A quantia deve ser um número positivo",
+            [TranslateKey.EconomyOnlineOnly] = "Essa economia só funciona com jogadores online",
+            [TranslateKey.SkillPointsLabel] = "Pontos disponíveis",
+            [TranslateKey.SkillPointsAmountPh] = "Pontos",
+            [TranslateKey.SkillPointsGaveOk] = "{1} pontos de habilidade dados a {0}",
+            [TranslateKey.SkillPointsTakeSoon] = "A API do plugin ainda não permite retirar pontos",
+            [TranslateKey.VitalHint] = "Cada valor é limitado à faixa do seu vital; o campo Max amplia esse limite.",
+            [TranslateKey.VitalColCur] = "Atual",
+            [TranslateKey.VitalColVal] = "Valor",
+            [TranslateKey.VitalColMax] = "Máx",
+            [TranslateKey.StatsTitle] = "Estatísticas",
+            [TranslateKey.StatReveal] = "Revelar",
+            [TranslateKey.StatConnection] = "Conexão",
+            [TranslateKey.StatStatus] = "Status",
+            [TranslateKey.StatSteamId] = "SteamID",
+            [TranslateKey.StatPing] = "Ping",
+            [TranslateKey.StatSession] = "Sessão",
+            [TranslateKey.StatPlaytime] = "Tempo jogado",
+            [TranslateKey.StatRustHours] = "Horas em Rust",
+            [TranslateKey.StatFirstSeen] = "Primeira vez visto",
+            [TranslateKey.StatLastSeen] = "Última vez visto",
+            [TranslateKey.StatIp] = "IP",
+            [TranslateKey.StatGroups] = "Grupos",
+            [TranslateKey.StatMuted] = "Mutado",
+            [TranslateKey.StatVitals] = "Vitais",
+            [TranslateKey.StatHealth] = "Vida",
+            [TranslateKey.StatHunger] = "Fome",
+            [TranslateKey.StatThirst] = "Sede",
+            [TranslateKey.StatRadiation] = "Radiação",
+            [TranslateKey.StatTemperature] = "Temperatura",
+            [TranslateKey.StatWetness] = "Umidade",
+            [TranslateKey.StatBleeding] = "Sangramento",
+            [TranslateKey.StatPoison] = "Veneno",
+            [TranslateKey.StatComfort] = "Conforto",
+            [TranslateKey.StatBalance] = "Saldo",
+            [TranslateKey.StatBalancePhysical] = "(moeda física)",
+            [TranslateKey.StateOffline] = "Offline",
+            [TranslateKey.StateDead] = "Morto",
+            [TranslateKey.StateWounded] = "Ferido",
+            [TranslateKey.StateSleeping] = "Dormindo",
+            [TranslateKey.StateOnline] = "Online",
+            [TranslateKey.CommonYes] = "Sim",
+            [TranslateKey.CommonNo] = "Não",
+            [TranslateKey.StatNoSteamKey] = "SEM CHAVE DA STEAM-API",
+            [TranslateKey.WelcomeTitle] = "Bem-vindo!",
+            [TranslateKey.WelcomeBody] =
+                "Este é o painel do PowerfulAdmin.\n\n" +
+                "· Painel - visão geral do servidor e alternâncias rápidas (Vanish, ESP, Godmode, Noclip).\n" +
+                "· Jogadores - gerencie-os: curar, expulsar, banir, mutar, teleportar, inventário, dar itens, blueprints, modificadores.\n" +
+                "· Inspecionar - olhe para um jogador e pressione o botão direito para abrir o card dele.\n" +
+                "· Permissões, Logs, Plugins, ConVars e Configurações ficam na barra lateral.\n\n" +
+                "Aproveite!",
+            [TranslateKey.WelcomeBtn] = "Começar",
+            [TranslateKey.ConvarsTitle] = "ConVars",
+            [TranslateKey.ConvarsSub] = "Veja e edite as variáveis de console do servidor",
+            [TranslateKey.ConvarsAll] = "Todas",
+            [TranslateKey.ConvarsSearchPh] = "Buscar convar...",
+            [TranslateKey.PopupBack] = "Voltar",
+            [TranslateKey.PopupConfirm] = "Confirmar",
+            [TranslateKey.PopupConfirmQ] = "Executar «{0}» em {1}?",
+            [TranslateKey.PopupConfirmD] = "Esta ação será aplicada imediatamente.",
+            [TranslateKey.PopupHealCur] = "Atual: {0} / {1} HP",
+            [TranslateKey.PopupHealSet] = "Definir",
+            [TranslateKey.PopupHealFull] = "Completo",
+            [TranslateKey.PopupHealMax] = "Máx",
+            [TranslateKey.PopupHealAdd] = "Adicionar",
+            [TranslateKey.PopupHealSub] = "Subtrair",
+            [TranslateKey.PopupHealAmt] = "Quantidade de HP",
+            [TranslateKey.PopupReason] = "Motivo",
+            [TranslateKey.PopupComment] = "Comentário (nota do admin)",
+            [TranslateKey.PopupTemplates] = "Modelos",
+            [TranslateKey.GiveSearchPh] = "Buscar item...",
+            [TranslateKey.GiveCart] = "Carrinho",
+            [TranslateKey.GiveAmtBad] = "Quantidade: número inteiro de 1 a 2147483647",
+            [TranslateKey.GiveClear] = "Limpar",
+            [TranslateKey.GiveConfirm] = "Dar",
+            [TranslateKey.GiveNoitems] = "Nada encontrado",
+            [TranslateKey.GiveCustom] = "Item personalizado",
+            [TranslateKey.GiveFav] = "Favoritos",
+            [TranslateKey.GiveModeItem] = "Item",
+            [TranslateKey.GiveModeBp] = "Blueprint",
+            [TranslateKey.GiveNofav] = "Ainda sem favoritos. Toque no coração de um item.",
+            [TranslateKey.ItemsTitle] = "Itens",
+            [TranslateKey.ItemsSub] = "Entrega em massa de itens e referência de itens",
+            [TranslateKey.ItemsSearchPh] = "Buscar item...",
+            [TranslateKey.ItemsCart] = "Carrinho",
+            [TranslateKey.ItemsClear] = "Limpar",
+            [TranslateKey.ItemsGive] = "Dar",
+            [TranslateKey.ItemsNoitems] = "Nada encontrado",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Dar para",
+            [TranslateKey.ItemsGiveSub] = "Selecione jogadores online",
+            [TranslateKey.ItemsGiveSearchPh] = "Filtrar por nome...",
+            [TranslateKey.ItemsGiveSelectall] = "Selecionar todos",
+            [TranslateKey.ItemsGiveClearsel] = "Limpar seleção",
+            [TranslateKey.ItemsGiveNoOnline] = "Nenhum jogador online",
+            [TranslateKey.ItemsGiveNoMatch] = "Nenhum jogador corresponde a \"{0}\"",
+            [TranslateKey.ItemsGiveConfirm] = "Dar ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Mostrar mais ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Selecione pelo menos um jogador",
+            [TranslateKey.ItemsGiveEmptyCart] = "O carrinho está vazio",
+            [TranslateKey.ItemsInfoTitle] = "Informações do item",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "Categoria",
+            [TranslateKey.ItemsInfoRarity] = "Raridade",
+            [TranslateKey.ItemsInfoStack] = "Pilha máx.",
+            [TranslateKey.ItemsInfoVolume] = "Volume (espaço no contêiner)",
+            [TranslateKey.ItemsInfoDurability] = "Durabilidade",
+            [TranslateKey.ItemsInfoDescription] = "Descrição",
+            [TranslateKey.ItemsInfoBlueprint] = "Fabricação",
+            [TranslateKey.ItemsInfoWorkbench] = "Bancada",
+            [TranslateKey.ItemsInfoCrafttime] = "Tempo de fabricação",
+            [TranslateKey.ItemsInfoScrap] = "Sucata ao reciclar",
+            [TranslateKey.ItemsInfoIngredients] = "Ingredientes",
+            [TranslateKey.ItemsInfoRecycle] = "Recicla em",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Recicla em (Recicladora verde)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Recicla em (Recicladora amarela)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Recicla em (Recicladora vermelha)",
+            [TranslateKey.ItemsInfoMods] = "Mods (componentes)",
+            [TranslateKey.GiveCustShort] = "Shortname (precisa existir)",
+            [TranslateKey.GiveCustName] = "Nome do item",
+            [TranslateKey.GiveCustSkin] = "Skin ID",
+            [TranslateKey.GiveCustQty] = "Quantidade",
+            [TranslateKey.GiveCustBad] = "não encontrado",
+            [TranslateKey.GiveCustAdd] = "Adicionar",
+            [TranslateKey.PermsTitle] = "Permissões e grupos",
+            [TranslateKey.PermsSub] = "as permissões se aplicam somente ao grupo selecionado",
+            [TranslateKey.PermsNewgroup] = "Novo grupo",
+            [TranslateKey.PermsNewgroupD] = "Digite um nome para o novo grupo de permissões",
+            [TranslateKey.PermsNewgroupPh] = "ex.: helper",
+            [TranslateKey.PermsInherit] = "Herdar permissões de:",
+            [TranslateKey.PermsParentNone] = "— Sem herança (novo) —",
+            [TranslateKey.PermsCreate] = "Criar",
+            [TranslateKey.PermsAutosave] = "salvo automaticamente",
+            [TranslateKey.PermsGroups] = "Grupos",
+            [TranslateKey.PermsForgroup] = "Permissões do grupo:",
+            [TranslateKey.PermsInherited] = "Herdado de {0}",
+            [TranslateKey.PermsDelGroup] = "Excluir grupo",
+            [TranslateKey.PermsDelConfirm] = "Confirmar exclusão?",
+            [TranslateKey.LogsTitle] = "Logs",
+            [TranslateKey.LogsSub] = "registro de ações dos admins",
+            [TranslateKey.LogsJournal] = "Histórico de ações dos admins",
+            [TranslateKey.LogsShowMore] = "Mostrar mais (+{0})",
+            [TranslateKey.PluginsTitle] = "Plugins",
+            [TranslateKey.PluginsSub] = "plugins carregados · recarregar e ativar/desativar",
+            [TranslateKey.PluginsActive] = "Ativo",
+            [TranslateKey.PluginsNoCommands] = "Este plugin não tem comandos registrados.",
+            [TranslateKey.PluginsOff] = "Desativado",
+            [TranslateKey.PluginsUnloaded] = "não carregado",
+            [TranslateKey.PluginsSearchPh] = "Buscar plugin...",
+            [TranslateKey.PluginsNone] = "Nenhum plugin encontrado",
+            [TranslateKey.PluginsCfgBtn] = "Config",
+            [TranslateKey.PluginsLangBtn] = "Idioma",
+            [TranslateKey.PluginsCheckUpdates] = "Verificar atualizações",
+            [TranslateKey.PluginsChecking] = "Verificando...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "O plugin UpdateChecker não está instalado.",
+            [TranslateKey.PluginsUpdateAvailable] = "Atualização: v{0} → v{1}",
+            [TranslateKey.CfgTitle] = "{0}  ·  Config",
+            [TranslateKey.CfgLangTitle] = "{0}  ·  Idioma",
+            [TranslateKey.CfgSaved] = "Configuração salva",
+            [TranslateKey.CfgParseError] = "Não foi possível ler ou interpretar o arquivo",
+            [TranslateKey.CfgWriteError] = "Falha ao gravar o arquivo",
+            [TranslateKey.CfgBadValue] = "Valor inválido para {0}",
+            [TranslateKey.CfgNoLang] = "Este plugin não tem arquivos de idioma",
+            [TranslateKey.CfgLangNew] = "novo código",
+            [TranslateKey.TipNavDashboard] = "Resumo do servidor em tempo real: jogadores online, desempenho e eventos recentes",
+            [TranslateKey.TipNavConsole] = "Console do servidor: leia o log e envie comandos",
+            [TranslateKey.TipNavPlayers] = "Lista de jogadores com busca e todas as ações sobre um jogador",
+            [TranslateKey.TipNavVanish] = "Invisibilidade do admin e tudo que ela ativa junto",
+            [TranslateKey.TipNavEsp] = "Destaca jogadores, NPCs e entidades através das paredes",
+            [TranslateKey.TipNavPerms] = "Permissões e grupos: conceda, revogue e edite a participação",
+            [TranslateKey.TipNavLogs] = "Histórico de ações dos admins, chat e eventos de plugins",
+            [TranslateKey.TipNavPlugins] = "Plugins do servidor: carregue, recarregue e edite configs e arquivos de idioma",
+            [TranslateKey.TipNavConvars] = "Convars do servidor: busque uma variável e altere seu valor",
+            [TranslateKey.TipNavAppearance] = "Tema, fonte e tamanho do painel",
+            [TranslateKey.TipNavSettings] = "Configurações do plugin: integrações, notificações, segurança e armazenamento",
+            [TranslateKey.TipNavMap] = "Mapa do admin com jogadores, marcadores e ações direto no mapa",
+            [TranslateKey.TipNavBinds] = "Binds de console prontos para as ferramentas de admin",
+            [TranslateKey.TipNavQuickButtons] = "Seus próprios botões de ação rápida para o painel e o mapa",
+            [TranslateKey.TipNavItems] = "Entrega em massa de itens e referência de itens",
+            [TranslateKey.CfgFormHint] = "Booleanos viram alternâncias, números e textos viram campos, objetos viram grupos, arrays abrem em janela própria",
+            [TranslateKey.CfgLangHint] = "Escolha um idioma existente ou copie-o para um novo código",
+            [TranslateKey.CfgLangExisting] = "Códigos de idioma existentes",
+            [TranslateKey.CfgLangCopy] = "Criar uma cópia",
+            [TranslateKey.CfgLangCopyFrom] = "cópia de {0}",
+            [TranslateKey.CfgLangNewD] = "Digite um código de idioma e pressione Enter, o idioma aberto será copiado para ele",
+            [TranslateKey.CfgLangBad] = "Código de idioma desconhecido, escolha um da lista",
+            [TranslateKey.CfgLangExists] = "Este plugin já tem esse idioma",
+            [TranslateKey.CfgLangDel] = "Excluir {0}",
+            [TranslateKey.CfgLangDelSure] = "Excluir {0}?",
+            [TranslateKey.CfgLangDelD] = "Exclui o arquivo da localização aberta, sem volta",
+            [TranslateKey.CfgLangDeleted] = "Localização {0} excluída",
+            [TranslateKey.CfgLangLast] = "A última localização não pode ser excluída",
+            [TranslateKey.CfgLangPick] = "Ou escolha um código pronto",
+            [TranslateKey.CfgFieldNew] = "Novo campo",
+            [TranslateKey.CfgFieldKeyHint] = "chave, por exemplo ui.algo",
+            [TranslateKey.CfgFieldValHint] = "valor padrão",
+            [TranslateKey.CfgFieldAdd] = "Adicionar a todos os idiomas",
+            [TranslateKey.CfgFieldD] =
+                "Digite uma chave e um valor, pressione Enter em cada campo, depois este botão - a chave aparece em todas as localizações do plugin",
+            [TranslateKey.CfgFieldBad] = "Digite o nome da chave e pressione Enter",
+            [TranslateKey.CfgFieldExists] = "Essa chave já existe nesta localização",
+            [TranslateKey.CfgFieldAdded] = "Chave {0} adicionada a {1} localização(ões)",
+            [TranslateKey.CfgArrTitle] = "Array  ·  {0}",
+            [TranslateKey.CfgArrHint] = "{0} elementos, clique em um para expandir",
+            [TranslateKey.CfgArrEdit] = "Editar",
+            [TranslateKey.CfgArrAdd] = "Adicionar elemento",
+            [TranslateKey.CfgArrApply] = "Aplicar",
+            [TranslateKey.CfgArrEmpty] = "O array está vazio",
+            [TranslateKey.CfgReloadLabel] = "Recarregar o plugin após salvar",
+            [TranslateKey.CfgEmpty] = "Nada para editar",
+            [TranslateKey.CfgSelf] = "O PowerfulAdmin não pode editar a si mesmo",
+            [TranslateKey.ButtonCommands] = "Comandos",
+            [TranslateKey.ButtonLoad] = "Ativar",
+            [TranslateKey.ButtonUnload] = "Desativar",
+            [TranslateKey.PluginsSelf] = "O PowerfulAdmin não pode ser desativado pelo próprio gerenciador.",
+            [TranslateKey.LogsFAll] = "Tudo",
+            [TranslateKey.LogsFAct] = "Ações",
+            [TranslateKey.LogsFChat] = "Chat",
+            [TranslateKey.LogsFConn] = "Conexões",
+            [TranslateKey.LogsFErr] = "Erros",
+            [TranslateKey.SettingsTitle] = "Configurações",
+            [TranslateKey.SettingsSub] = "interface · integrações · segurança",
+            [TranslateKey.SettingsTheme] = "Tema",
+            [TranslateKey.AppVitals] = "Vitais (exibir no HUD)",
+            [TranslateKey.HammerHint] = "Segure um martelo",
+            [TranslateKey.HammerEmpty] = "Olhe para um objeto",
+            [TranslateKey.HammerOwner] = "Dono",
+            [TranslateKey.HammerAuthed] = "Autorizado",
+            [TranslateKey.HammerItems] = "Conteúdo",
+            [TranslateKey.HammerCode] = "Código",
+            [TranslateKey.HammerGuest] = "Convidado",
+            [TranslateKey.HammerUpkeep] = "protegido",
+            [TranslateKey.HammerBag] = "Saco atribuído a",
+            [TranslateKey.HammerGeneral] = "Geral",
+            [TranslateKey.HammerWhitelist] = "Whitelist da fechadura",
+            [TranslateKey.HammerPosition] = "Posição",
+            [TranslateKey.HammerDistance] = "Distância",
+            [TranslateKey.HammerGrade] = "Nível",
+            [TranslateKey.HammerBuilding] = "Construção",
+            [TranslateKey.HammerParent] = "Pai",
+            [TranslateKey.HammerSteamId] = "SteamID",
+            [TranslateKey.HammerState] = "Estado",
+            [TranslateKey.HammerTeam] = "Equipe",
+            [TranslateKey.HammerPower] = "Energia",
+            [TranslateKey.HammerPowered] = "Energizado",
+            [TranslateKey.HammerMounted] = "Montado",
+            [TranslateKey.HammerHidden] = "Código oculto",
+            [TranslateKey.HammerReveal] = "Revelar",
+            [TranslateKey.HammerHide] = "Ocultar",
+            [TranslateKey.HammerDelete] = "Excluir",
+            [TranslateKey.HammerDeleteGibs] = "Com destroços",
+            [TranslateKey.HammerDeleteParents] = "Com vinculados",
+            [TranslateKey.HammerPlainHint] = "O objeto desaparece sem deixar rastro",
+            [TranslateKey.HammerGibsHint] = "O objeto se quebra em destroços, como uma demolição",
+            [TranslateKey.HammerParentsHint] = "Remove toda a estrutura vinculada, não só este bloco",
+            [TranslateKey.HammerCrateUnlock] = "Destravar",
+            [TranslateKey.HammerCrateTimer] = "Timer",
+            [TranslateKey.HammerCrateUnlockHint] = "O caixote abre na hora, sem precisar hackear",
+            [TranslateKey.HammerCrateTimerHint] = "Pede um tempo e o define no timer",
+            [TranslateKey.HammerLoot] = "Loot",
+            [TranslateKey.HammerModeNone] = "Nenhum modo",
+            [TranslateKey.PopupHealD] = "Restaura o HP. O modo Completo também remove sangramento/radiação e enche fome e sede",
+            [TranslateKey.PopupNotesD] = "Notas de admin sobre este jogador",
+            [TranslateKey.PopupKillD] = "Mata o jogador instantaneamente",
+            [TranslateKey.PopupStripD] = "Retira tudo do inventário, cinto e roupas",
+            [TranslateKey.PopupKickD] = "Desconecta o jogador com um motivo",
+            [TranslateKey.PopupBanD] = "Bane pelo steamid com motivo e duração",
+            [TranslateKey.PopupFreezeD] = "Congela o jogador no lugar para uma verificação",
+            [TranslateKey.PopupMuteD] = "Bloqueia chat e voz por um período",
+            [TranslateKey.PopupTpD] = "Teleporta até o jogador ou o traz até você",
+            [TranslateKey.PopupInvD] = "Abre e edita o inventário do jogador",
+            [TranslateKey.PopupSpectateD] = "Entra no modo espectador sobre este jogador",
+            [TranslateKey.PopupGiveD] = "Dá itens do catálogo",
+            [TranslateKey.PopupBlueprintsD] = "Gerencia blueprints aprendidos",
+            [TranslateKey.PopupModifiersD] = "Edita modificadores: velocidade, dano, gravidade",
+            [TranslateKey.PopupVitalsD] = "Edita vida, fome, sede e outros vitais",
+            [TranslateKey.PopupPermsD] = "Gerencia permissões e grupos do jogador",
+            [TranslateKey.PopupShowMapD] = "Mostra a posição do jogador no mapa do admin",
+            [TranslateKey.PopupEconomyD] = "Veja e edite o saldo do jogador",
+            [TranslateKey.HammerModeNoneD] = "Limpa o modo, o martelo funciona normalmente",
+            [TranslateKey.HammerLootHint] = "Abre o inventário do contêiner para edição",
+            [TranslateKey.HammerCrateTimeHint] = "Formato mm:ss ou segundos, conta a partir de agora",
+            [TranslateKey.HammerCrateTimeBad] = "Tempo inválido: use mm:ss, até 24 horas",
+            [TranslateKey.HammerCrateTimeDone] = "Timer do caixote: {0}",
+            [TranslateKey.HammerCrateApply] = "Aplicar",
+            [TranslateKey.HammerCrateTimeLabel] = "TEMPO PARA ABRIR",
+            [TranslateKey.HammerCrateOpens] = "Abre em",
+            [TranslateKey.HammerCrateOpened] = "aberto",
+            [TranslateKey.HammerCrateIdle] = "hack não iniciado",
+            [TranslateKey.HammerCratePresets] = "PREDEFINIÇÕES",
+            [TranslateKey.HammerCrateStateOk] = "PRONTO",
+            [TranslateKey.HammerCrateStateBad] = "ERRO",
+            [TranslateKey.SecurityCrateSeconds] = "Timer do caixote, s",
+            [TranslateKey.HammerNotArmed] = "Nenhuma ação selecionada",
+            [TranslateKey.HammerPieHint] = "Segure E para escolher uma ação",
+            [TranslateKey.HammerBinds] = "Segurar E menu   Shift+clique esquerdo executar   Shift+E código",
+            [TranslateKey.MapLayerPvp] = "PVP",
+            [TranslateKey.MapLayerRaid] = "Raids",
+            [TranslateKey.MapLayerNotes] = "Notas",
+            [TranslateKey.MapNoteHint] = "Segure Shift e coloque um marcador para teleportar até ele",
+            [TranslateKey.MapLegend] = "Legenda",
+            [TranslateKey.SettingsMapGroup] = "Agrupamento no mapa",
+            [TranslateKey.SettingsMapGroupD] = "Junta pontos em células contadas em vez de ícones separados",
+            [TranslateKey.SettingsPie] = "Menu radial",
+            [TranslateKey.SettingsPieD] = "Mostra esta ação no menu radial",
+            [TranslateKey.MapLegendTeam] = "Equipe do jogador selecionado",
+            [TranslateKey.MapLegendCargo] = "Navio de carga",
+            [TranslateKey.MapLegendAir] = "Drone de entrega",
+            [TranslateKey.MapLegendVending] = "Máquina de venda",
+            [TranslateKey.MapLegendEvent] = "Evento",
+            [TranslateKey.MapLegendIsland] = "Ilha",
+            [TranslateKey.MapLegendCity] = "Cidade flutuante",
+            [TranslateKey.MapLegendGhost] = "Navio fantasma",
+            [TranslateKey.MapLegendPortal] = "Portal",
+            [TranslateKey.MapActGroupState] = "Estado do jogador",
+            [TranslateKey.MapActGroupDiscipline] = "Disciplina",
+            [TranslateKey.MapActGroupMove] = "Movimento",
+            [TranslateKey.MapActGroupInspect] = "Inspecionar",
+            [TranslateKey.MapActSelected] = "{0} de {1} selecionados",
+            [TranslateKey.MapActOn] = "LIG",
+            [TranslateKey.MapActOff] = "DESL",
+            [TranslateKey.MapNotesEmptyHint] = "Clique com o botão direito no mapa para colocar uma nota",
+            [TranslateKey.MapLegendStation] = "Estação de barcos",
+            [TranslateKey.MapLegendRhib] = "Barcos",
+            [TranslateKey.MapLegendAirdrop] = "Airdrop",
+            [TranslateKey.MapZoneMain] = "Ilha Principal",
+            [TranslateKey.MapZoneDeep] = "Mar Profundo",
+            [TranslateKey.MapNotesEmpty] = "Escolha um jogador para ver seus marcadores",
+            [TranslateKey.MapNotesOf] = "Marcadores do jogador",
+            [TranslateKey.MapSearch] = "Buscar jogador...",
+            [TranslateKey.MapHealth] = "Vida",
+            [TranslateKey.MapQuickActions] = "Ações rápidas",
+            [TranslateKey.MapNoActions] = "Nenhuma ação configurada",
+            [TranslateKey.MapObjTeleport] = "Teleportar para lá",
+            [TranslateKey.MapObjDelete] = "Destruir",
+            [TranslateKey.MapObjDeleteConfirm] = "Destruir?",
+            [TranslateKey.MapObjDeleteOk] = "Sim, destruir",
+            [TranslateKey.MapObjLoot] = "Abrir inventário",
+            [TranslateKey.MapObjOwnersMore] = "e mais {0}",
+            [TranslateKey.MapCluTitle] = "No cluster: {0}",
+            [TranslateKey.SecurityHeatWindow] = "Janela do mapa de calor, min",
+            [TranslateKey.HammerToggle] = "Admin Hammer",
+            [TranslateKey.HammerToggleD] = "Informações do objeto que você está olhando",
+            [TranslateKey.HammerRangeLabel] = "Alcance do martelo",
+            [TranslateKey.HammerIntervalLabel] = "Atualização do martelo",
+            [TranslateKey.SecurityHammerBounds] = "Admin Hammer: intervalo de atualização, alcance do raio, item",
+            [TranslateKey.NavigationMap] = "Mapa",
+            [TranslateKey.NavigationBinds] = "Binds",
+            [TranslateKey.BindsTitle] = "Binds",
+            [TranslateKey.BindsSub] = "Selecione uma linha, copie com Ctrl+C e cole no console F1",
+            [TranslateKey.BindsCopy] = "SELECIONE E CTRL+C",
+            [TranslateKey.BindsKey] = "TECLA",
+            [TranslateKey.BindsUnbind] = "Remova um bind com unbind f1. Use a tecla que você escolheu",
+            [TranslateKey.BindsLocked] = "Sem acesso",
+            [TranslateKey.BindPanel] = "Painel",
+            [TranslateKey.BindPanelDesc] = "Abre o painel de admin",
+            [TranslateKey.BindVanish] = "Vanish",
+            [TranslateKey.BindVanishDesc] = "Alterna a invisibilidade",
+            [TranslateKey.BindGod] = "Modo Deus",
+            [TranslateKey.BindGodDesc] = "Ativa e desativa o modo deus",
+            [TranslateKey.BindNoclip] = "Noclip",
+            [TranslateKey.BindNoclipDesc] = "Ativa e desativa voar através das paredes",
+            [TranslateKey.BindEsp] = "ESP",
+            [TranslateKey.BindEspDesc] = "Ativa e desativa a sobreposição de entidades",
+            [TranslateKey.BindHammer] = "Martelo",
+            [TranslateKey.BindHammerDesc] = "Ativa e desativa a ferramenta martelo",
+            [TranslateKey.BindInspect] = "Inspecionar",
+            [TranslateKey.BindInspectDesc] = "Ativa e desativa a inspeção de jogador",
+            [TranslateKey.BindMap] = "Mapa",
+            [TranslateKey.BindMapDesc] = "Abre o painel direto no mapa",
+            [TranslateKey.BindPie] = "Menu radial",
+            [TranslateKey.BindPieDesc] = "Abre o menu radial de ações rápidas",
+            [TranslateKey.MapTitle] = "Mapa do servidor",
+            [TranslateKey.MapSub] = "posições e estruturas em tempo real",
+            [TranslateKey.MapPreparing] = "Preparando o mapa, isso leva alguns segundos",
+            [TranslateKey.MapLayerPlayers] = "Jogadores",
+            [TranslateKey.MapLayerSleepers] = "Dormentes",
+            [TranslateKey.MapLayerTc] = "TC",
+            [TranslateKey.MapLayerBags] = "Sacos",
+            [TranslateKey.MapLayerStashes] = "Esconderijos",
+            [TranslateKey.MapLayerCars] = "Carros",
+            [TranslateKey.MapLayerShops] = "Lojas",
+            [TranslateKey.MapLegendTrain] = "Trem",
+            [TranslateKey.MapLegendCrate] = "Caixote trancado",
+            [TranslateKey.MapLayerHorses] = "Cavalos",
+            [TranslateKey.MapLayerAir] = "Aéreo",
+            [TranslateKey.MapLayerEvents] = "Eventos",
+            [TranslateKey.MapRefresh] = "Atualizar",
+            [TranslateKey.MapPause] = "Pausar",
+            [TranslateKey.MapClusters] = "Grupos",
+            [TranslateKey.MapOnline] = "Online",
+            [TranslateKey.MapNoSelection] = "Escolha um jogador no mapa ou na lista",
+            [TranslateKey.MapDetails] = "Detalhes",
+            [TranslateKey.NavigationQuickButtons] = "Botões rápidos",
+            [TranslateKey.QbTitle] = "Botões rápidos",
+            [TranslateKey.QbSub] = "ações personalizadas de admin",
+            [TranslateKey.QbNew] = "Criar",
+            [TranslateKey.QbMapActions] = "Ações internas no mapa",
+            [TranslateKey.QbEdit] = "Editar botão",
+            [TranslateKey.QbEmpty] = "Ainda não há botões",
+            [TranslateKey.QbName] = "Nome",
+            [TranslateKey.QbCmd] = "Comando",
+            [TranslateKey.QbPerm] = "Permissão powerfuladmin.<nome> (vazio significa todos)",
+            [TranslateKey.QbIcon] = "Ícone do jogo",
+            [TranslateKey.QbTarget] = "Alvo",
+            [TranslateKey.QbTargetPlayer] = "Jogador",
+            [TranslateKey.QbTargetGlobal] = "Global",
+            [TranslateKey.QbTargetPoint] = "Ponto",
+            [TranslateKey.QbPlaces] = "Onde exibir",
+            [TranslateKey.QbPlacePopup] = "Popup do jogador",
+            [TranslateKey.QbPlaceMap] = "Mapa",
+            [TranslateKey.QbPlaceWidget] = "Widget",
+            [TranslateKey.QbPlaceDashboard] = "Painel",
+            [TranslateKey.QbPlaceNone] = "em nenhum lugar",
+            [TranslateKey.QbPlaceholders] =
+                "%STEAM_ID% %NICKNAME% %X% %Y% %Z% %GRID% %ADMIN_STEAM_ID% %ADMIN_NICKNAME% %ADMIN_X% %ADMIN_Y% %ADMIN_Z% %ADMIN_GRID%   separador de comandos |",
+            [TranslateKey.QbConfirm] = "Pedir confirmação",
+            [TranslateKey.QbConfirmQ] = "Executar {0}?",
+            [TranslateKey.QbSave] = "Salvar",
+            [TranslateKey.QbCancel] = "Cancelar",
+            [TranslateKey.QbDone] = "Executado: {0}",
+            [TranslateKey.QbActions] = "Ações rápidas",
+            [TranslateKey.DashboardQuickButtons] = "Botões rápidos",
+            [TranslateKey.AppFonts] = "Fontes",
+            [TranslateKey.AppFontTitle] = "Títulos e botões",
+            [TranslateKey.AppFontBody] = "Texto do corpo",
+            [TranslateKey.AppFontLogs] = "Logs",
+            [TranslateKey.AppFontConsole] = "Console",
+            [TranslateKey.AppFontHud] = "Notificações e HUD",
+            [TranslateKey.AppFontPick] = "Escolha uma fonte",
+            [TranslateKey.AppFontHint] = "Fontes sem cirílico são marcadas com (EN)",
+            [TranslateKey.AppEspSize] = "Tamanho do texto do ESP",
+            [TranslateKey.AppFontNoCyr] = "(EN)",
+            [TranslateKey.AppVitalsLocked] = "Requer a permissão powerfuladmin.candisablevitals",
+            [TranslateKey.SettingsPrivate] = "Configurações do painel",
+            [TranslateKey.SettingsDrag] = "Painel arrastável",
+            [TranslateKey.SettingsDragD] = "Permite arrastar o painel para qualquer lugar com o mouse, a posição é lembrada",
+            [TranslateKey.SettingsIntegration] = "integração",
+            [TranslateKey.SettingsSecurity] = "Segurança",
+            [TranslateKey.SettingsApi] = "Chaves de API",
+            [TranslateKey.ApiSteamKey] = "Chave da Steam Web API",
+            [TranslateKey.ApiSteamKeyPh] = "Cole sua chave da Steam Web API",
+            [TranslateKey.ApiSteamKeyD] =
+                "Necessária para a estatística de horas em Rust, obtenha uma chave em steamcommunity.com/dev/apikey, o perfil do jogador precisa ser público",
+            [TranslateKey.DiscordConnection] = "Conexão do bot",
+            [TranslateKey.DiscordToken] = "Token do bot",
+            [TranslateKey.DiscordGuildid] = "Guild (servidor)",
+            [TranslateKey.DiscordConnect] = "Conectar bot",
+            [TranslateKey.DiscordTest] = "Testar",
+            [TranslateKey.DiscordMessageError] = "Erro do plugin",
+            [TranslateKey.DiscordMessageConnect] = "Admin conectado",
+            [TranslateKey.DiscordMessageKick] = "Jogador expulso",
+            [TranslateKey.DiscordMessageMute] = "Jogador mutado",
+            [TranslateKey.DiscordMessageWipe] = "Wipe do servidor",
+            [TranslateKey.DiscordMessageWipeDesc] = "O mapa foi resetado.",
+            [TranslateKey.DiscordMessageRestart] = "Servidor iniciado",
+            [TranslateKey.DiscordMessageRestartDesc] = "O servidor foi iniciado e está pronto.",
+            [TranslateKey.DiscordMessageBy] = "Por:",
+            [TranslateKey.DiscordMessageTestSent] = "Mensagem de teste enviada ao Discord.",
+            [TranslateKey.DiscordMessageTestNourl] = "Defina uma URL de webhook nas configurações do Discord primeiro.",
+            [TranslateKey.DiscordWebhooks] = "Webhooks de eventos",
+            [TranslateKey.DiscordHookBans] = "Webhook: bans/expulsões",
+            [TranslateKey.DiscordHookActions] = "Webhook: ações de admin",
+            [TranslateKey.DiscordHookChat] = "Webhook: chat do servidor",
+            [TranslateKey.DiscordHookErrors] = "Webhook: erros e crashes",
+            [TranslateKey.DiscordWhUrl] = "URL do webhook",
+            [TranslateKey.DiscordWhName] = "Nome",
+            [TranslateKey.DiscordWhLogo] = "Logo (URL do avatar)",
+            [TranslateKey.DiscordWhDefault] = "padrão (compartilhado)",
+            [TranslateKey.DiscordNotset] = "não definido",
+            [TranslateKey.DiscordDisabledSend] = "Envio desativado",
+            [TranslateKey.DiscordWhatsend] = "O que enviar",
+            [TranslateKey.DiscordBansKicks] = "Bans e expulsões",
+            [TranslateKey.DiscordVef] = "Vanish / ESP",
+            [TranslateKey.DiscordAdminConn] = "Conexões de admin",
+            [TranslateKey.DiscordPlayerChat] = "Chat de jogadores",
+            [TranslateKey.DiscordRestart] = "Início/reinício do servidor",
+            [TranslateKey.DiscordPluginErr] = "Erros de plugins",
+            [TranslateKey.DiscordWipe] = "Notificações de wipe",
+            [TranslateKey.DiscordEco] = "Operações de saldo",
+            [TranslateKey.DiscordEmbed] = "Aparência da mensagem embed",
+            [TranslateKey.DiscordBotname] = "Nome do bot",
+            [TranslateKey.DiscordAvatar] = "URL do avatar",
+            [TranslateKey.DiscordFooter] = "Texto do rodapé",
+            [TranslateKey.DiscordEmbedcolor] = "Cor do embed (primária)",
+            [TranslateKey.DiscordColorClose] = "Fechar",
+            [TranslateKey.DiscordTitleTpl] = "Modelo de título",
+            [TranslateKey.DiscordDescTpl] = "Modelo de descrição",
+            [TranslateKey.DiscordVars] = "Variáveis: {action} {target} {admin} {reason} {time} {steamid}",
+            [TranslateKey.DiscordThumb] = "Avatar Steam do alvo",
+            [TranslateKey.DiscordThumbD] = "Mostra a logo do servidor como miniatura à direita do embed",
+            [TranslateKey.DiscordTimestamp] = "Timestamp",
+            [TranslateKey.DiscordTimestampD] = "Adiciona o horário do evento ao embed",
+            [TranslateKey.DiscordSlash] = "Comandos slash",
+            [TranslateKey.DiscordSlashOnline] = "obter o número de online",
+            [TranslateKey.DiscordSlashPlayers] = "lista de jogadores",
+            [TranslateKey.DiscordSlashKick] = "Expulsar direto do Discord",
+            [TranslateKey.DiscordSlashMute] = "Mutar direto do Discord",
+            [TranslateKey.DiscordChatBridge] = "Discord -> chat do jogo",
+            [TranslateKey.DiscordChatBridgeD] =
+                "Retransmite mensagens do canal de chat do Discord para o jogo, precisa do bot e do Message Content Intent",
+            [TranslateKey.DiscordSlashBan] = "Banir direto do Discord",
+            [TranslateKey.DiscordDelivery] = "Entrega de logs",
+            [TranslateKey.DiscordDelivWh] = "Webhooks",
+            [TranslateKey.DiscordDelivBot] = "Bot",
+            [TranslateKey.DiscordDelivBoth] = "Ambos",
+            [TranslateKey.DiscordDeliveryHint] = "Como os eventos são enviados ao Discord",
+            [TranslateKey.DiscordBotSection] = "Discord - bot",
+            [TranslateKey.DiscordBotChannels] = "Canais do bot (ID)",
+            [TranslateKey.DiscordChanBans] = "Canal de bans/expulsões",
+            [TranslateKey.DiscordChanChat] = "Canal de chat",
+            [TranslateKey.DiscordChanActions] = "Canal de ações",
+            [TranslateKey.DiscordChanErrors] = "Canal de erros",
+            [TranslateKey.DiscordRoles] = "Cargos de comando",
+            [TranslateKey.DiscordRolesKick] = "Cargos para /kick",
+            [TranslateKey.DiscordRolesMute] = "Cargos para /mute",
+            [TranslateKey.DiscordRolesSuper] = "Super cargo (todos os comandos)",
+            [TranslateKey.DiscordRolesNone] = "Não selecionado",
+            [TranslateKey.DiscordRolesHint] = "Conecte o bot para escolher os cargos",
+            [TranslateKey.DiscordRolesCount] = "Selecionados: {0}",
+            [TranslateKey.DiscordStatusOffline] = "Não conectado",
+            [TranslateKey.DiscordStatusConnecting] = "Conectando...",
+            [TranslateKey.DiscordStatusOnline] = "Conectado",
+            [TranslateKey.DiscordStatusError] = "Erro",
+            [TranslateKey.DiscordStatusNoExt] = "Extensão do Discord não encontrada",
+            [TranslateKey.DiscordStatusCfg] = "Status do bot",
+            [TranslateKey.DiscordStatusText] = "Texto de status ({online} {maxonline} {queue} {connecting})",
+            [TranslateKey.DiscordActPlaying] = "Jogando",
+            [TranslateKey.DiscordActWatching] = "Assistindo",
+            [TranslateKey.DiscordActListening] = "Ouvindo",
+            [TranslateKey.DiscordActCompeting] = "Competindo",
+            [TranslateKey.DiscordBanDlc] = "DLC",
+            [TranslateKey.SecurityLogall] = "Registrar todas as ações",
+            [TranslateKey.SecurityLogallD] = "Grava cada ação de admin em um histórico que não pode ser editado pelo jogo",
+            [TranslateKey.SecurityLockPa] = "Bloquear concessão de permissões do PowerfulAdmin",
+            [TranslateKey.SecurityLockPaD] = "Bloqueia as alternâncias powerfuladmin.* para todos, ninguém pode alterá-las pelo painel",
+            [TranslateKey.SecurityEspInterval] = "Intervalo do ESP (s)",
+            [TranslateKey.SecurityEspIntervalD] = "Frequência de redesenho do ESP, de 0.1 a 5 segundos, valores menores são mais suaves mas mais pesados",
+            [TranslateKey.SecurityEspMax] = "Máximo de objetos no ESP",
+            [TranslateKey.SecurityMapInterval] = "Atualização do mapa, seg",
+            [TranslateKey.SecurityLogMax] = "Máximo de logs (50-5000)",
+            [TranslateKey.SecurityTemplates] = "Modelos de motivo (separados por |)",
+            [TranslateKey.LockedTitle] = "Seção bloqueada",
+            [TranslateKey.LockedDesc] =
+                "O acesso às configurações é permitido apenas para usuários com a permissão powerfuladmin.settings. Fale com o dono do servidor ou o admin principal.",
+            [TranslateKey.LockedFeat] =
+                "Você não tem permissão para esta seção. Peça ao dono do servidor ou ao admin principal para liberar seu acesso.",
+            [TranslateKey.MessageNoperm] = "Você não tem acesso ao PowerfulAdmin."
+        };
+
+        private readonly Dictionary<string, string> _es = new()
+        {
+            [TranslateKey.DashboardFps] = "FPS DEL SERVIDOR",
+            [TranslateKey.DashboardSleeping] = "durmiendo",
+            [TranslateKey.DashboardEntities] = "entidades",
+            [TranslateKey.DashboardNonearby] = "No hay jugadores cerca",
+            [TranslateKey.ConsoleTabAll] = "Todo",
+            [TranslateKey.ConsoleTabChat] = "Chat",
+            [TranslateKey.ConsoleTabCmd] = "Comandos",
+            [TranslateKey.ConsoleTabConn] = "Conexiones",
+            [TranslateKey.ConsoleTabErr] = "Errores",
+            [TranslateKey.ConsoleExport] = "Exportar",
+            [TranslateKey.ConsoleExported] = "Consola exportada a oxide/logs/PowerfulAdmin.",
+            [TranslateKey.ConsoleEmpty] = "Aún no hay eventos",
+            [TranslateKey.WidgetConsoleOff] = "Consola deshabilitada",
+            [TranslateKey.PlayersSub2] = "{0} en línea · {1} conocidos",
+            [TranslateKey.PlayersShown2] = "Mostrando {0}–{1} de {2}",
+            [TranslateKey.PlayersEmpty] = "No se encontraron jugadores",
+            [TranslateKey.MessageNotfound] = "Jugador no encontrado o desconectado.",
+            [TranslateKey.MessageTpTo] = "Teletransportado a {0}.",
+            [TranslateKey.MessageTpHere] = "Trajiste a {0} contigo.",
+            [TranslateKey.MessageTpCoords] = "{0} teletransportado a las coordenadas ({1}).",
+            [TranslateKey.MessageTpLook] = "{0} teletransportado a lo largo de tu línea de visión.",
+            [TranslateKey.MessageKicked] = "{0} ha sido expulsado.",
+            [TranslateKey.MessageMuted] = "{0} ha sido silenciado ({1}).",
+            [TranslateKey.MessageUnmuted] = "{0} ha sido desilenciado.",
+            [TranslateKey.MuteNotice] = "No puedes usar el chat - estás silenciado. Motivo: {0}. Tiempo restante: {1}.",
+            [TranslateKey.MuteDefault] = "Sin motivo",
+            [TranslateKey.MutePerm] = "permanente",
+            [TranslateKey.MuteCustom] = "Duración personalizada",
+            [TranslateKey.MuteCustomPh] = "Duración personalizada (ej. 90, 2h, 1d12h)",
+            [TranslateKey.MessageGave] = "Objetos entregados a {0}.",
+            [TranslateKey.MessageItemsGiven] = "Entregado a {0} jugador(es).",
+            [TranslateKey.MessageBanDisabled] = "El baneo está deshabilitado en esta versión.",
+            [TranslateKey.MessageHealed] = "{0} ha sido curado ({1} HP).",
+            [TranslateKey.MessageKilled] = "{0} ha sido eliminado.",
+            [TranslateKey.MessageStripped] = "El inventario de {0} ha sido vaciado.",
+            [TranslateKey.MessageSoon] = "Próximamente.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Búsqueda de actualizaciones iniciada.",
+            [TranslateKey.KickDefault] = "Expulsado por un administrador",
+            [TranslateKey.KickBroadcast] = "{0} fue expulsado: {1}",
+            [TranslateKey.MuteBroadcast] = "{0} fue silenciado: {1}",
+            [TranslateKey.PopupSoon] = "próximamente",
+            [TranslateKey.GiveCustomCat] = "Mis objetos",
+            [TranslateKey.GiveNocustom] = "No hay objetos guardados. Crea uno personalizado y activa «Guardar».",
+            [TranslateKey.GiveSave] = "Guardar objeto",
+            [TranslateKey.GiveSaveD] = "Guarda el conjunto entregado en la pestaña Mis objetos para reutilizarlo",
+            [TranslateKey.SecurityConsolePlayer] = "Ejecutar comandos como el jugador",
+            [TranslateKey.SecurityConsolePlayerD] = "Ejecuta los comandos de consola como el administrador, de lo contrario se ejecutan como el servidor",
+            [TranslateKey.SecurityConsoleEnabled] = "Consola habilitada",
+            [TranslateKey.SecurityConsoleEnabledD] =
+                "Desactiva la consola del servidor para todos, el permiso powerfuladmin.console sigue siendo necesario",
+            [TranslateKey.ConsoleDisabled] = "La consola está deshabilitada o no tienes acceso",
+            [TranslateKey.PopupPerms] = "Permisos",
+            [TranslateKey.PermsSearchPh] = "Buscar permiso...",
+            [TranslateKey.PermsNone] = "No hay permisos registrados",
+            [TranslateKey.PermsGroupMembers] = "Jugadores en {0}",
+            [TranslateKey.PermsGroupMembersCount] = "{0} jugadores",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Filtrar por nombre...",
+            [TranslateKey.PermsGroupMembersEmpty] = "No hay jugadores en este grupo",
+            [TranslateKey.PermsGroupMembersNomatch] = "Ningún jugador coincide con \"{0}\"",
+            [TranslateKey.PermsGroupMembersTip] = "Haz clic para abrir la ficha del jugador",
+            [TranslateKey.PermsUserperms] = "Permisos directos del jugador",
+            [TranslateKey.SettingsStorage] = "Almacenamiento de datos",
+            [TranslateKey.StorageNote] = "Cambiar de motor migra los datos automáticamente",
+            [TranslateKey.StorageDescJson] =
+                "JSON — los datos se guardan en archivos oxide/data/PowerfulAdmin/*.json.\nSimple y legible, ideal para servidores pequeños.",
+            [TranslateKey.StorageDescSqlite] =
+                "SQLite — los datos viven en un archivo local PowerfulAdmin.db.\nRápido, sin BD externa. La opción por defecto.",
+            [TranslateKey.StorageHost] = "Host de MySQL",
+            [TranslateKey.StoragePort] = "Puerto",
+            [TranslateKey.StorageDb] = "Base de datos",
+            [TranslateKey.StorageUser] = "Usuario",
+            [TranslateKey.StoragePass] = "Contraseña",
+            [TranslateKey.StorageTest] = "Probar MySQL",
+            [TranslateKey.StorageMigrate] = "Migrar",
+            [TranslateKey.StorageMigrateQ] = "¿Migrar los datos aquí?",
+            [TranslateKey.ConfirmYes] = "Sí",
+            [TranslateKey.ConfirmNo] = "No",
+            [TranslateKey.StorageStNone] = "No conectado",
+            [TranslateKey.StorageStConnecting] = "Conectando...",
+            [TranslateKey.StorageStConnected] = "Conectado",
+            [TranslateKey.StorageStMigrating] = "Migrando datos...",
+            [TranslateKey.StorageStFailed] = "Conexión fallida",
+            [TranslateKey.StorageStMigrateFailed] = "Falló la migración de datos",
+            [TranslateKey.SettingsNotify] = "Notificaciones",
+            [TranslateKey.NotifyProviderLabel] = "Proveedor de notificaciones",
+            [TranslateKey.NotifyProviderD] =
+                "Auto usa primero el primer plugin cargado con NCP, Off silencia solo los avisos de éxito, los errores siguen llegando al chat",
+            [TranslateKey.NotifyProviderAuto] = "Auto",
+            [TranslateKey.NotifyProviderNotify] = "Notify",
+            [TranslateKey.NotifyProviderNcp] = "NCP",
+            [TranslateKey.NotifyProviderChat] = "Chat",
+            [TranslateKey.NotifyProviderOff] = "Off",
+            [TranslateKey.NotifySubNotify] = "Notify",
+            [TranslateKey.NotifySubNcp] = "NCP",
+            [TranslateKey.NotifyTypeSuccess] = "ID de tipo: éxito",
+            [TranslateKey.NotifyTypeError] = "ID de tipo: error",
+            [TranslateKey.NotifyTypePlayer] = "ID de tipo: jugador",
+            [TranslateKey.NcpTypeSuccess] = "ID de tipo: éxito",
+            [TranslateKey.NcpTypeError] = "ID de tipo: error",
+            [TranslateKey.NcpTypePlayer] = "ID de tipo: jugador",
+            [TranslateKey.TopSearch] = "Buscar jugador, comando, ID...",
+            [TranslateKey.TopSearchNone] = "No se encontraron jugadores",
+            [TranslateKey.NavigationCatMain] = "PRINCIPAL",
+            [TranslateKey.NavigationCatTools] = "HERRAMIENTAS",
+            [TranslateKey.NavigationCatManage] = "GESTIÓN",
+            [TranslateKey.NavigationDashboard] = "Panel",
+            [TranslateKey.NavigationConsole] = "Consola en vivo",
+            [TranslateKey.NavigationPlayers] = "Jugadores",
+            [TranslateKey.NavigationItems] = "Items",
+            [TranslateKey.NavigationVanish] = "Vanish",
+            [TranslateKey.NavigationEsp] = "ESP",
+            [TranslateKey.NavigationPerms] = "Permisos y grupos",
+            [TranslateKey.NavigationLogs] = "Registros",
+            [TranslateKey.NavigationPlugins] = "Plugins",
+            [TranslateKey.NavigationConvars] = "ConVars",
+            [TranslateKey.NavigationAppearance] = "Apariencia",
+            [TranslateKey.NavigationSettings] = "Ajustes",
+            [TranslateKey.AppearanceTitle] = "Apariencia",
+            [TranslateKey.AppearanceSub] = "tema de color del panel",
+            [TranslateKey.ButtonSend] = "Enviar",
+            [TranslateKey.ButtonSave] = "Guardar",
+            [TranslateKey.ButtonReload] = "Recargar",
+            [TranslateKey.FilterAll] = "Todos",
+            [TranslateKey.FilterOnline] = "En línea",
+            [TranslateKey.ColumnPlayer] = "Jugador",
+            [TranslateKey.ColumnTime] = "Tiempo",
+            [TranslateKey.ColumnPing] = "Ping",
+            [TranslateKey.ColumnGroup] = "Grupo",
+            [TranslateKey.ColumnActions] = "Acciones",
+            [TranslateKey.DashboardTitle] = "Panel",
+            [TranslateKey.DashboardSub] = "resumen del servidor en tiempo real",
+            [TranslateKey.DashboardOnline] = "EN LÍNEA",
+            [TranslateKey.DashboardQueue] = "cola {0} · conectando {1}",
+            [TranslateKey.DashboardAdmins] = "ADMINISTRADORES ACTIVOS",
+            [TranslateKey.DashboardNewplayers] = "JUGADORES NUEVOS",
+            [TranslateKey.DashboardNewplayersD] = "en 24h",
+            [TranslateKey.DashboardAllonline] = "todos en línea",
+            [TranslateKey.DashboardLiveconsole] = "Consola en vivo",
+            [TranslateKey.DashboardNearby] = "Jugadores cercanos",
+            [TranslateKey.DashboardQuicktoggles] = "Accesos rápidos de administrador",
+            [TranslateKey.NearbyAll] = "Todos los jugadores →",
+            [TranslateKey.ToggleVanish] = "Vanish",
+            [TranslateKey.ToggleVanishD] = "Invisible para los jugadores",
+            [TranslateKey.ToggleGodmode] = "Modo dios",
+            [TranslateKey.ToggleGodmodeD] = "Inmortalidad",
+            [TranslateKey.ToggleEsp] = "ESP",
+            [TranslateKey.ToggleEspD] = "Activar/desactivar (configúralo en la pestaña ESP)",
+            [TranslateKey.ToggleNoclip] = "Noclip",
+            [TranslateKey.ToggleNoclipD] = "Atraviesa paredes",
+            [TranslateKey.ToggleWidget] = "Mini-widget",
+            [TranslateKey.ToggleWidgetD] = "Widget HUD dentro del juego",
+            [TranslateKey.ToggleInspect] = "Inspeccionar",
+            [TranslateKey.ToggleInspectD] = "De cerca: E para inventario, clic derecho para la ficha",
+            [TranslateKey.InspectHintCard] = "Clic derecho - ficha",
+            [TranslateKey.InspectHintInv] = "E - inventario",
+            [TranslateKey.ConsoleTitle] = "Consola en vivo",
+            [TranslateKey.ConsoleSub] = "conexión directa en tiempo real con el servidor",
+            [TranslateKey.ConsoleStream] = "Flujo de eventos",
+            [TranslateKey.ConsolePlaceholder] = "Escribe un comando o texto...",
+            [TranslateKey.PlayersTitle] = "Jugadores",
+            [TranslateKey.VanishTitle] = "Vanish",
+            [TranslateKey.VanishSub] = "invisibilidad y comportamiento del administrador",
+            [TranslateKey.VanishMain] = "Parámetros principales",
+            [TranslateKey.VanishEnable] = "Habilitar Vanish",
+            [TranslateKey.VanishEnableD] = "Interruptor principal del modo",
+            [TranslateKey.VanishAuto] = "Vanish automático al conectar",
+            [TranslateKey.VanishAutoD] = "Activa la invisibilidad automáticamente cuando el administrador se conecta",
+            [TranslateKey.VanishUnlock] = "Abrir contenedores bloqueados",
+            [TranslateKey.VanishUnlockD] = "Permite a un administrador invisible abrir cajas y puertas bloqueadas",
+            [TranslateKey.VanishNoclip] = "Noclip junto con vanish",
+            [TranslateKey.VanishNoclipD] = "Activa y desactiva el vuelo junto con la invisibilidad",
+            [TranslateKey.VanishNoclipOff] = "Desactivar noclip junto con vanish",
+            [TranslateKey.VanishNoclipOffD] = "Desactiva el vuelo al desactivar la invisibilidad",
+            [TranslateKey.VanishAppearance] = "Apariencia",
+            [TranslateKey.VanishOpacity] = "Opacidad para otros administradores",
+            [TranslateKey.VanishSilColor] = "Color de silueta para otros administradores",
+            [TranslateKey.VanishLogging] = "Registro",
+            [TranslateKey.VanishLogToggle] = "Registrar cada activación/desactivación",
+            [TranslateKey.VanishLogToggleD] = "Escribe cada cambio de invisibilidad en el registro y el webhook de Discord",
+            [TranslateKey.VanishLogNotify] = "Notificar a otros administradores",
+            [TranslateKey.VanishLogNotifyD] = "Avisa por chat a los demás administradores quién se volvió invisible",
+            [TranslateKey.EspTitle] = "ESP",
+            [TranslateKey.EspSub] = "visualiza objetos y jugadores a través de las paredes",
+            [TranslateKey.EspWhat] = "Qué mostrar",
+            [TranslateKey.EspMaster] = "Habilitar ESP",
+            [TranslateKey.EspMasterD] = "Interruptor principal del ESP, las categorías de abajo solo funcionan mientras esté activado",
+            [TranslateKey.EspPlayers] = "Jugadores",
+            [TranslateKey.EspLoot] = "Botín (contenedores)",
+            [TranslateKey.EspBoxes] = "Cajas de jugadores",
+            [TranslateKey.EspTc] = "Armarios de herramientas",
+            [TranslateKey.EspBeds] = "Bolsas / camas",
+            [TranslateKey.EspTraps] = "Trampas",
+            [TranslateKey.EspStash] = "Escondites",
+            [TranslateKey.EspDrops] = "Objetos tirados",
+            [TranslateKey.EspSleepers] = "Durmientes",
+            [TranslateKey.EspTurrets] = "Torretas y trampas",
+            [TranslateKey.EspVehicles] = "Vehículos",
+            [TranslateKey.EspNpc] = "NPCs y animales",
+            [TranslateKey.EspNodes] = "Yacimientos de mineral",
+            [TranslateKey.EspForage] = "Recolectables",
+            [TranslateKey.EspRender] = "Parámetros de renderizado",
+            [TranslateKey.EspRadius] = "Radio",
+            [TranslateKey.EspBoxopacity] = "Opacidad de la caja",
+            [TranslateKey.EspTextopacity] = "Opacidad del texto",
+            [TranslateKey.EspColors] = "Colores",
+            [TranslateKey.EspColorEdit] = "Color del marcador",
+            [TranslateKey.EspColorFormat] = "R G B A, valores 0-1",
+            [TranslateKey.EspEnemies] = "Enemigos",
+            [TranslateKey.EspTeam] = "Equipo",
+            [TranslateKey.EspAdmins] = "Administradores",
+            [TranslateKey.EspVanishTag] = "[ADMIN EN VANISH]",
+            [TranslateKey.EspExtra] = "Extra",
+            [TranslateKey.EspDistance] = "Distancia (m)",
+            [TranslateKey.EspDistanceD] = "Número junto al objetivo",
+            [TranslateKey.EspHp] = "Salud HP",
+            [TranslateKey.EspHpD] = "Barra de salud",
+            [TranslateKey.EspHeld] = "Objeto en mano",
+            [TranslateKey.EspHeldD] = "Arma/herramienta en las manos",
+            [TranslateKey.DropdownTpTitle] = "Teletransportar a un jugador",
+            [TranslateKey.DropdownKickTitle] = "Expulsar jugador",
+            [TranslateKey.DropdownMuteTitle] = "Silenciar jugador",
+            [TranslateKey.DropdownManageTitle] = "Gestión de jugadores",
+            [TranslateKey.DropdownMode] = "Modo",
+            [TranslateKey.DropdownReasonPh] = "Motivo (corto, visible para el jugador)",
+            [TranslateKey.DropdownCommentPh] = "Comentario extendido (para el registro)",
+            [TranslateKey.DropdownTome] = "Hacia mí",
+            [TranslateKey.DropdownToplayer] = "Yo hacia el jugador",
+            [TranslateKey.DropdownTocoords] = "A coordenadas",
+            [TranslateKey.DropdownTolook] = "A la mira",
+            [TranslateKey.DropdownCoords] = "Coordenadas (X / Y / Z)",
+            [TranslateKey.DropdownCancel] = "Cancelar",
+            [TranslateKey.DropdownTpOk] = "Teletransportar",
+            [TranslateKey.DropdownMuteOk] = "Silenciar",
+            [TranslateKey.DropdownTemplate] = "Plantilla",
+            [TranslateKey.DropdownDuration] = "Duración",
+            [TranslateKey.DropdownNotify] = "Notificar",
+            [TranslateKey.DropdownNotifyPlayer] = "Solo al jugador",
+            [TranslateKey.DropdownNotifyDiscord] = "+ a Discord",
+            [TranslateKey.DropdownNotifyChat] = "Al chat global",
+            [TranslateKey.DropdownNotifyNotify] = "Vía Notify/NCP",
+            [TranslateKey.DropdownKickOk] = "Expulsar",
+            [TranslateKey.Duration1h] = "1h",
+            [TranslateKey.Duration1d] = "1d",
+            [TranslateKey.Duration7d] = "7d",
+            [TranslateKey.Duration30d] = "30d",
+            [TranslateKey.DurationPerm] = "∞",
+            [TranslateKey.PopupHeal] = "Curar",
+            [TranslateKey.PopupKill] = "Matar",
+            [TranslateKey.PopupStrip] = "Vaciar",
+            [TranslateKey.PopupKick] = "Expulsar",
+            [TranslateKey.PopupBan] = "Banear",
+            [TranslateKey.PopupFreeze] = "Congelar",
+            [TranslateKey.PopupMute] = "Silenciar",
+            [TranslateKey.PopupTp] = "Teletransportar",
+            [TranslateKey.PopupInv] = "Inventario",
+            [TranslateKey.PopupSpectate] = "Espectar",
+            [TranslateKey.PopupShowMap] = "Mostrar en el mapa",
+            [TranslateKey.SpectateExit] = "ESPACIO / AGACHARSE - siguiente objetivo, R - salir",
+            [TranslateKey.SpectateTarget] = "ESPECTANDO: {0}",
+            [TranslateKey.SpectateLost] = "No quedan objetivos para espectar, se detuvo el modo espectador",
+            [TranslateKey.PopupGive] = "Dar",
+            [TranslateKey.PopupBlueprints] = "Planos",
+            [TranslateKey.BlueprintOffline] = "El jugador debe estar en línea",
+            [TranslateKey.BlueprintUnlockedCount] = "Desbloqueados: {0}",
+            [TranslateKey.BlueprintHint] = "Haz clic en un objeto para desbloquear su receta para el jugador.",
+            [TranslateKey.BlueprintUnlockAll] = "Desbloquear todo",
+            [TranslateKey.BlueprintReset] = "Reiniciar",
+            [TranslateKey.BlueprintAllConfirm] = "¿Desbloquear TODOS los planos para este jugador?",
+            [TranslateKey.BlueprintResetConfirm] = "¿Reiniciar todos los planos de este jugador?",
+            [TranslateKey.BlueprintConfirmYes] = "Confirmar",
+            [TranslateKey.BlueprintConfirmCancel] = "Cancelar",
+            [TranslateKey.PopupModifiers] = "Modificadores",
+            [TranslateKey.ModifierFormatHint] = "El valor es un multiplicador: 1 = 100%, 2 = 200%",
+            [TranslateKey.ModifierClear] = "Borrar todo",
+            [TranslateKey.ModifierApply] = "Aplicar",
+            [TranslateKey.ModifierColCur] = "Actual",
+            [TranslateKey.ModifierColDur] = "Duración (s)",
+            [TranslateKey.ModifierColVal] = "Multiplicador",
+            [TranslateKey.PopupVitals] = "Vitales",
+            [TranslateKey.PopupEconomy] = "Economía",
+            [TranslateKey.EconomyNoProvider] = "No hay ningún plugin de economía cargado",
+            [TranslateKey.EconomyAmountPh] = "Cantidad",
+            [TranslateKey.EconomyAmountLabel] = "Cantidad de la operación",
+            [TranslateKey.EconomySource] = "Qué economía cobrar y acreditar",
+            [TranslateKey.EconomyClear] = "Reiniciar",
+            [TranslateKey.EconomyGive] = "Dar",
+            [TranslateKey.EconomyTake] = "Quitar",
+            [TranslateKey.EconomySet] = "Fijar",
+            [TranslateKey.EconomyGaveOk] = "El saldo de {0} aumentó en {1}",
+            [TranslateKey.EconomyTookOk] = "Se quitó {1} a {0}",
+            [TranslateKey.EconomySetOk] = "El saldo de {0} se fijó en {1}",
+            [TranslateKey.EconomyOpFailed] = "La operación falló",
+            [TranslateKey.EconomyBadAmount] = "La cantidad debe ser un número positivo",
+            [TranslateKey.EconomyOnlineOnly] = "Esta economía solo funciona con jugadores en línea",
+            [TranslateKey.SkillPointsLabel] = "Puntos disponibles",
+            [TranslateKey.SkillPointsAmountPh] = "Puntos",
+            [TranslateKey.SkillPointsGaveOk] = "Se dieron {1} puntos de habilidad a {0}",
+            [TranslateKey.SkillPointsTakeSoon] = "Quitar puntos aún no es compatible con la API del plugin",
+            [TranslateKey.VitalHint] = "Cada valor se limita al rango de su vital; el campo Max lo amplía.",
+            [TranslateKey.VitalColCur] = "Actual",
+            [TranslateKey.VitalColVal] = "Valor",
+            [TranslateKey.VitalColMax] = "Máx",
+            [TranslateKey.StatsTitle] = "Estadísticas",
+            [TranslateKey.StatReveal] = "Revelar",
+            [TranslateKey.StatConnection] = "Conexión",
+            [TranslateKey.StatStatus] = "Estado",
+            [TranslateKey.StatSteamId] = "SteamID",
+            [TranslateKey.StatPing] = "Ping",
+            [TranslateKey.StatSession] = "Sesión",
+            [TranslateKey.StatPlaytime] = "Tiempo jugado",
+            [TranslateKey.StatRustHours] = "Horas en Rust",
+            [TranslateKey.StatFirstSeen] = "Primera conexión",
+            [TranslateKey.StatLastSeen] = "Última conexión",
+            [TranslateKey.StatIp] = "IP",
+            [TranslateKey.StatGroups] = "Grupos",
+            [TranslateKey.StatMuted] = "Silenciado",
+            [TranslateKey.StatVitals] = "Vitales",
+            [TranslateKey.StatHealth] = "Salud",
+            [TranslateKey.StatHunger] = "Hambre",
+            [TranslateKey.StatThirst] = "Sed",
+            [TranslateKey.StatRadiation] = "Radiación",
+            [TranslateKey.StatTemperature] = "Temperatura",
+            [TranslateKey.StatWetness] = "Humedad",
+            [TranslateKey.StatBleeding] = "Sangrado",
+            [TranslateKey.StatPoison] = "Veneno",
+            [TranslateKey.StatComfort] = "Comodidad",
+            [TranslateKey.StatBalance] = "Saldo",
+            [TranslateKey.StatBalancePhysical] = "(moneda física)",
+            [TranslateKey.StateOffline] = "Desconectado",
+            [TranslateKey.StateDead] = "Muerto",
+            [TranslateKey.StateWounded] = "Herido",
+            [TranslateKey.StateSleeping] = "Durmiendo",
+            [TranslateKey.StateOnline] = "En línea",
+            [TranslateKey.CommonYes] = "Sí",
+            [TranslateKey.CommonNo] = "No",
+            [TranslateKey.StatNoSteamKey] = "SIN CLAVE STEAM-API",
+            [TranslateKey.WelcomeTitle] = "¡Bienvenido!",
+            [TranslateKey.WelcomeBody] =
+                "Este es el panel de PowerfulAdmin.\n\n" +
+                "· Panel - resumen del servidor y accesos rápidos (Vanish, ESP, Modo dios, Noclip).\n" +
+                "· Jugadores - gestiónalos: curar, expulsar, banear, silenciar, teletransportar, inventario, dar objetos, planos, modificadores.\n" +
+                "· Inspeccionar - mira a un jugador y pulsa clic derecho para abrir su ficha.\n" +
+                "· Permisos, Registros, Plugins, ConVars y Ajustes están en la barra lateral.\n\n" +
+                "¡Disfrútalo!",
+            [TranslateKey.WelcomeBtn] = "Comenzar",
+            [TranslateKey.ConvarsTitle] = "ConVars",
+            [TranslateKey.ConvarsSub] = "Ver y editar las variables de consola del servidor",
+            [TranslateKey.ConvarsAll] = "Todas",
+            [TranslateKey.ConvarsSearchPh] = "Buscar convar...",
+            [TranslateKey.PopupBack] = "Atrás",
+            [TranslateKey.PopupConfirm] = "Confirmar",
+            [TranslateKey.PopupConfirmQ] = "¿Realizar «{0}» sobre {1}?",
+            [TranslateKey.PopupConfirmD] = "Esta acción se aplicará de inmediato.",
+            [TranslateKey.PopupHealCur] = "Actual: {0} / {1} HP",
+            [TranslateKey.PopupHealSet] = "Fijar",
+            [TranslateKey.PopupHealFull] = "Completo",
+            [TranslateKey.PopupHealMax] = "Máx",
+            [TranslateKey.PopupHealAdd] = "Sumar",
+            [TranslateKey.PopupHealSub] = "Restar",
+            [TranslateKey.PopupHealAmt] = "Cantidad de HP",
+            [TranslateKey.PopupReason] = "Motivo",
+            [TranslateKey.PopupComment] = "Comentario (nota del administrador)",
+            [TranslateKey.PopupTemplates] = "Plantillas",
+            [TranslateKey.GiveSearchPh] = "Buscar objeto...",
+            [TranslateKey.GiveCart] = "Carrito",
+            [TranslateKey.GiveAmtBad] = "Cantidad: número entero de 1 a 2147483647",
+            [TranslateKey.GiveClear] = "Vaciar",
+            [TranslateKey.GiveConfirm] = "Dar",
+            [TranslateKey.GiveNoitems] = "No se encontró nada",
+            [TranslateKey.GiveCustom] = "Objeto personalizado",
+            [TranslateKey.GiveFav] = "Favoritos",
+            [TranslateKey.GiveModeItem] = "Objeto",
+            [TranslateKey.GiveModeBp] = "Plano",
+            [TranslateKey.GiveNofav] = "Aún no hay favoritos. Toca el corazón de un objeto.",
+            [TranslateKey.ItemsTitle] = "Items",
+            [TranslateKey.ItemsSub] = "Entrega masiva de items y referencia de items",
+            [TranslateKey.ItemsSearchPh] = "Buscar item...",
+            [TranslateKey.ItemsCart] = "Carrito",
+            [TranslateKey.ItemsClear] = "Vaciar",
+            [TranslateKey.ItemsGive] = "Dar",
+            [TranslateKey.ItemsNoitems] = "No se encontró nada",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Dar a",
+            [TranslateKey.ItemsGiveSub] = "Selecciona jugadores en línea",
+            [TranslateKey.ItemsGiveSearchPh] = "Filtrar por nombre...",
+            [TranslateKey.ItemsGiveSelectall] = "Seleccionar todos",
+            [TranslateKey.ItemsGiveClearsel] = "Quitar selección",
+            [TranslateKey.ItemsGiveNoOnline] = "No hay jugadores en línea",
+            [TranslateKey.ItemsGiveNoMatch] = "Ningún jugador coincide con \"{0}\"",
+            [TranslateKey.ItemsGiveConfirm] = "Dar ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Mostrar más ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Selecciona al menos un jugador",
+            [TranslateKey.ItemsGiveEmptyCart] = "El carrito está vacío",
+            [TranslateKey.ItemsInfoTitle] = "Información del item",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "Categoría",
+            [TranslateKey.ItemsInfoRarity] = "Rareza",
+            [TranslateKey.ItemsInfoStack] = "Stack máx.",
+            [TranslateKey.ItemsInfoVolume] = "Volumen (espacio en contenedor)",
+            [TranslateKey.ItemsInfoDurability] = "Durabilidad",
+            [TranslateKey.ItemsInfoDescription] = "Descripción",
+            [TranslateKey.ItemsInfoBlueprint] = "Fabricación",
+            [TranslateKey.ItemsInfoWorkbench] = "Mesa de trabajo",
+            [TranslateKey.ItemsInfoCrafttime] = "Tiempo de fabricación",
+            [TranslateKey.ItemsInfoScrap] = "Chatarra al reciclar",
+            [TranslateKey.ItemsInfoIngredients] = "Ingredientes",
+            [TranslateKey.ItemsInfoRecycle] = "Se recicla en",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Se recicla en (Reciclador verde)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Se recicla en (Reciclador amarillo)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Se recicla en (Reciclador rojo)",
+            [TranslateKey.ItemsInfoMods] = "Mods (componentes)",
+            [TranslateKey.GiveCustShort] = "Nombre corto (debe existir)",
+            [TranslateKey.GiveCustName] = "Nombre del objeto",
+            [TranslateKey.GiveCustSkin] = "ID de skin",
+            [TranslateKey.GiveCustQty] = "Cantidad",
+            [TranslateKey.GiveCustBad] = "no encontrado",
+            [TranslateKey.GiveCustAdd] = "Añadir",
+            [TranslateKey.PermsTitle] = "Permisos y grupos",
+            [TranslateKey.PermsSub] = "los permisos solo aplican al grupo seleccionado",
+            [TranslateKey.PermsNewgroup] = "Nuevo grupo",
+            [TranslateKey.PermsNewgroupD] = "Ingresa un nombre para el nuevo grupo de permisos",
+            [TranslateKey.PermsNewgroupPh] = "ej. helper",
+            [TranslateKey.PermsInherit] = "Heredar permisos de:",
+            [TranslateKey.PermsParentNone] = "— Sin herencia (nuevo) —",
+            [TranslateKey.PermsCreate] = "Crear",
+            [TranslateKey.PermsAutosave] = "se guarda automáticamente",
+            [TranslateKey.PermsGroups] = "Grupos",
+            [TranslateKey.PermsForgroup] = "Permisos del grupo:",
+            [TranslateKey.PermsInherited] = "Heredado de {0}",
+            [TranslateKey.PermsDelGroup] = "Eliminar grupo",
+            [TranslateKey.PermsDelConfirm] = "¿Confirmar eliminación?",
+            [TranslateKey.LogsTitle] = "Registros",
+            [TranslateKey.LogsSub] = "registro de acciones de administrador",
+            [TranslateKey.LogsJournal] = "Diario de acciones de administrador",
+            [TranslateKey.LogsShowMore] = "Mostrar más (+{0})",
+            [TranslateKey.PluginsTitle] = "Plugins",
+            [TranslateKey.PluginsSub] = "plugins cargados · recargar y activar/desactivar",
+            [TranslateKey.PluginsActive] = "Activo",
+            [TranslateKey.PluginsNoCommands] = "Este plugin no tiene comandos registrados.",
+            [TranslateKey.PluginsOff] = "Desactivado",
+            [TranslateKey.PluginsUnloaded] = "no cargado",
+            [TranslateKey.PluginsSearchPh] = "Buscar plugin...",
+            [TranslateKey.PluginsNone] = "No se encontraron plugins",
+            [TranslateKey.PluginsCfgBtn] = "Config",
+            [TranslateKey.PluginsLangBtn] = "Idioma",
+            [TranslateKey.PluginsCheckUpdates] = "Buscar actualizaciones",
+            [TranslateKey.PluginsChecking] = "Buscando...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "El plugin UpdateChecker no está instalado.",
+            [TranslateKey.PluginsUpdateAvailable] = "Actualización: v{0} → v{1}",
+            [TranslateKey.CfgTitle] = "{0}  ·  Config",
+            [TranslateKey.CfgLangTitle] = "{0}  ·  Idioma",
+            [TranslateKey.CfgSaved] = "Configuración guardada",
+            [TranslateKey.CfgParseError] = "No se pudo leer o analizar el archivo",
+            [TranslateKey.CfgWriteError] = "Error al escribir el archivo",
+            [TranslateKey.CfgBadValue] = "Valor inválido para {0}",
+            [TranslateKey.CfgNoLang] = "Este plugin no tiene archivos de idioma",
+            [TranslateKey.CfgLangNew] = "nuevo código",
+            [TranslateKey.TipNavDashboard] = "Resumen en vivo del servidor: jugadores en línea, rendimiento y eventos recientes",
+            [TranslateKey.TipNavConsole] = "Consola del servidor: lee el registro y envía comandos",
+            [TranslateKey.TipNavPlayers] = "Lista de jugadores con búsqueda y todas las acciones sobre un jugador",
+            [TranslateKey.TipNavVanish] = "Invisibilidad del administrador y todo lo que activa junto con ella",
+            [TranslateKey.TipNavEsp] = "Resalta jugadores, NPCs y entidades a través de las paredes",
+            [TranslateKey.TipNavPerms] = "Permisos y grupos: otorgar, revocar y editar membresías",
+            [TranslateKey.TipNavLogs] = "Historial de acciones de administrador, chat y eventos de plugins",
+            [TranslateKey.TipNavPlugins] = "Plugins del servidor: cargar, recargar y editar configuraciones y archivos de idioma",
+            [TranslateKey.TipNavConvars] = "Convars del servidor: busca una variable y cambia su valor",
+            [TranslateKey.TipNavAppearance] = "Tema, fuente y tamaño del panel",
+            [TranslateKey.TipNavSettings] = "Ajustes del plugin: integraciones, notificaciones, seguridad y almacenamiento",
+            [TranslateKey.TipNavMap] = "Mapa de administrador con jugadores, marcadores y acciones directamente en el mapa",
+            [TranslateKey.TipNavBinds] = "Atajos de consola listos para las herramientas de administrador",
+            [TranslateKey.TipNavQuickButtons] = "Tus propios botones de acción rápida para el panel y el mapa",
+            [TranslateKey.TipNavItems] = "Entrega masiva de items y referencia de items",
+            [TranslateKey.CfgFormHint] = "Los booleanos son interruptores, números y textos son campos, los objetos se agrupan, los arreglos se abren en su propia ventana",
+            [TranslateKey.CfgLangHint] = "Elige un idioma existente, o cópialo en un nuevo código",
+            [TranslateKey.CfgLangExisting] = "Códigos de idioma existentes",
+            [TranslateKey.CfgLangCopy] = "Crear una copia",
+            [TranslateKey.CfgLangCopyFrom] = "copia de {0}",
+            [TranslateKey.CfgLangNewD] = "Escribe un código de idioma y presiona Enter, el idioma abierto se copiará en él",
+            [TranslateKey.CfgLangBad] = "Código de idioma desconocido, elige uno de la lista",
+            [TranslateKey.CfgLangExists] = "Este plugin ya tiene ese idioma",
+            [TranslateKey.CfgLangDel] = "Eliminar {0}",
+            [TranslateKey.CfgLangDelSure] = "¿Eliminar {0}?",
+            [TranslateKey.CfgLangDelD] = "Elimina el archivo de la localización abierta sin posibilidad de deshacer",
+            [TranslateKey.CfgLangDeleted] = "Localización {0} eliminada",
+            [TranslateKey.CfgLangLast] = "No se puede eliminar la última localización",
+            [TranslateKey.CfgLangPick] = "O elige un código ya disponible",
+            [TranslateKey.CfgFieldNew] = "Nuevo campo",
+            [TranslateKey.CfgFieldKeyHint] = "clave, por ejemplo ui.something",
+            [TranslateKey.CfgFieldValHint] = "valor por defecto",
+            [TranslateKey.CfgFieldAdd] = "Añadir a todos los idiomas",
+            [TranslateKey.CfgFieldD] =
+                "Escribe una clave y un valor, presiona Enter en cada campo, luego este botón - la clave aparecerá en todas las localizaciones del plugin",
+            [TranslateKey.CfgFieldBad] = "Escribe el nombre de la clave y presiona Enter",
+            [TranslateKey.CfgFieldExists] = "Esa clave ya existe en esta localización",
+            [TranslateKey.CfgFieldAdded] = "Clave {0} añadida a {1} localización(es)",
+            [TranslateKey.CfgArrTitle] = "Arreglo  ·  {0}",
+            [TranslateKey.CfgArrHint] = "{0} elementos, haz clic en uno para expandirlo",
+            [TranslateKey.CfgArrEdit] = "Editar",
+            [TranslateKey.CfgArrAdd] = "Añadir elemento",
+            [TranslateKey.CfgArrApply] = "Aplicar",
+            [TranslateKey.CfgArrEmpty] = "El arreglo está vacío",
+            [TranslateKey.CfgReloadLabel] = "Recargar el plugin al guardar",
+            [TranslateKey.CfgEmpty] = "Nada que editar",
+            [TranslateKey.CfgSelf] = "PowerfulAdmin no puede editarse a sí mismo",
+            [TranslateKey.ButtonCommands] = "Comandos",
+            [TranslateKey.ButtonLoad] = "Activar",
+            [TranslateKey.ButtonUnload] = "Desactivar",
+            [TranslateKey.PluginsSelf] = "PowerfulAdmin no puede desactivarse desde su propio gestor.",
+            [TranslateKey.LogsFAll] = "Todo",
+            [TranslateKey.LogsFAct] = "Acciones",
+            [TranslateKey.LogsFChat] = "Chat",
+            [TranslateKey.LogsFConn] = "Conexiones",
+            [TranslateKey.LogsFErr] = "Errores",
+            [TranslateKey.SettingsTitle] = "Ajustes",
+            [TranslateKey.SettingsSub] = "interfaz · integraciones · seguridad",
+            [TranslateKey.SettingsTheme] = "Tema",
+            [TranslateKey.AppVitals] = "Vitales (mostrar en el HUD)",
+            [TranslateKey.HammerHint] = "Sostén un martillo",
+            [TranslateKey.HammerEmpty] = "Mira a un objeto",
+            [TranslateKey.HammerOwner] = "Propietario",
+            [TranslateKey.HammerAuthed] = "Autorizado",
+            [TranslateKey.HammerItems] = "Contenido",
+            [TranslateKey.HammerCode] = "Código",
+            [TranslateKey.HammerGuest] = "Invitado",
+            [TranslateKey.HammerUpkeep] = "protegido",
+            [TranslateKey.HammerBag] = "Bolsa asignada a",
+            [TranslateKey.HammerGeneral] = "General",
+            [TranslateKey.HammerWhitelist] = "Lista blanca de la cerradura",
+            [TranslateKey.HammerPosition] = "Posición",
+            [TranslateKey.HammerDistance] = "Distancia",
+            [TranslateKey.HammerGrade] = "Nivel",
+            [TranslateKey.HammerBuilding] = "Construcción",
+            [TranslateKey.HammerParent] = "Padre",
+            [TranslateKey.HammerSteamId] = "SteamID",
+            [TranslateKey.HammerState] = "Estado",
+            [TranslateKey.HammerTeam] = "Equipo",
+            [TranslateKey.HammerPower] = "Energía",
+            [TranslateKey.HammerPowered] = "Energizado",
+            [TranslateKey.HammerMounted] = "Montado",
+            [TranslateKey.HammerHidden] = "Código oculto",
+            [TranslateKey.HammerReveal] = "Revelar",
+            [TranslateKey.HammerHide] = "Ocultar",
+            [TranslateKey.HammerDelete] = "Eliminar",
+            [TranslateKey.HammerDeleteGibs] = "Con restos",
+            [TranslateKey.HammerDeleteParents] = "Con lo vinculado",
+            [TranslateKey.HammerPlainHint] = "El objeto desaparece sin dejar rastro",
+            [TranslateKey.HammerGibsHint] = "El objeto se rompe en escombros como una demolición",
+            [TranslateKey.HammerParentsHint] = "Elimina toda la estructura vinculada, no solo este bloque",
+            [TranslateKey.HammerCrateUnlock] = "Desbloquear",
+            [TranslateKey.HammerCrateTimer] = "Temporizador",
+            [TranslateKey.HammerCrateUnlockHint] = "El cofre se abre de inmediato, sin necesidad de hackear",
+            [TranslateKey.HammerCrateTimerHint] = "Pide un tiempo y lo pone en el temporizador",
+            [TranslateKey.HammerLoot] = "Botín",
+            [TranslateKey.HammerModeNone] = "Sin modo",
+            [TranslateKey.PopupHealD] = "Restaura el HP. El modo Completo también elimina sangrado/radiación y llena hambre y sed",
+            [TranslateKey.PopupNotesD] = "Notas de administrador sobre este jugador",
+            [TranslateKey.PopupKillD] = "Elimina al jugador al instante",
+            [TranslateKey.PopupStripD] = "Quita todo del inventario, cinturón y ropa",
+            [TranslateKey.PopupKickD] = "Desconecta al jugador con un motivo",
+            [TranslateKey.PopupBanD] = "Banea por steamid con un motivo y duración",
+            [TranslateKey.PopupFreezeD] = "Congela al jugador en su sitio para revisarlo",
+            [TranslateKey.PopupMuteD] = "Bloquea el chat y la voz por una duración",
+            [TranslateKey.PopupTpD] = "Teletranspórtate al jugador o tráelo hacia ti",
+            [TranslateKey.PopupInvD] = "Abre y edita el inventario del jugador",
+            [TranslateKey.PopupSpectateD] = "Entra en modo espectador sobre este jugador",
+            [TranslateKey.PopupGiveD] = "Da objetos del catálogo",
+            [TranslateKey.PopupBlueprintsD] = "Gestiona los planos aprendidos",
+            [TranslateKey.PopupModifiersD] = "Edita modificadores: velocidad, daño, gravedad",
+            [TranslateKey.PopupVitalsD] = "Edita salud, hambre, sed y otros vitales",
+            [TranslateKey.PopupPermsD] = "Gestiona los permisos y grupos del jugador",
+            [TranslateKey.PopupShowMapD] = "Muestra la posición del jugador en el mapa de administrador",
+            [TranslateKey.PopupEconomyD] = "Ver y editar el saldo del jugador",
+            [TranslateKey.HammerModeNoneD] = "Borra el modo, el martillo funciona como siempre",
+            [TranslateKey.HammerLootHint] = "Abre el inventario del contenedor para editarlo",
+            [TranslateKey.HammerCrateTimeHint] = "Formato mm:ss o segundos, cuenta desde ahora",
+            [TranslateKey.HammerCrateTimeBad] = "Tiempo inválido: usa mm:ss, hasta 24 horas",
+            [TranslateKey.HammerCrateTimeDone] = "Temporizador del cofre: {0}",
+            [TranslateKey.HammerCrateApply] = "Aplicar",
+            [TranslateKey.HammerCrateTimeLabel] = "TIEMPO DE APERTURA",
+            [TranslateKey.HammerCrateOpens] = "Se abre en",
+            [TranslateKey.HammerCrateOpened] = "abierto",
+            [TranslateKey.HammerCrateIdle] = "hackeo no iniciado",
+            [TranslateKey.HammerCratePresets] = "PREAJUSTES",
+            [TranslateKey.HammerCrateStateOk] = "LISTO",
+            [TranslateKey.HammerCrateStateBad] = "ERROR",
+            [TranslateKey.SecurityCrateSeconds] = "Temporizador del cofre, s",
+            [TranslateKey.HammerNotArmed] = "Ninguna acción seleccionada",
+            [TranslateKey.HammerPieHint] = "Mantén E para elegir una acción",
+            [TranslateKey.HammerBinds] = "Mantener E menú   Shift+clic izq ejecutar   Shift+E código",
+            [TranslateKey.MapLayerPvp] = "PVP",
+            [TranslateKey.MapLayerRaid] = "Raids",
+            [TranslateKey.MapLayerNotes] = "Notas",
+            [TranslateKey.MapNoteHint] = "Mantén Shift y coloca un marcador para teletransportarte a él",
+            [TranslateKey.MapLegend] = "Leyenda",
+            [TranslateKey.SettingsMapGroup] = "Agrupación del mapa",
+            [TranslateKey.SettingsMapGroupD] = "Combina puntos en celdas contadas en lugar de íconos separados",
+            [TranslateKey.SettingsPie] = "Menú radial",
+            [TranslateKey.SettingsPieD] = "Muestra esta acción en el menú radial",
+            [TranslateKey.MapLegendTeam] = "Equipo del jugador seleccionado",
+            [TranslateKey.MapLegendCargo] = "Barco de carga",
+            [TranslateKey.MapLegendAir] = "Dron de entrega",
+            [TranslateKey.MapLegendVending] = "Máquina expendedora",
+            [TranslateKey.MapLegendEvent] = "Evento",
+            [TranslateKey.MapLegendIsland] = "Isla",
+            [TranslateKey.MapLegendCity] = "Ciudad flotante",
+            [TranslateKey.MapLegendGhost] = "Barco fantasma",
+            [TranslateKey.MapLegendPortal] = "Portal",
+            [TranslateKey.MapActGroupState] = "Estado del jugador",
+            [TranslateKey.MapActGroupDiscipline] = "Disciplina",
+            [TranslateKey.MapActGroupMove] = "Movimiento",
+            [TranslateKey.MapActGroupInspect] = "Inspeccionar",
+            [TranslateKey.MapActSelected] = "{0} de {1} seleccionados",
+            [TranslateKey.MapActOn] = "ON",
+            [TranslateKey.MapActOff] = "OFF",
+            [TranslateKey.MapNotesEmptyHint] = "Haz clic derecho en el mapa para colocar una nota",
+            [TranslateKey.MapLegendStation] = "Estación de botes",
+            [TranslateKey.MapLegendRhib] = "Botes",
+            [TranslateKey.MapLegendAirdrop] = "Suministro aéreo",
+            [TranslateKey.MapZoneMain] = "Isla Principal",
+            [TranslateKey.MapZoneDeep] = "Mar Profundo",
+            [TranslateKey.MapNotesEmpty] = "Elige un jugador para ver sus marcadores",
+            [TranslateKey.MapNotesOf] = "Marcadores del jugador",
+            [TranslateKey.MapSearch] = "Buscar jugador...",
+            [TranslateKey.MapHealth] = "Salud",
+            [TranslateKey.MapQuickActions] = "Acciones rápidas",
+            [TranslateKey.MapNoActions] = "No hay acciones configuradas",
+            [TranslateKey.MapObjTeleport] = "Teletransportarse allí",
+            [TranslateKey.MapObjDelete] = "Destruir",
+            [TranslateKey.MapObjDeleteConfirm] = "¿Destruir?",
+            [TranslateKey.MapObjDeleteOk] = "Sí, destruir",
+            [TranslateKey.MapObjLoot] = "Abrir inventario",
+            [TranslateKey.MapObjOwnersMore] = "y {0} más",
+            [TranslateKey.MapCluTitle] = "En el grupo: {0}",
+            [TranslateKey.SecurityHeatWindow] = "Ventana del mapa de calor, min",
+            [TranslateKey.HammerToggle] = "Martillo de administrador",
+            [TranslateKey.HammerToggleD] = "Información sobre el objeto que miras",
+            [TranslateKey.HammerRangeLabel] = "Alcance del martillo",
+            [TranslateKey.HammerIntervalLabel] = "Actualización del martillo",
+            [TranslateKey.SecurityHammerBounds] = "Martillo de administrador: intervalo de actualización, alcance del rayo, objeto",
+            [TranslateKey.NavigationMap] = "Mapa",
+            [TranslateKey.NavigationBinds] = "Atajos",
+            [TranslateKey.BindsTitle] = "Atajos",
+            [TranslateKey.BindsSub] = "Selecciona una línea, cópiala con Ctrl+C y pégala en la consola F1",
+            [TranslateKey.BindsCopy] = "SELECCIONA Y CTRL+C",
+            [TranslateKey.BindsKey] = "TECLA",
+            [TranslateKey.BindsUnbind] = "Elimina un atajo con unbind f1. Usa la tecla que elegiste",
+            [TranslateKey.BindsLocked] = "Sin acceso",
+            [TranslateKey.BindPanel] = "Panel",
+            [TranslateKey.BindPanelDesc] = "Abre el panel de administrador",
+            [TranslateKey.BindVanish] = "Vanish",
+            [TranslateKey.BindVanishDesc] = "Activa o desactiva la invisibilidad",
+            [TranslateKey.BindGod] = "Modo dios",
+            [TranslateKey.BindGodDesc] = "Activa o desactiva el modo dios",
+            [TranslateKey.BindNoclip] = "Noclip",
+            [TranslateKey.BindNoclipDesc] = "Activa o desactiva volar a través de paredes",
+            [TranslateKey.BindEsp] = "ESP",
+            [TranslateKey.BindEspDesc] = "Activa o desactiva la superposición de entidades",
+            [TranslateKey.BindHammer] = "Martillo",
+            [TranslateKey.BindHammerDesc] = "Activa o desactiva la herramienta martillo",
+            [TranslateKey.BindInspect] = "Inspeccionar",
+            [TranslateKey.BindInspectDesc] = "Activa o desactiva la inspección de jugadores",
+            [TranslateKey.BindMap] = "Mapa",
+            [TranslateKey.BindMapDesc] = "Abre el panel directamente en el mapa",
+            [TranslateKey.BindPie] = "Menú radial",
+            [TranslateKey.BindPieDesc] = "Abre el menú radial de acciones rápidas",
+            [TranslateKey.MapTitle] = "Mapa del servidor",
+            [TranslateKey.MapSub] = "posiciones y estructuras en vivo",
+            [TranslateKey.MapPreparing] = "Preparando el mapa, esto toma unos segundos",
+            [TranslateKey.MapLayerPlayers] = "Jugadores",
+            [TranslateKey.MapLayerSleepers] = "Durmientes",
+            [TranslateKey.MapLayerTc] = "TC",
+            [TranslateKey.MapLayerBags] = "Bolsas",
+            [TranslateKey.MapLayerStashes] = "Escondites",
+            [TranslateKey.MapLayerCars] = "Autos",
+            [TranslateKey.MapLayerShops] = "Tiendas",
+            [TranslateKey.MapLegendTrain] = "Tren",
+            [TranslateKey.MapLegendCrate] = "Cofre bloqueado",
+            [TranslateKey.MapLayerHorses] = "Caballos",
+            [TranslateKey.MapLayerAir] = "Aire",
+            [TranslateKey.MapLayerEvents] = "Eventos",
+            [TranslateKey.MapRefresh] = "Actualizar",
+            [TranslateKey.MapPause] = "Pausar",
+            [TranslateKey.MapClusters] = "Grupos",
+            [TranslateKey.MapOnline] = "En línea",
+            [TranslateKey.MapNoSelection] = "Elige un jugador en el mapa o en la lista",
+            [TranslateKey.MapDetails] = "Detalles",
+            [TranslateKey.NavigationQuickButtons] = "Botones rápidos",
+            [TranslateKey.QbTitle] = "Botones rápidos",
+            [TranslateKey.QbSub] = "acciones personalizadas de administrador",
+            [TranslateKey.QbNew] = "Crear",
+            [TranslateKey.QbMapActions] = "Acciones integradas en el mapa",
+            [TranslateKey.QbEdit] = "Editar botón",
+            [TranslateKey.QbEmpty] = "Aún no hay botones",
+            [TranslateKey.QbName] = "Nombre",
+            [TranslateKey.QbCmd] = "Comando",
+            [TranslateKey.QbPerm] = "Permiso powerfuladmin.<nombre> (vacío significa todos)",
+            [TranslateKey.QbIcon] = "Ícono del juego",
+            [TranslateKey.QbTarget] = "Objetivo",
+            [TranslateKey.QbTargetPlayer] = "Jugador",
+            [TranslateKey.QbTargetGlobal] = "Global",
+            [TranslateKey.QbTargetPoint] = "Punto",
+            [TranslateKey.QbPlaces] = "Dónde mostrar",
+            [TranslateKey.QbPlacePopup] = "Ventana emergente del jugador",
+            [TranslateKey.QbPlaceMap] = "Mapa",
+            [TranslateKey.QbPlaceWidget] = "Widget",
+            [TranslateKey.QbPlaceDashboard] = "Panel",
+            [TranslateKey.QbPlaceNone] = "en ningún lado",
+            [TranslateKey.QbPlaceholders] =
+                "%STEAM_ID% %NICKNAME% %X% %Y% %Z% %GRID% %ADMIN_STEAM_ID% %ADMIN_NICKNAME% %ADMIN_X% %ADMIN_Y% %ADMIN_Z% %ADMIN_GRID%   separador de comandos |",
+            [TranslateKey.QbConfirm] = "Pedir confirmación",
+            [TranslateKey.QbConfirmQ] = "¿Ejecutar {0}?",
+            [TranslateKey.QbSave] = "Guardar",
+            [TranslateKey.QbCancel] = "Cancelar",
+            [TranslateKey.QbDone] = "Ejecutado: {0}",
+            [TranslateKey.QbActions] = "Acciones rápidas",
+            [TranslateKey.DashboardQuickButtons] = "Botones rápidos",
+            [TranslateKey.AppFonts] = "Fuentes",
+            [TranslateKey.AppFontTitle] = "Títulos y botones",
+            [TranslateKey.AppFontBody] = "Texto del cuerpo",
+            [TranslateKey.AppFontLogs] = "Registros",
+            [TranslateKey.AppFontConsole] = "Consola",
+            [TranslateKey.AppFontHud] = "Notificaciones y HUD",
+            [TranslateKey.AppFontPick] = "Elige una fuente",
+            [TranslateKey.AppFontHint] = "Las fuentes sin cirílico están marcadas (EN)",
+            [TranslateKey.AppEspSize] = "Tamaño del texto ESP",
+            [TranslateKey.AppFontNoCyr] = "(EN)",
+            [TranslateKey.AppVitalsLocked] = "Requiere el permiso powerfuladmin.candisablevitals",
+            [TranslateKey.SettingsPrivate] = "Ajustes del panel",
+            [TranslateKey.SettingsDrag] = "Panel arrastrable",
+            [TranslateKey.SettingsDragD] = "Te permite arrastrar el panel a cualquier lugar con el ratón, se recuerda la posición",
+            [TranslateKey.SettingsIntegration] = "integración",
+            [TranslateKey.SettingsSecurity] = "Seguridad",
+            [TranslateKey.SettingsApi] = "Claves de API",
+            [TranslateKey.ApiSteamKey] = "Clave de la API web de Steam",
+            [TranslateKey.ApiSteamKeyPh] = "Pega tu clave de la API web de Steam",
+            [TranslateKey.ApiSteamKeyD] =
+                "Necesaria para la estadística de horas en Rust, obtén una clave en steamcommunity.com/dev/apikey, el perfil del jugador debe ser público",
+            [TranslateKey.DiscordConnection] = "Conexión del bot",
+            [TranslateKey.DiscordToken] = "Token del bot",
+            [TranslateKey.DiscordGuildid] = "Servidor (guild)",
+            [TranslateKey.DiscordConnect] = "Conectar bot",
+            [TranslateKey.DiscordTest] = "Probar",
+            [TranslateKey.DiscordMessageError] = "Error del plugin",
+            [TranslateKey.DiscordMessageConnect] = "Administrador conectado",
+            [TranslateKey.DiscordMessageKick] = "Jugador expulsado",
+            [TranslateKey.DiscordMessageMute] = "Jugador silenciado",
+            [TranslateKey.DiscordMessageWipe] = "Reinicio del servidor",
+            [TranslateKey.DiscordMessageWipeDesc] = "El mapa ha sido reiniciado.",
+            [TranslateKey.DiscordMessageRestart] = "Servidor iniciado",
+            [TranslateKey.DiscordMessageRestartDesc] = "El servidor se ha iniciado y está listo.",
+            [TranslateKey.DiscordMessageBy] = "Por:",
+            [TranslateKey.DiscordMessageTestSent] = "Mensaje de prueba enviado a Discord.",
+            [TranslateKey.DiscordMessageTestNourl] = "Primero configura una URL de webhook en los ajustes de Discord.",
+            [TranslateKey.DiscordWebhooks] = "Webhooks de eventos",
+            [TranslateKey.DiscordHookBans] = "Webhook: baneos/expulsiones",
+            [TranslateKey.DiscordHookActions] = "Webhook: acciones de administrador",
+            [TranslateKey.DiscordHookChat] = "Webhook: chat del servidor",
+            [TranslateKey.DiscordHookErrors] = "Webhook: errores y caídas",
+            [TranslateKey.DiscordWhUrl] = "URL del webhook",
+            [TranslateKey.DiscordWhName] = "Nombre",
+            [TranslateKey.DiscordWhLogo] = "Logo (URL del avatar)",
+            [TranslateKey.DiscordWhDefault] = "por defecto (compartido)",
+            [TranslateKey.DiscordNotset] = "no configurado",
+            [TranslateKey.DiscordDisabledSend] = "Envío deshabilitado",
+            [TranslateKey.DiscordWhatsend] = "Qué enviar",
+            [TranslateKey.DiscordBansKicks] = "Baneos y expulsiones",
+            [TranslateKey.DiscordVef] = "Vanish / ESP",
+            [TranslateKey.DiscordAdminConn] = "Conexiones de administradores",
+            [TranslateKey.DiscordPlayerChat] = "Chat de jugadores",
+            [TranslateKey.DiscordRestart] = "Inicio/reinicio del servidor",
+            [TranslateKey.DiscordPluginErr] = "Errores de plugins",
+            [TranslateKey.DiscordWipe] = "Notificaciones de reinicio",
+            [TranslateKey.DiscordEco] = "Operaciones de saldo",
+            [TranslateKey.DiscordEmbed] = "Apariencia del mensaje embed",
+            [TranslateKey.DiscordBotname] = "Nombre del bot",
+            [TranslateKey.DiscordAvatar] = "URL del avatar",
+            [TranslateKey.DiscordFooter] = "Texto del pie",
+            [TranslateKey.DiscordEmbedcolor] = "Color del embed (primario)",
+            [TranslateKey.DiscordColorClose] = "Cerrar",
+            [TranslateKey.DiscordTitleTpl] = "Plantilla del título",
+            [TranslateKey.DiscordDescTpl] = "Plantilla de la descripción",
+            [TranslateKey.DiscordVars] = "Variables: {action} {target} {admin} {reason} {time} {steamid}",
+            [TranslateKey.DiscordThumb] = "Avatar de Steam del objetivo",
+            [TranslateKey.DiscordThumbD] = "Muestra el logo del servidor como miniatura a la derecha del embed",
+            [TranslateKey.DiscordTimestamp] = "Marca de tiempo",
+            [TranslateKey.DiscordTimestampD] = "Añade la hora del evento al embed",
+            [TranslateKey.DiscordSlash] = "Comandos slash",
+            [TranslateKey.DiscordSlashOnline] = "obtiene la cantidad de jugadores en línea",
+            [TranslateKey.DiscordSlashPlayers] = "lista de jugadores",
+            [TranslateKey.DiscordSlashKick] = "Expulsa directamente desde Discord",
+            [TranslateKey.DiscordSlashMute] = "Silencia directamente desde Discord",
+            [TranslateKey.DiscordChatBridge] = "Discord -> chat del juego",
+            [TranslateKey.DiscordChatBridgeD] =
+                "Retransmite mensajes del canal de chat de Discord hacia el juego, necesita el bot y el Message Content Intent",
+            [TranslateKey.DiscordSlashBan] = "Banea directamente desde Discord",
+            [TranslateKey.DiscordDelivery] = "Entrega de registros",
+            [TranslateKey.DiscordDelivWh] = "Webhooks",
+            [TranslateKey.DiscordDelivBot] = "Bot",
+            [TranslateKey.DiscordDelivBoth] = "Ambos",
+            [TranslateKey.DiscordDeliveryHint] = "Cómo se envían los eventos a Discord",
+            [TranslateKey.DiscordBotSection] = "Discord - bot",
+            [TranslateKey.DiscordBotChannels] = "Canales del bot (ID)",
+            [TranslateKey.DiscordChanBans] = "Canal de baneos/expulsiones",
+            [TranslateKey.DiscordChanChat] = "Canal de chat",
+            [TranslateKey.DiscordChanActions] = "Canal de acciones",
+            [TranslateKey.DiscordChanErrors] = "Canal de errores",
+            [TranslateKey.DiscordRoles] = "Roles de comandos",
+            [TranslateKey.DiscordRolesKick] = "Roles para /kick",
+            [TranslateKey.DiscordRolesMute] = "Roles para /mute",
+            [TranslateKey.DiscordRolesSuper] = "Super-rol (todos los comandos)",
+            [TranslateKey.DiscordRolesNone] = "No seleccionado",
+            [TranslateKey.DiscordRolesHint] = "Conecta el bot para elegir roles",
+            [TranslateKey.DiscordRolesCount] = "Seleccionados: {0}",
+            [TranslateKey.DiscordStatusOffline] = "No conectado",
+            [TranslateKey.DiscordStatusConnecting] = "Conectando...",
+            [TranslateKey.DiscordStatusOnline] = "Conectado",
+            [TranslateKey.DiscordStatusError] = "Error",
+            [TranslateKey.DiscordStatusNoExt] = "Extensión de Discord no encontrada",
+            [TranslateKey.DiscordStatusCfg] = "Estado del bot",
+            [TranslateKey.DiscordStatusText] = "Texto de estado ({online} {maxonline} {queue} {connecting})",
+            [TranslateKey.DiscordActPlaying] = "Jugando",
+            [TranslateKey.DiscordActWatching] = "Viendo",
+            [TranslateKey.DiscordActListening] = "Escuchando",
+            [TranslateKey.DiscordActCompeting] = "Compitiendo",
+            [TranslateKey.DiscordBanDlc] = "DLC",
+            [TranslateKey.SecurityLogall] = "Registrar todas las acciones",
+            [TranslateKey.SecurityLogallD] = "Escribe cada acción de administrador en un diario que no se puede editar desde el juego",
+            [TranslateKey.SecurityLockPa] = "Bloquear la concesión de permisos de PowerfulAdmin",
+            [TranslateKey.SecurityLockPaD] = "Bloquea los interruptores powerfuladmin.* para todos, nadie puede cambiarlos desde el panel",
+            [TranslateKey.SecurityEspInterval] = "Intervalo del ESP (s)",
+            [TranslateKey.SecurityEspIntervalD] = "Con qué frecuencia se redibuja el ESP, de 0.1 a 5 segundos, menor es más fluido pero más pesado",
+            [TranslateKey.SecurityEspMax] = "Máximo de objetos ESP",
+            [TranslateKey.SecurityMapInterval] = "Actualización del mapa, seg",
+            [TranslateKey.SecurityLogMax] = "Máximo de registros (50-5000)",
+            [TranslateKey.SecurityTemplates] = "Plantillas de motivos (separadas por |)",
+            [TranslateKey.LockedTitle] = "Sección bloqueada",
+            [TranslateKey.LockedDesc] =
+                "El acceso a los ajustes solo está permitido para usuarios con el permiso powerfuladmin.settings. Contacta al dueño del servidor o al administrador principal.",
+            [TranslateKey.LockedFeat] =
+                "No tienes permiso para esta sección. Pide al dueño del servidor o al administrador principal que te dé acceso.",
+            [TranslateKey.MessageNoperm] = "No tienes acceso a PowerfulAdmin."
+        };
+
+        private readonly Dictionary<string, string> _de = new()
+        {
+            [TranslateKey.DashboardFps] = "SERVER-FPS",
+            [TranslateKey.DashboardSleeping] = "schlafend",
+            [TranslateKey.DashboardEntities] = "Entitäten",
+            [TranslateKey.DashboardNonearby] = "Keine Spieler in der Nähe",
+            [TranslateKey.ConsoleTabAll] = "Alle",
+            [TranslateKey.ConsoleTabChat] = "Chat",
+            [TranslateKey.ConsoleTabCmd] = "Befehle",
+            [TranslateKey.ConsoleTabConn] = "Verbindungen",
+            [TranslateKey.ConsoleTabErr] = "Fehler",
+            [TranslateKey.ConsoleExport] = "Exportieren",
+            [TranslateKey.ConsoleExported] = "Konsole exportiert nach oxide/logs/PowerfulAdmin.",
+            [TranslateKey.ConsoleEmpty] = "Noch keine Ereignisse",
+            [TranslateKey.WidgetConsoleOff] = "Konsole deaktiviert",
+            [TranslateKey.PlayersSub2] = "{0} online · {1} bekannt",
+            [TranslateKey.PlayersShown2] = "Zeige {0}–{1} von {2}",
+            [TranslateKey.PlayersEmpty] = "Keine Spieler gefunden",
+            [TranslateKey.MessageNotfound] = "Spieler nicht gefunden oder offline.",
+            [TranslateKey.MessageTpTo] = "Zu {0} teleportiert.",
+            [TranslateKey.MessageTpHere] = "{0} zu dir geholt.",
+            [TranslateKey.MessageTpCoords] = "{0} zu den Koordinaten ({1}) teleportiert.",
+            [TranslateKey.MessageTpLook] = "{0} entlang deiner Blickrichtung teleportiert.",
+            [TranslateKey.MessageKicked] = "{0} wurde gekickt.",
+            [TranslateKey.MessageMuted] = "{0} wurde stummgeschaltet ({1}).",
+            [TranslateKey.MessageUnmuted] = "{0} wurde entstummt.",
+            [TranslateKey.MuteNotice] = "Du kannst den Chat nicht nutzen - du bist stummgeschaltet. Grund: {0}. Verbleibende Zeit: {1}.",
+            [TranslateKey.MuteDefault] = "Kein Grund",
+            [TranslateKey.MutePerm] = "dauerhaft",
+            [TranslateKey.MuteCustom] = "Eigene Dauer",
+            [TranslateKey.MuteCustomPh] = "Eigene Dauer (z. B. 90, 2h, 1d12h)",
+            [TranslateKey.MessageGave] = "Items an {0} übergeben.",
+            [TranslateKey.MessageItemsGiven] = "An {0} Spieler ausgegeben.",
+            [TranslateKey.MessageBanDisabled] = "Ban ist in diesem Build deaktiviert.",
+            [TranslateKey.MessageHealed] = "{0} wurde geheilt ({1} HP).",
+            [TranslateKey.MessageKilled] = "{0} wurde getötet.",
+            [TranslateKey.MessageStripped] = "Das Inventar von {0} wurde geleert.",
+            [TranslateKey.MessageSoon] = "Demnächst verfügbar.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Update-Prüfung gestartet.",
+            [TranslateKey.KickDefault] = "Vom Admin gekickt",
+            [TranslateKey.KickBroadcast] = "{0} wurde gekickt: {1}",
+            [TranslateKey.MuteBroadcast] = "{0} wurde stummgeschaltet: {1}",
+            [TranslateKey.PopupSoon] = "bald",
+            [TranslateKey.GiveCustomCat] = "Meine Items",
+            [TranslateKey.GiveNocustom] = "Keine gespeicherten Items. Erstelle ein eigenes und aktiviere «Speichern».",
+            [TranslateKey.GiveSave] = "Item speichern",
+            [TranslateKey.GiveSaveD] = "Speichert das ausgegebene Set im Tab Meine Items zur Wiederverwendung",
+            [TranslateKey.SecurityConsolePlayer] = "Befehle als Spieler ausführen",
+            [TranslateKey.SecurityConsolePlayerD] = "Führt Konsolenbefehle als der Admin aus, sonst laufen sie als der Server",
+            [TranslateKey.SecurityConsoleEnabled] = "Konsole aktiviert",
+            [TranslateKey.SecurityConsoleEnabledD] =
+                "Schaltet die Serverkonsole für alle aus, die Berechtigung powerfuladmin.console ist weiterhin nötig",
+            [TranslateKey.ConsoleDisabled] = "Konsole ist deaktiviert oder dir fehlt der Zugriff",
+            [TranslateKey.PopupPerms] = "Berechtigungen",
+            [TranslateKey.PermsSearchPh] = "Berechtigung suchen...",
+            [TranslateKey.PermsNone] = "Keine Berechtigungen registriert",
+            [TranslateKey.PermsGroupMembers] = "Spieler in {0}",
+            [TranslateKey.PermsGroupMembersCount] = "{0} Spieler",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Nach Name filtern...",
+            [TranslateKey.PermsGroupMembersEmpty] = "Keine Spieler in dieser Gruppe",
+            [TranslateKey.PermsGroupMembersNomatch] = "Keine Spieler stimmen mit \"{0}\" überein",
+            [TranslateKey.PermsGroupMembersTip] = "Klicken, um die Spielerkarte zu öffnen",
+            [TranslateKey.PermsUserperms] = "Direkte Berechtigungen des Spielers",
+            [TranslateKey.SettingsStorage] = "Datenspeicher",
+            [TranslateKey.StorageNote] = "Beim Wechsel des Backends werden die Daten automatisch migriert",
+            [TranslateKey.StorageDescJson] =
+                "JSON — Daten werden in oxide/data/PowerfulAdmin/*.json gespeichert.\nEinfach und lesbar, gut für kleine Server.",
+            [TranslateKey.StorageDescSqlite] =
+                "SQLite — Daten liegen in einer lokalen PowerfulAdmin.db.\nSchnell, keine externe DB. Die Standardwahl.",
+            [TranslateKey.StorageHost] = "MySQL-Host",
+            [TranslateKey.StoragePort] = "Port",
+            [TranslateKey.StorageDb] = "Datenbank",
+            [TranslateKey.StorageUser] = "Benutzer",
+            [TranslateKey.StoragePass] = "Passwort",
+            [TranslateKey.StorageTest] = "MySQL testen",
+            [TranslateKey.StorageMigrate] = "Migrieren",
+            [TranslateKey.StorageMigrateQ] = "Daten hierher migrieren?",
+            [TranslateKey.ConfirmYes] = "Ja",
+            [TranslateKey.ConfirmNo] = "Nein",
+            [TranslateKey.StorageStNone] = "Nicht verbunden",
+            [TranslateKey.StorageStConnecting] = "Verbinde...",
+            [TranslateKey.StorageStConnected] = "Verbunden",
+            [TranslateKey.StorageStMigrating] = "Daten werden migriert...",
+            [TranslateKey.StorageStFailed] = "Verbindung fehlgeschlagen",
+            [TranslateKey.StorageStMigrateFailed] = "Migration fehlgeschlagen",
+            [TranslateKey.SettingsNotify] = "Benachrichtigungen",
+            [TranslateKey.NotifyProviderLabel] = "Benachrichtigungsanbieter",
+            [TranslateKey.NotifyProviderD] =
+                "Auto nimmt das erste geladene Plugin mit NCP zuerst, Aus stummt nur Erfolgsmeldungen, Fehler erreichen weiterhin den Chat",
+            [TranslateKey.NotifyProviderAuto] = "Auto",
+            [TranslateKey.NotifyProviderNotify] = "Notify",
+            [TranslateKey.NotifyProviderNcp] = "NCP",
+            [TranslateKey.NotifyProviderChat] = "Chat",
+            [TranslateKey.NotifyProviderOff] = "Aus",
+            [TranslateKey.NotifySubNotify] = "Notify",
+            [TranslateKey.NotifySubNcp] = "NCP",
+            [TranslateKey.NotifyTypeSuccess] = "Type-ID: Erfolg",
+            [TranslateKey.NotifyTypeError] = "Type-ID: Fehler",
+            [TranslateKey.NotifyTypePlayer] = "Type-ID: Spieler",
+            [TranslateKey.NcpTypeSuccess] = "Type-ID: Erfolg",
+            [TranslateKey.NcpTypeError] = "Type-ID: Fehler",
+            [TranslateKey.NcpTypePlayer] = "Type-ID: Spieler",
+            [TranslateKey.TopSearch] = "Spieler, Befehl, ID suchen...",
+            [TranslateKey.TopSearchNone] = "Keine Spieler gefunden",
+            [TranslateKey.NavigationCatMain] = "HAUPTMENÜ",
+            [TranslateKey.NavigationCatTools] = "WERKZEUGE",
+            [TranslateKey.NavigationCatManage] = "VERWALTUNG",
+            [TranslateKey.NavigationDashboard] = "Dashboard",
+            [TranslateKey.NavigationConsole] = "Live-Konsole",
+            [TranslateKey.NavigationPlayers] = "Spieler",
+            [TranslateKey.NavigationItems] = "Items",
+            [TranslateKey.NavigationVanish] = "Vanish",
+            [TranslateKey.NavigationEsp] = "ESP",
+            [TranslateKey.NavigationPerms] = "Berechtigungen & Gruppen",
+            [TranslateKey.NavigationLogs] = "Logs",
+            [TranslateKey.NavigationPlugins] = "Plugins",
+            [TranslateKey.NavigationConvars] = "ConVars",
+            [TranslateKey.NavigationAppearance] = "Erscheinungsbild",
+            [TranslateKey.NavigationSettings] = "Einstellungen",
+            [TranslateKey.AppearanceTitle] = "Erscheinungsbild",
+            [TranslateKey.AppearanceSub] = "Farbschema des Panels",
+            [TranslateKey.ButtonSend] = "Senden",
+            [TranslateKey.ButtonSave] = "Speichern",
+            [TranslateKey.ButtonReload] = "Neu laden",
+            [TranslateKey.FilterAll] = "Alle",
+            [TranslateKey.FilterOnline] = "Online",
+            [TranslateKey.ColumnPlayer] = "Spieler",
+            [TranslateKey.ColumnTime] = "Zeit",
+            [TranslateKey.ColumnPing] = "Ping",
+            [TranslateKey.ColumnGroup] = "Gruppe",
+            [TranslateKey.ColumnActions] = "Aktionen",
+            [TranslateKey.DashboardTitle] = "Dashboard",
+            [TranslateKey.DashboardSub] = "Serverübersicht in Echtzeit",
+            [TranslateKey.DashboardOnline] = "ONLINE",
+            [TranslateKey.DashboardQueue] = "Warteschlange {0} · verbindet {1}",
+            [TranslateKey.DashboardAdmins] = "AKTIVE ADMINS",
+            [TranslateKey.DashboardNewplayers] = "NEUE SPIELER",
+            [TranslateKey.DashboardNewplayersD] = "in 24h",
+            [TranslateKey.DashboardAllonline] = "alle online",
+            [TranslateKey.DashboardLiveconsole] = "Live-Konsole",
+            [TranslateKey.DashboardNearby] = "Spieler in der Nähe",
+            [TranslateKey.DashboardQuicktoggles] = "Admin-Schnellschalter",
+            [TranslateKey.NearbyAll] = "Alle Spieler →",
+            [TranslateKey.ToggleVanish] = "Vanish",
+            [TranslateKey.ToggleVanishD] = "Für Spieler unsichtbar",
+            [TranslateKey.ToggleGodmode] = "Godmode",
+            [TranslateKey.ToggleGodmodeD] = "Unsterblichkeit",
+            [TranslateKey.ToggleEsp] = "ESP",
+            [TranslateKey.ToggleEspD] = "An/Aus (Konfiguration im ESP-Tab)",
+            [TranslateKey.ToggleNoclip] = "Noclip",
+            [TranslateKey.ToggleNoclipD] = "Durch Wände gehen",
+            [TranslateKey.ToggleWidget] = "Mini-Widget",
+            [TranslateKey.ToggleWidgetD] = "HUD-Widget im Spiel",
+            [TranslateKey.ToggleInspect] = "Inspect",
+            [TranslateKey.ToggleInspectD] = "Aus der Nähe: E fürs Inventar, RMT für die Karte",
+            [TranslateKey.InspectHintCard] = "RMT - Karte",
+            [TranslateKey.InspectHintInv] = "E - Inventar",
+            [TranslateKey.ConsoleTitle] = "Live-Konsole",
+            [TranslateKey.ConsoleSub] = "direkte Echtzeit-Verbindung zum Server",
+            [TranslateKey.ConsoleStream] = "Ereignis-Stream",
+            [TranslateKey.ConsolePlaceholder] = "Befehl oder Text eingeben...",
+            [TranslateKey.PlayersTitle] = "Spieler",
+            [TranslateKey.VanishTitle] = "Vanish",
+            [TranslateKey.VanishSub] = "Unsichtbarkeit und Admin-Verhalten",
+            [TranslateKey.VanishMain] = "Hauptparameter",
+            [TranslateKey.VanishEnable] = "Vanish aktivieren",
+            [TranslateKey.VanishEnableD] = "Hauptschalter des Modus",
+            [TranslateKey.VanishAuto] = "Auto-Vanish beim Beitritt",
+            [TranslateKey.VanishAutoD] = "Aktiviert die Unsichtbarkeit automatisch, wenn der Admin sich verbindet",
+            [TranslateKey.VanishUnlock] = "Verschlossene Container öffnen",
+            [TranslateKey.VanishUnlockD] = "Erlaubt einem unsichtbaren Admin, verschlossene Kisten und Türen zu öffnen",
+            [TranslateKey.VanishNoclip] = "Noclip mit Vanish",
+            [TranslateKey.VanishNoclipD] = "Schaltet das Fliegen zusammen mit der Unsichtbarkeit ein und aus",
+            [TranslateKey.VanishNoclipOff] = "Noclip zusammen mit Vanish ausschalten",
+            [TranslateKey.VanishNoclipOffD] = "Deaktiviert das Fliegen, wenn die Unsichtbarkeit ausgeschaltet wird",
+            [TranslateKey.VanishAppearance] = "Erscheinungsbild",
+            [TranslateKey.VanishOpacity] = "Deckkraft für andere Admins",
+            [TranslateKey.VanishSilColor] = "Silhouettenfarbe für andere Admins",
+            [TranslateKey.VanishLogging] = "Protokollierung",
+            [TranslateKey.VanishLogToggle] = "Jedes Ein-/Ausschalten protokollieren",
+            [TranslateKey.VanishLogToggleD] = "Schreibt jeden Unsichtbarkeits-Wechsel ins Journal und den Discord-Webhook",
+            [TranslateKey.VanishLogNotify] = "Andere Admins benachrichtigen",
+            [TranslateKey.VanishLogNotifyD] = "Teilt anderen Admins im Chat mit, wer unsichtbar wurde",
+            [TranslateKey.EspTitle] = "ESP",
+            [TranslateKey.EspSub] = "Objekte und Spieler durch Wände sichtbar machen",
+            [TranslateKey.EspWhat] = "Was angezeigt wird",
+            [TranslateKey.EspMaster] = "ESP aktivieren",
+            [TranslateKey.EspMasterD] = "Hauptschalter für ESP, die Kategorien unten wirken nur, wenn er an ist",
+            [TranslateKey.EspPlayers] = "Spieler",
+            [TranslateKey.EspLoot] = "Loot (Container)",
+            [TranslateKey.EspBoxes] = "Spielerkisten",
+            [TranslateKey.EspTc] = "Werkzeugschränke",
+            [TranslateKey.EspBeds] = "Schlafsäcke / Betten",
+            [TranslateKey.EspTraps] = "Fallen",
+            [TranslateKey.EspStash] = "Verstecke",
+            [TranslateKey.EspDrops] = "Fallengelassene Items",
+            [TranslateKey.EspSleepers] = "Schläfer",
+            [TranslateKey.EspTurrets] = "Geschütztürme & Fallen",
+            [TranslateKey.EspVehicles] = "Fahrzeuge",
+            [TranslateKey.EspNpc] = "NPCs & Tiere",
+            [TranslateKey.EspNodes] = "Erzvorkommen",
+            [TranslateKey.EspForage] = "Sammelobjekte",
+            [TranslateKey.EspRender] = "Render-Parameter",
+            [TranslateKey.EspRadius] = "Radius",
+            [TranslateKey.EspBoxopacity] = "Kastendeckkraft",
+            [TranslateKey.EspTextopacity] = "Textdeckkraft",
+            [TranslateKey.EspColors] = "Farben",
+            [TranslateKey.EspColorEdit] = "Markierungsfarbe",
+            [TranslateKey.EspColorFormat] = "R G B A, Werte 0-1",
+            [TranslateKey.EspEnemies] = "Gegner",
+            [TranslateKey.EspTeam] = "Team",
+            [TranslateKey.EspAdmins] = "Admins",
+            [TranslateKey.EspVanishTag] = "[ADMIN IN VANISH]",
+            [TranslateKey.EspExtra] = "Extra",
+            [TranslateKey.EspDistance] = "Entfernung (m)",
+            [TranslateKey.EspDistanceD] = "Zahl neben dem Ziel",
+            [TranslateKey.EspHp] = "Gesundheit HP",
+            [TranslateKey.EspHpD] = "Gesundheitsleiste",
+            [TranslateKey.EspHeld] = "Gehaltenes Item",
+            [TranslateKey.EspHeldD] = "Waffe/Werkzeug in den Händen",
+            [TranslateKey.DropdownTpTitle] = "Zum Spieler teleportieren",
+            [TranslateKey.DropdownKickTitle] = "Spieler kicken",
+            [TranslateKey.DropdownMuteTitle] = "Spieler stummschalten",
+            [TranslateKey.DropdownManageTitle] = "Spielerverwaltung",
+            [TranslateKey.DropdownMode] = "Modus",
+            [TranslateKey.DropdownReasonPh] = "Grund (kurz, für den Spieler sichtbar)",
+            [TranslateKey.DropdownCommentPh] = "Erweiterter Kommentar (für das Log)",
+            [TranslateKey.DropdownTome] = "Zu mir",
+            [TranslateKey.DropdownToplayer] = "Mich zum Spieler",
+            [TranslateKey.DropdownTocoords] = "Zu Koordinaten",
+            [TranslateKey.DropdownTolook] = "Zum Blickpunkt",
+            [TranslateKey.DropdownCoords] = "Koordinaten (X / Y / Z)",
+            [TranslateKey.DropdownCancel] = "Abbrechen",
+            [TranslateKey.DropdownTpOk] = "Teleportieren",
+            [TranslateKey.DropdownMuteOk] = "Stummschalten",
+            [TranslateKey.DropdownTemplate] = "Vorlage",
+            [TranslateKey.DropdownDuration] = "Dauer",
+            [TranslateKey.DropdownNotify] = "Benachrichtigen",
+            [TranslateKey.DropdownNotifyPlayer] = "Nur Spieler",
+            [TranslateKey.DropdownNotifyDiscord] = "+ nach Discord",
+            [TranslateKey.DropdownNotifyChat] = "An globalen Chat",
+            [TranslateKey.DropdownNotifyNotify] = "Über Notify/NCP",
+            [TranslateKey.DropdownKickOk] = "Kicken",
+            [TranslateKey.Duration1h] = "1h",
+            [TranslateKey.Duration1d] = "1d",
+            [TranslateKey.Duration7d] = "7d",
+            [TranslateKey.Duration30d] = "30d",
+            [TranslateKey.DurationPerm] = "∞",
+            [TranslateKey.PopupHeal] = "Heilen",
+            [TranslateKey.PopupKill] = "Töten",
+            [TranslateKey.PopupStrip] = "Leeren",
+            [TranslateKey.PopupKick] = "Kicken",
+            [TranslateKey.PopupBan] = "Bannen",
+            [TranslateKey.PopupFreeze] = "Einfrieren",
+            [TranslateKey.PopupMute] = "Stummschalten",
+            [TranslateKey.PopupTp] = "Teleportieren",
+            [TranslateKey.PopupInv] = "Inventar",
+            [TranslateKey.PopupSpectate] = "Zuschauen",
+            [TranslateKey.PopupShowMap] = "Auf Karte zeigen",
+            [TranslateKey.SpectateExit] = "LEERTASTE / DUCKEN - nächstes Ziel, R - beenden",
+            [TranslateKey.SpectateTarget] = "ZUSCHAUEN: {0}",
+            [TranslateKey.SpectateLost] = "Keine Zuschauziele mehr übrig, Zuschauen beendet",
+            [TranslateKey.PopupGive] = "Geben",
+            [TranslateKey.PopupBlueprints] = "Blaupausen",
+            [TranslateKey.BlueprintOffline] = "Spieler muss online sein",
+            [TranslateKey.BlueprintUnlockedCount] = "Freigeschaltet: {0}",
+            [TranslateKey.BlueprintHint] = "Klicke ein Item, um dessen Rezept für den Spieler freizuschalten.",
+            [TranslateKey.BlueprintUnlockAll] = "Alle freischalten",
+            [TranslateKey.BlueprintReset] = "Zurücksetzen",
+            [TranslateKey.BlueprintAllConfirm] = "ALLE Blaupausen für diesen Spieler freischalten?",
+            [TranslateKey.BlueprintResetConfirm] = "Alle Blaupausen dieses Spielers zurücksetzen?",
+            [TranslateKey.BlueprintConfirmYes] = "Bestätigen",
+            [TranslateKey.BlueprintConfirmCancel] = "Abbrechen",
+            [TranslateKey.PopupModifiers] = "Modifikatoren",
+            [TranslateKey.ModifierFormatHint] = "Der Wert ist ein Multiplikator: 1 = 100%, 2 = 200%",
+            [TranslateKey.ModifierClear] = "Alle zurücksetzen",
+            [TranslateKey.ModifierApply] = "Anwenden",
+            [TranslateKey.ModifierColCur] = "Aktuell",
+            [TranslateKey.ModifierColDur] = "Dauer (s)",
+            [TranslateKey.ModifierColVal] = "Multiplikator",
+            [TranslateKey.PopupVitals] = "Vitalwerte",
+            [TranslateKey.PopupEconomy] = "Wirtschaft",
+            [TranslateKey.EconomyNoProvider] = "Kein Wirtschafts-Plugin geladen",
+            [TranslateKey.EconomyAmountPh] = "Betrag",
+            [TranslateKey.EconomyAmountLabel] = "Betrag der Operation",
+            [TranslateKey.EconomySource] = "Welches Wirtschaftssystem belastet und gutgeschrieben wird",
+            [TranslateKey.EconomyClear] = "Zurücksetzen",
+            [TranslateKey.EconomyGive] = "Geben",
+            [TranslateKey.EconomyTake] = "Abziehen",
+            [TranslateKey.EconomySet] = "Setzen",
+            [TranslateKey.EconomyGaveOk] = "Guthaben von {0} um {1} erhöht",
+            [TranslateKey.EconomyTookOk] = "{1} von {0} abgezogen",
+            [TranslateKey.EconomySetOk] = "Guthaben von {0} auf {1} gesetzt",
+            [TranslateKey.EconomyOpFailed] = "Operation fehlgeschlagen",
+            [TranslateKey.EconomyBadAmount] = "Der Betrag muss eine positive Zahl sein",
+            [TranslateKey.EconomyOnlineOnly] = "Dieses Wirtschaftssystem funktioniert nur bei Online-Spielern",
+            [TranslateKey.SkillPointsLabel] = "Verfügbare Punkte",
+            [TranslateKey.SkillPointsAmountPh] = "Punkte",
+            [TranslateKey.SkillPointsGaveOk] = "{1} Skillpunkte an {0} vergeben",
+            [TranslateKey.SkillPointsTakeSoon] = "Das Abziehen von Punkten wird von der Plugin-API noch nicht unterstützt",
+            [TranslateKey.VitalHint] = "Jeder Wert wird auf den Bereich des Vitalwerts begrenzt; das Feld Max erweitert ihn.",
+            [TranslateKey.VitalColCur] = "Aktuell",
+            [TranslateKey.VitalColVal] = "Wert",
+            [TranslateKey.VitalColMax] = "Max",
+            [TranslateKey.StatsTitle] = "Statistiken",
+            [TranslateKey.StatReveal] = "Anzeigen",
+            [TranslateKey.StatConnection] = "Verbindung",
+            [TranslateKey.StatStatus] = "Status",
+            [TranslateKey.StatSteamId] = "SteamID",
+            [TranslateKey.StatPing] = "Ping",
+            [TranslateKey.StatSession] = "Sitzung",
+            [TranslateKey.StatPlaytime] = "Spielzeit",
+            [TranslateKey.StatRustHours] = "Rust-Stunden",
+            [TranslateKey.StatFirstSeen] = "Zuerst gesehen",
+            [TranslateKey.StatLastSeen] = "Zuletzt gesehen",
+            [TranslateKey.StatIp] = "IP",
+            [TranslateKey.StatGroups] = "Gruppen",
+            [TranslateKey.StatMuted] = "Stummgeschaltet",
+            [TranslateKey.StatVitals] = "Vitalwerte",
+            [TranslateKey.StatHealth] = "Gesundheit",
+            [TranslateKey.StatHunger] = "Hunger",
+            [TranslateKey.StatThirst] = "Durst",
+            [TranslateKey.StatRadiation] = "Strahlung",
+            [TranslateKey.StatTemperature] = "Temperatur",
+            [TranslateKey.StatWetness] = "Nässe",
+            [TranslateKey.StatBleeding] = "Blutung",
+            [TranslateKey.StatPoison] = "Vergiftung",
+            [TranslateKey.StatComfort] = "Komfort",
+            [TranslateKey.StatBalance] = "Guthaben",
+            [TranslateKey.StatBalancePhysical] = "(physische Währung)",
+            [TranslateKey.StateOffline] = "Offline",
+            [TranslateKey.StateDead] = "Tot",
+            [TranslateKey.StateWounded] = "Verwundet",
+            [TranslateKey.StateSleeping] = "Schlafend",
+            [TranslateKey.StateOnline] = "Online",
+            [TranslateKey.CommonYes] = "Ja",
+            [TranslateKey.CommonNo] = "Nein",
+            [TranslateKey.StatNoSteamKey] = "KEIN STEAM-API-KEY",
+            [TranslateKey.WelcomeTitle] = "Willkommen!",
+            [TranslateKey.WelcomeBody] =
+                "Das ist das PowerfulAdmin-Panel.\n\n" +
+                "· Dashboard - Serverübersicht und Schnellschalter (Vanish, ESP, Godmode, Noclip).\n" +
+                "· Spieler - verwalten: heilen, kicken, bannen, stummschalten, teleportieren, Inventar, geben, Blaupausen, Modifikatoren.\n" +
+                "· Inspect - einen Spieler ansehen und RMT drücken, um seine Karte zu öffnen.\n" +
+                "· Berechtigungen, Logs, Plugins, ConVars und Einstellungen findest du in der Seitenleiste.\n\n" +
+                "Viel Spaß!",
+            [TranslateKey.WelcomeBtn] = "Los geht's",
+            [TranslateKey.ConvarsTitle] = "ConVars",
+            [TranslateKey.ConvarsSub] = "Server-Konsolenvariablen ansehen und bearbeiten",
+            [TranslateKey.ConvarsAll] = "Alle",
+            [TranslateKey.ConvarsSearchPh] = "Convar suchen...",
+            [TranslateKey.PopupBack] = "Zurück",
+            [TranslateKey.PopupConfirm] = "Bestätigen",
+            [TranslateKey.PopupConfirmQ] = "«{0}» bei {1} ausführen?",
+            [TranslateKey.PopupConfirmD] = "Diese Aktion wird sofort ausgeführt.",
+            [TranslateKey.PopupHealCur] = "Aktuell: {0} / {1} HP",
+            [TranslateKey.PopupHealSet] = "Setzen",
+            [TranslateKey.PopupHealFull] = "Voll",
+            [TranslateKey.PopupHealMax] = "Max",
+            [TranslateKey.PopupHealAdd] = "Addieren",
+            [TranslateKey.PopupHealSub] = "Subtrahieren",
+            [TranslateKey.PopupHealAmt] = "HP-Menge",
+            [TranslateKey.PopupReason] = "Grund",
+            [TranslateKey.PopupComment] = "Kommentar (Admin-Notiz)",
+            [TranslateKey.PopupTemplates] = "Vorlagen",
+            [TranslateKey.GiveSearchPh] = "Item suchen...",
+            [TranslateKey.GiveCart] = "Warenkorb",
+            [TranslateKey.GiveAmtBad] = "Menge: ganze Zahl von 1 bis 2147483647",
+            [TranslateKey.GiveClear] = "Leeren",
+            [TranslateKey.GiveConfirm] = "Geben",
+            [TranslateKey.GiveNoitems] = "Nichts gefunden",
+            [TranslateKey.GiveCustom] = "Eigenes Item",
+            [TranslateKey.GiveFav] = "Favoriten",
+            [TranslateKey.GiveModeItem] = "Item",
+            [TranslateKey.GiveModeBp] = "Blaupause",
+            [TranslateKey.GiveNofav] = "Noch keine Favoriten. Tippe auf das Herz eines Items.",
+            [TranslateKey.ItemsTitle] = "Items",
+            [TranslateKey.ItemsSub] = "Massenvergabe von Items und Item-Übersicht",
+            [TranslateKey.ItemsSearchPh] = "Item suchen...",
+            [TranslateKey.ItemsCart] = "Warenkorb",
+            [TranslateKey.ItemsClear] = "Leeren",
+            [TranslateKey.ItemsGive] = "Geben",
+            [TranslateKey.ItemsNoitems] = "Nichts gefunden",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Geben an",
+            [TranslateKey.ItemsGiveSub] = "Online-Spieler auswählen",
+            [TranslateKey.ItemsGiveSearchPh] = "Nach Name filtern...",
+            [TranslateKey.ItemsGiveSelectall] = "Alle auswählen",
+            [TranslateKey.ItemsGiveClearsel] = "Auswahl aufheben",
+            [TranslateKey.ItemsGiveNoOnline] = "Keine Spieler online",
+            [TranslateKey.ItemsGiveNoMatch] = "Keine Spieler stimmen mit \"{0}\" überein",
+            [TranslateKey.ItemsGiveConfirm] = "Geben ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Mehr anzeigen ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Mindestens einen Spieler auswählen",
+            [TranslateKey.ItemsGiveEmptyCart] = "Warenkorb ist leer",
+            [TranslateKey.ItemsInfoTitle] = "Item-Info",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item-ID",
+            [TranslateKey.ItemsInfoCategory] = "Kategorie",
+            [TranslateKey.ItemsInfoRarity] = "Seltenheit",
+            [TranslateKey.ItemsInfoStack] = "Max. Stapel",
+            [TranslateKey.ItemsInfoVolume] = "Volumen (Behälterplatz)",
+            [TranslateKey.ItemsInfoDurability] = "Haltbarkeit",
+            [TranslateKey.ItemsInfoDescription] = "Beschreibung",
+            [TranslateKey.ItemsInfoBlueprint] = "Herstellung",
+            [TranslateKey.ItemsInfoWorkbench] = "Werkbank",
+            [TranslateKey.ItemsInfoCrafttime] = "Herstellungszeit",
+            [TranslateKey.ItemsInfoScrap] = "Schrott beim Recycling",
+            [TranslateKey.ItemsInfoIngredients] = "Zutaten",
+            [TranslateKey.ItemsInfoRecycle] = "Recycelt zu",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Recycelt zu (Grüner Recycler)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Recycelt zu (Gelber Recycler)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Recycelt zu (Roter Recycler)",
+            [TranslateKey.ItemsInfoMods] = "Mods (Komponenten)",
+            [TranslateKey.GiveCustShort] = "Shortname (muss existieren)",
+            [TranslateKey.GiveCustName] = "Item-Name",
+            [TranslateKey.GiveCustSkin] = "Skin-ID",
+            [TranslateKey.GiveCustQty] = "Menge",
+            [TranslateKey.GiveCustBad] = "nicht gefunden",
+            [TranslateKey.GiveCustAdd] = "Hinzufügen",
+            [TranslateKey.PermsTitle] = "Berechtigungen & Gruppen",
+            [TranslateKey.PermsSub] = "Berechtigungen gelten nur für die ausgewählte Gruppe",
+            [TranslateKey.PermsNewgroup] = "Neue Gruppe",
+            [TranslateKey.PermsNewgroupD] = "Gib einen Namen für die neue Berechtigungsgruppe ein",
+            [TranslateKey.PermsNewgroupPh] = "z. B. helper",
+            [TranslateKey.PermsInherit] = "Berechtigungen erben von:",
+            [TranslateKey.PermsParentNone] = "— Keine Vererbung (neu) —",
+            [TranslateKey.PermsCreate] = "Erstellen",
+            [TranslateKey.PermsAutosave] = "wird automatisch gespeichert",
+            [TranslateKey.PermsGroups] = "Gruppen",
+            [TranslateKey.PermsForgroup] = "Berechtigungen für Gruppe:",
+            [TranslateKey.PermsInherited] = "Geerbt von {0}",
+            [TranslateKey.PermsDelGroup] = "Gruppe löschen",
+            [TranslateKey.PermsDelConfirm] = "Löschen bestätigen?",
+            [TranslateKey.LogsTitle] = "Logs",
+            [TranslateKey.LogsSub] = "Admin-Aktionsprotokoll",
+            [TranslateKey.LogsJournal] = "Admin-Aktionsjournal",
+            [TranslateKey.LogsShowMore] = "Mehr anzeigen (+{0})",
+            [TranslateKey.PluginsTitle] = "Plugins",
+            [TranslateKey.PluginsSub] = "geladene Plugins · neu laden und aktivieren/deaktivieren",
+            [TranslateKey.PluginsActive] = "Aktiv",
+            [TranslateKey.PluginsNoCommands] = "Dieses Plugin hat keine registrierten Befehle.",
+            [TranslateKey.PluginsOff] = "Deaktiviert",
+            [TranslateKey.PluginsUnloaded] = "nicht geladen",
+            [TranslateKey.PluginsSearchPh] = "Plugin suchen...",
+            [TranslateKey.PluginsNone] = "Keine Plugins gefunden",
+            [TranslateKey.PluginsCfgBtn] = "Config",
+            [TranslateKey.PluginsLangBtn] = "Sprache",
+            [TranslateKey.PluginsCheckUpdates] = "Updates prüfen",
+            [TranslateKey.PluginsChecking] = "Wird geprüft...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "Das UpdateChecker-Plugin ist nicht installiert.",
+            [TranslateKey.PluginsUpdateAvailable] = "Update: v{0} → v{1}",
+            [TranslateKey.CfgTitle] = "{0}  ·  Config",
+            [TranslateKey.CfgLangTitle] = "{0}  ·  Sprache",
+            [TranslateKey.CfgSaved] = "Konfiguration gespeichert",
+            [TranslateKey.CfgParseError] = "Datei konnte nicht gelesen oder verarbeitet werden",
+            [TranslateKey.CfgWriteError] = "Datei konnte nicht geschrieben werden",
+            [TranslateKey.CfgBadValue] = "Ungültiger Wert für {0}",
+            [TranslateKey.CfgNoLang] = "Dieses Plugin hat keine Sprachdateien",
+            [TranslateKey.CfgLangNew] = "neuer Code",
+            [TranslateKey.TipNavDashboard] = "Live-Serverübersicht: Spieler online, Leistung und letzte Ereignisse",
+            [TranslateKey.TipNavConsole] = "Serverkonsole: Log lesen und Befehle senden",
+            [TranslateKey.TipNavPlayers] = "Spielerliste mit Suche und allen Aktionen für einen Spieler",
+            [TranslateKey.TipNavVanish] = "Admin-Unsichtbarkeit und alles, was sie mit umschaltet",
+            [TranslateKey.TipNavEsp] = "Umrisse von Spielern, NPCs und Entitäten durch Wände",
+            [TranslateKey.TipNavPerms] = "Berechtigungen und Gruppen: vergeben, entziehen und Mitgliedschaft bearbeiten",
+            [TranslateKey.TipNavLogs] = "Verlauf von Admin-Aktionen, Chat und Plugin-Ereignissen",
+            [TranslateKey.TipNavPlugins] = "Server-Plugins: laden, neu laden, Configs und Sprachdateien bearbeiten",
+            [TranslateKey.TipNavConvars] = "Server-Convars: eine Variable suchen und ihren Wert ändern",
+            [TranslateKey.TipNavAppearance] = "Theme, Schriftart und Größe des Panels",
+            [TranslateKey.TipNavSettings] = "Plugin-Einstellungen: Integrationen, Benachrichtigungen, Sicherheit und Speicher",
+            [TranslateKey.TipNavMap] = "Admin-Karte mit Spielern, Markierungen und Aktionen direkt auf der Karte",
+            [TranslateKey.TipNavBinds] = "Fertige Konsolen-Binds für die Admin-Werkzeuge",
+            [TranslateKey.TipNavQuickButtons] = "Eigene Schnellaktions-Buttons für Panel und Karte",
+            [TranslateKey.TipNavItems] = "Massenvergabe von Items und Item-Übersicht",
+            [TranslateKey.CfgFormHint] = "Booleans werden umgeschaltet, Zahlen und Strings sind Eingabefelder, Objekte werden zu Gruppen, Arrays öffnen sich in einem eigenen Fenster",
+            [TranslateKey.CfgLangHint] = "Wähle eine bestehende Sprache oder kopiere sie in einen neuen Code",
+            [TranslateKey.CfgLangExisting] = "Vorhandene Sprachcodes",
+            [TranslateKey.CfgLangCopy] = "Kopie erstellen",
+            [TranslateKey.CfgLangCopyFrom] = "Kopie von {0}",
+            [TranslateKey.CfgLangNewD] = "Sprachcode eingeben und Enter drücken, die geöffnete Sprache wird hineinkopiert",
+            [TranslateKey.CfgLangBad] = "Unbekannter Sprachcode, wähle einen aus der Liste",
+            [TranslateKey.CfgLangExists] = "Dieses Plugin hat diese Sprache bereits",
+            [TranslateKey.CfgLangDel] = "{0} löschen",
+            [TranslateKey.CfgLangDelSure] = "{0} löschen?",
+            [TranslateKey.CfgLangDelD] = "Löscht die Datei der geöffneten Lokalisierung unwiderruflich",
+            [TranslateKey.CfgLangDeleted] = "Lokalisierung {0} gelöscht",
+            [TranslateKey.CfgLangLast] = "Die letzte Lokalisierung kann nicht gelöscht werden",
+            [TranslateKey.CfgLangPick] = "Oder einen fertigen Code wählen",
+            [TranslateKey.CfgFieldNew] = "Neues Feld",
+            [TranslateKey.CfgFieldKeyHint] = "Schlüssel, zum Beispiel ui.something",
+            [TranslateKey.CfgFieldValHint] = "Standardwert",
+            [TranslateKey.CfgFieldAdd] = "Zu allen Sprachen hinzufügen",
+            [TranslateKey.CfgFieldD] =
+                "Schlüssel und Wert eingeben, in jedem Feld Enter drücken, dann diesen Button - der Schlüssel erscheint in jeder Lokalisierung des Plugins",
+            [TranslateKey.CfgFieldBad] = "Schlüsselnamen eingeben und Enter drücken",
+            [TranslateKey.CfgFieldExists] = "Dieser Schlüssel existiert in dieser Lokalisierung bereits",
+            [TranslateKey.CfgFieldAdded] = "Schlüssel {0} zu {1} Lokalisierung(en) hinzugefügt",
+            [TranslateKey.CfgArrTitle] = "Array  ·  {0}",
+            [TranslateKey.CfgArrHint] = "{0} Elemente, auf ein Element klicken, um es aufzuklappen",
+            [TranslateKey.CfgArrEdit] = "Bearbeiten",
+            [TranslateKey.CfgArrAdd] = "Element hinzufügen",
+            [TranslateKey.CfgArrApply] = "Anwenden",
+            [TranslateKey.CfgArrEmpty] = "Das Array ist leer",
+            [TranslateKey.CfgReloadLabel] = "Plugin nach dem Speichern neu laden",
+            [TranslateKey.CfgEmpty] = "Nichts zu bearbeiten",
+            [TranslateKey.CfgSelf] = "PowerfulAdmin kann sich nicht selbst bearbeiten",
+            [TranslateKey.ButtonCommands] = "Befehle",
+            [TranslateKey.ButtonLoad] = "Aktivieren",
+            [TranslateKey.ButtonUnload] = "Deaktivieren",
+            [TranslateKey.PluginsSelf] = "PowerfulAdmin kann nicht aus seiner eigenen Verwaltung deaktiviert werden.",
+            [TranslateKey.LogsFAll] = "Alle",
+            [TranslateKey.LogsFAct] = "Aktionen",
+            [TranslateKey.LogsFChat] = "Chat",
+            [TranslateKey.LogsFConn] = "Verbindungen",
+            [TranslateKey.LogsFErr] = "Fehler",
+            [TranslateKey.SettingsTitle] = "Einstellungen",
+            [TranslateKey.SettingsSub] = "Oberfläche · Integrationen · Sicherheit",
+            [TranslateKey.SettingsTheme] = "Theme",
+            [TranslateKey.AppVitals] = "Vitalwerte (im HUD anzeigen)",
+            [TranslateKey.HammerHint] = "Hammer halten",
+            [TranslateKey.HammerEmpty] = "Auf ein Objekt schauen",
+            [TranslateKey.HammerOwner] = "Besitzer",
+            [TranslateKey.HammerAuthed] = "Autorisiert",
+            [TranslateKey.HammerItems] = "Inhalt",
+            [TranslateKey.HammerCode] = "Code",
+            [TranslateKey.HammerGuest] = "Gast",
+            [TranslateKey.HammerUpkeep] = "geschützt",
+            [TranslateKey.HammerBag] = "Schlafsack zugewiesen an",
+            [TranslateKey.HammerGeneral] = "Allgemein",
+            [TranslateKey.HammerWhitelist] = "Schloss-Whitelist",
+            [TranslateKey.HammerPosition] = "Position",
+            [TranslateKey.HammerDistance] = "Entfernung",
+            [TranslateKey.HammerGrade] = "Stufe",
+            [TranslateKey.HammerBuilding] = "Gebäude",
+            [TranslateKey.HammerParent] = "Übergeordnet",
+            [TranslateKey.HammerSteamId] = "SteamID",
+            [TranslateKey.HammerState] = "Zustand",
+            [TranslateKey.HammerTeam] = "Team",
+            [TranslateKey.HammerPower] = "Energie",
+            [TranslateKey.HammerPowered] = "Mit Strom versorgt",
+            [TranslateKey.HammerMounted] = "Montiert",
+            [TranslateKey.HammerHidden] = "Code verborgen",
+            [TranslateKey.HammerReveal] = "Anzeigen",
+            [TranslateKey.HammerHide] = "Verbergen",
+            [TranslateKey.HammerDelete] = "Löschen",
+            [TranslateKey.HammerDeleteGibs] = "Mit Trümmern",
+            [TranslateKey.HammerDeleteParents] = "Mit Verknüpftem",
+            [TranslateKey.HammerPlainHint] = "Das Objekt verschwindet spurlos",
+            [TranslateKey.HammerGibsHint] = "Das Objekt zerbricht in Trümmer wie bei einem Abriss",
+            [TranslateKey.HammerParentsHint] = "Entfernt die gesamte verknüpfte Struktur, nicht nur diesen Block",
+            [TranslateKey.HammerCrateUnlock] = "Entsperren",
+            [TranslateKey.HammerCrateTimer] = "Timer",
+            [TranslateKey.HammerCrateUnlockHint] = "Die Kiste öffnet sich sofort, kein Hacken nötig",
+            [TranslateKey.HammerCrateTimerHint] = "Fragt nach einer Zeit und setzt sie auf den Timer",
+            [TranslateKey.HammerLoot] = "Loot",
+            [TranslateKey.HammerModeNone] = "Kein Modus",
+            [TranslateKey.PopupHealD] = "Stellt HP wieder her. Der Modus Voll entfernt zusätzlich Blutung/Strahlung und füllt Hunger und Durst auf",
+            [TranslateKey.PopupNotesD] = "Admin-Notizen zu diesem Spieler",
+            [TranslateKey.PopupKillD] = "Den Spieler sofort töten",
+            [TranslateKey.PopupStripD] = "Alles aus Inventar, Gürtel und Kleidung nehmen",
+            [TranslateKey.PopupKickD] = "Den Spieler mit einem Grund trennen",
+            [TranslateKey.PopupBanD] = "Per SteamID mit Grund und Dauer bannen",
+            [TranslateKey.PopupFreezeD] = "Den Spieler zur Kontrolle einfrieren",
+            [TranslateKey.PopupMuteD] = "Chat und Sprache für eine Dauer sperren",
+            [TranslateKey.PopupTpD] = "Zum Spieler teleportieren oder ihn zu dir holen",
+            [TranslateKey.PopupInvD] = "Das Spielerinventar öffnen und bearbeiten",
+            [TranslateKey.PopupSpectateD] = "Diesen Spieler beobachten",
+            [TranslateKey.PopupGiveD] = "Items aus dem Katalog geben",
+            [TranslateKey.PopupBlueprintsD] = "Erlernte Blaupausen verwalten",
+            [TranslateKey.PopupModifiersD] = "Modifikatoren bearbeiten: Geschwindigkeit, Schaden, Schwerkraft",
+            [TranslateKey.PopupVitalsD] = "Gesundheit, Hunger, Durst und weitere Vitalwerte bearbeiten",
+            [TranslateKey.PopupPermsD] = "Berechtigungen und Gruppen des Spielers verwalten",
+            [TranslateKey.PopupShowMapD] = "Die Position des Spielers auf der Admin-Karte anzeigen",
+            [TranslateKey.PopupEconomyD] = "Das Guthaben des Spielers ansehen und bearbeiten",
+            [TranslateKey.HammerModeNoneD] = "Modus zurücksetzen, der Hammer funktioniert wie gewohnt",
+            [TranslateKey.HammerLootHint] = "Öffnet das Inventar des Containers zur Bearbeitung",
+            [TranslateKey.HammerCrateTimeHint] = "Format mm:ss oder Sekunden, zählt ab jetzt",
+            [TranslateKey.HammerCrateTimeBad] = "Ungültige Zeit: mm:ss verwenden, bis zu 24 Stunden",
+            [TranslateKey.HammerCrateTimeDone] = "Kisten-Timer: {0}",
+            [TranslateKey.HammerCrateApply] = "Anwenden",
+            [TranslateKey.HammerCrateTimeLabel] = "ÖFFNUNGSZEIT",
+            [TranslateKey.HammerCrateOpens] = "Öffnet in",
+            [TranslateKey.HammerCrateOpened] = "offen",
+            [TranslateKey.HammerCrateIdle] = "Hack nicht gestartet",
+            [TranslateKey.HammerCratePresets] = "VORLAGEN",
+            [TranslateKey.HammerCrateStateOk] = "BEREIT",
+            [TranslateKey.HammerCrateStateBad] = "FEHLER",
+            [TranslateKey.SecurityCrateSeconds] = "Kisten-Timer, s",
+            [TranslateKey.HammerNotArmed] = "Keine Aktion ausgewählt",
+            [TranslateKey.HammerPieHint] = "E halten, um eine Aktion zu wählen",
+            [TranslateKey.HammerBinds] = "E halten Menü   Shift+LMT ausführen   Shift+E Code",
+            [TranslateKey.MapLayerPvp] = "PVP",
+            [TranslateKey.MapLayerRaid] = "Raids",
+            [TranslateKey.MapLayerNotes] = "Notizen",
+            [TranslateKey.MapNoteHint] = "Shift halten und eine Markierung setzen, um dorthin zu teleportieren",
+            [TranslateKey.MapLegend] = "Legende",
+            [TranslateKey.SettingsMapGroup] = "Kartengruppierung",
+            [TranslateKey.SettingsMapGroupD] = "Punkte zu gezählten Zellen zusammenfassen statt einzelner Symbole",
+            [TranslateKey.SettingsPie] = "Radialmenü",
+            [TranslateKey.SettingsPieD] = "Diese Aktion im Radialmenü anzeigen",
+            [TranslateKey.MapLegendTeam] = "Team des ausgewählten Spielers",
+            [TranslateKey.MapLegendCargo] = "Frachtschiff",
+            [TranslateKey.MapLegendAir] = "Lieferdrohne",
+            [TranslateKey.MapLegendVending] = "Verkaufsautomat",
+            [TranslateKey.MapLegendEvent] = "Event",
+            [TranslateKey.MapLegendIsland] = "Insel",
+            [TranslateKey.MapLegendCity] = "Schwimmende Stadt",
+            [TranslateKey.MapLegendGhost] = "Geisterschiff",
+            [TranslateKey.MapLegendPortal] = "Portal",
+            [TranslateKey.MapActGroupState] = "Spielerzustand",
+            [TranslateKey.MapActGroupDiscipline] = "Disziplin",
+            [TranslateKey.MapActGroupMove] = "Bewegung",
+            [TranslateKey.MapActGroupInspect] = "Inspect",
+            [TranslateKey.MapActSelected] = "{0} von {1} ausgewählt",
+            [TranslateKey.MapActOn] = "AN",
+            [TranslateKey.MapActOff] = "AUS",
+            [TranslateKey.MapNotesEmptyHint] = "Rechtsklick auf die Karte, um eine Notiz zu setzen",
+            [TranslateKey.MapLegendStation] = "Bootsstation",
+            [TranslateKey.MapLegendRhib] = "Boote",
+            [TranslateKey.MapLegendAirdrop] = "Luftabwurf",
+            [TranslateKey.MapZoneMain] = "Hauptinsel",
+            [TranslateKey.MapZoneDeep] = "Tiefsee",
+            [TranslateKey.MapNotesEmpty] = "Einen Spieler wählen, um seine Markierungen zu sehen",
+            [TranslateKey.MapNotesOf] = "Spieler-Markierungen",
+            [TranslateKey.MapSearch] = "Spieler suchen...",
+            [TranslateKey.MapHealth] = "Gesundheit",
+            [TranslateKey.MapQuickActions] = "Schnellaktionen",
+            [TranslateKey.MapNoActions] = "Keine Aktionen konfiguriert",
+            [TranslateKey.MapObjTeleport] = "Dorthin teleportieren",
+            [TranslateKey.MapObjDelete] = "Zerstören",
+            [TranslateKey.MapObjDeleteConfirm] = "Zerstören?",
+            [TranslateKey.MapObjDeleteOk] = "Ja, zerstören",
+            [TranslateKey.MapObjLoot] = "Inventar öffnen",
+            [TranslateKey.MapObjOwnersMore] = "und {0} weitere",
+            [TranslateKey.MapCluTitle] = "Im Cluster: {0}",
+            [TranslateKey.SecurityHeatWindow] = "Heatmap-Fenster, Min.",
+            [TranslateKey.HammerToggle] = "Admin-Hammer",
+            [TranslateKey.HammerToggleD] = "Infos über das Objekt, das du ansiehst",
+            [TranslateKey.HammerRangeLabel] = "Hammer-Reichweite",
+            [TranslateKey.HammerIntervalLabel] = "Hammer-Aktualisierung",
+            [TranslateKey.SecurityHammerBounds] = "Admin-Hammer: Aktualisierungsintervall, Strahlreichweite, Item",
+            [TranslateKey.NavigationMap] = "Karte",
+            [TranslateKey.NavigationBinds] = "Binds",
+            [TranslateKey.BindsTitle] = "Binds",
+            [TranslateKey.BindsSub] = "Zeile auswählen, mit Strg+C kopieren und in die F1-Konsole einfügen",
+            [TranslateKey.BindsCopy] = "AUSWÄHLEN UND STRG+C",
+            [TranslateKey.BindsKey] = "TASTE",
+            [TranslateKey.BindsUnbind] = "Einen Bind mit unbind f1 entfernen. Die von dir gewählte Taste verwenden",
+            [TranslateKey.BindsLocked] = "Kein Zugriff",
+            [TranslateKey.BindPanel] = "Panel",
+            [TranslateKey.BindPanelDesc] = "Öffnet das Adminpanel",
+            [TranslateKey.BindVanish] = "Vanish",
+            [TranslateKey.BindVanishDesc] = "Schaltet Unsichtbarkeit um",
+            [TranslateKey.BindGod] = "Godmode",
+            [TranslateKey.BindGodDesc] = "Schaltet Godmode um",
+            [TranslateKey.BindNoclip] = "Noclip",
+            [TranslateKey.BindNoclipDesc] = "Schaltet das Fliegen durch Wände um",
+            [TranslateKey.BindEsp] = "ESP",
+            [TranslateKey.BindEspDesc] = "Schaltet die Entitäten-Übersicht um",
+            [TranslateKey.BindHammer] = "Hammer",
+            [TranslateKey.BindHammerDesc] = "Schaltet das Hammer-Werkzeug um",
+            [TranslateKey.BindInspect] = "Inspect",
+            [TranslateKey.BindInspectDesc] = "Schaltet Spieler-Inspect um",
+            [TranslateKey.BindMap] = "Karte",
+            [TranslateKey.BindMapDesc] = "Öffnet das Panel direkt auf der Karte",
+            [TranslateKey.BindPie] = "Radialmenü",
+            [TranslateKey.BindPieDesc] = "Öffnet das radiale Schnellaktionsmenü",
+            [TranslateKey.MapTitle] = "Serverkarte",
+            [TranslateKey.MapSub] = "Live-Positionen und Strukturen",
+            [TranslateKey.MapPreparing] = "Karte wird vorbereitet, das dauert ein paar Sekunden",
+            [TranslateKey.MapLayerPlayers] = "Spieler",
+            [TranslateKey.MapLayerSleepers] = "Schläfer",
+            [TranslateKey.MapLayerTc] = "TC",
+            [TranslateKey.MapLayerBags] = "Schlafsäcke",
+            [TranslateKey.MapLayerStashes] = "Verstecke",
+            [TranslateKey.MapLayerCars] = "Autos",
+            [TranslateKey.MapLayerShops] = "Shops",
+            [TranslateKey.MapLegendTrain] = "Zug",
+            [TranslateKey.MapLegendCrate] = "Verschlossene Kiste",
+            [TranslateKey.MapLayerHorses] = "Pferde",
+            [TranslateKey.MapLayerAir] = "Luft",
+            [TranslateKey.MapLayerEvents] = "Events",
+            [TranslateKey.MapRefresh] = "Aktualisieren",
+            [TranslateKey.MapPause] = "Pause",
+            [TranslateKey.MapClusters] = "Cluster",
+            [TranslateKey.MapOnline] = "Online",
+            [TranslateKey.MapNoSelection] = "Einen Spieler auf der Karte oder in der Liste wählen",
+            [TranslateKey.MapDetails] = "Details",
+            [TranslateKey.NavigationQuickButtons] = "Schnellbuttons",
+            [TranslateKey.QbTitle] = "Schnellbuttons",
+            [TranslateKey.QbSub] = "eigene Admin-Aktionen",
+            [TranslateKey.QbNew] = "Erstellen",
+            [TranslateKey.QbMapActions] = "Eingebaute Aktionen auf der Karte",
+            [TranslateKey.QbEdit] = "Button bearbeiten",
+            [TranslateKey.QbEmpty] = "Noch keine Buttons",
+            [TranslateKey.QbName] = "Name",
+            [TranslateKey.QbCmd] = "Befehl",
+            [TranslateKey.QbPerm] = "Berechtigung powerfuladmin.<name> (leer bedeutet alle)",
+            [TranslateKey.QbIcon] = "Spielicon",
+            [TranslateKey.QbTarget] = "Ziel",
+            [TranslateKey.QbTargetPlayer] = "Spieler",
+            [TranslateKey.QbTargetGlobal] = "Global",
+            [TranslateKey.QbTargetPoint] = "Punkt",
+            [TranslateKey.QbPlaces] = "Wo angezeigt wird",
+            [TranslateKey.QbPlacePopup] = "Spieler-Popup",
+            [TranslateKey.QbPlaceMap] = "Karte",
+            [TranslateKey.QbPlaceWidget] = "Widget",
+            [TranslateKey.QbPlaceDashboard] = "Dashboard",
+            [TranslateKey.QbPlaceNone] = "nirgends",
+            [TranslateKey.QbPlaceholders] =
+                "%STEAM_ID% %NICKNAME% %X% %Y% %Z% %GRID% %ADMIN_STEAM_ID% %ADMIN_NICKNAME% %ADMIN_X% %ADMIN_Y% %ADMIN_Z% %ADMIN_GRID%   Befehlstrenner |",
+            [TranslateKey.QbConfirm] = "Bestätigung anfordern",
+            [TranslateKey.QbConfirmQ] = "{0} ausführen?",
+            [TranslateKey.QbSave] = "Speichern",
+            [TranslateKey.QbCancel] = "Abbrechen",
+            [TranslateKey.QbDone] = "Ausgeführt: {0}",
+            [TranslateKey.QbActions] = "Schnellaktionen",
+            [TranslateKey.DashboardQuickButtons] = "Schnellbuttons",
+            [TranslateKey.AppFonts] = "Schriftarten",
+            [TranslateKey.AppFontTitle] = "Titel und Buttons",
+            [TranslateKey.AppFontBody] = "Fließtext",
+            [TranslateKey.AppFontLogs] = "Logs",
+            [TranslateKey.AppFontConsole] = "Konsole",
+            [TranslateKey.AppFontHud] = "Benachrichtigungen und HUD",
+            [TranslateKey.AppFontPick] = "Schriftart wählen",
+            [TranslateKey.AppFontHint] = "Schriftarten ohne Kyrillisch sind mit (EN) markiert",
+            [TranslateKey.AppEspSize] = "ESP-Textgröße",
+            [TranslateKey.AppFontNoCyr] = "(EN)",
+            [TranslateKey.AppVitalsLocked] = "Erfordert die Berechtigung powerfuladmin.candisablevitals",
+            [TranslateKey.SettingsPrivate] = "Panel-Einstellungen",
+            [TranslateKey.SettingsDrag] = "Verschiebbares Panel",
+            [TranslateKey.SettingsDragD] = "Lässt dich das Panel mit der Maus überall hinziehen, die Position wird gespeichert",
+            [TranslateKey.SettingsIntegration] = "Integration",
+            [TranslateKey.SettingsSecurity] = "Sicherheit",
+            [TranslateKey.SettingsApi] = "API-Schlüssel",
+            [TranslateKey.ApiSteamKey] = "Steam Web API Key",
+            [TranslateKey.ApiSteamKeyPh] = "Deinen Steam Web API Key einfügen",
+            [TranslateKey.ApiSteamKeyD] =
+                "Wird für die Rust-Stunden-Statistik benötigt, einen Key gibt es auf steamcommunity.com/dev/apikey, das Spielerprofil muss öffentlich sein",
+            [TranslateKey.DiscordConnection] = "Bot-Verbindung",
+            [TranslateKey.DiscordToken] = "Bot-Token",
+            [TranslateKey.DiscordGuildid] = "Guild (Server)",
+            [TranslateKey.DiscordConnect] = "Bot verbinden",
+            [TranslateKey.DiscordTest] = "Testen",
+            [TranslateKey.DiscordMessageError] = "Plugin-Fehler",
+            [TranslateKey.DiscordMessageConnect] = "Admin verbunden",
+            [TranslateKey.DiscordMessageKick] = "Spieler gekickt",
+            [TranslateKey.DiscordMessageMute] = "Spieler stummgeschaltet",
+            [TranslateKey.DiscordMessageWipe] = "Server-Wipe",
+            [TranslateKey.DiscordMessageWipeDesc] = "Die Map wurde gewiped.",
+            [TranslateKey.DiscordMessageRestart] = "Server gestartet",
+            [TranslateKey.DiscordMessageRestartDesc] = "Der Server ist gestartet und bereit.",
+            [TranslateKey.DiscordMessageBy] = "Von:",
+            [TranslateKey.DiscordMessageTestSent] = "Testnachricht an Discord gesendet.",
+            [TranslateKey.DiscordMessageTestNourl] = "Zuerst eine Webhook-URL in den Discord-Einstellungen festlegen.",
+            [TranslateKey.DiscordWebhooks] = "Event-Webhooks",
+            [TranslateKey.DiscordHookBans] = "Webhook: Bans/Kicks",
+            [TranslateKey.DiscordHookActions] = "Webhook: Admin-Aktionen",
+            [TranslateKey.DiscordHookChat] = "Webhook: Server-Chat",
+            [TranslateKey.DiscordHookErrors] = "Webhook: Fehler & Abstürze",
+            [TranslateKey.DiscordWhUrl] = "Webhook-URL",
+            [TranslateKey.DiscordWhName] = "Name",
+            [TranslateKey.DiscordWhLogo] = "Logo (Avatar-URL)",
+            [TranslateKey.DiscordWhDefault] = "Standard (geteilt)",
+            [TranslateKey.DiscordNotset] = "nicht gesetzt",
+            [TranslateKey.DiscordDisabledSend] = "Versand deaktiviert",
+            [TranslateKey.DiscordWhatsend] = "Was gesendet wird",
+            [TranslateKey.DiscordBansKicks] = "Bans & Kicks",
+            [TranslateKey.DiscordVef] = "Vanish / ESP",
+            [TranslateKey.DiscordAdminConn] = "Admin-Verbindungen",
+            [TranslateKey.DiscordPlayerChat] = "Spieler-Chat",
+            [TranslateKey.DiscordRestart] = "Serverstart/-neustart",
+            [TranslateKey.DiscordPluginErr] = "Plugin-Fehler",
+            [TranslateKey.DiscordWipe] = "Wipe-Benachrichtigungen",
+            [TranslateKey.DiscordEco] = "Guthaben-Operationen",
+            [TranslateKey.DiscordEmbed] = "Erscheinungsbild der Embed-Nachricht",
+            [TranslateKey.DiscordBotname] = "Bot-Name",
+            [TranslateKey.DiscordAvatar] = "Avatar-URL",
+            [TranslateKey.DiscordFooter] = "Fußzeilentext",
+            [TranslateKey.DiscordEmbedcolor] = "Embed-Farbe (primär)",
+            [TranslateKey.DiscordColorClose] = "Schließen",
+            [TranslateKey.DiscordTitleTpl] = "Titelvorlage",
+            [TranslateKey.DiscordDescTpl] = "Beschreibungsvorlage",
+            [TranslateKey.DiscordVars] = "Variablen: {action} {target} {admin} {reason} {time} {steamid}",
+            [TranslateKey.DiscordThumb] = "Steam-Avatar des Ziels",
+            [TranslateKey.DiscordThumbD] = "Zeigt das Serverlogo als Vorschaubild rechts im Embed",
+            [TranslateKey.DiscordTimestamp] = "Zeitstempel",
+            [TranslateKey.DiscordTimestampD] = "Fügt die Ereigniszeit zum Embed hinzu",
+            [TranslateKey.DiscordSlash] = "Slash-Befehle",
+            [TranslateKey.DiscordSlashOnline] = "die Online-Zahl abrufen",
+            [TranslateKey.DiscordSlashPlayers] = "Spielerliste",
+            [TranslateKey.DiscordSlashKick] = "Direkt aus Discord kicken",
+            [TranslateKey.DiscordSlashMute] = "Direkt aus Discord stummschalten",
+            [TranslateKey.DiscordChatBridge] = "Discord -> Spielchat",
+            [TranslateKey.DiscordChatBridgeD] =
+                "Leitet Nachrichten aus dem Discord-Chat-Kanal ins Spiel weiter, benötigt den Bot und Message Content Intent",
+            [TranslateKey.DiscordSlashBan] = "Direkt aus Discord bannen",
+            [TranslateKey.DiscordDelivery] = "Log-Zustellung",
+            [TranslateKey.DiscordDelivWh] = "Webhooks",
+            [TranslateKey.DiscordDelivBot] = "Bot",
+            [TranslateKey.DiscordDelivBoth] = "Beides",
+            [TranslateKey.DiscordDeliveryHint] = "Wie Ereignisse an Discord gesendet werden",
+            [TranslateKey.DiscordBotSection] = "Discord - Bot",
+            [TranslateKey.DiscordBotChannels] = "Bot-Kanäle (ID)",
+            [TranslateKey.DiscordChanBans] = "Bans/Kicks-Kanal",
+            [TranslateKey.DiscordChanChat] = "Chat-Kanal",
+            [TranslateKey.DiscordChanActions] = "Aktionen-Kanal",
+            [TranslateKey.DiscordChanErrors] = "Fehler-Kanal",
+            [TranslateKey.DiscordRoles] = "Befehlsrollen",
+            [TranslateKey.DiscordRolesKick] = "Rollen für /kick",
+            [TranslateKey.DiscordRolesMute] = "Rollen für /mute",
+            [TranslateKey.DiscordRolesSuper] = "Super-Rolle (alle Befehle)",
+            [TranslateKey.DiscordRolesNone] = "Nicht ausgewählt",
+            [TranslateKey.DiscordRolesHint] = "Bot verbinden, um Rollen auszuwählen",
+            [TranslateKey.DiscordRolesCount] = "Ausgewählt: {0}",
+            [TranslateKey.DiscordStatusOffline] = "Nicht verbunden",
+            [TranslateKey.DiscordStatusConnecting] = "Verbinde...",
+            [TranslateKey.DiscordStatusOnline] = "Verbunden",
+            [TranslateKey.DiscordStatusError] = "Fehler",
+            [TranslateKey.DiscordStatusNoExt] = "Discord-Erweiterung nicht gefunden",
+            [TranslateKey.DiscordStatusCfg] = "Bot-Status",
+            [TranslateKey.DiscordStatusText] = "Statustext ({online} {maxonline} {queue} {connecting})",
+            [TranslateKey.DiscordActPlaying] = "Spielt",
+            [TranslateKey.DiscordActWatching] = "Schaut",
+            [TranslateKey.DiscordActListening] = "Hört",
+            [TranslateKey.DiscordActCompeting] = "Tritt an bei",
+            [TranslateKey.DiscordBanDlc] = "DLC",
+            [TranslateKey.SecurityLogall] = "Alle Aktionen protokollieren",
+            [TranslateKey.SecurityLogallD] = "Schreibt jede Admin-Aktion in ein Journal, das im Spiel nicht bearbeitet werden kann",
+            [TranslateKey.SecurityLockPa] = "Vergabe von PowerfulAdmin-Rechten sperren",
+            [TranslateKey.SecurityLockPaD] = "Sperrt powerfuladmin.*-Schalter für alle, niemand kann sie über das Panel ändern",
+            [TranslateKey.SecurityEspInterval] = "ESP-Intervall (s)",
+            [TranslateKey.SecurityEspIntervalD] = "Wie oft ESP neu zeichnet, von 0,1 bis 5 Sekunden, niedriger ist flüssiger aber schwerer",
+            [TranslateKey.SecurityEspMax] = "Max. ESP-Objekte",
+            [TranslateKey.SecurityMapInterval] = "Kartenaktualisierung, Sek.",
+            [TranslateKey.SecurityLogMax] = "Max. Logs (50-5000)",
+            [TranslateKey.SecurityTemplates] = "Grund-Vorlagen (getrennt mit |)",
+            [TranslateKey.LockedTitle] = "Bereich gesperrt",
+            [TranslateKey.LockedDesc] =
+                "Der Zugriff auf die Einstellungen ist nur für Benutzer mit der Berechtigung powerfuladmin.settings erlaubt. Wende dich an den Serverbesitzer oder Hauptadmin.",
+            [TranslateKey.LockedFeat] =
+                "Du hast keine Berechtigung für diesen Bereich. Bitte den Serverbesitzer oder Hauptadmin, dir Zugriff zu gewähren.",
+            [TranslateKey.MessageNoperm] = "Du hast keinen Zugriff auf PowerfulAdmin."
+        };
+
+        private readonly Dictionary<string, string> _fr = new()
+        {
+            [TranslateKey.DashboardFps] = "FPS SERVEUR",
+            [TranslateKey.DashboardSleeping] = "endormis",
+            [TranslateKey.DashboardEntities] = "entités",
+            [TranslateKey.DashboardNonearby] = "Aucun joueur à proximité",
+            [TranslateKey.ConsoleTabAll] = "Tout",
+            [TranslateKey.ConsoleTabChat] = "Chat",
+            [TranslateKey.ConsoleTabCmd] = "Commandes",
+            [TranslateKey.ConsoleTabConn] = "Connexions",
+            [TranslateKey.ConsoleTabErr] = "Erreurs",
+            [TranslateKey.ConsoleExport] = "Exporter",
+            [TranslateKey.ConsoleExported] = "Console exportée vers oxide/logs/PowerfulAdmin.",
+            [TranslateKey.ConsoleEmpty] = "Aucun événement pour l'instant",
+            [TranslateKey.WidgetConsoleOff] = "Console désactivée",
+            [TranslateKey.PlayersSub2] = "{0} en ligne · {1} connus",
+            [TranslateKey.PlayersShown2] = "Affichage {0}–{1} sur {2}",
+            [TranslateKey.PlayersEmpty] = "Aucun joueur trouvé",
+            [TranslateKey.MessageNotfound] = "Joueur introuvable ou hors ligne.",
+            [TranslateKey.MessageTpTo] = "Téléporté vers {0}.",
+            [TranslateKey.MessageTpHere] = "{0} a été amené à vous.",
+            [TranslateKey.MessageTpCoords] = "{0} téléporté aux coordonnées ({1}).",
+            [TranslateKey.MessageTpLook] = "{0} téléporté le long de votre ligne de mire.",
+            [TranslateKey.MessageKicked] = "{0} a été expulsé.",
+            [TranslateKey.MessageMuted] = "{0} a été rendu muet ({1}).",
+            [TranslateKey.MessageUnmuted] = "{0} n'est plus muet.",
+            [TranslateKey.MuteNotice] = "Vous ne pouvez pas utiliser le chat - vous êtes muet. Raison : {0}. Temps restant : {1}.",
+            [TranslateKey.MuteDefault] = "Aucune raison",
+            [TranslateKey.MutePerm] = "permanent",
+            [TranslateKey.MuteCustom] = "Durée personnalisée",
+            [TranslateKey.MuteCustomPh] = "Durée personnalisée (ex. 90, 2h, 1d12h)",
+            [TranslateKey.MessageGave] = "Objets donnés à {0}.",
+            [TranslateKey.MessageItemsGiven] = "Donné à {0} joueur(s).",
+            [TranslateKey.MessageBanDisabled] = "Le bannissement est désactivé dans cette version.",
+            [TranslateKey.MessageHealed] = "{0} a été soigné ({1} PV).",
+            [TranslateKey.MessageKilled] = "{0} a été tué.",
+            [TranslateKey.MessageStripped] = "L'inventaire de {0} a été vidé.",
+            [TranslateKey.MessageSoon] = "Bientôt disponible.",
+            [TranslateKey.MessageUpdatecheckStarted] = "Vérification des mises à jour lancée.",
+            [TranslateKey.KickDefault] = "Expulsé par un administrateur",
+            [TranslateKey.KickBroadcast] = "{0} a été expulsé : {1}",
+            [TranslateKey.MuteBroadcast] = "{0} a été rendu muet : {1}",
+            [TranslateKey.PopupSoon] = "bientôt",
+            [TranslateKey.GiveCustomCat] = "Mes objets",
+            [TranslateKey.GiveNocustom] = "Aucun objet enregistré. Créez un objet personnalisé et activez « Enregistrer ».",
+            [TranslateKey.GiveSave] = "Enregistrer l'objet",
+            [TranslateKey.GiveSaveD] = "Enregistre le lot donné dans l'onglet Mes objets pour réutilisation",
+            [TranslateKey.SecurityConsolePlayer] = "Exécuter les commandes en tant que joueur",
+            [TranslateKey.SecurityConsolePlayerD] = "Exécute les commandes console en tant qu'administrateur, sinon elles s'exécutent en tant que serveur",
+            [TranslateKey.SecurityConsoleEnabled] = "Console activée",
+            [TranslateKey.SecurityConsoleEnabledD] =
+                "Désactive la console serveur pour tout le monde, la permission powerfuladmin.console reste nécessaire",
+            [TranslateKey.ConsoleDisabled] = "La console est désactivée ou vous n'y avez pas accès",
+            [TranslateKey.PopupPerms] = "Permissions",
+            [TranslateKey.PermsSearchPh] = "Rechercher une permission...",
+            [TranslateKey.PermsNone] = "Aucune permission enregistrée",
+            [TranslateKey.PermsGroupMembers] = "Joueurs dans {0}",
+            [TranslateKey.PermsGroupMembersCount] = "{0} joueurs",
+            [TranslateKey.PermsGroupMembersSearchPh] = "Filtrer par nom...",
+            [TranslateKey.PermsGroupMembersEmpty] = "Aucun joueur dans ce groupe",
+            [TranslateKey.PermsGroupMembersNomatch] = "Aucun joueur ne correspond à \"{0}\"",
+            [TranslateKey.PermsGroupMembersTip] = "Cliquez pour ouvrir la fiche du joueur",
+            [TranslateKey.PermsUserperms] = "Permissions directes du joueur",
+            [TranslateKey.SettingsStorage] = "Stockage des données",
+            [TranslateKey.StorageNote] = "Changer de backend migre automatiquement les données",
+            [TranslateKey.StorageDescJson] =
+                "JSON — les données sont stockées dans les fichiers oxide/data/PowerfulAdmin/*.json.\nSimple et lisible, adapté aux petits serveurs.",
+            [TranslateKey.StorageDescSqlite] =
+                "SQLite — les données résident dans un fichier local PowerfulAdmin.db.\nRapide, sans base externe. Le choix par défaut.",
+            [TranslateKey.StorageHost] = "Hôte MySQL",
+            [TranslateKey.StoragePort] = "Port",
+            [TranslateKey.StorageDb] = "Base de données",
+            [TranslateKey.StorageUser] = "Utilisateur",
+            [TranslateKey.StoragePass] = "Mot de passe",
+            [TranslateKey.StorageTest] = "Tester MySQL",
+            [TranslateKey.StorageMigrate] = "Migrer",
+            [TranslateKey.StorageMigrateQ] = "Migrer les données ici ?",
+            [TranslateKey.ConfirmYes] = "Oui",
+            [TranslateKey.ConfirmNo] = "Non",
+            [TranslateKey.StorageStNone] = "Non connecté",
+            [TranslateKey.StorageStConnecting] = "Connexion...",
+            [TranslateKey.StorageStConnected] = "Connecté",
+            [TranslateKey.StorageStMigrating] = "Migration des données...",
+            [TranslateKey.StorageStFailed] = "Échec de la connexion",
+            [TranslateKey.StorageStMigrateFailed] = "Échec de la migration des données",
+            [TranslateKey.SettingsNotify] = "Notifications",
+            [TranslateKey.NotifyProviderLabel] = "Fournisseur de notifications",
+            [TranslateKey.NotifyProviderD] =
+                "Auto privilégie le premier plugin chargé compatible NCP, Désactivé masque seulement les notifications de succès, les erreurs restent affichées dans le chat",
+            [TranslateKey.NotifyProviderAuto] = "Auto",
+            [TranslateKey.NotifyProviderNotify] = "Notify",
+            [TranslateKey.NotifyProviderNcp] = "NCP",
+            [TranslateKey.NotifyProviderChat] = "Chat",
+            [TranslateKey.NotifyProviderOff] = "Désactivé",
+            [TranslateKey.NotifySubNotify] = "Notify",
+            [TranslateKey.NotifySubNcp] = "NCP",
+            [TranslateKey.NotifyTypeSuccess] = "ID type : succès",
+            [TranslateKey.NotifyTypeError] = "ID type : erreur",
+            [TranslateKey.NotifyTypePlayer] = "ID type : joueur",
+            [TranslateKey.NcpTypeSuccess] = "ID type : succès",
+            [TranslateKey.NcpTypeError] = "ID type : erreur",
+            [TranslateKey.NcpTypePlayer] = "ID type : joueur",
+            [TranslateKey.TopSearch] = "Rechercher joueur, commande, ID...",
+            [TranslateKey.TopSearchNone] = "Aucun joueur trouvé",
+            [TranslateKey.NavigationCatMain] = "PRINCIPAL",
+            [TranslateKey.NavigationCatTools] = "OUTILS",
+            [TranslateKey.NavigationCatManage] = "GESTION",
+            [TranslateKey.NavigationDashboard] = "Tableau de bord",
+            [TranslateKey.NavigationConsole] = "Console en direct",
+            [TranslateKey.NavigationPlayers] = "Joueurs",
+            [TranslateKey.NavigationItems] = "Objets",
+            [TranslateKey.NavigationVanish] = "Invisibilité",
+            [TranslateKey.NavigationEsp] = "ESP",
+            [TranslateKey.NavigationPerms] = "Permissions et groupes",
+            [TranslateKey.NavigationLogs] = "Journaux",
+            [TranslateKey.NavigationPlugins] = "Plugins",
+            [TranslateKey.NavigationConvars] = "ConVars",
+            [TranslateKey.NavigationAppearance] = "Apparence",
+            [TranslateKey.NavigationSettings] = "Réglages",
+            [TranslateKey.AppearanceTitle] = "Apparence",
+            [TranslateKey.AppearanceSub] = "thème de couleur du panneau",
+            [TranslateKey.ButtonSend] = "Envoyer",
+            [TranslateKey.ButtonSave] = "Enregistrer",
+            [TranslateKey.ButtonReload] = "Recharger",
+            [TranslateKey.FilterAll] = "Tous",
+            [TranslateKey.FilterOnline] = "En ligne",
+            [TranslateKey.ColumnPlayer] = "Joueur",
+            [TranslateKey.ColumnTime] = "Temps",
+            [TranslateKey.ColumnPing] = "Ping",
+            [TranslateKey.ColumnGroup] = "Groupe",
+            [TranslateKey.ColumnActions] = "Actions",
+            [TranslateKey.DashboardTitle] = "Tableau de bord",
+            [TranslateKey.DashboardSub] = "vue d'ensemble du serveur en temps réel",
+            [TranslateKey.DashboardOnline] = "EN LIGNE",
+            [TranslateKey.DashboardQueue] = "file d'attente {0} · connexion {1}",
+            [TranslateKey.DashboardAdmins] = "ADMINS ACTIFS",
+            [TranslateKey.DashboardNewplayers] = "NOUVEAUX JOUEURS",
+            [TranslateKey.DashboardNewplayersD] = "en 24h",
+            [TranslateKey.DashboardAllonline] = "tous en ligne",
+            [TranslateKey.DashboardLiveconsole] = "Console en direct",
+            [TranslateKey.DashboardNearby] = "Joueurs à proximité",
+            [TranslateKey.DashboardQuicktoggles] = "Raccourcis admin",
+            [TranslateKey.NearbyAll] = "Tous les joueurs →",
+            [TranslateKey.ToggleVanish] = "Invisibilité",
+            [TranslateKey.ToggleVanishD] = "Invisible pour les joueurs",
+            [TranslateKey.ToggleGodmode] = "Mode divin",
+            [TranslateKey.ToggleGodmodeD] = "Immortalité",
+            [TranslateKey.ToggleEsp] = "ESP",
+            [TranslateKey.ToggleEspD] = "Activer/désactiver (à configurer dans l'onglet ESP)",
+            [TranslateKey.ToggleNoclip] = "Noclip",
+            [TranslateKey.ToggleNoclipD] = "Traverser les murs",
+            [TranslateKey.ToggleWidget] = "Mini-widget",
+            [TranslateKey.ToggleWidgetD] = "Widget HUD en jeu",
+            [TranslateKey.ToggleInspect] = "Inspecter",
+            [TranslateKey.ToggleInspectD] = "De près : E pour l'inventaire, clic droit pour la fiche",
+            [TranslateKey.InspectHintCard] = "Clic droit - fiche",
+            [TranslateKey.InspectHintInv] = "E - inventaire",
+            [TranslateKey.ConsoleTitle] = "Console en direct",
+            [TranslateKey.ConsoleSub] = "lien direct en temps réel avec le serveur",
+            [TranslateKey.ConsoleStream] = "Flux d'événements",
+            [TranslateKey.ConsolePlaceholder] = "Entrez une commande ou du texte...",
+            [TranslateKey.PlayersTitle] = "Joueurs",
+            [TranslateKey.VanishTitle] = "Invisibilité",
+            [TranslateKey.VanishSub] = "invisibilité et comportement admin",
+            [TranslateKey.VanishMain] = "Paramètres principaux",
+            [TranslateKey.VanishEnable] = "Activer l'invisibilité",
+            [TranslateKey.VanishEnableD] = "Interrupteur principal du mode",
+            [TranslateKey.VanishAuto] = "Invisibilité auto à la connexion",
+            [TranslateKey.VanishAutoD] = "Active automatiquement l'invisibilité quand l'admin se connecte",
+            [TranslateKey.VanishUnlock] = "Ouvrir les coffres verrouillés",
+            [TranslateKey.VanishUnlockD] = "Permet à un admin invisible d'ouvrir coffres et portes verrouillés",
+            [TranslateKey.VanishNoclip] = "Noclip avec l'invisibilité",
+            [TranslateKey.VanishNoclipD] = "Active/désactive le vol en même temps que l'invisibilité",
+            [TranslateKey.VanishNoclipOff] = "Désactiver le noclip avec l'invisibilité",
+            [TranslateKey.VanishNoclipOffD] = "Désactive le vol quand l'invisibilité est désactivée",
+            [TranslateKey.VanishAppearance] = "Apparence",
+            [TranslateKey.VanishOpacity] = "Opacité pour les autres admins",
+            [TranslateKey.VanishSilColor] = "Couleur de silhouette pour les autres admins",
+            [TranslateKey.VanishLogging] = "Journalisation",
+            [TranslateKey.VanishLogToggle] = "Journaliser chaque activation/désactivation",
+            [TranslateKey.VanishLogToggleD] = "Écrit chaque bascule d'invisibilité dans le journal et le webhook Discord",
+            [TranslateKey.VanishLogNotify] = "Notifier les autres admins",
+            [TranslateKey.VanishLogNotifyD] = "Informe les autres admins dans le chat de qui est devenu invisible",
+            [TranslateKey.EspTitle] = "ESP",
+            [TranslateKey.EspSub] = "visualiser objets et joueurs à travers les murs",
+            [TranslateKey.EspWhat] = "Quoi afficher",
+            [TranslateKey.EspMaster] = "Activer l'ESP",
+            [TranslateKey.EspMasterD] = "Interrupteur principal de l'ESP, les catégories ci-dessous ne fonctionnent que s'il est activé",
+            [TranslateKey.EspPlayers] = "Joueurs",
+            [TranslateKey.EspLoot] = "Butin (coffres)",
+            [TranslateKey.EspBoxes] = "Coffres joueurs",
+            [TranslateKey.EspTc] = "Armoires à outils",
+            [TranslateKey.EspBeds] = "Sacs / lits",
+            [TranslateKey.EspTraps] = "Pièges",
+            [TranslateKey.EspStash] = "Caches",
+            [TranslateKey.EspDrops] = "Objets au sol",
+            [TranslateKey.EspSleepers] = "Endormis",
+            [TranslateKey.EspTurrets] = "Tourelles et pièges",
+            [TranslateKey.EspVehicles] = "Véhicules",
+            [TranslateKey.EspNpc] = "PNJ et animaux",
+            [TranslateKey.EspNodes] = "Gisements de minerai",
+            [TranslateKey.EspForage] = "Ressources ramassables",
+            [TranslateKey.EspRender] = "Paramètres de rendu",
+            [TranslateKey.EspRadius] = "Rayon",
+            [TranslateKey.EspBoxopacity] = "Opacité des cadres",
+            [TranslateKey.EspTextopacity] = "Opacité du texte",
+            [TranslateKey.EspColors] = "Couleurs",
+            [TranslateKey.EspColorEdit] = "Couleur du marqueur",
+            [TranslateKey.EspColorFormat] = "R V B A, valeurs 0-1",
+            [TranslateKey.EspEnemies] = "Ennemis",
+            [TranslateKey.EspTeam] = "Équipe",
+            [TranslateKey.EspAdmins] = "Admins",
+            [TranslateKey.EspVanishTag] = "[ADMIN INVISIBLE]",
+            [TranslateKey.EspExtra] = "Supplémentaire",
+            [TranslateKey.EspDistance] = "Distance (m)",
+            [TranslateKey.EspDistanceD] = "Nombre affiché près de la cible",
+            [TranslateKey.EspHp] = "PV de santé",
+            [TranslateKey.EspHpD] = "Barre de vie",
+            [TranslateKey.EspHeld] = "Objet en main",
+            [TranslateKey.EspHeldD] = "Arme/outil en main",
+            [TranslateKey.DropdownTpTitle] = "Téléporter vers le joueur",
+            [TranslateKey.DropdownKickTitle] = "Expulser le joueur",
+            [TranslateKey.DropdownMuteTitle] = "Rendre le joueur muet",
+            [TranslateKey.DropdownManageTitle] = "Gestion du joueur",
+            [TranslateKey.DropdownMode] = "Mode",
+            [TranslateKey.DropdownReasonPh] = "Raison (courte, visible par le joueur)",
+            [TranslateKey.DropdownCommentPh] = "Commentaire détaillé (pour le journal)",
+            [TranslateKey.DropdownTome] = "Vers moi",
+            [TranslateKey.DropdownToplayer] = "Moi vers le joueur",
+            [TranslateKey.DropdownTocoords] = "Vers des coordonnées",
+            [TranslateKey.DropdownTolook] = "Vers la ligne de mire",
+            [TranslateKey.DropdownCoords] = "Coordonnées (X / Y / Z)",
+            [TranslateKey.DropdownCancel] = "Annuler",
+            [TranslateKey.DropdownTpOk] = "Téléporter",
+            [TranslateKey.DropdownMuteOk] = "Rendre muet",
+            [TranslateKey.DropdownTemplate] = "Modèle",
+            [TranslateKey.DropdownDuration] = "Durée",
+            [TranslateKey.DropdownNotify] = "Notifier",
+            [TranslateKey.DropdownNotifyPlayer] = "Joueur seulement",
+            [TranslateKey.DropdownNotifyDiscord] = "+ vers Discord",
+            [TranslateKey.DropdownNotifyChat] = "Vers le chat global",
+            [TranslateKey.DropdownNotifyNotify] = "Via Notify/NCP",
+            [TranslateKey.DropdownKickOk] = "Expulser",
+            [TranslateKey.Duration1h] = "1h",
+            [TranslateKey.Duration1d] = "1j",
+            [TranslateKey.Duration7d] = "7j",
+            [TranslateKey.Duration30d] = "30j",
+            [TranslateKey.DurationPerm] = "∞",
+            [TranslateKey.PopupHeal] = "Soigner",
+            [TranslateKey.PopupKill] = "Tuer",
+            [TranslateKey.PopupStrip] = "Vider",
+            [TranslateKey.PopupKick] = "Expulser",
+            [TranslateKey.PopupBan] = "Bannir",
+            [TranslateKey.PopupFreeze] = "Geler",
+            [TranslateKey.PopupMute] = "Rendre muet",
+            [TranslateKey.PopupTp] = "Téléporter",
+            [TranslateKey.PopupInv] = "Inventaire",
+            [TranslateKey.PopupSpectate] = "Observer",
+            [TranslateKey.PopupShowMap] = "Afficher sur la carte",
+            [TranslateKey.SpectateExit] = "ESPACE / S'ACCROUPIR - cible suivante, R - quitter",
+            [TranslateKey.SpectateTarget] = "OBSERVATION : {0}",
+            [TranslateKey.SpectateLost] = "Plus aucune cible à observer, observation arrêtée",
+            [TranslateKey.PopupGive] = "Donner",
+            [TranslateKey.PopupBlueprints] = "Plans",
+            [TranslateKey.BlueprintOffline] = "Le joueur doit être en ligne",
+            [TranslateKey.BlueprintUnlockedCount] = "Débloqués : {0}",
+            [TranslateKey.BlueprintHint] = "Cliquez sur un objet pour débloquer sa recette pour le joueur.",
+            [TranslateKey.BlueprintUnlockAll] = "Tout débloquer",
+            [TranslateKey.BlueprintReset] = "Réinitialiser",
+            [TranslateKey.BlueprintAllConfirm] = "Débloquer TOUS les plans pour ce joueur ?",
+            [TranslateKey.BlueprintResetConfirm] = "Réinitialiser tous les plans de ce joueur ?",
+            [TranslateKey.BlueprintConfirmYes] = "Confirmer",
+            [TranslateKey.BlueprintConfirmCancel] = "Annuler",
+            [TranslateKey.PopupModifiers] = "Modificateurs",
+            [TranslateKey.ModifierFormatHint] = "La valeur est un multiplicateur : 1 = 100%, 2 = 200%",
+            [TranslateKey.ModifierClear] = "Tout effacer",
+            [TranslateKey.ModifierApply] = "Appliquer",
+            [TranslateKey.ModifierColCur] = "Actuel",
+            [TranslateKey.ModifierColDur] = "Durée (s)",
+            [TranslateKey.ModifierColVal] = "Multiplicateur",
+            [TranslateKey.PopupVitals] = "Constantes vitales",
+            [TranslateKey.PopupEconomy] = "Économie",
+            [TranslateKey.EconomyNoProvider] = "Aucun plugin d'économie n'est chargé",
+            [TranslateKey.EconomyAmountPh] = "Montant",
+            [TranslateKey.EconomyAmountLabel] = "Montant de l'opération",
+            [TranslateKey.EconomySource] = "Quelle économie débiter et créditer",
+            [TranslateKey.EconomyClear] = "Réinitialiser",
+            [TranslateKey.EconomyGive] = "Donner",
+            [TranslateKey.EconomyTake] = "Retirer",
+            [TranslateKey.EconomySet] = "Définir",
+            [TranslateKey.EconomyGaveOk] = "Le solde de {0} a augmenté de {1}",
+            [TranslateKey.EconomyTookOk] = "{1} retiré à {0}",
+            [TranslateKey.EconomySetOk] = "Le solde de {0} a été fixé à {1}",
+            [TranslateKey.EconomyOpFailed] = "L'opération a échoué",
+            [TranslateKey.EconomyBadAmount] = "Le montant doit être un nombre positif",
+            [TranslateKey.EconomyOnlineOnly] = "Cette économie ne fonctionne qu'avec les joueurs en ligne",
+            [TranslateKey.SkillPointsLabel] = "Points disponibles",
+            [TranslateKey.SkillPointsAmountPh] = "Points",
+            [TranslateKey.SkillPointsGaveOk] = "{1} points de compétence donnés à {0}",
+            [TranslateKey.SkillPointsTakeSoon] = "Retirer des points n'est pas encore pris en charge par l'API du plugin",
+            [TranslateKey.VitalHint] = "Chaque valeur est limitée à la plage de sa constante ; le champ Max l'élargit.",
+            [TranslateKey.VitalColCur] = "Actuel",
+            [TranslateKey.VitalColVal] = "Valeur",
+            [TranslateKey.VitalColMax] = "Max",
+            [TranslateKey.StatsTitle] = "Statistiques",
+            [TranslateKey.StatReveal] = "Afficher",
+            [TranslateKey.StatConnection] = "Connexion",
+            [TranslateKey.StatStatus] = "Statut",
+            [TranslateKey.StatSteamId] = "SteamID",
+            [TranslateKey.StatPing] = "Ping",
+            [TranslateKey.StatSession] = "Session",
+            [TranslateKey.StatPlaytime] = "Temps de jeu",
+            [TranslateKey.StatRustHours] = "Heures sur Rust",
+            [TranslateKey.StatFirstSeen] = "Première connexion",
+            [TranslateKey.StatLastSeen] = "Dernière connexion",
+            [TranslateKey.StatIp] = "IP",
+            [TranslateKey.StatGroups] = "Groupes",
+            [TranslateKey.StatMuted] = "Muet",
+            [TranslateKey.StatVitals] = "Constantes vitales",
+            [TranslateKey.StatHealth] = "Santé",
+            [TranslateKey.StatHunger] = "Faim",
+            [TranslateKey.StatThirst] = "Soif",
+            [TranslateKey.StatRadiation] = "Radiation",
+            [TranslateKey.StatTemperature] = "Température",
+            [TranslateKey.StatWetness] = "Humidité",
+            [TranslateKey.StatBleeding] = "Saignement",
+            [TranslateKey.StatPoison] = "Poison",
+            [TranslateKey.StatComfort] = "Confort",
+            [TranslateKey.StatBalance] = "Solde",
+            [TranslateKey.StatBalancePhysical] = "(monnaie physique)",
+            [TranslateKey.StateOffline] = "Hors ligne",
+            [TranslateKey.StateDead] = "Mort",
+            [TranslateKey.StateWounded] = "Blessé",
+            [TranslateKey.StateSleeping] = "Endormi",
+            [TranslateKey.StateOnline] = "En ligne",
+            [TranslateKey.CommonYes] = "Oui",
+            [TranslateKey.CommonNo] = "Non",
+            [TranslateKey.StatNoSteamKey] = "PAS DE CLÉ STEAM-API",
+            [TranslateKey.WelcomeTitle] = "Bienvenue !",
+            [TranslateKey.WelcomeBody] =
+                "Bienvenue sur le panneau PowerfulAdmin.\n\n" +
+                "· Tableau de bord - vue d'ensemble du serveur et raccourcis rapides (Invisibilité, ESP, Mode divin, Noclip).\n" +
+                "· Joueurs - gérez-les : soigner, expulser, bannir, rendre muet, téléporter, inventaire, donner, plans, modificateurs.\n" +
+                "· Inspecter - regardez un joueur et appuyez sur le clic droit pour ouvrir sa fiche.\n" +
+                "· Permissions, Journaux, Plugins, ConVars et Réglages se trouvent dans la barre latérale.\n\n" +
+                "Profitez-en !",
+            [TranslateKey.WelcomeBtn] = "Commencer",
+            [TranslateKey.ConvarsTitle] = "ConVars",
+            [TranslateKey.ConvarsSub] = "Voir et modifier les variables de console du serveur",
+            [TranslateKey.ConvarsAll] = "Toutes",
+            [TranslateKey.ConvarsSearchPh] = "Rechercher une convar...",
+            [TranslateKey.PopupBack] = "Retour",
+            [TranslateKey.PopupConfirm] = "Confirmer",
+            [TranslateKey.PopupConfirmQ] = "Effectuer « {0} » sur {1} ?",
+            [TranslateKey.PopupConfirmD] = "Cette action sera appliquée immédiatement.",
+            [TranslateKey.PopupHealCur] = "Actuel : {0} / {1} PV",
+            [TranslateKey.PopupHealSet] = "Définir",
+            [TranslateKey.PopupHealFull] = "Complet",
+            [TranslateKey.PopupHealMax] = "Max",
+            [TranslateKey.PopupHealAdd] = "Ajouter",
+            [TranslateKey.PopupHealSub] = "Soustraire",
+            [TranslateKey.PopupHealAmt] = "Montant de PV",
+            [TranslateKey.PopupReason] = "Raison",
+            [TranslateKey.PopupComment] = "Commentaire (note admin)",
+            [TranslateKey.PopupTemplates] = "Modèles",
+            [TranslateKey.GiveSearchPh] = "Rechercher un objet...",
+            [TranslateKey.GiveCart] = "Panier",
+            [TranslateKey.GiveAmtBad] = "Quantité : nombre entier de 1 à 2147483647",
+            [TranslateKey.GiveClear] = "Vider",
+            [TranslateKey.GiveConfirm] = "Donner",
+            [TranslateKey.GiveNoitems] = "Rien trouvé",
+            [TranslateKey.GiveCustom] = "Objet personnalisé",
+            [TranslateKey.GiveFav] = "Favoris",
+            [TranslateKey.GiveModeItem] = "Objet",
+            [TranslateKey.GiveModeBp] = "Plan",
+            [TranslateKey.GiveNofav] = "Aucun favori pour l'instant. Cliquez sur le cœur d'un objet.",
+            [TranslateKey.ItemsTitle] = "Objets",
+            [TranslateKey.ItemsSub] = "Distribution en masse d'objets et référence des objets",
+            [TranslateKey.ItemsSearchPh] = "Rechercher un objet...",
+            [TranslateKey.ItemsCart] = "Panier",
+            [TranslateKey.ItemsClear] = "Vider",
+            [TranslateKey.ItemsGive] = "Donner",
+            [TranslateKey.ItemsNoitems] = "Rien trouvé",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "Donner à",
+            [TranslateKey.ItemsGiveSub] = "Sélectionnez des joueurs en ligne",
+            [TranslateKey.ItemsGiveSearchPh] = "Filtrer par nom...",
+            [TranslateKey.ItemsGiveSelectall] = "Tout sélectionner",
+            [TranslateKey.ItemsGiveClearsel] = "Désélectionner",
+            [TranslateKey.ItemsGiveNoOnline] = "Aucun joueur en ligne",
+            [TranslateKey.ItemsGiveNoMatch] = "Aucun joueur ne correspond à \"{0}\"",
+            [TranslateKey.ItemsGiveConfirm] = "Donner ({0})",
+            [TranslateKey.ItemsGiveLoadmore] = "Afficher plus ({0})",
+            [TranslateKey.ItemsGiveNoneSelected] = "Sélectionnez au moins un joueur",
+            [TranslateKey.ItemsGiveEmptyCart] = "Le panier est vide",
+            [TranslateKey.ItemsInfoTitle] = "Infos sur l'objet",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "Catégorie",
+            [TranslateKey.ItemsInfoRarity] = "Rareté",
+            [TranslateKey.ItemsInfoStack] = "Pile max.",
+            [TranslateKey.ItemsInfoVolume] = "Volume (espace de stockage)",
+            [TranslateKey.ItemsInfoDurability] = "Durabilité",
+            [TranslateKey.ItemsInfoDescription] = "Description",
+            [TranslateKey.ItemsInfoBlueprint] = "Fabrication",
+            [TranslateKey.ItemsInfoWorkbench] = "Établi",
+            [TranslateKey.ItemsInfoCrafttime] = "Temps de fabrication",
+            [TranslateKey.ItemsInfoScrap] = "Ferraille au recyclage",
+            [TranslateKey.ItemsInfoIngredients] = "Ingrédients",
+            [TranslateKey.ItemsInfoRecycle] = "Se recycle en",
+            [TranslateKey.ItemsInfoRecycleGreen] = "Se recycle en (Recycleur vert)",
+            [TranslateKey.ItemsInfoRecycleYellow] = "Se recycle en (Recycleur jaune)",
+            [TranslateKey.ItemsInfoRecycleRed] = "Se recycle en (Recycleur rouge)",
+            [TranslateKey.ItemsInfoMods] = "Mods (composants)",
+            [TranslateKey.GiveCustShort] = "Shortname (doit exister)",
+            [TranslateKey.GiveCustName] = "Nom de l'objet",
+            [TranslateKey.GiveCustSkin] = "ID du skin",
+            [TranslateKey.GiveCustQty] = "Quantité",
+            [TranslateKey.GiveCustBad] = "introuvable",
+            [TranslateKey.GiveCustAdd] = "Ajouter",
+            [TranslateKey.PermsTitle] = "Permissions et groupes",
+            [TranslateKey.PermsSub] = "les permissions s'appliquent uniquement au groupe sélectionné",
+            [TranslateKey.PermsNewgroup] = "Nouveau groupe",
+            [TranslateKey.PermsNewgroupD] = "Entrez un nom pour le nouveau groupe de permissions",
+            [TranslateKey.PermsNewgroupPh] = "ex. helper",
+            [TranslateKey.PermsInherit] = "Hériter des permissions de :",
+            [TranslateKey.PermsParentNone] = "— Aucun héritage (nouveau) —",
+            [TranslateKey.PermsCreate] = "Créer",
+            [TranslateKey.PermsAutosave] = "enregistré automatiquement",
+            [TranslateKey.PermsGroups] = "Groupes",
+            [TranslateKey.PermsForgroup] = "Permissions du groupe :",
+            [TranslateKey.PermsInherited] = "Hérité de {0}",
+            [TranslateKey.PermsDelGroup] = "Supprimer le groupe",
+            [TranslateKey.PermsDelConfirm] = "Confirmer la suppression ?",
+            [TranslateKey.LogsTitle] = "Journaux",
+            [TranslateKey.LogsSub] = "journal des actions admin",
+            [TranslateKey.LogsJournal] = "Journal des actions admin",
+            [TranslateKey.LogsShowMore] = "Afficher plus (+{0})",
+            [TranslateKey.PluginsTitle] = "Plugins",
+            [TranslateKey.PluginsSub] = "plugins chargés · recharger et activer/désactiver",
+            [TranslateKey.PluginsActive] = "Actif",
+            [TranslateKey.PluginsNoCommands] = "Ce plugin n'a aucune commande enregistrée.",
+            [TranslateKey.PluginsOff] = "Désactivé",
+            [TranslateKey.PluginsUnloaded] = "non chargé",
+            [TranslateKey.PluginsSearchPh] = "Rechercher un plugin...",
+            [TranslateKey.PluginsNone] = "Aucun plugin trouvé",
+            [TranslateKey.PluginsCfgBtn] = "Config",
+            [TranslateKey.PluginsLangBtn] = "Langue",
+            [TranslateKey.PluginsCheckUpdates] = "Vérifier les mises à jour",
+            [TranslateKey.PluginsChecking] = "Vérification...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "Le plugin UpdateChecker n'est pas installé.",
+            [TranslateKey.PluginsUpdateAvailable] = "Mise à jour : v{0} → v{1}",
+            [TranslateKey.CfgTitle] = "{0}  ·  Config",
+            [TranslateKey.CfgLangTitle] = "{0}  ·  Langue",
+            [TranslateKey.CfgSaved] = "Configuration enregistrée",
+            [TranslateKey.CfgParseError] = "Impossible de lire ou d'analyser le fichier",
+            [TranslateKey.CfgWriteError] = "Échec de l'écriture du fichier",
+            [TranslateKey.CfgBadValue] = "Valeur invalide pour {0}",
+            [TranslateKey.CfgNoLang] = "Ce plugin n'a aucun fichier de langue",
+            [TranslateKey.CfgLangNew] = "nouveau code",
+            [TranslateKey.TipNavDashboard] = "Résumé du serveur en direct : joueurs en ligne, performances et événements récents",
+            [TranslateKey.TipNavConsole] = "Console serveur : lire le journal et envoyer des commandes",
+            [TranslateKey.TipNavPlayers] = "Liste des joueurs avec recherche et toutes les actions possibles sur un joueur",
+            [TranslateKey.TipNavVanish] = "Invisibilité admin et tout ce qu'elle active avec elle",
+            [TranslateKey.TipNavEsp] = "Contours des joueurs, PNJ et entités à travers les murs",
+            [TranslateKey.TipNavPerms] = "Permissions et groupes : accorder, révoquer et modifier l'appartenance",
+            [TranslateKey.TipNavLogs] = "Historique des actions admin, du chat et des événements des plugins",
+            [TranslateKey.TipNavPlugins] = "Plugins du serveur : charger, recharger et modifier configs et fichiers de langue",
+            [TranslateKey.TipNavConvars] = "Convars du serveur : rechercher une variable et changer sa valeur",
+            [TranslateKey.TipNavAppearance] = "Thème, police et taille du panneau",
+            [TranslateKey.TipNavSettings] = "Réglages du plugin : intégrations, notifications, sécurité et stockage",
+            [TranslateKey.TipNavMap] = "Carte admin avec joueurs, marqueurs et actions directement sur la carte",
+            [TranslateKey.TipNavBinds] = "Binds console prêts à l'emploi pour les outils admin",
+            [TranslateKey.TipNavQuickButtons] = "Vos propres boutons d'action rapide pour le panneau et la carte",
+            [TranslateKey.TipNavItems] = "Distribution en masse d'objets et référence des objets",
+            [TranslateKey.CfgFormHint] = "Les booléens sont des interrupteurs, nombres et textes sont des champs, les objets deviennent des groupes, les tableaux s'ouvrent dans leur propre fenêtre",
+            [TranslateKey.CfgLangHint] = "Choisissez une langue existante, ou copiez-la vers un nouveau code",
+            [TranslateKey.CfgLangExisting] = "Codes de langue existants",
+            [TranslateKey.CfgLangCopy] = "Créer une copie",
+            [TranslateKey.CfgLangCopyFrom] = "copie de {0}",
+            [TranslateKey.CfgLangNewD] = "Entrez un code de langue et appuyez sur Entrée, la langue ouverte y sera copiée",
+            [TranslateKey.CfgLangBad] = "Code de langue inconnu, choisissez-en un dans la liste",
+            [TranslateKey.CfgLangExists] = "Ce plugin possède déjà cette langue",
+            [TranslateKey.CfgLangDel] = "Supprimer {0}",
+            [TranslateKey.CfgLangDelSure] = "Supprimer {0} ?",
+            [TranslateKey.CfgLangDelD] = "Supprime définitivement le fichier de la localisation ouverte",
+            [TranslateKey.CfgLangDeleted] = "Localisation {0} supprimée",
+            [TranslateKey.CfgLangLast] = "La dernière localisation ne peut pas être supprimée",
+            [TranslateKey.CfgLangPick] = "Ou choisissez un code prêt",
+            [TranslateKey.CfgFieldNew] = "Nouveau champ",
+            [TranslateKey.CfgFieldKeyHint] = "clé, par exemple ui.something",
+            [TranslateKey.CfgFieldValHint] = "valeur par défaut",
+            [TranslateKey.CfgFieldAdd] = "Ajouter à toutes les langues",
+            [TranslateKey.CfgFieldD] =
+                "Entrez une clé et une valeur, appuyez sur Entrée dans chaque champ, puis sur ce bouton - la clé apparaîtra dans toutes les localisations du plugin",
+            [TranslateKey.CfgFieldBad] = "Entrez le nom de la clé et appuyez sur Entrée",
+            [TranslateKey.CfgFieldExists] = "Cette clé existe déjà dans cette localisation",
+            [TranslateKey.CfgFieldAdded] = "Clé {0} ajoutée à {1} localisation(s)",
+            [TranslateKey.CfgArrTitle] = "Tableau  ·  {0}",
+            [TranslateKey.CfgArrHint] = "{0} éléments, cliquez sur un élément pour le développer",
+            [TranslateKey.CfgArrEdit] = "Modifier",
+            [TranslateKey.CfgArrAdd] = "Ajouter un élément",
+            [TranslateKey.CfgArrApply] = "Appliquer",
+            [TranslateKey.CfgArrEmpty] = "Le tableau est vide",
+            [TranslateKey.CfgReloadLabel] = "Recharger le plugin après l'enregistrement",
+            [TranslateKey.CfgEmpty] = "Rien à modifier",
+            [TranslateKey.CfgSelf] = "PowerfulAdmin ne peut pas se modifier lui-même",
+            [TranslateKey.ButtonCommands] = "Commandes",
+            [TranslateKey.ButtonLoad] = "Activer",
+            [TranslateKey.ButtonUnload] = "Désactiver",
+            [TranslateKey.PluginsSelf] = "PowerfulAdmin ne peut pas être désactivé depuis son propre gestionnaire.",
+            [TranslateKey.LogsFAll] = "Tout",
+            [TranslateKey.LogsFAct] = "Actions",
+            [TranslateKey.LogsFChat] = "Chat",
+            [TranslateKey.LogsFConn] = "Connexions",
+            [TranslateKey.LogsFErr] = "Erreurs",
+            [TranslateKey.SettingsTitle] = "Réglages",
+            [TranslateKey.SettingsSub] = "interface · intégrations · sécurité",
+            [TranslateKey.SettingsTheme] = "Thème",
+            [TranslateKey.AppVitals] = "Constantes vitales (afficher dans le HUD)",
+            [TranslateKey.HammerHint] = "Tenez un marteau",
+            [TranslateKey.HammerEmpty] = "Regardez un objet",
+            [TranslateKey.HammerOwner] = "Propriétaire",
+            [TranslateKey.HammerAuthed] = "Autorisé",
+            [TranslateKey.HammerItems] = "Contenu",
+            [TranslateKey.HammerCode] = "Code",
+            [TranslateKey.HammerGuest] = "Invité",
+            [TranslateKey.HammerUpkeep] = "protégé",
+            [TranslateKey.HammerBag] = "Sac assigné à",
+            [TranslateKey.HammerGeneral] = "Général",
+            [TranslateKey.HammerWhitelist] = "Liste blanche du verrou",
+            [TranslateKey.HammerPosition] = "Position",
+            [TranslateKey.HammerDistance] = "Distance",
+            [TranslateKey.HammerGrade] = "Niveau",
+            [TranslateKey.HammerBuilding] = "Bâtiment",
+            [TranslateKey.HammerParent] = "Parent",
+            [TranslateKey.HammerSteamId] = "SteamID",
+            [TranslateKey.HammerState] = "État",
+            [TranslateKey.HammerTeam] = "Équipe",
+            [TranslateKey.HammerPower] = "Énergie",
+            [TranslateKey.HammerPowered] = "Alimenté",
+            [TranslateKey.HammerMounted] = "Monté",
+            [TranslateKey.HammerHidden] = "Code masqué",
+            [TranslateKey.HammerReveal] = "Afficher",
+            [TranslateKey.HammerHide] = "Masquer",
+            [TranslateKey.HammerDelete] = "Supprimer",
+            [TranslateKey.HammerDeleteGibs] = "Avec débris",
+            [TranslateKey.HammerDeleteParents] = "Avec les liés",
+            [TranslateKey.HammerPlainHint] = "L'objet disparaît sans rien laisser derrière",
+            [TranslateKey.HammerGibsHint] = "L'objet se brise en débris comme une démolition",
+            [TranslateKey.HammerParentsHint] = "Supprime toute la structure liée, pas seulement ce bloc",
+            [TranslateKey.HammerCrateUnlock] = "Déverrouiller",
+            [TranslateKey.HammerCrateTimer] = "Minuteur",
+            [TranslateKey.HammerCrateUnlockHint] = "La caisse s'ouvre immédiatement, aucun piratage nécessaire",
+            [TranslateKey.HammerCrateTimerHint] = "Demande une durée et l'applique au minuteur",
+            [TranslateKey.HammerLoot] = "Butin",
+            [TranslateKey.HammerModeNone] = "Aucun mode",
+            [TranslateKey.PopupHealD] = "Restaure les PV. Le mode Complet supprime aussi saignement/radiation et remplit faim et soif",
+            [TranslateKey.PopupNotesD] = "Notes admin sur ce joueur",
+            [TranslateKey.PopupKillD] = "Tue le joueur instantanément",
+            [TranslateKey.PopupStripD] = "Retire tout de l'inventaire, de la ceinture et des vêtements",
+            [TranslateKey.PopupKickD] = "Déconnecte le joueur avec une raison",
+            [TranslateKey.PopupBanD] = "Bannit par steamid avec une raison et une durée",
+            [TranslateKey.PopupFreezeD] = "Gèle le joueur sur place pour un contrôle",
+            [TranslateKey.PopupMuteD] = "Bloque le chat et la voix pour une durée",
+            [TranslateKey.PopupTpD] = "Se téléporter vers le joueur ou l'amener à vous",
+            [TranslateKey.PopupInvD] = "Ouvrir et modifier l'inventaire du joueur",
+            [TranslateKey.PopupSpectateD] = "Entrer en mode observation sur ce joueur",
+            [TranslateKey.PopupGiveD] = "Donner des objets depuis le catalogue",
+            [TranslateKey.PopupBlueprintsD] = "Gérer les plans appris",
+            [TranslateKey.PopupModifiersD] = "Modifier les modificateurs : vitesse, dégâts, gravité",
+            [TranslateKey.PopupVitalsD] = "Modifier santé, faim, soif et autres constantes vitales",
+            [TranslateKey.PopupPermsD] = "Gérer les permissions et groupes du joueur",
+            [TranslateKey.PopupShowMapD] = "Afficher la position du joueur sur la carte admin",
+            [TranslateKey.PopupEconomyD] = "Voir et modifier le solde du joueur",
+            [TranslateKey.HammerModeNoneD] = "Efface le mode, le marteau fonctionne normalement",
+            [TranslateKey.HammerLootHint] = "Ouvre l'inventaire du conteneur pour modification",
+            [TranslateKey.HammerCrateTimeHint] = "Format mm:ss ou secondes, décompte à partir de maintenant",
+            [TranslateKey.HammerCrateTimeBad] = "Durée invalide : utilisez mm:ss, jusqu'à 24 heures",
+            [TranslateKey.HammerCrateTimeDone] = "Minuteur de la caisse : {0}",
+            [TranslateKey.HammerCrateApply] = "Appliquer",
+            [TranslateKey.HammerCrateTimeLabel] = "TEMPS D'OUVERTURE",
+            [TranslateKey.HammerCrateOpens] = "S'ouvre dans",
+            [TranslateKey.HammerCrateOpened] = "ouverte",
+            [TranslateKey.HammerCrateIdle] = "piratage non commencé",
+            [TranslateKey.HammerCratePresets] = "PRÉRÉGLAGES",
+            [TranslateKey.HammerCrateStateOk] = "PRÊT",
+            [TranslateKey.HammerCrateStateBad] = "ERREUR",
+            [TranslateKey.SecurityCrateSeconds] = "Minuteur de caisse, s",
+            [TranslateKey.HammerNotArmed] = "Aucune action sélectionnée",
+            [TranslateKey.HammerPieHint] = "Maintenez E pour choisir une action",
+            [TranslateKey.HammerBinds] = "Maintenir E menu   Shift+clic gauche exécuter   Shift+E code",
+            [TranslateKey.MapLayerPvp] = "PVP",
+            [TranslateKey.MapLayerRaid] = "Raids",
+            [TranslateKey.MapLayerNotes] = "Notes",
+            [TranslateKey.MapNoteHint] = "Maintenez Shift et placez un marqueur pour vous y téléporter",
+            [TranslateKey.MapLegend] = "Légende",
+            [TranslateKey.SettingsMapGroup] = "Regroupement de la carte",
+            [TranslateKey.SettingsMapGroupD] = "Fusionne les points en cellules comptées au lieu d'icônes séparées",
+            [TranslateKey.SettingsPie] = "Menu circulaire",
+            [TranslateKey.SettingsPieD] = "Afficher cette action dans le menu circulaire",
+            [TranslateKey.MapLegendTeam] = "Équipe du joueur sélectionné",
+            [TranslateKey.MapLegendCargo] = "Cargo",
+            [TranslateKey.MapLegendAir] = "Drone de livraison",
+            [TranslateKey.MapLegendVending] = "Distributeur",
+            [TranslateKey.MapLegendEvent] = "Événement",
+            [TranslateKey.MapLegendIsland] = "Île",
+            [TranslateKey.MapLegendCity] = "Ville flottante",
+            [TranslateKey.MapLegendGhost] = "Vaisseau fantôme",
+            [TranslateKey.MapLegendPortal] = "Portail",
+            [TranslateKey.MapActGroupState] = "État du joueur",
+            [TranslateKey.MapActGroupDiscipline] = "Discipline",
+            [TranslateKey.MapActGroupMove] = "Déplacement",
+            [TranslateKey.MapActGroupInspect] = "Inspecter",
+            [TranslateKey.MapActSelected] = "{0} sur {1} sélectionnés",
+            [TranslateKey.MapActOn] = "ON",
+            [TranslateKey.MapActOff] = "OFF",
+            [TranslateKey.MapNotesEmptyHint] = "Clic droit sur la carte pour placer une note",
+            [TranslateKey.MapLegendStation] = "Station d'amarrage",
+            [TranslateKey.MapLegendRhib] = "Bateaux",
+            [TranslateKey.MapLegendAirdrop] = "Parachutage",
+            [TranslateKey.MapZoneMain] = "Île principale",
+            [TranslateKey.MapZoneDeep] = "Haute mer",
+            [TranslateKey.MapNotesEmpty] = "Choisissez un joueur pour voir ses marqueurs",
+            [TranslateKey.MapNotesOf] = "Marqueurs du joueur",
+            [TranslateKey.MapSearch] = "Rechercher un joueur...",
+            [TranslateKey.MapHealth] = "Santé",
+            [TranslateKey.MapQuickActions] = "Actions rapides",
+            [TranslateKey.MapNoActions] = "Aucune action configurée",
+            [TranslateKey.MapObjTeleport] = "Se téléporter là",
+            [TranslateKey.MapObjDelete] = "Détruire",
+            [TranslateKey.MapObjDeleteConfirm] = "Détruire ?",
+            [TranslateKey.MapObjDeleteOk] = "Oui, détruire",
+            [TranslateKey.MapObjLoot] = "Ouvrir l'inventaire",
+            [TranslateKey.MapObjOwnersMore] = "et {0} de plus",
+            [TranslateKey.MapCluTitle] = "Dans le groupe : {0}",
+            [TranslateKey.SecurityHeatWindow] = "Fenêtre de la carte de chaleur, min",
+            [TranslateKey.HammerToggle] = "Marteau admin",
+            [TranslateKey.HammerToggleD] = "Infos sur l'objet que vous regardez",
+            [TranslateKey.HammerRangeLabel] = "Portée du marteau",
+            [TranslateKey.HammerIntervalLabel] = "Rafraîchissement du marteau",
+            [TranslateKey.SecurityHammerBounds] = "Marteau admin : intervalle de rafraîchissement, portée du rayon, objet",
+            [TranslateKey.NavigationMap] = "Carte",
+            [TranslateKey.NavigationBinds] = "Binds",
+            [TranslateKey.BindsTitle] = "Binds",
+            [TranslateKey.BindsSub] = "Sélectionnez une ligne, copiez-la avec Ctrl+C et collez-la dans la console F1",
+            [TranslateKey.BindsCopy] = "SÉLECTIONNER ET CTRL+C",
+            [TranslateKey.BindsKey] = "TOUCHE",
+            [TranslateKey.BindsUnbind] = "Supprimez un bind avec unbind f1. Utilisez la touche choisie",
+            [TranslateKey.BindsLocked] = "Aucun accès",
+            [TranslateKey.BindPanel] = "Panneau",
+            [TranslateKey.BindPanelDesc] = "Ouvre le panneau admin",
+            [TranslateKey.BindVanish] = "Invisibilité",
+            [TranslateKey.BindVanishDesc] = "Active/désactive l'invisibilité",
+            [TranslateKey.BindGod] = "Mode divin",
+            [TranslateKey.BindGodDesc] = "Active/désactive le mode divin",
+            [TranslateKey.BindNoclip] = "Noclip",
+            [TranslateKey.BindNoclipDesc] = "Active/désactive le vol à travers les murs",
+            [TranslateKey.BindEsp] = "ESP",
+            [TranslateKey.BindEspDesc] = "Active/désactive l'overlay des entités",
+            [TranslateKey.BindHammer] = "Marteau",
+            [TranslateKey.BindHammerDesc] = "Active/désactive l'outil marteau",
+            [TranslateKey.BindInspect] = "Inspecter",
+            [TranslateKey.BindInspectDesc] = "Active/désactive l'inspection de joueur",
+            [TranslateKey.BindMap] = "Carte",
+            [TranslateKey.BindMapDesc] = "Ouvre le panneau directement sur la carte",
+            [TranslateKey.BindPie] = "Menu circulaire",
+            [TranslateKey.BindPieDesc] = "Ouvre le menu radial d'actions rapides",
+            [TranslateKey.MapTitle] = "Carte du serveur",
+            [TranslateKey.MapSub] = "positions et structures en direct",
+            [TranslateKey.MapPreparing] = "Préparation de la carte, cela prend quelques secondes",
+            [TranslateKey.MapLayerPlayers] = "Joueurs",
+            [TranslateKey.MapLayerSleepers] = "Endormis",
+            [TranslateKey.MapLayerTc] = "TC",
+            [TranslateKey.MapLayerBags] = "Sacs",
+            [TranslateKey.MapLayerStashes] = "Caches",
+            [TranslateKey.MapLayerCars] = "Voitures",
+            [TranslateKey.MapLayerShops] = "Boutiques",
+            [TranslateKey.MapLegendTrain] = "Train",
+            [TranslateKey.MapLegendCrate] = "Caisse verrouillée",
+            [TranslateKey.MapLayerHorses] = "Chevaux",
+            [TranslateKey.MapLayerAir] = "Air",
+            [TranslateKey.MapLayerEvents] = "Événements",
+            [TranslateKey.MapRefresh] = "Actualiser",
+            [TranslateKey.MapPause] = "Pause",
+            [TranslateKey.MapClusters] = "Groupes",
+            [TranslateKey.MapOnline] = "En ligne",
+            [TranslateKey.MapNoSelection] = "Choisissez un joueur sur la carte ou dans la liste",
+            [TranslateKey.MapDetails] = "Détails",
+            [TranslateKey.NavigationQuickButtons] = "Boutons rapides",
+            [TranslateKey.QbTitle] = "Boutons rapides",
+            [TranslateKey.QbSub] = "actions admin personnalisées",
+            [TranslateKey.QbNew] = "Créer",
+            [TranslateKey.QbMapActions] = "Actions intégrées sur la carte",
+            [TranslateKey.QbEdit] = "Modifier le bouton",
+            [TranslateKey.QbEmpty] = "Aucun bouton pour l'instant",
+            [TranslateKey.QbName] = "Nom",
+            [TranslateKey.QbCmd] = "Commande",
+            [TranslateKey.QbPerm] = "Permission powerfuladmin.<nom> (vide = tout le monde)",
+            [TranslateKey.QbIcon] = "Icône du jeu",
+            [TranslateKey.QbTarget] = "Cible",
+            [TranslateKey.QbTargetPlayer] = "Joueur",
+            [TranslateKey.QbTargetGlobal] = "Global",
+            [TranslateKey.QbTargetPoint] = "Point",
+            [TranslateKey.QbPlaces] = "Où afficher",
+            [TranslateKey.QbPlacePopup] = "Popup joueur",
+            [TranslateKey.QbPlaceMap] = "Carte",
+            [TranslateKey.QbPlaceWidget] = "Widget",
+            [TranslateKey.QbPlaceDashboard] = "Tableau de bord",
+            [TranslateKey.QbPlaceNone] = "nulle part",
+            [TranslateKey.QbPlaceholders] =
+                "%STEAM_ID% %NICKNAME% %X% %Y% %Z% %GRID% %ADMIN_STEAM_ID% %ADMIN_NICKNAME% %ADMIN_X% %ADMIN_Y% %ADMIN_Z% %ADMIN_GRID%   séparateur de commandes |",
+            [TranslateKey.QbConfirm] = "Demander confirmation",
+            [TranslateKey.QbConfirmQ] = "Exécuter {0} ?",
+            [TranslateKey.QbSave] = "Enregistrer",
+            [TranslateKey.QbCancel] = "Annuler",
+            [TranslateKey.QbDone] = "Exécuté : {0}",
+            [TranslateKey.QbActions] = "Actions rapides",
+            [TranslateKey.DashboardQuickButtons] = "Boutons rapides",
+            [TranslateKey.AppFonts] = "Polices",
+            [TranslateKey.AppFontTitle] = "Titres et boutons",
+            [TranslateKey.AppFontBody] = "Texte principal",
+            [TranslateKey.AppFontLogs] = "Journaux",
+            [TranslateKey.AppFontConsole] = "Console",
+            [TranslateKey.AppFontHud] = "Notifications et HUD",
+            [TranslateKey.AppFontPick] = "Choisir une police",
+            [TranslateKey.AppFontHint] = "Les polices sans cyrillique sont marquées (EN)",
+            [TranslateKey.AppEspSize] = "Taille du texte ESP",
+            [TranslateKey.AppFontNoCyr] = "(EN)",
+            [TranslateKey.AppVitalsLocked] = "Nécessite la permission powerfuladmin.candisablevitals",
+            [TranslateKey.SettingsPrivate] = "Réglages du panneau",
+            [TranslateKey.SettingsDrag] = "Panneau déplaçable",
+            [TranslateKey.SettingsDragD] = "Permet de déplacer le panneau n'importe où à la souris, la position est mémorisée",
+            [TranslateKey.SettingsIntegration] = "intégration",
+            [TranslateKey.SettingsSecurity] = "Sécurité",
+            [TranslateKey.SettingsApi] = "Clés API",
+            [TranslateKey.ApiSteamKey] = "Clé Steam Web API",
+            [TranslateKey.ApiSteamKeyPh] = "Collez votre clé Steam Web API",
+            [TranslateKey.ApiSteamKeyD] =
+                "Nécessaire pour la statistique des heures Rust, obtenez une clé sur steamcommunity.com/dev/apikey, le profil du joueur doit être public",
+            [TranslateKey.DiscordConnection] = "Connexion du bot",
+            [TranslateKey.DiscordToken] = "Token du bot",
+            [TranslateKey.DiscordGuildid] = "Guilde (serveur)",
+            [TranslateKey.DiscordConnect] = "Connecter le bot",
+            [TranslateKey.DiscordTest] = "Tester",
+            [TranslateKey.DiscordMessageError] = "Erreur du plugin",
+            [TranslateKey.DiscordMessageConnect] = "Admin connecté",
+            [TranslateKey.DiscordMessageKick] = "Joueur expulsé",
+            [TranslateKey.DiscordMessageMute] = "Joueur rendu muet",
+            [TranslateKey.DiscordMessageWipe] = "Wipe du serveur",
+            [TranslateKey.DiscordMessageWipeDesc] = "La carte a été réinitialisée.",
+            [TranslateKey.DiscordMessageRestart] = "Serveur démarré",
+            [TranslateKey.DiscordMessageRestartDesc] = "Le serveur a démarré et est prêt.",
+            [TranslateKey.DiscordMessageBy] = "Par :",
+            [TranslateKey.DiscordMessageTestSent] = "Message de test envoyé sur Discord.",
+            [TranslateKey.DiscordMessageTestNourl] = "Définissez d'abord une URL de webhook dans les réglages Discord.",
+            [TranslateKey.DiscordWebhooks] = "Webhooks d'événements",
+            [TranslateKey.DiscordHookBans] = "Webhook : bannissements/expulsions",
+            [TranslateKey.DiscordHookActions] = "Webhook : actions admin",
+            [TranslateKey.DiscordHookChat] = "Webhook : chat du serveur",
+            [TranslateKey.DiscordHookErrors] = "Webhook : erreurs et plantages",
+            [TranslateKey.DiscordWhUrl] = "URL du webhook",
+            [TranslateKey.DiscordWhName] = "Nom",
+            [TranslateKey.DiscordWhLogo] = "Logo (URL d'avatar)",
+            [TranslateKey.DiscordWhDefault] = "par défaut (partagé)",
+            [TranslateKey.DiscordNotset] = "non défini",
+            [TranslateKey.DiscordDisabledSend] = "Envoi désactivé",
+            [TranslateKey.DiscordWhatsend] = "Quoi envoyer",
+            [TranslateKey.DiscordBansKicks] = "Bannissements et expulsions",
+            [TranslateKey.DiscordVef] = "Invisibilité / ESP",
+            [TranslateKey.DiscordAdminConn] = "Connexions admin",
+            [TranslateKey.DiscordPlayerChat] = "Chat des joueurs",
+            [TranslateKey.DiscordRestart] = "Démarrage/redémarrage serveur",
+            [TranslateKey.DiscordPluginErr] = "Erreurs de plugin",
+            [TranslateKey.DiscordWipe] = "Notifications de wipe",
+            [TranslateKey.DiscordEco] = "Opérations de solde",
+            [TranslateKey.DiscordEmbed] = "Apparence du message embed",
+            [TranslateKey.DiscordBotname] = "Nom du bot",
+            [TranslateKey.DiscordAvatar] = "URL de l'avatar",
+            [TranslateKey.DiscordFooter] = "Texte du pied de page",
+            [TranslateKey.DiscordEmbedcolor] = "Couleur de l'embed (principale)",
+            [TranslateKey.DiscordColorClose] = "Fermer",
+            [TranslateKey.DiscordTitleTpl] = "Modèle de titre",
+            [TranslateKey.DiscordDescTpl] = "Modèle de description",
+            [TranslateKey.DiscordVars] = "Variables : {action} {target} {admin} {reason} {time} {steamid}",
+            [TranslateKey.DiscordThumb] = "Avatar Steam de la cible",
+            [TranslateKey.DiscordThumbD] = "Affiche le logo du serveur en miniature à droite de l'embed",
+            [TranslateKey.DiscordTimestamp] = "Horodatage",
+            [TranslateKey.DiscordTimestampD] = "Ajoute l'heure de l'événement à l'embed",
+            [TranslateKey.DiscordSlash] = "Commandes slash",
+            [TranslateKey.DiscordSlashOnline] = "obtenir le nombre de joueurs en ligne",
+            [TranslateKey.DiscordSlashPlayers] = "liste des joueurs",
+            [TranslateKey.DiscordSlashKick] = "Expulser directement depuis Discord",
+            [TranslateKey.DiscordSlashMute] = "Rendre muet directement depuis Discord",
+            [TranslateKey.DiscordChatBridge] = "Discord -> chat du jeu",
+            [TranslateKey.DiscordChatBridgeD] =
+                "Relaie les messages du salon Discord vers le jeu, nécessite le bot et l'intent Message Content",
+            [TranslateKey.DiscordSlashBan] = "Bannir directement depuis Discord",
+            [TranslateKey.DiscordDelivery] = "Livraison des journaux",
+            [TranslateKey.DiscordDelivWh] = "Webhooks",
+            [TranslateKey.DiscordDelivBot] = "Bot",
+            [TranslateKey.DiscordDelivBoth] = "Les deux",
+            [TranslateKey.DiscordDeliveryHint] = "Comment les événements sont envoyés à Discord",
+            [TranslateKey.DiscordBotSection] = "Discord - bot",
+            [TranslateKey.DiscordBotChannels] = "Salons du bot (ID)",
+            [TranslateKey.DiscordChanBans] = "Salon bannissements/expulsions",
+            [TranslateKey.DiscordChanChat] = "Salon chat",
+            [TranslateKey.DiscordChanActions] = "Salon actions",
+            [TranslateKey.DiscordChanErrors] = "Salon erreurs",
+            [TranslateKey.DiscordRoles] = "Rôles de commande",
+            [TranslateKey.DiscordRolesKick] = "Rôles pour /kick",
+            [TranslateKey.DiscordRolesMute] = "Rôles pour /mute",
+            [TranslateKey.DiscordRolesSuper] = "Super-rôle (toutes les commandes)",
+            [TranslateKey.DiscordRolesNone] = "Non sélectionné",
+            [TranslateKey.DiscordRolesHint] = "Connectez le bot pour choisir les rôles",
+            [TranslateKey.DiscordRolesCount] = "Sélectionnés : {0}",
+            [TranslateKey.DiscordStatusOffline] = "Non connecté",
+            [TranslateKey.DiscordStatusConnecting] = "Connexion...",
+            [TranslateKey.DiscordStatusOnline] = "Connecté",
+            [TranslateKey.DiscordStatusError] = "Erreur",
+            [TranslateKey.DiscordStatusNoExt] = "Extension Discord introuvable",
+            [TranslateKey.DiscordStatusCfg] = "Statut du bot",
+            [TranslateKey.DiscordStatusText] = "Texte de statut ({online} {maxonline} {queue} {connecting})",
+            [TranslateKey.DiscordActPlaying] = "Joue à",
+            [TranslateKey.DiscordActWatching] = "Regarde",
+            [TranslateKey.DiscordActListening] = "Écoute",
+            [TranslateKey.DiscordActCompeting] = "En compétition",
+            [TranslateKey.DiscordBanDlc] = "DLC",
+            [TranslateKey.SecurityLogall] = "Journaliser toutes les actions",
+            [TranslateKey.SecurityLogallD] = "Écrit chaque action admin dans un journal non modifiable depuis le jeu",
+            [TranslateKey.SecurityLockPa] = "Verrouiller l'attribution des permissions PowerfulAdmin",
+            [TranslateKey.SecurityLockPaD] = "Verrouille les interrupteurs powerfuladmin.* pour tout le monde, personne ne peut les modifier depuis le panneau",
+            [TranslateKey.SecurityEspInterval] = "Intervalle ESP (s)",
+            [TranslateKey.SecurityEspIntervalD] = "Fréquence de rafraîchissement de l'ESP, de 0,1 à 5 secondes, plus bas est plus fluide mais plus lourd",
+            [TranslateKey.SecurityEspMax] = "Objets ESP max",
+            [TranslateKey.SecurityMapInterval] = "Actualisation carte, s",
+            [TranslateKey.SecurityLogMax] = "Journaux max (50-5000)",
+            [TranslateKey.SecurityTemplates] = "Modèles de raison (séparés par |)",
+            [TranslateKey.LockedTitle] = "Section verrouillée",
+            [TranslateKey.LockedDesc] =
+                "L'accès aux réglages est réservé aux utilisateurs ayant la permission powerfuladmin.settings. Contactez le propriétaire du serveur ou l'admin principal.",
+            [TranslateKey.LockedFeat] =
+                "Vous n'avez pas la permission pour cette section. Demandez au propriétaire du serveur ou à l'admin principal de vous accorder l'accès.",
+            [TranslateKey.MessageNoperm] = "Vous n'avez pas accès à PowerfulAdmin."
+        };
+
+        private readonly Dictionary<string, string> _zhCn = new()
+        {
+            [TranslateKey.DashboardFps] = "服务器 FPS",
+            [TranslateKey.DashboardSleeping] = "睡眠中",
+            [TranslateKey.DashboardEntities] = "实体数",
+            [TranslateKey.DashboardNonearby] = "附近没有玩家",
+            [TranslateKey.ConsoleTabAll] = "全部",
+            [TranslateKey.ConsoleTabChat] = "聊天",
+            [TranslateKey.ConsoleTabCmd] = "命令",
+            [TranslateKey.ConsoleTabConn] = "连接",
+            [TranslateKey.ConsoleTabErr] = "错误",
+            [TranslateKey.ConsoleExport] = "导出",
+            [TranslateKey.ConsoleExported] = "控制台已导出到 oxide/logs/PowerfulAdmin。",
+            [TranslateKey.ConsoleEmpty] = "暂无事件",
+            [TranslateKey.WidgetConsoleOff] = "控制台已禁用",
+            [TranslateKey.PlayersSub2] = "{0} 在线 · 共 {1} 名已知玩家",
+            [TranslateKey.PlayersShown2] = "显示第 {0}–{1} 条，共 {2} 条",
+            [TranslateKey.PlayersEmpty] = "未找到玩家",
+            [TranslateKey.MessageNotfound] = "未找到玩家或玩家不在线。",
+            [TranslateKey.MessageTpTo] = "已传送到 {0}。",
+            [TranslateKey.MessageTpHere] = "已将 {0} 传送到你身边。",
+            [TranslateKey.MessageTpCoords] = "{0} 已传送到坐标（{1}）。",
+            [TranslateKey.MessageTpLook] = "{0} 已沿你的视线方向传送。",
+            [TranslateKey.MessageKicked] = "{0} 已被踢出。",
+            [TranslateKey.MessageMuted] = "{0} 已被禁言（{1}）。",
+            [TranslateKey.MessageUnmuted] = "{0} 已解除禁言。",
+            [TranslateKey.MuteNotice] = "你已被禁言，无法使用聊天。原因：{0}。剩余时间：{1}。",
+            [TranslateKey.MuteDefault] = "无原因",
+            [TranslateKey.MutePerm] = "永久",
+            [TranslateKey.MuteCustom] = "自定义时长",
+            [TranslateKey.MuteCustomPh] = "自定义时长（例如 90、2h、1d12h）",
+            [TranslateKey.MessageGave] = "已将物品给予 {0}。",
+            [TranslateKey.MessageItemsGiven] = "已发放给 {0} 名玩家。",
+            [TranslateKey.MessageBanDisabled] = "此版本中封禁功能已禁用。",
+            [TranslateKey.MessageHealed] = "{0} 已被治疗（{1} HP）。",
+            [TranslateKey.MessageKilled] = "{0} 已被击杀。",
+            [TranslateKey.MessageStripped] = "{0} 的物品栏已被清空。",
+            [TranslateKey.MessageSoon] = "即将推出。",
+            [TranslateKey.MessageUpdatecheckStarted] = "已开始检查更新。",
+            [TranslateKey.KickDefault] = "被管理员踢出",
+            [TranslateKey.KickBroadcast] = "{0} 被踢出：{1}",
+            [TranslateKey.MuteBroadcast] = "{0} 被禁言：{1}",
+            [TranslateKey.PopupSoon] = "即将推出",
+            [TranslateKey.GiveCustomCat] = "我的物品",
+            [TranslateKey.GiveNocustom] = "没有已保存的物品。创建一个自定义物品并启用「保存」。",
+            [TranslateKey.GiveSave] = "保存物品",
+            [TranslateKey.GiveSaveD] = "将发放的物品组合保存到「我的物品」标签，以便重复使用",
+            [TranslateKey.SecurityConsolePlayer] = "以玩家身份执行命令",
+            [TranslateKey.SecurityConsolePlayerD] = "以管理员身份执行控制台命令，否则以服务器身份执行",
+            [TranslateKey.SecurityConsoleEnabled] = "控制台已启用",
+            [TranslateKey.SecurityConsoleEnabledD] = "对所有人关闭服务器控制台，仍需要 powerfuladmin.console 权限",
+            [TranslateKey.ConsoleDisabled] = "控制台已禁用或你没有访问权限",
+            [TranslateKey.PopupPerms] = "权限",
+            [TranslateKey.PermsSearchPh] = "搜索权限...",
+            [TranslateKey.PermsNone] = "没有已注册的权限",
+            [TranslateKey.PermsGroupMembers] = "「{0}」组玩家",
+            [TranslateKey.PermsGroupMembersCount] = "{0} 名玩家",
+            [TranslateKey.PermsGroupMembersSearchPh] = "按名称筛选...",
+            [TranslateKey.PermsGroupMembersEmpty] = "该分组没有玩家",
+            [TranslateKey.PermsGroupMembersNomatch] = "没有匹配“{0}”的玩家",
+            [TranslateKey.PermsGroupMembersTip] = "点击打开玩家管理卡片",
+            [TranslateKey.PermsUserperms] = "玩家的直接权限",
+            [TranslateKey.SettingsStorage] = "数据存储",
+            [TranslateKey.StorageNote] = "切换存储后端会自动迁移数据",
+            [TranslateKey.StorageDescJson] =
+                "JSON — 数据存储在 oxide/data/PowerfulAdmin/*.json 文件中。\n简单易读，适合小型服务器。",
+            [TranslateKey.StorageDescSqlite] =
+                "SQLite — 数据存储在本地 PowerfulAdmin.db 文件中。\n速度快，无需外部数据库，默认选项。",
+            [TranslateKey.StorageHost] = "MySQL 主机",
+            [TranslateKey.StoragePort] = "端口",
+            [TranslateKey.StorageDb] = "数据库",
+            [TranslateKey.StorageUser] = "用户名",
+            [TranslateKey.StoragePass] = "密码",
+            [TranslateKey.StorageTest] = "测试 MySQL",
+            [TranslateKey.StorageMigrate] = "迁移",
+            [TranslateKey.StorageMigrateQ] = "将数据迁移到此处？",
+            [TranslateKey.ConfirmYes] = "是",
+            [TranslateKey.ConfirmNo] = "否",
+            [TranslateKey.StorageStNone] = "未连接",
+            [TranslateKey.StorageStConnecting] = "连接中...",
+            [TranslateKey.StorageStConnected] = "已连接",
+            [TranslateKey.StorageStMigrating] = "数据迁移中...",
+            [TranslateKey.StorageStFailed] = "连接失败",
+            [TranslateKey.StorageStMigrateFailed] = "数据迁移失败",
+            [TranslateKey.SettingsNotify] = "通知",
+            [TranslateKey.NotifyProviderLabel] = "通知提供方",
+            [TranslateKey.NotifyProviderD] = "自动模式优先使用最先加载的支持 NCP 的插件；关闭仅屏蔽成功提示，错误仍会显示在聊天中",
+            [TranslateKey.NotifyProviderAuto] = "自动",
+            [TranslateKey.NotifyProviderNotify] = "Notify",
+            [TranslateKey.NotifyProviderNcp] = "NCP",
+            [TranslateKey.NotifyProviderChat] = "聊天",
+            [TranslateKey.NotifyProviderOff] = "关闭",
+            [TranslateKey.NotifySubNotify] = "Notify",
+            [TranslateKey.NotifySubNcp] = "NCP",
+            [TranslateKey.NotifyTypeSuccess] = "类型 ID：success",
+            [TranslateKey.NotifyTypeError] = "类型 ID：error",
+            [TranslateKey.NotifyTypePlayer] = "类型 ID：player",
+            [TranslateKey.NcpTypeSuccess] = "类型 ID：success",
+            [TranslateKey.NcpTypeError] = "类型 ID：error",
+            [TranslateKey.NcpTypePlayer] = "类型 ID：player",
+            [TranslateKey.TopSearch] = "搜索玩家、命令、ID...",
+            [TranslateKey.TopSearchNone] = "未找到玩家",
+            [TranslateKey.NavigationCatMain] = "主要",
+            [TranslateKey.NavigationCatTools] = "工具",
+            [TranslateKey.NavigationCatManage] = "管理",
+            [TranslateKey.NavigationDashboard] = "仪表盘",
+            [TranslateKey.NavigationConsole] = "实时控制台",
+            [TranslateKey.NavigationPlayers] = "玩家",
+            [TranslateKey.NavigationItems] = "物品",
+            [TranslateKey.NavigationVanish] = "隐身",
+            [TranslateKey.NavigationEsp] = "透视",
+            [TranslateKey.NavigationPerms] = "权限与组",
+            [TranslateKey.NavigationLogs] = "日志",
+            [TranslateKey.NavigationPlugins] = "插件",
+            [TranslateKey.NavigationConvars] = "控制台变量",
+            [TranslateKey.NavigationAppearance] = "外观",
+            [TranslateKey.NavigationSettings] = "设置",
+            [TranslateKey.AppearanceTitle] = "外观",
+            [TranslateKey.AppearanceSub] = "面板配色主题",
+            [TranslateKey.ButtonSend] = "发送",
+            [TranslateKey.ButtonSave] = "保存",
+            [TranslateKey.ButtonReload] = "重载",
+            [TranslateKey.FilterAll] = "全部",
+            [TranslateKey.FilterOnline] = "在线",
+            [TranslateKey.ColumnPlayer] = "玩家",
+            [TranslateKey.ColumnTime] = "时间",
+            [TranslateKey.ColumnPing] = "延迟",
+            [TranslateKey.ColumnGroup] = "组",
+            [TranslateKey.ColumnActions] = "操作",
+            [TranslateKey.DashboardTitle] = "仪表盘",
+            [TranslateKey.DashboardSub] = "服务器实时概览",
+            [TranslateKey.DashboardOnline] = "在线",
+            [TranslateKey.DashboardQueue] = "排队 {0} · 加入中 {1}",
+            [TranslateKey.DashboardAdmins] = "在线管理员",
+            [TranslateKey.DashboardNewplayers] = "新玩家",
+            [TranslateKey.DashboardNewplayersD] = "24小时内",
+            [TranslateKey.DashboardAllonline] = "全部在线",
+            [TranslateKey.DashboardLiveconsole] = "实时控制台",
+            [TranslateKey.DashboardNearby] = "附近玩家",
+            [TranslateKey.DashboardQuicktoggles] = "管理员快捷开关",
+            [TranslateKey.NearbyAll] = "全部玩家 →",
+            [TranslateKey.ToggleVanish] = "隐身",
+            [TranslateKey.ToggleVanishD] = "对玩家隐身",
+            [TranslateKey.ToggleGodmode] = "无敌模式",
+            [TranslateKey.ToggleGodmodeD] = "免疫伤害",
+            [TranslateKey.ToggleEsp] = "透视",
+            [TranslateKey.ToggleEspD] = "开关（在透视标签页中配置）",
+            [TranslateKey.ToggleNoclip] = "穿墙",
+            [TranslateKey.ToggleNoclipD] = "穿墙飞行",
+            [TranslateKey.ToggleWidget] = "小组件",
+            [TranslateKey.ToggleWidgetD] = "游戏内 HUD 小组件",
+            [TranslateKey.ToggleInspect] = "检查",
+            [TranslateKey.ToggleInspectD] = "近距离：E 打开物品栏，右键打开信息卡",
+            [TranslateKey.InspectHintCard] = "右键 - 信息卡",
+            [TranslateKey.InspectHintInv] = "E - 物品栏",
+            [TranslateKey.ConsoleTitle] = "实时控制台",
+            [TranslateKey.ConsoleSub] = "与服务器的实时直连",
+            [TranslateKey.ConsoleStream] = "事件流",
+            [TranslateKey.ConsolePlaceholder] = "输入命令或文本...",
+            [TranslateKey.PlayersTitle] = "玩家",
+            [TranslateKey.VanishTitle] = "隐身",
+            [TranslateKey.VanishSub] = "隐身与管理员行为",
+            [TranslateKey.VanishMain] = "主要参数",
+            [TranslateKey.VanishEnable] = "启用隐身",
+            [TranslateKey.VanishEnableD] = "该模式的总开关",
+            [TranslateKey.VanishAuto] = "加入时自动隐身",
+            [TranslateKey.VanishAutoD] = "管理员连接时自动开启隐身",
+            [TranslateKey.VanishUnlock] = "打开上锁的容器",
+            [TranslateKey.VanishUnlockD] = "允许隐身的管理员打开上锁的箱子和门",
+            [TranslateKey.VanishNoclip] = "隐身时同步穿墙",
+            [TranslateKey.VanishNoclipD] = "隐身开关的同时切换飞行模式",
+            [TranslateKey.VanishNoclipOff] = "关闭隐身时同步关闭穿墙",
+            [TranslateKey.VanishNoclipOffD] = "关闭隐身时自动关闭飞行模式",
+            [TranslateKey.VanishAppearance] = "外观",
+            [TranslateKey.VanishOpacity] = "对其他管理员的透明度",
+            [TranslateKey.VanishSilColor] = "对其他管理员显示的轮廓颜色",
+            [TranslateKey.VanishLogging] = "日志记录",
+            [TranslateKey.VanishLogToggle] = "记录每次开启/关闭",
+            [TranslateKey.VanishLogToggleD] = "将每次隐身切换写入日志和 Discord Webhook",
+            [TranslateKey.VanishLogNotify] = "通知其他管理员",
+            [TranslateKey.VanishLogNotifyD] = "在聊天中告知其他管理员谁开启了隐身",
+            [TranslateKey.EspTitle] = "透视",
+            [TranslateKey.EspSub] = "透过墙体显示物体和玩家",
+            [TranslateKey.EspWhat] = "显示内容",
+            [TranslateKey.EspMaster] = "启用透视",
+            [TranslateKey.EspMasterD] = "透视总开关，下方分类仅在开启时生效",
+            [TranslateKey.EspPlayers] = "玩家",
+            [TranslateKey.EspLoot] = "战利品（容器）",
+            [TranslateKey.EspBoxes] = "玩家箱子",
+            [TranslateKey.EspTc] = "工具柜",
+            [TranslateKey.EspBeds] = "背包 / 床",
+            [TranslateKey.EspTraps] = "陷阱",
+            [TranslateKey.EspStash] = "藏匿点",
+            [TranslateKey.EspDrops] = "掉落物品",
+            [TranslateKey.EspSleepers] = "睡眠玩家",
+            [TranslateKey.EspTurrets] = "炮塔与陷阱",
+            [TranslateKey.EspVehicles] = "载具",
+            [TranslateKey.EspNpc] = "NPC 与动物",
+            [TranslateKey.EspNodes] = "矿石节点",
+            [TranslateKey.EspForage] = "采集物",
+            [TranslateKey.EspRender] = "渲染参数",
+            [TranslateKey.EspRadius] = "半径",
+            [TranslateKey.EspBoxopacity] = "方框透明度",
+            [TranslateKey.EspTextopacity] = "文字透明度",
+            [TranslateKey.EspColors] = "颜色",
+            [TranslateKey.EspColorEdit] = "标记颜色",
+            [TranslateKey.EspColorFormat] = "R G B A，取值 0-1",
+            [TranslateKey.EspEnemies] = "敌对生物",
+            [TranslateKey.EspTeam] = "队伍",
+            [TranslateKey.EspAdmins] = "管理员",
+            [TranslateKey.EspVanishTag] = "[隐身管理员]",
+            [TranslateKey.EspExtra] = "额外信息",
+            [TranslateKey.EspDistance] = "距离（米）",
+            [TranslateKey.EspDistanceD] = "目标旁显示数值",
+            [TranslateKey.EspHp] = "生命值 HP",
+            [TranslateKey.EspHpD] = "血条",
+            [TranslateKey.EspHeld] = "手持物品",
+            [TranslateKey.EspHeldD] = "手中的武器/工具",
+            [TranslateKey.DropdownTpTitle] = "传送到玩家",
+            [TranslateKey.DropdownKickTitle] = "踢出玩家",
+            [TranslateKey.DropdownMuteTitle] = "禁言玩家",
+            [TranslateKey.DropdownManageTitle] = "玩家管理",
+            [TranslateKey.DropdownMode] = "模式",
+            [TranslateKey.DropdownReasonPh] = "原因（简短，玩家可见）",
+            [TranslateKey.DropdownCommentPh] = "详细备注（写入日志）",
+            [TranslateKey.DropdownTome] = "传送到我",
+            [TranslateKey.DropdownToplayer] = "我传送到玩家",
+            [TranslateKey.DropdownTocoords] = "到坐标",
+            [TranslateKey.DropdownTolook] = "到视线方向",
+            [TranslateKey.DropdownCoords] = "坐标（X / Y / Z）",
+            [TranslateKey.DropdownCancel] = "取消",
+            [TranslateKey.DropdownTpOk] = "传送",
+            [TranslateKey.DropdownMuteOk] = "禁言",
+            [TranslateKey.DropdownTemplate] = "模板",
+            [TranslateKey.DropdownDuration] = "时长",
+            [TranslateKey.DropdownNotify] = "通知",
+            [TranslateKey.DropdownNotifyPlayer] = "仅玩家",
+            [TranslateKey.DropdownNotifyDiscord] = "+ 发送到 Discord",
+            [TranslateKey.DropdownNotifyChat] = "发送到全局聊天",
+            [TranslateKey.DropdownNotifyNotify] = "通过 Notify/NCP",
+            [TranslateKey.DropdownKickOk] = "踢出",
+            [TranslateKey.Duration1h] = "1小时",
+            [TranslateKey.Duration1d] = "1天",
+            [TranslateKey.Duration7d] = "7天",
+            [TranslateKey.Duration30d] = "30天",
+            [TranslateKey.DurationPerm] = "∞",
+            [TranslateKey.PopupHeal] = "治疗",
+            [TranslateKey.PopupKill] = "击杀",
+            [TranslateKey.PopupStrip] = "清空",
+            [TranslateKey.PopupKick] = "踢出",
+            [TranslateKey.PopupBan] = "封禁",
+            [TranslateKey.PopupFreeze] = "冻结",
+            [TranslateKey.PopupMute] = "禁言",
+            [TranslateKey.PopupTp] = "传送",
+            [TranslateKey.PopupInv] = "物品栏",
+            [TranslateKey.PopupSpectate] = "观察",
+            [TranslateKey.PopupShowMap] = "在地图上显示",
+            [TranslateKey.SpectateExit] = "空格 / 蹲下 - 切换目标，R - 退出",
+            [TranslateKey.SpectateTarget] = "观察中：{0}",
+            [TranslateKey.SpectateLost] = "没有可观察的目标，已停止观察",
+            [TranslateKey.PopupGive] = "给予",
+            [TranslateKey.PopupBlueprints] = "蓝图",
+            [TranslateKey.BlueprintOffline] = "玩家必须在线",
+            [TranslateKey.BlueprintUnlockedCount] = "已解锁：{0}",
+            [TranslateKey.BlueprintHint] = "点击物品即可为该玩家解锁其配方。",
+            [TranslateKey.BlueprintUnlockAll] = "全部解锁",
+            [TranslateKey.BlueprintReset] = "重置",
+            [TranslateKey.BlueprintAllConfirm] = "确定为该玩家解锁所有蓝图？",
+            [TranslateKey.BlueprintResetConfirm] = "确定重置该玩家的所有蓝图？",
+            [TranslateKey.BlueprintConfirmYes] = "确认",
+            [TranslateKey.BlueprintConfirmCancel] = "取消",
+            [TranslateKey.PopupModifiers] = "修饰属性",
+            [TranslateKey.ModifierFormatHint] = "数值为倍率：1 = 100%，2 = 200%",
+            [TranslateKey.ModifierClear] = "全部清除",
+            [TranslateKey.ModifierApply] = "应用",
+            [TranslateKey.ModifierColCur] = "当前",
+            [TranslateKey.ModifierColDur] = "时长（秒）",
+            [TranslateKey.ModifierColVal] = "倍率",
+            [TranslateKey.PopupVitals] = "生命体征",
+            [TranslateKey.PopupEconomy] = "经济",
+            [TranslateKey.EconomyNoProvider] = "未加载任何经济插件",
+            [TranslateKey.EconomyAmountPh] = "数量",
+            [TranslateKey.EconomyAmountLabel] = "操作数量",
+            [TranslateKey.EconomySource] = "使用哪种经济系统进行增减",
+            [TranslateKey.EconomyClear] = "重置",
+            [TranslateKey.EconomyGive] = "增加",
+            [TranslateKey.EconomyTake] = "扣除",
+            [TranslateKey.EconomySet] = "设置",
+            [TranslateKey.EconomyGaveOk] = "{0} 的余额增加了 {1}",
+            [TranslateKey.EconomyTookOk] = "已从 {0} 扣除 {1}",
+            [TranslateKey.EconomySetOk] = "{0} 的余额已设置为 {1}",
+            [TranslateKey.EconomyOpFailed] = "操作失败",
+            [TranslateKey.EconomyBadAmount] = "数量必须为正数",
+            [TranslateKey.EconomyOnlineOnly] = "该经济系统仅对在线玩家生效",
+            [TranslateKey.SkillPointsLabel] = "可用点数",
+            [TranslateKey.SkillPointsAmountPh] = "点数",
+            [TranslateKey.SkillPointsGaveOk] = "已给予 {0} {1} 点技能点",
+            [TranslateKey.SkillPointsTakeSoon] = "该插件 API 暂不支持扣除点数",
+            [TranslateKey.VitalHint] = "每个数值都会被限制在其体征的范围内，Max 字段可扩大该范围。",
+            [TranslateKey.VitalColCur] = "当前",
+            [TranslateKey.VitalColVal] = "数值",
+            [TranslateKey.VitalColMax] = "最大值",
+            [TranslateKey.StatsTitle] = "统计信息",
+            [TranslateKey.StatReveal] = "显示",
+            [TranslateKey.StatConnection] = "连接信息",
+            [TranslateKey.StatStatus] = "状态",
+            [TranslateKey.StatSteamId] = "SteamID",
+            [TranslateKey.StatPing] = "延迟",
+            [TranslateKey.StatSession] = "本次会话",
+            [TranslateKey.StatPlaytime] = "游玩时长",
+            [TranslateKey.StatRustHours] = "Rust 游玩时长",
+            [TranslateKey.StatFirstSeen] = "首次出现",
+            [TranslateKey.StatLastSeen] = "最后出现",
+            [TranslateKey.StatIp] = "IP",
+            [TranslateKey.StatGroups] = "组",
+            [TranslateKey.StatMuted] = "已禁言",
+            [TranslateKey.StatVitals] = "生命体征",
+            [TranslateKey.StatHealth] = "生命值",
+            [TranslateKey.StatHunger] = "饥饿",
+            [TranslateKey.StatThirst] = "口渴",
+            [TranslateKey.StatRadiation] = "辐射",
+            [TranslateKey.StatTemperature] = "体温",
+            [TranslateKey.StatWetness] = "潮湿度",
+            [TranslateKey.StatBleeding] = "流血",
+            [TranslateKey.StatPoison] = "中毒",
+            [TranslateKey.StatComfort] = "舒适度",
+            [TranslateKey.StatBalance] = "余额",
+            [TranslateKey.StatBalancePhysical] = "（实物货币）",
+            [TranslateKey.StateOffline] = "离线",
+            [TranslateKey.StateDead] = "死亡",
+            [TranslateKey.StateWounded] = "重伤",
+            [TranslateKey.StateSleeping] = "睡眠中",
+            [TranslateKey.StateOnline] = "在线",
+            [TranslateKey.CommonYes] = "是",
+            [TranslateKey.CommonNo] = "否",
+            [TranslateKey.StatNoSteamKey] = "未设置 STEAM API 密钥",
+            [TranslateKey.WelcomeTitle] = "欢迎！",
+            [TranslateKey.WelcomeBody] =
+                "这里是 PowerfulAdmin 管理面板。\n\n" +
+                "· 仪表盘 - 服务器概览与快捷开关（隐身、透视、无敌、穿墙）。\n" +
+                "· 玩家 - 管理玩家：治疗、踢出、封禁、禁言、传送、物品栏、给予物品、蓝图、修饰属性。\n" +
+                "· 检查 - 查看玩家并按右键打开其信息卡。\n" +
+                "· 权限、日志、插件、控制台变量和设置都在侧边栏中。\n\n" +
+                "祝使用愉快！",
+            [TranslateKey.WelcomeBtn] = "开始使用",
+            [TranslateKey.ConvarsTitle] = "控制台变量",
+            [TranslateKey.ConvarsSub] = "查看和编辑服务器控制台变量",
+            [TranslateKey.ConvarsAll] = "全部",
+            [TranslateKey.ConvarsSearchPh] = "搜索变量...",
+            [TranslateKey.PopupBack] = "返回",
+            [TranslateKey.PopupConfirm] = "确认",
+            [TranslateKey.PopupConfirmQ] = "确定对 {1} 执行「{0}」？",
+            [TranslateKey.PopupConfirmD] = "该操作将立即生效。",
+            [TranslateKey.PopupHealCur] = "当前：{0} / {1} HP",
+            [TranslateKey.PopupHealSet] = "设置",
+            [TranslateKey.PopupHealFull] = "完全",
+            [TranslateKey.PopupHealMax] = "最大值",
+            [TranslateKey.PopupHealAdd] = "增加",
+            [TranslateKey.PopupHealSub] = "减少",
+            [TranslateKey.PopupHealAmt] = "HP 数值",
+            [TranslateKey.PopupReason] = "原因",
+            [TranslateKey.PopupComment] = "备注（管理员笔记）",
+            [TranslateKey.PopupTemplates] = "模板",
+            [TranslateKey.GiveSearchPh] = "搜索物品...",
+            [TranslateKey.GiveCart] = "购物车",
+            [TranslateKey.GiveAmtBad] = "数量：1 到 2147483647 之间的整数",
+            [TranslateKey.GiveClear] = "清空",
+            [TranslateKey.GiveConfirm] = "给予",
+            [TranslateKey.GiveNoitems] = "未找到内容",
+            [TranslateKey.GiveCustom] = "自定义物品",
+            [TranslateKey.GiveFav] = "收藏",
+            [TranslateKey.GiveModeItem] = "物品",
+            [TranslateKey.GiveModeBp] = "蓝图",
+            [TranslateKey.GiveNofav] = "暂无收藏。点击物品上的心形图标即可收藏。",
+            [TranslateKey.ItemsTitle] = "物品",
+            [TranslateKey.ItemsSub] = "批量发放物品与物品查询",
+            [TranslateKey.ItemsSearchPh] = "搜索物品...",
+            [TranslateKey.ItemsCart] = "购物车",
+            [TranslateKey.ItemsClear] = "清空",
+            [TranslateKey.ItemsGive] = "给予",
+            [TranslateKey.ItemsNoitems] = "未找到内容",
+            [TranslateKey.ItemsInfoBtn] = "i",
+            [TranslateKey.ItemsGiveTitle] = "发放给",
+            [TranslateKey.ItemsGiveSub] = "选择在线玩家",
+            [TranslateKey.ItemsGiveSearchPh] = "按名称筛选...",
+            [TranslateKey.ItemsGiveSelectall] = "全选",
+            [TranslateKey.ItemsGiveClearsel] = "取消选择",
+            [TranslateKey.ItemsGiveNoOnline] = "没有在线玩家",
+            [TranslateKey.ItemsGiveNoMatch] = "没有匹配\"{0}\"的玩家",
+            [TranslateKey.ItemsGiveConfirm] = "给予（{0}）",
+            [TranslateKey.ItemsGiveLoadmore] = "显示更多（{0}）",
+            [TranslateKey.ItemsGiveNoneSelected] = "请至少选择一名玩家",
+            [TranslateKey.ItemsGiveEmptyCart] = "购物车是空的",
+            [TranslateKey.ItemsInfoTitle] = "物品信息",
+            [TranslateKey.ItemsInfoShortname] = "Shortname",
+            [TranslateKey.ItemsInfoId] = "Item ID",
+            [TranslateKey.ItemsInfoCategory] = "类别",
+            [TranslateKey.ItemsInfoRarity] = "稀有度",
+            [TranslateKey.ItemsInfoStack] = "最大堆叠",
+            [TranslateKey.ItemsInfoVolume] = "体积（容器空间）",
+            [TranslateKey.ItemsInfoDurability] = "耐久度",
+            [TranslateKey.ItemsInfoDescription] = "描述",
+            [TranslateKey.ItemsInfoBlueprint] = "制作",
+            [TranslateKey.ItemsInfoWorkbench] = "工作台",
+            [TranslateKey.ItemsInfoCrafttime] = "制作时间",
+            [TranslateKey.ItemsInfoScrap] = "回收废料",
+            [TranslateKey.ItemsInfoIngredients] = "所需材料",
+            [TranslateKey.ItemsInfoRecycle] = "回收为",
+            [TranslateKey.ItemsInfoRecycleGreen] = "回收为（绿色回收机）",
+            [TranslateKey.ItemsInfoRecycleYellow] = "回收为（黄色回收机）",
+            [TranslateKey.ItemsInfoRecycleRed] = "回收为（红色回收机）",
+            [TranslateKey.ItemsInfoMods] = "组件 (mods)",
+            [TranslateKey.GiveCustShort] = "简称（必须真实存在）",
+            [TranslateKey.GiveCustName] = "物品名称",
+            [TranslateKey.GiveCustSkin] = "皮肤 ID",
+            [TranslateKey.GiveCustQty] = "数量",
+            [TranslateKey.GiveCustBad] = "未找到",
+            [TranslateKey.GiveCustAdd] = "添加",
+            [TranslateKey.PermsTitle] = "权限与组",
+            [TranslateKey.PermsSub] = "权限仅对所选组生效",
+            [TranslateKey.PermsNewgroup] = "新建组",
+            [TranslateKey.PermsNewgroupD] = "输入新权限组的名称",
+            [TranslateKey.PermsNewgroupPh] = "例如 helper",
+            [TranslateKey.PermsInherit] = "继承权限自：",
+            [TranslateKey.PermsParentNone] = "— 不继承（新建） —",
+            [TranslateKey.PermsCreate] = "创建",
+            [TranslateKey.PermsAutosave] = "自动保存",
+            [TranslateKey.PermsGroups] = "组",
+            [TranslateKey.PermsForgroup] = "组的权限：",
+            [TranslateKey.PermsInherited] = "继承自 {0}",
+            [TranslateKey.PermsDelGroup] = "删除组",
+            [TranslateKey.PermsDelConfirm] = "确认删除？",
+            [TranslateKey.LogsTitle] = "日志",
+            [TranslateKey.LogsSub] = "管理员操作日志",
+            [TranslateKey.LogsJournal] = "管理员操作日志",
+            [TranslateKey.LogsShowMore] = "显示更多（+{0}）",
+            [TranslateKey.PluginsTitle] = "插件",
+            [TranslateKey.PluginsSub] = "已加载插件 · 重载与启用/禁用",
+            [TranslateKey.PluginsActive] = "运行中",
+            [TranslateKey.PluginsNoCommands] = "该插件没有已注册的命令。",
+            [TranslateKey.PluginsOff] = "已禁用",
+            [TranslateKey.PluginsUnloaded] = "未加载",
+            [TranslateKey.PluginsSearchPh] = "搜索插件...",
+            [TranslateKey.PluginsNone] = "未找到插件",
+            [TranslateKey.PluginsCfgBtn] = "配置",
+            [TranslateKey.PluginsLangBtn] = "语言",
+            [TranslateKey.PluginsCheckUpdates] = "检查更新",
+            [TranslateKey.PluginsChecking] = "检查中...",
+            [TranslateKey.PluginsUpdatecheckerMissing] = "未安装 UpdateChecker 插件。",
+            [TranslateKey.PluginsUpdateAvailable] = "更新：v{0} → v{1}",
+            [TranslateKey.CfgTitle] = "{0}  ·  配置",
+            [TranslateKey.CfgLangTitle] = "{0}  ·  语言",
+            [TranslateKey.CfgSaved] = "配置已保存",
+            [TranslateKey.CfgParseError] = "无法读取或解析文件",
+            [TranslateKey.CfgWriteError] = "写入文件失败",
+            [TranslateKey.CfgBadValue] = "{0} 的值无效",
+            [TranslateKey.CfgNoLang] = "该插件没有语言文件",
+            [TranslateKey.CfgLangNew] = "新语言代码",
+            [TranslateKey.TipNavDashboard] = "服务器实时概览：在线玩家、性能与最近事件",
+            [TranslateKey.TipNavConsole] = "服务器控制台：查看日志并发送命令",
+            [TranslateKey.TipNavPlayers] = "带搜索功能的玩家列表，可对玩家执行各种操作",
+            [TranslateKey.TipNavVanish] = "管理员隐身及其联动的所有功能",
+            [TranslateKey.TipNavEsp] = "透过墙体标出玩家、NPC 和实体的轮廓",
+            [TranslateKey.TipNavPerms] = "权限与组：授予、撤销权限及编辑成员关系",
+            [TranslateKey.TipNavLogs] = "管理员操作、聊天及插件事件的历史记录",
+            [TranslateKey.TipNavPlugins] = "服务器插件：加载、重载并编辑配置与语言文件",
+            [TranslateKey.TipNavConvars] = "服务器控制台变量：搜索变量并修改其值",
+            [TranslateKey.TipNavAppearance] = "面板的主题、字体与大小",
+            [TranslateKey.TipNavSettings] = "插件设置：集成、通知、安全与存储",
+            [TranslateKey.TipNavMap] = "管理员地图，直接在地图上显示玩家、标记和操作",
+            [TranslateKey.TipNavBinds] = "管理工具的预设控制台绑定",
+            [TranslateKey.TipNavQuickButtons] = "你自定义的面板与地图快捷操作按钮",
+            [TranslateKey.TipNavItems] = "批量发放物品与物品查询",
+            [TranslateKey.CfgFormHint] = "布尔值为开关，数字和字符串为输入框，对象显示为分组，数组会在单独窗口中打开",
+            [TranslateKey.CfgLangHint] = "选择一个已有语言，或将其复制为新的语言代码",
+            [TranslateKey.CfgLangExisting] = "已有语言代码",
+            [TranslateKey.CfgLangCopy] = "创建副本",
+            [TranslateKey.CfgLangCopyFrom] = "{0} 的副本",
+            [TranslateKey.CfgLangNewD] = "输入语言代码并按回车，当前打开的语言将被复制到其中",
+            [TranslateKey.CfgLangBad] = "未知的语言代码，请从列表中选择",
+            [TranslateKey.CfgLangExists] = "该插件已存在此语言",
+            [TranslateKey.CfgLangDel] = "删除 {0}",
+            [TranslateKey.CfgLangDelSure] = "确定删除 {0}？",
+            [TranslateKey.CfgLangDelD] = "删除当前打开的本地化文件，且无法恢复",
+            [TranslateKey.CfgLangDeleted] = "本地化 {0} 已删除",
+            [TranslateKey.CfgLangLast] = "无法删除最后一个本地化",
+            [TranslateKey.CfgLangPick] = "或选择一个现成的代码",
+            [TranslateKey.CfgFieldNew] = "新字段",
+            [TranslateKey.CfgFieldKeyHint] = "键名，例如 ui.something",
+            [TranslateKey.CfgFieldValHint] = "默认值",
+            [TranslateKey.CfgFieldAdd] = "添加到所有语言",
+            [TranslateKey.CfgFieldD] =
+                "输入键名和值，在每个框中按回车，然后点击此按钮 - 该键将出现在插件的每个本地化中",
+            [TranslateKey.CfgFieldBad] = "输入键名并按回车",
+            [TranslateKey.CfgFieldExists] = "该键在此本地化中已存在",
+            [TranslateKey.CfgFieldAdded] = "键 {0} 已添加到 {1} 个本地化",
+            [TranslateKey.CfgArrTitle] = "数组  ·  {0}",
+            [TranslateKey.CfgArrHint] = "共 {0} 个元素，点击元素可展开",
+            [TranslateKey.CfgArrEdit] = "编辑",
+            [TranslateKey.CfgArrAdd] = "添加元素",
+            [TranslateKey.CfgArrApply] = "应用",
+            [TranslateKey.CfgArrEmpty] = "数组为空",
+            [TranslateKey.CfgReloadLabel] = "保存后重载插件",
+            [TranslateKey.CfgEmpty] = "没有可编辑的内容",
+            [TranslateKey.CfgSelf] = "PowerfulAdmin 无法编辑自身",
+            [TranslateKey.ButtonCommands] = "命令",
+            [TranslateKey.ButtonLoad] = "启用",
+            [TranslateKey.ButtonUnload] = "禁用",
+            [TranslateKey.PluginsSelf] = "无法在自身的管理界面中禁用 PowerfulAdmin。",
+            [TranslateKey.LogsFAll] = "全部",
+            [TranslateKey.LogsFAct] = "操作",
+            [TranslateKey.LogsFChat] = "聊天",
+            [TranslateKey.LogsFConn] = "连接",
+            [TranslateKey.LogsFErr] = "错误",
+            [TranslateKey.SettingsTitle] = "设置",
+            [TranslateKey.SettingsSub] = "界面 · 集成 · 安全",
+            [TranslateKey.SettingsTheme] = "主题",
+            [TranslateKey.AppVitals] = "生命体征（HUD 显示）",
+            [TranslateKey.HammerHint] = "手持锤子",
+            [TranslateKey.HammerEmpty] = "请看向一个物体",
+            [TranslateKey.HammerOwner] = "所有者",
+            [TranslateKey.HammerAuthed] = "已授权",
+            [TranslateKey.HammerItems] = "内容物",
+            [TranslateKey.HammerCode] = "密码",
+            [TranslateKey.HammerGuest] = "访客",
+            [TranslateKey.HammerUpkeep] = "受保护",
+            [TranslateKey.HammerBag] = "背包所属",
+            [TranslateKey.HammerGeneral] = "常规",
+            [TranslateKey.HammerWhitelist] = "门锁白名单",
+            [TranslateKey.HammerPosition] = "位置",
+            [TranslateKey.HammerDistance] = "距离",
+            [TranslateKey.HammerGrade] = "等级",
+            [TranslateKey.HammerBuilding] = "建筑",
+            [TranslateKey.HammerParent] = "父对象",
+            [TranslateKey.HammerSteamId] = "SteamID",
+            [TranslateKey.HammerState] = "状态",
+            [TranslateKey.HammerTeam] = "队伍",
+            [TranslateKey.HammerPower] = "电力",
+            [TranslateKey.HammerPowered] = "已通电",
+            [TranslateKey.HammerMounted] = "已骑乘",
+            [TranslateKey.HammerHidden] = "密码已隐藏",
+            [TranslateKey.HammerReveal] = "显示",
+            [TranslateKey.HammerHide] = "隐藏",
+            [TranslateKey.HammerDelete] = "删除",
+            [TranslateKey.HammerDeleteGibs] = "带碎片效果",
+            [TranslateKey.HammerDeleteParents] = "连同关联结构",
+            [TranslateKey.HammerPlainHint] = "物体直接消失，不留任何痕迹",
+            [TranslateKey.HammerGibsHint] = "物体像拆除一样碎裂成残骸",
+            [TranslateKey.HammerParentsHint] = "移除整个关联结构，而不仅是这一个方块",
+            [TranslateKey.HammerCrateUnlock] = "解锁",
+            [TranslateKey.HammerCrateTimer] = "计时器",
+            [TranslateKey.HammerCrateUnlockHint] = "箱子立即打开，无需破解",
+            [TranslateKey.HammerCrateTimerHint] = "要求输入时间并设置到计时器上",
+            [TranslateKey.HammerLoot] = "战利品",
+            [TranslateKey.HammerModeNone] = "无模式",
+            [TranslateKey.PopupHealD] = "恢复生命值。选择完全模式还会清除流血和辐射，并补满饥饿度和口渴度",
+            [TranslateKey.PopupNotesD] = "关于该玩家的管理员笔记",
+            [TranslateKey.PopupKillD] = "立即击杀该玩家",
+            [TranslateKey.PopupStripD] = "清空物品栏、快捷栏和衣物中的所有物品",
+            [TranslateKey.PopupKickD] = "带原因断开玩家连接",
+            [TranslateKey.PopupBanD] = "按 SteamID 封禁，附带原因和时长",
+            [TranslateKey.PopupFreezeD] = "原地冻结玩家以便检查",
+            [TranslateKey.PopupMuteD] = "在一段时间内禁用聊天和语音",
+            [TranslateKey.PopupTpD] = "传送到该玩家或将其传送到你身边",
+            [TranslateKey.PopupInvD] = "打开并编辑玩家的物品栏",
+            [TranslateKey.PopupSpectateD] = "进入对该玩家的观察模式",
+            [TranslateKey.PopupGiveD] = "从物品目录中给予物品",
+            [TranslateKey.PopupBlueprintsD] = "管理已学习的蓝图",
+            [TranslateKey.PopupModifiersD] = "编辑修饰属性：速度、伤害、重力",
+            [TranslateKey.PopupVitalsD] = "编辑生命值、饥饿度、口渴度等生命体征",
+            [TranslateKey.PopupPermsD] = "管理该玩家的权限与所属组",
+            [TranslateKey.PopupShowMapD] = "在管理员地图上显示该玩家的位置",
+            [TranslateKey.PopupEconomyD] = "查看并编辑玩家余额",
+            [TranslateKey.HammerModeNoneD] = "清除模式，锤子恢复正常功能",
+            [TranslateKey.HammerLootHint] = "打开该容器的物品栏进行编辑",
+            [TranslateKey.HammerCrateTimeHint] = "格式为 mm:ss 或秒数，从当前开始计时",
+            [TranslateKey.HammerCrateTimeBad] = "时间格式有误：请使用 mm:ss，最长 24 小时",
+            [TranslateKey.HammerCrateTimeDone] = "箱子计时器：{0}",
+            [TranslateKey.HammerCrateApply] = "应用",
+            [TranslateKey.HammerCrateTimeLabel] = "开启时间",
+            [TranslateKey.HammerCrateOpens] = "还有",
+            [TranslateKey.HammerCrateOpened] = "已开启",
+            [TranslateKey.HammerCrateIdle] = "尚未开始破解",
+            [TranslateKey.HammerCratePresets] = "预设",
+            [TranslateKey.HammerCrateStateOk] = "就绪",
+            [TranslateKey.HammerCrateStateBad] = "错误",
+            [TranslateKey.SecurityCrateSeconds] = "箱子计时器（秒）",
+            [TranslateKey.HammerNotArmed] = "未选择操作",
+            [TranslateKey.HammerPieHint] = "按住 E 选择操作",
+            [TranslateKey.HammerBinds] = "按住 E 打开菜单   Shift+左键 执行   Shift+E 密码",
+            [TranslateKey.MapLayerPvp] = "PVP",
+            [TranslateKey.MapLayerRaid] = "突袭",
+            [TranslateKey.MapLayerNotes] = "标注",
+            [TranslateKey.MapNoteHint] = "按住 Shift 放置标记即可传送过去",
+            [TranslateKey.MapLegend] = "图例",
+            [TranslateKey.SettingsMapGroup] = "地图分组",
+            [TranslateKey.SettingsMapGroupD] = "将点位合并为带数量的格子，而非单独图标",
+            [TranslateKey.SettingsPie] = "环形菜单",
+            [TranslateKey.SettingsPieD] = "在环形菜单中显示此操作",
+            [TranslateKey.MapLegendTeam] = "所选玩家的队伍",
+            [TranslateKey.MapLegendCargo] = "货船",
+            [TranslateKey.MapLegendAir] = "运输无人机",
+            [TranslateKey.MapLegendVending] = "自动贩卖机",
+            [TranslateKey.MapLegendEvent] = "活动事件",
+            [TranslateKey.MapLegendIsland] = "岛屿",
+            [TranslateKey.MapLegendCity] = "浮空城市",
+            [TranslateKey.MapLegendGhost] = "幽灵船",
+            [TranslateKey.MapLegendPortal] = "传送门",
+            [TranslateKey.MapActGroupState] = "玩家状态",
+            [TranslateKey.MapActGroupDiscipline] = "处罚",
+            [TranslateKey.MapActGroupMove] = "移动",
+            [TranslateKey.MapActGroupInspect] = "检查",
+            [TranslateKey.MapActSelected] = "已选择 {0} / {1}",
+            [TranslateKey.MapActOn] = "开",
+            [TranslateKey.MapActOff] = "关",
+            [TranslateKey.MapNotesEmptyHint] = "右键点击地图放置标注",
+            [TranslateKey.MapLegendStation] = "船坞",
+            [TranslateKey.MapLegendRhib] = "船只",
+            [TranslateKey.MapLegendAirdrop] = "空投",
+            [TranslateKey.MapZoneMain] = "主岛",
+            [TranslateKey.MapZoneDeep] = "深海",
+            [TranslateKey.MapNotesEmpty] = "选择玩家以查看其标记",
+            [TranslateKey.MapNotesOf] = "玩家标记",
+            [TranslateKey.MapSearch] = "搜索玩家...",
+            [TranslateKey.MapHealth] = "生命值",
+            [TranslateKey.MapQuickActions] = "快捷操作",
+            [TranslateKey.MapNoActions] = "未配置任何操作",
+            [TranslateKey.MapObjTeleport] = "传送过去",
+            [TranslateKey.MapObjDelete] = "摧毁",
+            [TranslateKey.MapObjDeleteConfirm] = "确定摧毁？",
+            [TranslateKey.MapObjDeleteOk] = "是，摧毁",
+            [TranslateKey.MapObjLoot] = "打开物品栏",
+            [TranslateKey.MapObjOwnersMore] = "还有 {0} 个",
+            [TranslateKey.MapCluTitle] = "聚合内：{0}",
+            [TranslateKey.SecurityHeatWindow] = "热力图时间窗口（分钟）",
+            [TranslateKey.HammerToggle] = "管理员锤子",
+            [TranslateKey.HammerToggleD] = "显示你所看物体的信息",
+            [TranslateKey.HammerRangeLabel] = "锤子范围",
+            [TranslateKey.HammerIntervalLabel] = "锤子刷新间隔",
+            [TranslateKey.SecurityHammerBounds] = "管理员锤子：刷新间隔、射线范围、物品",
+            [TranslateKey.NavigationMap] = "地图",
+            [TranslateKey.NavigationBinds] = "绑定",
+            [TranslateKey.BindsTitle] = "绑定",
+            [TranslateKey.BindsSub] = "选择一行，用 Ctrl+C 复制，然后粘贴到 F1 控制台",
+            [TranslateKey.BindsCopy] = "选中并 CTRL+C 复制",
+            [TranslateKey.BindsKey] = "按键",
+            [TranslateKey.BindsUnbind] = "使用 unbind f1 移除绑定，请替换为你选择的按键",
+            [TranslateKey.BindsLocked] = "无访问权限",
+            [TranslateKey.BindPanel] = "面板",
+            [TranslateKey.BindPanelDesc] = "打开管理面板",
+            [TranslateKey.BindVanish] = "隐身",
+            [TranslateKey.BindVanishDesc] = "切换隐身状态",
+            [TranslateKey.BindGod] = "无敌模式",
+            [TranslateKey.BindGodDesc] = "切换无敌模式",
+            [TranslateKey.BindNoclip] = "穿墙",
+            [TranslateKey.BindNoclipDesc] = "切换穿墙飞行",
+            [TranslateKey.BindEsp] = "透视",
+            [TranslateKey.BindEspDesc] = "切换实体透视显示",
+            [TranslateKey.BindHammer] = "锤子",
+            [TranslateKey.BindHammerDesc] = "切换锤子工具",
+            [TranslateKey.BindInspect] = "检查",
+            [TranslateKey.BindInspectDesc] = "切换玩家检查功能",
+            [TranslateKey.BindMap] = "地图",
+            [TranslateKey.BindMapDesc] = "直接打开面板并定位到地图",
+            [TranslateKey.BindPie] = "环形菜单",
+            [TranslateKey.BindPieDesc] = "打开环形快捷操作菜单",
+            [TranslateKey.MapTitle] = "服务器地图",
+            [TranslateKey.MapSub] = "实时位置与建筑结构",
+            [TranslateKey.MapPreparing] = "地图准备中，需要几秒钟",
+            [TranslateKey.MapLayerPlayers] = "玩家",
+            [TranslateKey.MapLayerSleepers] = "睡眠玩家",
+            [TranslateKey.MapLayerTc] = "工具柜",
+            [TranslateKey.MapLayerBags] = "背包",
+            [TranslateKey.MapLayerStashes] = "藏匿点",
+            [TranslateKey.MapLayerCars] = "汽车",
+            [TranslateKey.MapLayerShops] = "商店",
+            [TranslateKey.MapLegendTrain] = "火车",
+            [TranslateKey.MapLegendCrate] = "上锁箱子",
+            [TranslateKey.MapLayerHorses] = "马匹",
+            [TranslateKey.MapLayerAir] = "空中",
+            [TranslateKey.MapLayerEvents] = "事件",
+            [TranslateKey.MapRefresh] = "刷新",
+            [TranslateKey.MapPause] = "暂停",
+            [TranslateKey.MapClusters] = "聚合",
+            [TranslateKey.MapOnline] = "在线",
+            [TranslateKey.MapNoSelection] = "在地图或列表中选择一名玩家",
+            [TranslateKey.MapDetails] = "详情",
+            [TranslateKey.NavigationQuickButtons] = "快捷按钮",
+            [TranslateKey.QbTitle] = "快捷按钮",
+            [TranslateKey.QbSub] = "自定义管理操作",
+            [TranslateKey.QbNew] = "创建",
+            [TranslateKey.QbMapActions] = "地图内置操作",
+            [TranslateKey.QbEdit] = "编辑按钮",
+            [TranslateKey.QbEmpty] = "暂无按钮",
+            [TranslateKey.QbName] = "名称",
+            [TranslateKey.QbCmd] = "命令",
+            [TranslateKey.QbPerm] = "权限 powerfuladmin.<名称>（留空表示所有人）",
+            [TranslateKey.QbIcon] = "游戏图标",
+            [TranslateKey.QbTarget] = "目标",
+            [TranslateKey.QbTargetPlayer] = "玩家",
+            [TranslateKey.QbTargetGlobal] = "全局",
+            [TranslateKey.QbTargetPoint] = "坐标点",
+            [TranslateKey.QbPlaces] = "显示位置",
+            [TranslateKey.QbPlacePopup] = "玩家弹窗",
+            [TranslateKey.QbPlaceMap] = "地图",
+            [TranslateKey.QbPlaceWidget] = "小组件",
+            [TranslateKey.QbPlaceDashboard] = "仪表盘",
+            [TranslateKey.QbPlaceNone] = "不显示",
+            [TranslateKey.QbPlaceholders] =
+                "%STEAM_ID% %NICKNAME% %X% %Y% %Z% %GRID% %ADMIN_STEAM_ID% %ADMIN_NICKNAME% %ADMIN_X% %ADMIN_Y% %ADMIN_Z% %ADMIN_GRID%   命令分隔符 |",
+            [TranslateKey.QbConfirm] = "需要确认",
+            [TranslateKey.QbConfirmQ] = "确定执行 {0}？",
+            [TranslateKey.QbSave] = "保存",
+            [TranslateKey.QbCancel] = "取消",
+            [TranslateKey.QbDone] = "已执行：{0}",
+            [TranslateKey.QbActions] = "快捷操作",
+            [TranslateKey.DashboardQuickButtons] = "快捷按钮",
+            [TranslateKey.AppFonts] = "字体",
+            [TranslateKey.AppFontTitle] = "标题与按钮",
+            [TranslateKey.AppFontBody] = "正文文本",
+            [TranslateKey.AppFontLogs] = "日志",
+            [TranslateKey.AppFontConsole] = "控制台",
+            [TranslateKey.AppFontHud] = "通知与 HUD",
+            [TranslateKey.AppFontPick] = "选择字体",
+            [TranslateKey.AppFontHint] = "不支持西里尔字母的字体标注为 (EN)",
+            [TranslateKey.AppEspSize] = "透视文字大小",
+            [TranslateKey.AppFontNoCyr] = "(EN)",
+            [TranslateKey.AppVitalsLocked] = "需要 powerfuladmin.candisablevitals 权限",
+            [TranslateKey.SettingsPrivate] = "面板设置",
+            [TranslateKey.SettingsDrag] = "可拖动面板",
+            [TranslateKey.SettingsDragD] = "允许用鼠标将面板拖动到任意位置，并记住该位置",
+            [TranslateKey.SettingsIntegration] = "集成",
+            [TranslateKey.SettingsSecurity] = "安全",
+            [TranslateKey.SettingsApi] = "API 密钥",
+            [TranslateKey.ApiSteamKey] = "Steam Web API 密钥",
+            [TranslateKey.ApiSteamKeyPh] = "粘贴你的 Steam Web API 密钥",
+            [TranslateKey.ApiSteamKeyD] = "用于显示 Rust 游玩时长统计，可在 steamcommunity.com/dev/apikey 获取密钥，玩家资料需为公开",
+            [TranslateKey.DiscordConnection] = "机器人连接",
+            [TranslateKey.DiscordToken] = "机器人 Token",
+            [TranslateKey.DiscordGuildid] = "服务器 (Guild)",
+            [TranslateKey.DiscordConnect] = "连接机器人",
+            [TranslateKey.DiscordTest] = "测试",
+            [TranslateKey.DiscordMessageError] = "插件错误",
+            [TranslateKey.DiscordMessageConnect] = "管理员已连接",
+            [TranslateKey.DiscordMessageKick] = "玩家已被踢出",
+            [TranslateKey.DiscordMessageMute] = "玩家已被禁言",
+            [TranslateKey.DiscordMessageWipe] = "服务器重置",
+            [TranslateKey.DiscordMessageWipeDesc] = "地图已重置。",
+            [TranslateKey.DiscordMessageRestart] = "服务器已启动",
+            [TranslateKey.DiscordMessageRestartDesc] = "服务器已启动并准备就绪。",
+            [TranslateKey.DiscordMessageBy] = "执行人：",
+            [TranslateKey.DiscordMessageTestSent] = "测试消息已发送到 Discord。",
+            [TranslateKey.DiscordMessageTestNourl] = "请先在 Discord 设置中配置 Webhook 地址。",
+            [TranslateKey.DiscordWebhooks] = "事件 Webhook",
+            [TranslateKey.DiscordHookBans] = "Webhook：封禁/踢出",
+            [TranslateKey.DiscordHookActions] = "Webhook：管理操作",
+            [TranslateKey.DiscordHookChat] = "Webhook：服务器聊天",
+            [TranslateKey.DiscordHookErrors] = "Webhook：错误与崩溃",
+            [TranslateKey.DiscordWhUrl] = "Webhook 地址",
+            [TranslateKey.DiscordWhName] = "名称",
+            [TranslateKey.DiscordWhLogo] = "头像（URL）",
+            [TranslateKey.DiscordWhDefault] = "默认（共用）",
+            [TranslateKey.DiscordNotset] = "未设置",
+            [TranslateKey.DiscordDisabledSend] = "已禁用发送",
+            [TranslateKey.DiscordWhatsend] = "发送内容",
+            [TranslateKey.DiscordBansKicks] = "封禁与踢出",
+            [TranslateKey.DiscordVef] = "隐身 / 透视",
+            [TranslateKey.DiscordAdminConn] = "管理员连接",
+            [TranslateKey.DiscordPlayerChat] = "玩家聊天",
+            [TranslateKey.DiscordRestart] = "服务器启动/重启",
+            [TranslateKey.DiscordPluginErr] = "插件错误",
+            [TranslateKey.DiscordWipe] = "重置通知",
+            [TranslateKey.DiscordEco] = "余额操作",
+            [TranslateKey.DiscordEmbed] = "嵌入消息外观",
+            [TranslateKey.DiscordBotname] = "机器人名称",
+            [TranslateKey.DiscordAvatar] = "头像 URL",
+            [TranslateKey.DiscordFooter] = "页脚文字",
+            [TranslateKey.DiscordEmbedcolor] = "嵌入消息颜色（主色）",
+            [TranslateKey.DiscordColorClose] = "关闭",
+            [TranslateKey.DiscordTitleTpl] = "标题模板",
+            [TranslateKey.DiscordDescTpl] = "描述模板",
+            [TranslateKey.DiscordVars] = "变量：{action} {target} {admin} {reason} {time} {steamid}",
+            [TranslateKey.DiscordThumb] = "目标 Steam 头像",
+            [TranslateKey.DiscordThumbD] = "在嵌入消息右侧以缩略图显示服务器 Logo",
+            [TranslateKey.DiscordTimestamp] = "时间戳",
+            [TranslateKey.DiscordTimestampD] = "在嵌入消息中添加事件时间",
+            [TranslateKey.DiscordSlash] = "斜杠命令",
+            [TranslateKey.DiscordSlashOnline] = "获取在线人数",
+            [TranslateKey.DiscordSlashPlayers] = "玩家列表",
+            [TranslateKey.DiscordSlashKick] = "直接从 Discord 踢出玩家",
+            [TranslateKey.DiscordSlashMute] = "直接从 Discord 禁言玩家",
+            [TranslateKey.DiscordChatBridge] = "Discord -> 游戏聊天",
+            [TranslateKey.DiscordChatBridgeD] = "将 Discord 聊天频道的消息转发到游戏内，需要机器人并启用 Message Content Intent",
+            [TranslateKey.DiscordSlashBan] = "直接从 Discord 封禁玩家",
+            [TranslateKey.DiscordDelivery] = "日志投递方式",
+            [TranslateKey.DiscordDelivWh] = "Webhook",
+            [TranslateKey.DiscordDelivBot] = "机器人",
+            [TranslateKey.DiscordDelivBoth] = "两者都用",
+            [TranslateKey.DiscordDeliveryHint] = "事件发送到 Discord 的方式",
+            [TranslateKey.DiscordBotSection] = "Discord - 机器人",
+            [TranslateKey.DiscordBotChannels] = "机器人频道（ID）",
+            [TranslateKey.DiscordChanBans] = "封禁/踢出频道",
+            [TranslateKey.DiscordChanChat] = "聊天频道",
+            [TranslateKey.DiscordChanActions] = "操作频道",
+            [TranslateKey.DiscordChanErrors] = "错误频道",
+            [TranslateKey.DiscordRoles] = "命令身份组",
+            [TranslateKey.DiscordRolesKick] = "/kick 可用身份组",
+            [TranslateKey.DiscordRolesMute] = "/mute 可用身份组",
+            [TranslateKey.DiscordRolesSuper] = "超级身份组（全部命令）",
+            [TranslateKey.DiscordRolesNone] = "未选择",
+            [TranslateKey.DiscordRolesHint] = "连接机器人后即可选择身份组",
+            [TranslateKey.DiscordRolesCount] = "已选择：{0}",
+            [TranslateKey.DiscordStatusOffline] = "未连接",
+            [TranslateKey.DiscordStatusConnecting] = "连接中...",
+            [TranslateKey.DiscordStatusOnline] = "已连接",
+            [TranslateKey.DiscordStatusError] = "错误",
+            [TranslateKey.DiscordStatusNoExt] = "未找到 Discord 扩展",
+            [TranslateKey.DiscordStatusCfg] = "机器人状态",
+            [TranslateKey.DiscordStatusText] = "状态文字（{online} {maxonline} {queue} {connecting}）",
+            [TranslateKey.DiscordActPlaying] = "正在玩",
+            [TranslateKey.DiscordActWatching] = "正在看",
+            [TranslateKey.DiscordActListening] = "正在听",
+            [TranslateKey.DiscordActCompeting] = "正在竞赛",
+            [TranslateKey.DiscordBanDlc] = "DLC",
+            [TranslateKey.SecurityLogall] = "记录所有操作",
+            [TranslateKey.SecurityLogallD] = "将每次管理操作写入日志，游戏内无法编辑",
+            [TranslateKey.SecurityLockPa] = "锁定 PowerfulAdmin 权限的授予",
+            [TranslateKey.SecurityLockPaD] = "锁定所有人的 powerfuladmin.* 开关，任何人都无法在面板中修改",
+            [TranslateKey.SecurityEspInterval] = "透视刷新间隔（秒）",
+            [TranslateKey.SecurityEspIntervalD] = "透视重绘的频率，范围 0.1 到 5 秒，数值越低越流畅但性能开销越大",
+            [TranslateKey.SecurityEspMax] = "透视对象数量上限",
+            [TranslateKey.SecurityMapInterval] = "地图刷新间隔（秒）",
+            [TranslateKey.SecurityLogMax] = "日志数量上限（50-5000）",
+            [TranslateKey.SecurityTemplates] = "原因模板（用 | 分隔）",
+            [TranslateKey.LockedTitle] = "该板块已锁定",
+            [TranslateKey.LockedDesc] =
+                "只有拥有 powerfuladmin.settings 权限的用户才能访问设置。请联系服主或主管理员。",
+            [TranslateKey.LockedFeat] =
+                "你没有访问此板块的权限，请让服主或主管理员为你授权。",
+            [TranslateKey.MessageNoperm] = "你没有访问 PowerfulAdmin 的权限。"
         };
 
         #endregion

@@ -6,6 +6,7 @@ using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using Oxide.Plugins.DefendableHomesExtensionMethods;
 using Rust;
+using Rust.Ai.Gen2;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -17,7 +18,7 @@ using UnityEngine.Networking;
 
 namespace Oxide.Plugins
 {
-    [Info("DefendableHomes", "KpucTaJl", "1.2.2")]
+    [Info("DefendableHomes", "KpucTaJl", "1.2.4")]
     internal class DefendableHomes : RustPlugin
     {
         #region Config
@@ -2252,7 +2253,7 @@ namespace Oxide.Plugins
                     if (!Physics.Raycast(pos, Vector3.down, out RaycastHit raycastHit, 500f, GroundLayers)) continue;
                     pos.y = raycastHit.point.y;
 
-                    if (!NavMesh.SamplePosition(pos, out NavMeshHit navmeshHit, 2f, 1)) continue;
+                    if (!RustNavMeshHelpers.SamplePosition(pos, out NavMeshHit navmeshHit, 2f, 1)) continue;
                     pos = navmeshHit.position;
 
                     if (Math.Abs(pos.y - center.y) > 9f) continue;
@@ -2667,7 +2668,7 @@ namespace Oxide.Plugins
                     else
                     {
                         Texture2D tex = DownloadHandlerTexture.GetContent(unityWebRequest);
-                        Images.Add(name, FileStorage.server.Store(tex.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID).ToString());
+                        Images.Add(name, FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, tex.EncodeToPNG()).ToString());
                         Puts($"Image {name} download is complete");
                         UnityEngine.Object.DestroyImmediate(tex);
                     }

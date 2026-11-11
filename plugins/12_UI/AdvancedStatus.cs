@@ -44,11 +44,11 @@ using Oxide.Core.Libraries.Covalence;
 
 namespace Oxide.Plugins
 {
-	[Info("Advanced Status", "IIIaKa", "0.1.26")]
+	[Info("Advanced Status", "IIIaKa", "0.1.27")]
 	[Description("A useful API plugin that mimics in-game status bars and allows the addition of custom ones.")]
 	class AdvancedStatus : RustPlugin
     {
-        [PluginReference]
+		[PluginReference]
 		private Plugin ImageLibrary;
 
 		#region ~Variables~
@@ -95,7 +95,7 @@ namespace Oxide.Plugins
 		
 		private readonly Dictionary<ItemCategory, int[]> _buildingItems2 = new Dictionary<ItemCategory, int[]>()
         {
-			{ ItemCategory.Items, new int[] { 613961768, 696029452, -1501434104, -593892112, 1099611828, 2047789913, -903796529, 1629564540, -870140677 }},
+			{ ItemCategory.Items, new int[] { 613961768, 696029452, -1501434104, -593892112, 1099611828, 2047789913, -903796529, 1629564540, -870140677, -593892104 }},
 			{ ItemCategory.Electrical, new int[] { 363163265, -144513264, -566907190, -144417939 }},
 			{ ItemCategory.Fun, new int[]
 			{
@@ -127,8 +127,25 @@ namespace Oxide.Plugins
 			734320711, -798662404, 1004843240, 1414245519, -19360132, -1037472336, -611118083, 912235912, 1412103380, 1178325727,
 			924598634, -1790885730, -170436364, -1318837358, 392828520, -2100458529, -2095813057, -1081599445, -1616704051, -1796837031,
 			248643189, -963819285, -594596146, 2036395619, -274709858, -1247485104, 104856514, 54436981, -1896395719, -143481979,
-			385645417, -24571537
-        };
+			385645417, -24571537, 1931713481, 204391867, 1184215560, -201824959, -1957595450, 718346230, -319133397, 1412100395,
+			1751463672, -1716287874, 1185218972, -1882497808, 1527700610, -1661676046, -132349657, -1244746477, -744942541, 1519395656,
+			556232090, -844428380, 1973949960, -52398594, -849373693, 139776459, 325350919, -1341272471, 1738714421, 789540413,
+			-1644292642, -1388103748, 1243083208, -1057052157, 91167975, 777041831, -1019639625, 882559853, -1729415579, -1498613415,
+			-652889722, -1385721419, -2123125470, 603811464, 2063916636, 2021351233, 524678627, -334418777, -541206665, 368008432,
+			-487356515, -1260229965, 368008432, 1516531815, -929092070, -1184406448, 1480022580, 263834859, -1142222427, -649128577,
+			-1814195745, -193519904, 1382263453, 342438846, 1548091822, -1432674913, -1274093662, 920930831, 281099360, -909588488,
+            844440409, 1783512007, -1941646328, -700591459, 640470230, 1142993169, -1117626326, -1510616686, -965336208, 1159991980,
+            -1950721390, 1619039771, -629028935, 1717250161, 1655979682, -1557377697, 674734128, -1230433643, -1379835144, 936496778,
+            1983621560, 1892536031, -486432631, -1899491405, -1002156085, -746030907, -1679267738, 1268178466, -1923843855, 786458957,
+            -1698937385, 756890702, -1993883724, -967648160, 99588025, -985781766, 1883981800, -246672609, 1623701499, -265202949,
+            -850982208, 479292118, 1581210395, 1883981798, 1115193056, -450890885, -2016974826, -424687710, 1899610628, 1883981801,
+            1655650836, -819720157, 1361520181, -542577259, 963150711, 738611016, 286193827, -1429456799, -33009419, 1121416193,
+            97903330, 377750553, -1677315902, 1712261904, 1729374708, 1905387657, 2024467711, -1476814093, -557539629, -496584751,
+            -1160621614, 671706427, 1230323789, -851988960, -1018026008, 1950721418, -559599960, -1654233406, -1878475007, -948291630,
+            573926264, 1327005675, 1757265204, 1319617282, 1903654061, -722241321, -1878764039, -870140677, -1258821205, -781014061,
+            15388698, -1614955425, 1975934948, 240752557, 1248356124, -280812482, -2134097299, 1132603396, -18034684, -96256997,
+            866889860, -92759291, -1183726687, 680234026
+		};
 		
 		private static readonly HashSet<string> _doubleMountsList = new HashSet<string> { "horsesaddle", "horsesaddlerear", "bikedriverseat", "bikepassengerseat" },
 			_mountsList = new HashSet<string>
@@ -370,7 +387,6 @@ namespace Oxide.Plugins
 			_playersList = new Hash<ulong, PlayerWatcher>();
 			if (initial)
 				yield return CoroutineEx.waitForSeconds(5f);
-			
 			string imgDir = $"{Interface.Oxide.DataDirectory}{Path.DirectorySeparatorChar}{Name}{Path.DirectorySeparatorChar}Images";
             if (!Directory.Exists(imgDir))
                 Directory.CreateDirectory(imgDir);
@@ -390,6 +406,8 @@ namespace Oxide.Plugins
 			_harmony = new Harmony(IdForHarmony);
             _harmony.Patch(AccessTools.Method(typeof(CardGameController), "JoinTable", new Type[] { typeof(ulong) }), postfix: new HarmonyMethod(typeof(AdvancedStatus), nameof(AdvancedStatus_JoinTable)));
             _harmony.Patch(AccessTools.Method(typeof(CardGameController), "LeaveTable", new Type[] { typeof(ulong) }), postfix: new HarmonyMethod(typeof(AdvancedStatus), nameof(AdvancedStatus_LeaveTable)));
+			_harmony.Patch(AccessTools.Method(typeof(PoolTableGameController), "OnPlayerJoined", new Type[] { typeof(ulong) }), postfix: new HarmonyMethod(typeof(AdvancedStatus), nameof(AdvancedStatus_PoolTableJoined)));
+			_harmony.Patch(AccessTools.Method(typeof(Pooltable), "OnMountablePlayerLeft", new Type[] { typeof(ulong) }), postfix: new HarmonyMethod(typeof(AdvancedStatus), nameof(AdvancedStatus_PoolTableLeft)));
 			_harmony.Patch(AccessTools.Method(typeof(BasePlayer), "SetActiveTelephone", new Type[] { typeof(PhoneController) }), postfix: new HarmonyMethod(typeof(AdvancedStatus), nameof(AdvancedStatus_SetActiveTelephone)));
 			
 			foreach (var player in BasePlayer.activePlayerList)
@@ -484,8 +502,20 @@ namespace Oxide.Plugins
                 watcher.OnVanillaUi(false);
         }
 		
+		public static void AdvancedStatus_PoolTableJoined(PoolTableGameController __instance, ulong playerId)
+        {
+			if (__instance != null && __instance.playerIds.Contains(playerId) && TryGetWatcher(playerId, out var watcher))
+                watcher.OnVanillaUi(true);
+        }
+		
+		public static void AdvancedStatus_PoolTableLeft(ulong playerId)
+        {
+			if (TryGetWatcher(playerId, out var watcher))
+				watcher.OnVanillaUi(false);
+		}
+		
 		public static void AdvancedStatus_SetActiveTelephone(BasePlayer __instance)
-		{
+        {
             if (__instance != null && TryGetWatcher(__instance.userID, out var watcher))
                 watcher.OnVanillaUi(__instance.activeTelephone != null);
         }
@@ -664,6 +694,12 @@ namespace Oxide.Plugins
         private void CreateBar(BasePlayer player, Dictionary<string, object> parameters) => CreateBar(player.userID.Get(), parameters);
         private void CreateBar(ulong userID, Dictionary<string, object> parameters)
         {
+			/*if (!_isReady || parameters == null || !parameters.TryGetValue("Plugin", out var pNameObj) || pNameObj is not string pluginName ||
+                !parameters.TryGetValue("Id", out var bIdObj) || bIdObj is not string barId || !TryGetWatcher(userID, out var watcher)) return;*/
+			
+			//TODO
+            //delete after adding the subscription order to hooks
+            //https://github.com/OxideMod/Oxide.Core/pull/103
 			if (parameters == null || !userID.IsSteamId() || !parameters.TryGetValue("Plugin", out var pNameObj) || pNameObj is not string pluginName ||
                 !parameters.TryGetValue("Id", out var bIdObj) || bIdObj is not string barId)
 				return;
@@ -683,6 +719,7 @@ namespace Oxide.Plugins
                     return;
                 }
             }
+			//----------
 			
 			AdvancedBar bar = null;
 			bool isOrder = true, found = false;
@@ -755,6 +792,12 @@ namespace Oxide.Plugins
         private void CreateBar(BasePlayer player, Dictionary<int, object> parameters) => CreateBar(player.userID.Get(), parameters);
         private void CreateBar(ulong userID, Dictionary<int, object> parameters)
         {
+			/*if (!_isReady || parameters == null || !parameters.TryGetValue(1, out var pNameObj) || pNameObj is not string pluginName ||
+                !parameters.TryGetValue(0, out var bIdObj) || bIdObj is not string barId || !TryGetWatcher(userID, out var watcher)) return;*/
+			
+			//TODO
+            //delete after adding the subscription order to hooks
+            //https://github.com/OxideMod/Oxide.Core/pull/103
 			if (parameters == null || !userID.IsSteamId() || !parameters.TryGetValue(1, out var pNameObj) || pNameObj is not string pluginName ||
                 !parameters.TryGetValue(0, out var bIdObj) || bIdObj is not string barId)
 				return;
@@ -774,6 +817,7 @@ namespace Oxide.Plugins
                     return;
                 }
             }
+			//----------
 			
 			AdvancedBar bar = null;
             bool isOrder = true, found = false;
@@ -895,7 +939,7 @@ namespace Oxide.Plugins
             if (_imagesList.TryGetValue(imgName, out var crcStr))
             {
                 if (uint.TryParse(crcStr, out var crc))
-                    FileStorage.server.Remove(crc, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                    FileStorage.server.Remove(CommunityEntity.ServerInstance.net.ID, crc);
                 _imagesList.Remove(imgName);
             }
             if (deleteFile)
@@ -927,13 +971,13 @@ namespace Oxide.Plugins
 				foreach (var crcStr in _imagesList.Values)
                 {
                     if (uint.TryParse(crcStr, out crc))
-                        FileStorage.server.Remove(crc, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                        FileStorage.server.Remove(CommunityEntity.ServerInstance.net.ID, crc);
                 }
                 _imagesList.Clear();
             }
 
             string[] imgList = Interface.Oxide.DataFileSystem.GetFiles($"{AdvancedStatusName}{Path.DirectorySeparatorChar}Images", "*.png");
-            if (imgList.Any())
+            if (imgList.Length > 0)
             {
                 int lastSeparator;
                 string imgName, path;
@@ -972,9 +1016,9 @@ namespace Oxide.Plugins
                     yield break;
                 }
                 Texture2D tex = DownloadHandlerTexture.GetContent(request);
-                if (_imagesList.TryGetValue(imgName, out var crcStr) && uint.TryParse(crcStr, out var crc))
-                    FileStorage.server.Remove(crc, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
-                _imagesList[imgName] = FileStorage.server.Store(tex.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID).ToString();
+				if (_imagesList.TryGetValue(imgName, out var crcStr) && uint.TryParse(crcStr, out var crc))
+					FileStorage.server.Remove(CommunityEntity.ServerInstance.net.ID, crc);
+                _imagesList[imgName] = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, tex.EncodeToPNG()).ToString();
                 if (_config.LogImages)
                     Puts($"The image '{imgName}' was stored successfully!");
                 UnityEngine.Object.DestroyImmediate(tex);
@@ -983,8 +1027,11 @@ namespace Oxide.Plugins
 		#endregion
         
         #region ~Oxide Hooks~
+        //void OnPlayerConnected(BasePlayer player) => InitPlayer(player);
         void OnPlayerConnected(BasePlayer player)
 		{
+			//TODO del
+            //https://github.com/OxideMod/Oxide.Core/pull/103
             if (!_playersList.ContainsKey(player.userID))
 				InitPlayer(player);
 		}
@@ -1050,11 +1097,24 @@ namespace Oxide.Plugins
                 watcher.OnVanillaUi(false);
         }
 		
+		void OnEntityMounted(DartsGameMountable dartsMount, BasePlayer player)
+        {
+			if (TryGetWatcher(player.userID, out var watcher))
+                watcher.OnVanillaUi(true);
+        }
+
+        void OnEntityDismounted(DartsGameMountable dartsMount, BasePlayer player)
+        {
+			if (TryGetWatcher(player.userID, out var watcher))
+                watcher.OnVanillaUi(false);
+        }
+		
 		void OnNpcConversationStart(NPCTalking npcTalking, BasePlayer player, ConversationData conversationData)
 		{
 			NextTick(() =>
 			{
-                if (npcTalking.conversingPlayers.Contains(player) && TryGetWatcher(player.userID, out var watcher))
+                //npcTalking.ConversationHost.IsConversingWith(player) - Not the best solution, as the conversation UI will display the status bar UI.
+                if (npcTalking.ConversationHost.IsConversingWith(player) && TryGetWatcher(player.userID, out var watcher))
 					watcher.OnVanillaUi(true);
 			});
 		}
@@ -1093,7 +1153,7 @@ namespace Oxide.Plugins
 			foreach (var crcStr in _imagesList.Values)
             {
                 if (uint.TryParse(crcStr, out var crc))
-                    FileStorage.server.Remove(crc, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                    FileStorage.server.Remove(CommunityEntity.ServerInstance.net.ID, crc);
             }
 			if (_playersList != null)
             {
@@ -1904,6 +1964,8 @@ namespace Oxide.Plugins
 				if (Player.currentCraftLevel > 0f) result++;
                 if (Player.inventory.crafting.queue.Count > 0) result++;
 
+				//if (Player.modifiers.ActiveModifierCount > 0) result++;
+				//TODO TEMP
 				Modifier modifier;
 				bool hasBuf = false, hasDeBuf = false;
 				for (int i = 0; i < Player.modifiers.All.Count; i++)
@@ -1918,6 +1980,7 @@ namespace Oxide.Plugins
 				}
 				if (hasBuf) result++;
 				if (hasDeBuf) result++;
+                //----------------------
 				
 				if (Player.PetEntity != null) result++;
 				if (Player.HasPlayerFlag(BasePlayer.PlayerFlags.SafeZone)) result++;
@@ -1948,6 +2011,8 @@ namespace Oxide.Plugins
 			
 			private void CountPrivilege()
             {
+				
+				
 				int counter = 0;
 				bool isAuthed, isBuildingAuthed = false, isBuildingBlocked = false,
 					isRightItem = Instance.IsBuildingBlockItem(Player.GetActiveItem()?.info);

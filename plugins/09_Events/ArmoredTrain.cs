@@ -10,6 +10,7 @@ using Oxide.Game.Rust.Cui;
 using Oxide.Plugins.ArmoredTrainExtensionMethods;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Rust.Ai.Gen2;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.Networking;
@@ -21,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("ArmoredTrain", "Adem", "2.0.5")]
+    [Info("ArmoredTrain", "Adem", "2.0.9")]
     public class ArmoredTrain : RustPlugin
     {
         #region Variables
@@ -151,6 +152,11 @@ namespace Oxide.Plugins
         private bool IsTrainTurret(ulong netID)
         {
             return EventLauncher.IsEventActive() && _eventController.IsTrainTurret(netID);
+        }
+        
+        private bool IsArmoredTrainPvp()
+        {
+            return _config.ZoneConfig.IsPvpZone;
         }
         #endregion ExternalAPI
 
@@ -3035,6 +3041,7 @@ namespace Oxide.Plugins
                             if (previousDecorConfig.Position == decorEntityConfig.Position && previousDecorConfig.Rotation == decorEntityConfig.Rotation && previousDecorConfig.PrefabName == decorEntityConfig.PrefabName)
                                 continue;
                         }
+                        
                         SpawnDecorEntity(decorEntityConfig, trainCar);
                     }
                 }
@@ -3061,6 +3068,37 @@ namespace Oxide.Plugins
             {
                 Vector3 localPosition = decorEntityConfig.Position.ToVector3();
                 Vector3 localRotation = decorEntityConfig.Rotation.ToVector3();
+
+                if (decorEntityConfig.PrefabName == "assets/prefabs/deployable/playerioents/electricfurnace/electricfurnace.io.prefab")
+                    return;
+
+                if (trainCar.ShortPrefabName == "locomotive.entity")
+                {
+                    if (decorEntityConfig.PrefabName == "assets/prefabs/deployable/weaponracks/weaponrack_tall.deployed.prefab" && decorEntityConfig.Position == "(0.8085879, 2.500965, 1.70813)")
+                        return;
+
+                    if (decorEntityConfig.PrefabName == "assets/prefabs/deployable/playerioents/electricfurnace/electricfurnace.deployed.prefab")
+                    {
+                        int multilicator = 1;
+                        if (localRotation.x != 0 || localRotation.z != 0)
+                        {
+                            if (localPosition.y < 4f)
+                                multilicator = localPosition.x > 0 ? 1 : -1;
+                        }
+                            
+                        else
+                        {
+                            if (localPosition.x > 0)
+                                multilicator = -1;
+                            else
+                                return;
+                        }
+
+                        localPosition = new Vector3(localPosition.x + 0.02f * multilicator, localPosition.y, localPosition.z);
+                    }
+                }
+
+
                 bool isNoDecorEntity = decorEntityConfig.PrefabName.Contains("neon") || decorEntityConfig.PrefabName.Contains("skullspikes");
 
                 BaseEntity entity = BuildManager.SpawnChildEntity(trainCar, decorEntityConfig.PrefabName, localPosition, localRotation, decorEntityConfig.Skin, !isNoDecorEntity);
@@ -3658,7 +3696,7 @@ namespace Oxide.Plugins
                         byte[] bt = tex.EncodeToPNG();
                         Array.Resize(ref neonSign.textureIDs, 1);
                         uint textureIndex = 0;
-                        uint textureId = FileStorage.server.Store(bt, FileStorage.Type.png, neonSign.net.ID, textureIndex);
+                        uint textureId = FileStorage.server.StoreByCrc(neonSign.net.ID, FileStorage.Type.png, bt);
 
                         neonSign.textureIDs[textureIndex] = textureId;
                         neonSign.SendNetworkUpdate();
@@ -5122,7 +5160,7 @@ namespace Oxide.Plugins
 
             public static bool GetNavmeshInPoint(Vector3 position, float radius, out NavMeshHit navMeshHit)
             {
-                return NavMesh.SamplePosition(position, out navMeshHit, radius, 1);
+                return RustNavMeshHelpers.SamplePosition(position, out navMeshHit, radius, 1);
             }
         }
 
@@ -5280,7 +5318,7 @@ namespace Oxide.Plugins
                 }
 
                 Texture2D texture = DownloadHandlerTexture.GetContent(unityWebRequest);
-                uint imageId = FileStorage.server.Store(texture.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                uint imageId = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, texture.EncodeToPNG());
                 TabImageInfo.ImageId = imageId.ToString();
                 UnityEngine.Object.DestroyImmediate(texture);
             }
@@ -5300,7 +5338,7 @@ namespace Oxide.Plugins
                     }
 
                     Texture2D texture = DownloadHandlerTexture.GetContent(unityWebRequest);
-                    uint imageId = FileStorage.server.Store(texture.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                    uint imageId = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, texture.EncodeToPNG());
                     imageInfo.ImageId = imageId.ToString();
                     UnityEngine.Object.DestroyImmediate(texture);
                 }
@@ -6655,9 +6693,6 @@ namespace Oxide.Plugins
             [JsonProperty("HP")]
             public float Hp { get; set; }
 
-            [JsonProperty(En ? "Scale damage" : "Множитель урона")]
-            public float ScaleDamage { get; set; }
-
             [JsonProperty(En ? "The viewing distance" : "Дальность обзора")]
             public float ViewDistance { get; set; }
 
@@ -7341,7 +7376,7 @@ namespace Oxide.Plugins
             {
                 return new PluginConfig()
                 {
-                    VersionConfig = new VersionNumber(2, 0, 4),
+                    VersionConfig = new VersionNumber(2, 0, 9),
                     Prefix = "[ArmoredTrain]",
                     MainConfig = new MainConfig
                     {
@@ -7383,7 +7418,7 @@ namespace Oxide.Plugins
                     },
                     CustomizationConfig = new CustomizationConfig
                     {
-                        IsHalloween = false,
+                        IsHalloween = true,
                         IsChristmas = false,
                         IsElectricFurnacesEnable = false,
                         IsBoilersEnable = true,
@@ -8473,7 +8508,6 @@ namespace Oxide.Plugins
                         {
                             PresetName = "bradley_default",
                             Hp = 900f,
-                            ScaleDamage = 0.3f,
                             ViewDistance = 100.0f,
                             SearchDistance = 100.0f,
                             CoaxAimCone = 1.1f,
