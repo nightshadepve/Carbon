@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeExcavatorTest", "Nightshade", "1.0.1")]
+    [Info("NightshadeExcavatorTest", "Nightshade", "1.0.2")]
     [Description("Admin-only live check for the Giant Excavator weekend boost. Unload clears any test clock this plugin set.")]
     public class NightshadeExcavatorTest : RustPlugin
     {
@@ -24,7 +24,10 @@ namespace Oxide.Plugins
         private Timer restoreTimer;
         private Timer measureTimer;
         private int measureToken;
+        private int measureTicks;
+        private int measureGoal;
         private ulong measureUserId;
+        private readonly List<List<ArmSample>> measureSamples = new List<List<ArmSample>>();
 
         private void Init()
         {
@@ -109,65 +112,110 @@ namespace Oxide.Plugins
                 arg.ReplyWith("No ExcavatorArm on the map.");
                 return;
             }
+            measureSamples.Clear();
+            measureSamples.Add(start);
+            measureGoal = seconds;
+            measureTicks = 0;
             int token = ++measureToken;
             BasePlayer caller = arg.Connection != null ? arg.Connection.player as BasePlayer : null;
             measureUserId = caller != null ? caller.userID : 0UL;
-            measureTimer = timer.Once(seconds, () => FinishMeasure(token, seconds, start));
-            arg.ReplyWith("Measuring " + seconds + "s across " + start.Count + " arm(s). Do not reload the plugin until it prints. " + Summarize(start));
+            measureTimer = timer.Every(1f, () => MeasureTick(token));
+            arg.ReplyWith("Measuring " + seconds + "s across " + start.Count + " arm(s), once a second. Burn is engine-on time, not the fuel stack. " + Summarize(start));
         }
 
-        private void FinishMeasure(int token, int seconds, List<ArmSample> start)
+        private void MeasureTick(int token)
         {
             if (token != measureToken) return;
+            measureTicks++;
+            measureSamples.Add(Snapshot());
+            if (measureTicks < measureGoal) return;
+            measureTimer?.Destroy();
             measureTimer = null;
-            List<ArmSample> end = Snapshot();
+            FinishMeasure();
+        }
+
+        private void FinishMeasure()
+        {
+            List<ArmSample> start = measureSamples.Count > 0 ? measureSamples[0] : new List<ArmSample>();
             var lines = new List<string>();
-            lines.Add("nexttest.measure " + seconds + "s done. " + WeekendClause());
+            lines.Add("nexttest.measure " + measureGoal + "s done (" + measureTicks + " one-second samples). " + WeekendClause());
             double ore = 0d;
-            double diesels = 0d;
+            float burned = 0f;
             for (int i = 0; i < start.Count; i++)
             {
                 ArmSample before = start[i];
-                ArmSample after = null;
-                for (int n = 0; n < end.Count; n++)
+                var series = new List<ArmSample>();
+                for (int s = 0; s < measureSamples.Count; s++)
                 {
-                    if (end[n].Id == before.Id) { after = end[n]; break; }
+                    List<ArmSample> frame = measureSamples[s];
+                    for (int n = 0; n < frame.Count; n++)
+                    {
+                        if (frame[n].Id == before.Id) { series.Add(frame[n]); break; }
+                    }
                 }
-                if (after == null)
+                if (series.Count == 0)
                 {
                     lines.Add("Arm " + before.Id + " is gone.");
                     continue;
                 }
+                ArmSample after = series[series.Count - 1];
                 double gained = Total(after.Ore) - Total(before.Ore);
                 ore += gained;
-                int items = before.FuelItems - after.FuelItems;
-                double partial = 0d;
-                if (after.EngineFound && after.FuelSeconds > 0.01f)
-                    partial = (before.CachedFuel - after.CachedFuel) / after.FuelSeconds;
-                double used = (before.EngineFound && after.EngineFound) ? items + partial : 0d;
-                diesels += used;
-                double perMinute = seconds <= 0 ? 0d : gained / seconds * 60d;
+                float onSeconds = 0f;
+                float armBurn = 0f;
+                int purchases = 0;
+                for (int s = 1; s < series.Count; s++)
+                {
+                    ArmSample left = series[s - 1];
+                    ArmSample right = series[s];
+                    if (!left.EngineOn && !right.EngineOn) continue;
+                    float rate = right.FuelSeconds > 0.01f ? right.FuelSeconds : left.FuelSeconds;
+                    onSeconds += 1f;
+                    if (rate <= 0.01f) continue;
+                    armBurn += 1f / rate;
+                    if (left.EngineFound && right.EngineFound && right.CachedFuel > left.CachedFuel + 1f)
+                    {
+                        int bought = (int)Math.Round((right.CachedFuel - left.CachedFuel) / rate);
+                        if (bought < 1) bought = 1;
+                        purchases += bought;
+                    }
+                }
+                burned += armBurn;
+                int stackDelta = after.FuelItems - before.FuelItems;
+                float stackFormula = 0f;
+                if (after.FuelSeconds > 0.01f)
+                    stackFormula = (before.FuelItems - after.FuelItems) + (before.CachedFuel - after.CachedFuel) / after.FuelSeconds;
+                double perOnMinute = onSeconds <= 0.01f ? 0d : gained / onSeconds * 60d;
                 lines.Add("Arm " + before.Id
-                    + " tick " + Num(after.Tick)
+                    + " tick " + Num(after.Tick) + " (not written by the boost)"
                     + " full " + Num(after.Full)
                     + " fuelSeconds " + (after.EngineFound ? Num(after.FuelSeconds) : "none")
                     + " mining " + (after.Mining ? "yes" : "no")
                     + " engineOn " + (after.EngineFound ? (after.EngineOn ? "yes" : "no") : "none"));
-                lines.Add("  ore " + Num(gained) + " (" + Num(perMinute) + "/min) fuelItems " + items
-                    + " cached " + Num(before.CachedFuel) + " -> " + Num(after.CachedFuel)
-                    + " diesel " + (before.EngineFound ? Num(used) : "n/a"));
+                lines.Add("  ore " + Num(gained) + " in " + Num(onSeconds) + "s engine-on (" + Num(perOnMinute) + "/min while on)");
                 lines.Add("  ore by item: " + DeltaText(before.Ore, after.Ore));
-                if (after.Full > 0.01f && after.EngineFound && after.FuelSeconds > 0.01f)
+                lines.Add("  fuel stack " + before.FuelItems + " -> " + after.FuelItems
+                    + " (" + (stackDelta >= 0 ? "+" : "") + stackDelta + " in the tank, refuel is not burn)"
+                    + " cached " + Num(before.CachedFuel) + " -> " + Num(after.CachedFuel)
+                    + " purchases " + purchases
+                    + " burned " + Num(armBurn) + " diesel");
+                if (Math.Abs(stackFormula) > 0.05f)
+                    lines.Add("  ignored stack formula " + Num(stackFormula) + " diesel (that number mixed refueling into burn; the 60s sample that printed -4.17 came from this).");
+                if (after.Full > 0.01f && onSeconds > 0.01f)
                 {
-                    lines.Add("  expected vs 120s vanilla: speed x" + Num(120f / after.Full)
-                        + ", yield x" + Num(after.FuelSeconds / after.Full)
-                        + " (2x speed and 1x yield is full 60, fuel 60).");
+                    double cycle = gained / onSeconds * after.Full;
+                    lines.Add("  one full cycle at this speed is about " + Num(cycle) + " ore. full " + Num(after.Full)
+                        + " vs vanilla 120 is speed x" + Num(120f / after.Full)
+                        + (after.FuelSeconds > 0.01f ? ", yield x" + Num(after.FuelSeconds / after.Full) : "")
+                        + ". Tick is not changed, so tick 1 and tick 3 are the same speed while the invoke still matches the tick.");
                 }
+                if (armBurn > 0.02f)
+                    lines.Add("  yield " + Num(gained / armBurn) + " ore per diesel burned.");
             }
-            if (Math.Abs(diesels) > 0.02d)
-                lines.Add("Total ore " + Num(ore) + " (" + Num(ore / seconds * 60d) + "/min), yield " + Num(ore / diesels) + " ore per diesel.");
+            if (burned > 0.02f)
+                lines.Add("Total ore " + Num(ore) + ", burned " + Num(burned) + " diesel, yield " + Num(ore / burned) + " ore per diesel.");
             else
-                lines.Add("Total ore " + Num(ore) + " (" + Num(ore / seconds * 60d) + "/min). No diesel was consumed, so yield per diesel is not available. Run longer while the engine is on.");
+                lines.Add("Total ore " + Num(ore) + ". The engine was not on, so yield per diesel is not available.");
             Deliver(measureUserId, string.Join("\n", lines.ToArray()));
         }
 

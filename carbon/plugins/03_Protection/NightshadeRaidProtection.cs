@@ -279,6 +279,9 @@ namespace Oxide.Plugins
     // Those three rate fields are not in the save. cachedFuelTime is (dieselEngine.fuelTime).
     public static class NightshadeExcavatorBoost
     {
+        // ExcavatorArm's ctor writes 3. The monument prefab can override that; this host's live field is 1.
+        // Carbon multiplies it only when ExcavatorResourceTickRateMultiplier is not -1. Speed does not use the tick:
+        // ProduceResources adds tick/timeForFull each invoke, and BeginMining repeats at that same tick, so per second is 1/timeForFull.
         public const float VanillaTickRate = 3f;
         public const float VanillaFullResourcesSeconds = 120f;
         public const float VanillaFuelSeconds = 120f;
@@ -323,7 +326,7 @@ namespace Oxide.Plugins
             };
         }
 
-        // Tick stays at the captured vanilla tick. Speed is timeForFullResources / multiplier.
+        // Tick is copied through and never divided. Speed is timeForFullResources / multiplier.
         // KeepYieldPerDiesel shortens the diesel by the same factor, so ore per diesel stays put.
         public static Target TargetFrom(Baseline baseline, bool windowActive, bool enabled, float speedMultiplier, bool keepYieldPerDiesel)
         {
@@ -344,32 +347,69 @@ namespace Oxide.Plugins
             return target;
         }
 
-        // A hot reload that skipped Unload leaves 3/60/60 on the live entities. Those floats
-        // are not what a fresh spawn loads (the ctor writes 3/120/120). Recognize that exact
-        // boosted triple and keep the ctor numbers as vanilla. Anything else is captured as-is.
+        // A hot reload that skipped Unload leaves full/fuel at the boosted pair (60/60 at 2x).
+        // The tick is whatever the prefab had (3 in the ctor, 1 on this host) and must be kept.
+        // Anything else is captured as-is, including a live tick of 1 with vanilla 120/120.
         public static Baseline Capture(float tick, float full, float fuel, float speedMultiplier, bool keepYieldPerDiesel)
         {
             Baseline defaults = Defaults();
             Target boosted = TargetFrom(defaults, true, true, speedMultiplier, keepYieldPerDiesel);
+            float liveTick = tick > 0f ? tick : defaults.TickRate;
             if (boosted.Applied
-                && Near(tick, boosted.TickRate)
                 && Near(full, boosted.FullResourcesSeconds)
                 && Near(fuel, boosted.FuelSeconds))
-                return defaults;
-            if (tick <= 0f) tick = defaults.TickRate;
+            {
+                return new Baseline
+                {
+                    TickRate = liveTick,
+                    FullResourcesSeconds = defaults.FullResourcesSeconds,
+                    FuelSeconds = defaults.FuelSeconds
+                };
+            }
             if (full <= 0f) full = defaults.FullResourcesSeconds;
             if (fuel <= 0f) fuel = defaults.FuelSeconds;
-            return new Baseline { TickRate = tick, FullResourcesSeconds = full, FuelSeconds = fuel };
+            return new Baseline { TickRate = liveTick, FullResourcesSeconds = full, FuelSeconds = fuel };
         }
 
         // Keep the fraction of the diesel already paid for. 90s of a 120s unit becomes 45s of a 60s unit.
-        // Zero stays zero, so a stopped engine does not gain a free unit.
+        // Zero stays zero. Do not replace it with a full unit; FixedUpdate buys the next diesel itself.
         public static float ScaleFuel(float cachedFuelTime, float oldSecondsPerUnit, float newSecondsPerUnit)
         {
             if (cachedFuelTime <= 0f) return 0f;
             if (oldSecondsPerUnit <= 0f || newSecondsPerUnit <= 0f) return cachedFuelTime;
             if (Near(oldSecondsPerUnit, newSecondsPerUnit)) return cachedFuelTime;
             return cachedFuelTime * (newSecondsPerUnit / oldSecondsPerUnit);
+        }
+
+        // Burn is engine-on time divided by seconds per diesel. A fuel stack that grows is a refuel.
+        // Adding (startItems-endItems) to the cached delta counted Shel's stack growth as burn:
+        // items -4, cached 0 -> 10, rate 60 over 60s became -4.17, and the absolute value looked like 4 diesel.
+        public static float BurnedDiesel(float engineOnSeconds, float secondsPerUnit)
+        {
+            if (engineOnSeconds <= 0f || secondsPerUnit <= 0f) return 0f;
+            return engineOnSeconds / secondsPerUnit;
+        }
+
+        // What the old two-point stack formula reported. Kept so the regression can pin Shel's -4.17.
+        public static float StackFormulaDiesel(int startItems, int endItems, float startCached, float endCached, float secondsPerUnit)
+        {
+            if (secondsPerUnit <= 0f) return 0f;
+            return (startItems - endItems) + (startCached - endCached) / secondsPerUnit;
+        }
+
+        // Purchases implied by the timer: end = start - onTime + purchases * rate.
+        public static float ClockPurchases(float engineOnSeconds, float startCached, float endCached, float secondsPerUnit)
+        {
+            if (secondsPerUnit <= 0f) return 0f;
+            return (engineOnSeconds - (startCached - endCached)) / secondsPerUnit;
+        }
+
+        // Per second of one resource when BeginMining's interval still equals the tick field.
+        // Tick 1 and tick 3 are the same speed. Changing the field without restarting the invoke is not.
+        public static double OrePerSecond(float tick, float timeForFull, float invokeInterval, double fullCycleAmount)
+        {
+            if (timeForFull <= 0f || invokeInterval <= 0f) return 0d;
+            return fullCycleAmount * (tick / timeForFull) / invokeInterval;
         }
 
         // BeginMining cancels ProduceResources and waits a full tick before the next payout.
@@ -381,7 +421,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.3.1")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.3.2")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -1419,14 +1459,9 @@ namespace Oxide.Plugins
                 // No paired engine and yield must stay 1x: do not speed the arm.
                 bool allowBoost = window && !(keepYield && first == null);
                 NightshadeExcavatorBoost.Target target = NightshadeExcavatorBoost.TargetFrom(baseline, allowBoost, true, multiplier, keepYield);
-                bool restart = NightshadeExcavatorBoost.ShouldRestartMining(arm.IsMining(), arm.resourceProductionTickRate, target.TickRate);
+                // Do not write resourceProductionTickRate. BeginMining already captured it as the invoke interval.
+                // Writing a different tick would slow or speed ProduceResources without retiming that invoke.
                 arm.timeForFullResources = target.FullResourcesSeconds;
-                arm.resourceProductionTickRate = target.TickRate;
-                if (restart)
-                {
-                    arm.StopMining();
-                    arm.BeginMining();
-                }
                 for (int e = 0; e < list.Count; e++)
                 {
                     DieselEngine engine = list[e];
@@ -1442,7 +1477,7 @@ namespace Oxide.Plugins
                 if (first == null) missingEngines++;
                 if (arm.IsMining()) anyMining = true;
                 if (target.Applied) anyApplied = true;
-                shownTick = target.TickRate;
+                shownTick = arm.resourceProductionTickRate;
                 shownFull = target.FullResourcesSeconds;
                 shownFuel = target.FuelSeconds;
                 shownVanillaFull = baseline.FullResourcesSeconds;
@@ -1456,7 +1491,7 @@ namespace Oxide.Plugins
                 text = "excavator waiting, DieselEngine not found, arm left unchanged so yield stays 1x";
             else if (anyApplied)
                 text = "excavator active x" + Num(multiplier)
-                    + " tick " + Num(shownTick)
+                    + " tick " + Num(shownTick) + " unchanged"
                     + " full " + Num(shownFull)
                     + " fuel " + Num(shownFuel)
                     + " (vanilla full " + Num(shownVanillaFull) + " fuel " + Num(shownVanillaFuel) + ")"
@@ -1466,7 +1501,7 @@ namespace Oxide.Plugins
                     + (keepYield ? " yield-kept" : " yield-not-kept");
             else
                 text = "excavator vanilla"
-                    + " tick " + Num(shownTick)
+                    + " tick " + Num(shownTick) + " unchanged"
                     + " full " + Num(shownFull)
                     + " fuel " + Num(shownFuel)
                     + " arms " + arms.Count + " engines " + usedEngines

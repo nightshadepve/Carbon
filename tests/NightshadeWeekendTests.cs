@@ -403,7 +403,13 @@ public static class NightshadeWeekendTests
         Check(NightshadeExcavatorBoost.ScaleFuel(-5f, 120f, 60f) == 0f, "negative fuel time should clamp to zero");
 
         NightshadeExcavatorBoost.Baseline leftover = NightshadeExcavatorBoost.Capture(3f, 60f, 60f, 2f, true);
-        Check(NightshadeExcavatorBoost.Near(leftover.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(leftover.FuelSeconds, 120f), "a leftover 60/60 boost must not be captured as vanilla");
+        Check(NightshadeExcavatorBoost.Near(leftover.TickRate, 3f) && NightshadeExcavatorBoost.Near(leftover.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(leftover.FuelSeconds, 120f), "a leftover 60/60 boost must not be captured as vanilla");
+        NightshadeExcavatorBoost.Baseline prefabTick = NightshadeExcavatorBoost.Capture(1f, 120f, 120f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(prefabTick.TickRate, 1f) && NightshadeExcavatorBoost.Near(prefabTick.FullResourcesSeconds, 120f), "a live tick of 1 must stay 1; the ctor's 3 is not this host");
+        NightshadeExcavatorBoost.Target prefabBoost = NightshadeExcavatorBoost.TargetFrom(prefabTick, true, true, 2f, true);
+        Check(prefabBoost.Applied && NightshadeExcavatorBoost.Near(prefabBoost.TickRate, 1f) && NightshadeExcavatorBoost.Near(prefabBoost.FullResourcesSeconds, 60f) && NightshadeExcavatorBoost.Near(prefabBoost.FuelSeconds, 60f), "2x on a tick-1 prefab changes full and fuel only");
+        NightshadeExcavatorBoost.Baseline leftoverTick1 = NightshadeExcavatorBoost.Capture(1f, 60f, 60f, 2f, true);
+        Check(NightshadeExcavatorBoost.Near(leftoverTick1.TickRate, 1f) && NightshadeExcavatorBoost.Near(leftoverTick1.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(leftoverTick1.FuelSeconds, 120f), "leftover 60/60 on tick 1 must restore 120/120 and keep tick 1");
         NightshadeExcavatorBoost.Baseline liveVanilla = NightshadeExcavatorBoost.Capture(3f, 120f, 120f, 2f, true);
         Check(NightshadeExcavatorBoost.Near(liveVanilla.FullResourcesSeconds, 120f) && NightshadeExcavatorBoost.Near(liveVanilla.FuelSeconds, 120f), "live 120/120 should stay vanilla");
         NightshadeExcavatorBoost.Baseline customLive = NightshadeExcavatorBoost.Capture(3f, 90f, 100f, 2f, true);
@@ -415,6 +421,25 @@ public static class NightshadeWeekendTests
         Check(NightshadeExcavatorBoost.ShouldRestartMining(true, 1f, 3f), "a changed tick on a running arm should restart");
         Check(!NightshadeExcavatorBoost.ShouldRestartMining(false, 1f, 3f), "a stopped arm has no invoke to restart");
         Check(NightshadeExcavatorBoost.Near(NightshadeExcavatorBoost.EnginePairMeters, 50f), "engine pair distance drifted from the 20m broadcast plus margin");
+
+        // Tick cancels out while the invoke interval still equals the field. 2x is timeForFull 60, not a new tick.
+        double twoXTick1 = NightshadeExcavatorBoost.OrePerSecond(1f, 60f, 1f, 100d) * 60d;
+        double twoXTick3 = NightshadeExcavatorBoost.OrePerSecond(3f, 60f, 3f, 100d) * 60d;
+        double vanillaTick1 = NightshadeExcavatorBoost.OrePerSecond(1f, 120f, 1f, 100d) * 60d;
+        Check(Math.Abs(twoXTick1 - 100d) < 0.001 && Math.Abs(twoXTick3 - twoXTick1) < 0.001, "tick 1 and tick 3 at full 60 both produce one 100 HQM cycle per minute");
+        Check(Math.Abs(vanillaTick1 - 50d) < 0.001, "vanilla full 120 is 50 HQM per minute when a cycle is 100");
+        // Desync the field from the invoke and the rate collapses. That is why the plugin must not write the tick.
+        double desynced = NightshadeExcavatorBoost.OrePerSecond(1f, 60f, 3f, 100d) * 60d;
+        Check(desynced < 40d, "writing tick 1 over an invoke that is still every 3s is not 2x");
+
+        // Shel's 60s sample: fuel stack grew by 4 (printed fuelItems -4), cached 0 -> 10, rate 60.
+        // The stack formula is -4.17. Abs of that is not diesel burned. On-time burn is 1.0 if the engine ran the whole minute.
+        float stack = NightshadeExcavatorBoost.StackFormulaDiesel(6, 10, 0f, 10f, 60f);
+        Check(Math.Abs(stack - (-4.166666f)) < 0.01f, "stack formula for a +4 refuel and cached 0->10 must stay about -4.17, not be used as burn");
+        Check(Math.Abs(NightshadeExcavatorBoost.BurnedDiesel(60f, 60f) - 1f) < 0.001f, "60s engine-on at 60s per diesel is 1 diesel, not 4.17");
+        Check(Math.Abs(NightshadeExcavatorBoost.ClockPurchases(60f, 0f, 10f, 60f) - (70f / 60f)) < 0.001f, "cached 0->10 over 60s is about 1.17 purchases, then the timer drained");
+        float twice = NightshadeExcavatorBoost.ScaleFuel(NightshadeExcavatorBoost.ScaleFuel(40f, 120f, 60f), 60f, 60f);
+        Check(NightshadeExcavatorBoost.Near(twice, 20f), "a second apply at the same rate must not halve the diesel again");
     }
 
     static void TestExcavatorConfig(string truePvePath)
