@@ -22,7 +22,7 @@ using Time = UnityEngine.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Convoy", "Adem", "3.0.6")]
+    [Info("Convoy", "Adem", "3.0.7")]
     internal class Convoy : RustPlugin
     {
         #region Variables
@@ -2181,7 +2181,6 @@ namespace Oxide.Plugins
                                 continue;
 
                             npcInfo.BaseMountable = mountPointInfo.mountable;
-                            npcInfo.BaseMountable.mountSyncType = BaseMountable.MountSyncType.Parent;
                             npcInfo.BaseMountable.AttemptMount(npcInfo.ScientistNpc, false);
                             npcInfo.IsDriver = mountPointInfo.isDriver;
                             npcInfo.IsDismount = true;
@@ -2212,7 +2211,6 @@ namespace Oxide.Plugins
                         npcInfo.ScientistNpc = NpcSpawnManager.SpawnScientistNpc(npcInfo.NpcPresetName, parentEntity.transform.position, 1, true);
                         npcInfo.BaseMountable.isMobile = true;
                         npcInfo.BaseMountable.ignoreVehicleParent = true;
-                        npcInfo.BaseMountable.mountSyncType = BaseMountable.MountSyncType.Parent;
                         npcInfo.IsDismount = npcPoseConfig.IsDismount;
 
                         if (npcInfo.ScientistNpc == null || npcInfo.BaseMountable == null)
@@ -5756,7 +5754,7 @@ namespace Oxide.Plugins
                 }
 
                 Texture2D texture = DownloadHandlerTexture.GetContent(unityWebRequest);
-                uint imageId = FileStorage.server.Store(texture.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                uint imageId = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, texture.EncodeToPNG());
                 TabImageInfo.ImageId = imageId.ToString();
                 UnityEngine.Object.DestroyImmediate(texture);
             }
@@ -5776,7 +5774,7 @@ namespace Oxide.Plugins
                     }
 
                     Texture2D texture = DownloadHandlerTexture.GetContent(unityWebRequest);
-                    uint imageId = FileStorage.server.Store(texture.EncodeToPNG(), FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                    uint imageId = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID, FileStorage.Type.png, texture.EncodeToPNG());
                     imageInfo.ImageId = imageId.ToString();
                     UnityEngine.Object.DestroyImmediate(texture);
                 }
@@ -8129,7 +8127,7 @@ namespace Oxide.Plugins
             {
                 return new PluginConfig()
                 {
-                    Version = "3.0.6",
+                    Version = "3.0.7",
                     Prefix = "[Convoy]",
                     MainConfig = new MainConfig
                     {

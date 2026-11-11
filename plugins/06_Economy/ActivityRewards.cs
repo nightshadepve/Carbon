@@ -15,13 +15,10 @@
 *      https://github.com/IIIaKa
 *      https://umod.org/user/IIIaKa
 *      https://codefling.com/iiiaka
-*      https://lone.design/vendor/iiiaka/
 *      https://www.patreon.com/iiiaka
 *      https://boosty.to/iiiaka
 *  Codefling plugin page: https://codefling.com/plugins/activity-rewards
 *  Codefling license: https://codefling.com/plugins/activity-rewards?tab=downloads_field_4
-*  
-*  Lone.Design plugin page: https://lone.design/product/activity-rewards/
 *
 *  Copyright © 2024-2026 IIIaKa
 */
@@ -38,7 +35,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-	[Info("Activity Rewards", "IIIaKa", "0.1.9")]
+	[Info("Activity Rewards", "IIIaKa", "0.1.10")]
 	[Description("Plugin rewarding players for their in-game activity.")]
 	class ActivityRewards : RustPlugin
 	{
@@ -59,7 +56,7 @@ namespace Oxide.Plugins
 		private Dictionary<string, RewardData> _gatherConfig, _killConfig, _pickupConfig, _plantingConfig, _fishingConfig, _miscConfig;
 		private Dictionary<string, MonumentRewardData> _monumentConfig;
         private HashSet<string> _plugins = new HashSet<string>();
-		private Hash<ulong, ulong> _patrolLastHit = new Hash<ulong, ulong>();
+		private Hash<ulong, Dictionary<ulong, float>> _patrolMostDmg = new Hash<ulong, Dictionary<ulong, float>>();
 		
 		[Flags]
 		[JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
@@ -76,6 +73,13 @@ namespace Oxide.Plugins
 			Monuments = 1 << 7,
 			Misc = 1 << 8,
             All = Gather | Kill | Research | LootOpen | Pickup | Planting | Fishing | Monuments | Misc
+		}
+		
+		[JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+		public enum PatrolHeliReward
+		{
+			LastHit,
+			MostDamageDealt
 		}
 		#endregion
 
@@ -98,6 +102,9 @@ namespace Oxide.Plugins
 			
 			[JsonProperty(PropertyName = "A prefix or suffix required in the player's nickname to receive the permission reward. An empty string disables the reward")]
             public string BonusName;
+			
+			[JsonProperty(PropertyName = "Patrol Helicopter reward method(LastHit, MostDamageDealt)")]
+			public PatrolHeliReward PatrolMethod = PatrolHeliReward.MostDamageDealt;
 			
 			[JsonProperty(PropertyName = "List of permissions granted when the player's nickname contains the required prefix or suffix")]
             public List<string> BonusName_Permissions;
@@ -589,11 +596,21 @@ namespace Oxide.Plugins
             }
 		}
 		
-		void OnPatrolHelicopterTakeDamage(PatrolHelicopter patrol)
+		void OnPatrolHelicopterTakeDamage(PatrolHelicopter patrol, HitInfo info)
         {
-            if (patrol.lastAttacker is BasePlayer attacker && attacker != null && attacker.userID.IsSteamId())
-                _patrolLastHit[patrol.net.ID.Value] = attacker.userID;
-        }
+			var attacker = info?.InitiatorPlayer;
+			if (attacker == null || !attacker.userID.IsSteamId())
+				return;
+			float dmg = info.damageTypes.Total();
+			if (dmg <= 0f)
+				return;
+			
+			var netID = patrol.net.ID.Value;
+            if (!_patrolMostDmg.TryGetValue(netID, out var list))
+                _patrolMostDmg[netID] = list = new Dictionary<ulong, float>();
+            list.TryGetValue(attacker.userID, out float previousDamage);
+            list[attacker.userID] = previousDamage + dmg;
+		}
 		
 		void OnItemDropped(Item item, DroppedItem droppedItem)
         {
@@ -666,6 +683,7 @@ namespace Oxide.Plugins
 			Unsubscribe(nameof(OnDispenserBonusReceived));
 			Unsubscribe(nameof(OnEntityDeath));
 			Unsubscribe(nameof(OnPatrolHelicopterTakeDamage));
+			Unsubscribe(nameof(OnPatrolHelicopterKill));
 			Unsubscribe(nameof(OnCollectiblePickup));
 			Unsubscribe(nameof(OnGrowableGathered));
 			Unsubscribe(nameof(OnItemPickup));
@@ -765,23 +783,41 @@ namespace Oxide.Plugins
                     _killConfig = new Dictionary<string, RewardData>(StringComparer.OrdinalIgnoreCase)
 					{
 						{ "dead_log_", new RewardData(2, 0.25d) }, { "loot-barrel", new RewardData(5, 0.5d) }, { "loot_barrel", new RewardData(5, 0.5d) }, { "oil_barrel", new RewardData(10, 1d) }, { "roadsign", new RewardData(5, 0.5d) },
-						{ "beehive.natural", new RewardData(5, 0.5d) }, { "chicken", new RewardData(5, 0.5d) }, { "simplechicken.entity", new RewardData(5, 0.5d) }, { "snake.entity", new RewardData(10, 1d) }, { "boar", new RewardData(10, 1d) },
-						{ "stag", new RewardData(15, 1.5d) }, { "ridablehorse", new RewardData(15, 1.5d) }, { "wolf", new RewardData(20, 2d) }, { "panther", new RewardData(25, 2.5d) }, { "tiger", new RewardData(25, 2.5d) },
-						{ "bear", new RewardData(25, 2.5d) }, { "polarbear", new RewardData(25, 2.5d) }, { "crocodile", new RewardData(25, 2.5d) }, { "simpleshark", new RewardData(30, 3d) }, { "chicken.corpse", new RewardData(3, 0.25d) },
-						{ "boar.corpse", new RewardData(5, 0.5d) }, { "stag.corpse", new RewardData(7, 0.75d) }, { "horse.corpse", new RewardData(7, 0.75d) }, { "wolf.corpse", new RewardData(15, 1.5d) }, { "panther.corpse", new RewardData(15, 1.5d) },
-						{ "tiger.corpse", new RewardData(15, 1.5d) }, { "bear.corpse", new RewardData(15, 1.5d) }, { "polarbear.corpse", new RewardData(15, 1.5d) }, { "crocodile.corpse", new RewardData(15, 1.5d) }, { "shark.corpse", new RewardData(20, 2d) },
+						
+						{ "beartrap", new RewardData(0, 0d) },
+						
+						{ "monumentblocker_ventcage.entity", new RewardData(2, 0.25d) }, { "monumentblocker_trolley.entity", new RewardData(5, 0.5d) }, { "monumentblocker_barrels_100x300.entity", new RewardData(5, 0.5d) }, { "monumentblocker_barrels_100x450.entity", new RewardData(5, 0.5d) }, { "monumentblocker_barricades.entity", new RewardData(10, 1d) },
+						{ "monumentblocker_desks.entity", new RewardData(10, 1d) }, { "monumentblocker_lockers.entity", new RewardData(10, 1d) }, { "monumentblocker_terminals.entity", new RewardData(10, 1d) }, { "monumentblocker_blastdoor.entity", new RewardData(10, 1d) }, { "monumentblocker_collapse.entity", new RewardData(10, 1d) },
+						
+						{ "seaturtle", new RewardData(10, 1d) }, { "seaturtle.corpse", new RewardData(5, 0.5d) }, { "frog", new RewardData(5, 0.5d) }, { "frog.corpse", new RewardData(2, 2.5d) }, { "rabbit", new RewardData(15, 1.5d) },
+						{ "rabbit.corpse", new RewardData(7, 0.75d) }, { "squirrel", new RewardData(15, 1.5d) }, { "squirrel.corpse", new RewardData(7, 0.75d) }, { "beehive.natural", new RewardData(5, 0.5d) }, { "chicken", new RewardData(5, 0.5d) },
+						{ "simplechicken.entity", new RewardData(5, 0.5d) }, { "chicken.corpse", new RewardData(2, 0.25d) }, { "lamb", new RewardData(5, 0.5d) }, { "lamb.corpse", new RewardData(2, 0.25d) }, { "sheep", new RewardData(15, 1.5d) },
+						{ "sheep.corpse", new RewardData(7, 0.75d) }, { "calf", new RewardData(5, 0.5d) }, { "calf.corpse", new RewardData(2, 0.25d) }, { "cow", new RewardData(15, 1.5d) }, { "cow.corpse", new RewardData(7, 0.75d) },
+						{ "bull", new RewardData(20, 2d) }, { "bull.corpse", new RewardData(10, 1d) },
+						
+						{ "boar", new RewardData(10, 1d) }, { "boar.corpse", new RewardData(5, 0.5d) }, { "stag", new RewardData(15, 1.5d) }, { "stag.corpse", new RewardData(7, 0.75d) }, { "ridablehorse", new RewardData(15, 1.5d) },
+						{ "horse.corpse", new RewardData(7, 0.75d) }, { "snake.entity", new RewardData(10, 1d) }, { "snake.corpse", new RewardData(5, 0.5d) }, { "wolf", new RewardData(20, 2d) }, { "wolf.corpse", new RewardData(15, 1.5d) },
+						{ "panther", new RewardData(25, 2.5d) }, { "panther.corpse", new RewardData(15, 1.5d) }, { "tiger", new RewardData(25, 2.5d) }, { "tiger.corpse", new RewardData(15, 1.5d) }, { "bear", new RewardData(25, 2.5d) },
+						{ "bear.corpse", new RewardData(15, 1.5d) }, { "polarbear", new RewardData(25, 2.5d) }, { "polarbear.corpse", new RewardData(15, 1.5d) }, { "crocodile", new RewardData(25, 2.5d) }, { "crocodile.corpse", new RewardData(15, 1.5d) },
+						{ "simpleshark", new RewardData(30, 3d) }, { "shark.corpse", new RewardData(20, 2d) },
+						
 						{ "suicide", new RewardData(-5, -0.5d) }, { "player", new RewardData(10, 1d) }, { "scientistnpc", new RewardData(15, 1.5d) }, { "npc_tunneldweller", new RewardData(15, 1.5d) }, { "npc_underwaterdweller", new RewardData(15, 1.5d) },
-                        { "scientistnpc_junkpile_pistol", new RewardData(10, 1d) }, { "waterwell_shopkeeper", new RewardData(15, 1.5d) }, { "scientistnpc_heavy", new RewardData(20, 2d) }, { "gingerbread_dungeon", new RewardData(15, 1.5d) }, { "gingerbread_meleedungeon", new RewardData(15, 1.5d) },
-						{ "scarecrow", new RewardData(15, 1.5d) }, { "scarecrow_dungeon", new RewardData(15, 1.5d) }, { "scarecrow_dungeonnoroam", new RewardData(15, 1.5d) }, { "scientist_corpse", new RewardData(7, 0.75d) }, { "gingerbread_corpse", new RewardData(7, 0.75d) },
-						{ "murderer_corpse", new RewardData(7, 0.75d) }, { "patrolhelicopter", new RewardData(100, 10d) }, { "bradleyapc", new RewardData(100, 10d) }, { "beartrap", new RewardData(0, 0d) }
+                        { "scientistnpc_junkpile_pistol", new RewardData(10, 1d) }, { "waterwell_shopkeeper", new RewardData(15, 1.5d) }, { "scientistnpc_heavy", new RewardData(20, 2d) }, { "scientist_corpse", new RewardData(7, 0.75d) },
+						
+						{ "gingerbread_dungeon", new RewardData(15, 1.5d) }, { "gingerbread_meleedungeon", new RewardData(15, 1.5d) }, { "gingerbread_corpse", new RewardData(7, 0.75d) }, { "scarecrow", new RewardData(15, 1.5d) }, { "scarecrow_dungeon", new RewardData(15, 1.5d) },
+						{ "scarecrow_dungeonnoroam", new RewardData(15, 1.5d) }, { "murderer_corpse", new RewardData(7, 0.75d) },
+						
+						{ "patrolhelicopter", new RewardData(100, 10d) }, { "servergibs_patrolhelicopter", new RewardData(10, 1d) }, { "bradleyapc", new RewardData(100, 10d) }, { "servergibs_bradley", new RewardData(10, 1d) }, { "satellite_remains.entity", new RewardData(30, 3d) }
 					};
                     SaveRewardConfig(killPath, _killConfig);
-                }
-				PrepareRewardItems(_killConfig.Values);
+				}
+                PrepareRewardItems(_killConfig.Values);
 				subList.Add(nameof(OnEntityDeath));
-				subList.Add(nameof(OnPatrolHelicopterTakeDamage));
-            }
-			if ((_config.EnabledRewards & RewardCategories.Research) != 0)
+				subList.Add(nameof(OnPatrolHelicopterKill));
+				if (_config.PatrolMethod == PatrolHeliReward.MostDamageDealt)
+					subList.Add(nameof(OnPatrolHelicopterTakeDamage));
+			}
+            if ((_config.EnabledRewards & RewardCategories.Research) != 0)
             {
 				if (!TryLoadReward(researchPath, out _researchConfig))
 					_researchConfig = new Dictionary<string, RewardData>(StringComparer.OrdinalIgnoreCase);
@@ -791,11 +827,17 @@ namespace Oxide.Plugins
 				for (int i = 0; i < list.Count; i++)
                 {
 					itemDef = list[i];
-					if (!_researchConfig.TryGetValue(itemDef.shortname, out var rewData) || rewData == null)
-					{
-						int scrapCost = Workbench.ScrapForResearch(itemDef, itemDef.Blueprint.workbenchLevelRequired, out int tax);
-						_researchConfig[itemDef.shortname] = new RewardData(scrapCost / 10, scrapCost / 100.0d);
-					}
+					if (_researchConfig.TryGetValue(itemDef.shortname, out var rewData) && rewData != null)
+						continue;
+					int workbenchLevel = itemDef.Blueprint.workbenchLevelRequired,
+						scrapCost = Workbench.FragmentsForResearch(itemDef, workbenchLevel, out int tax);
+					
+					if (workbenchLevel == 2)
+						_researchConfig[itemDef.shortname] = new RewardData(scrapCost * 5, scrapCost * 5d);
+					else if (workbenchLevel == 3)
+						_researchConfig[itemDef.shortname] = new RewardData(scrapCost * 10, scrapCost * 10d);
+					else
+						_researchConfig[itemDef.shortname] = new RewardData(scrapCost, scrapCost / 10.0d);
 				}
 				SaveRewardConfig(researchPath, _researchConfig);
 				
@@ -815,7 +857,8 @@ namespace Oxide.Plugins
 						{ "crate_mine", new RewardData(10, 1d) }, { "crate_tools", new RewardData(15, 1.5d) }, { "crate_tools_tutorial", new RewardData(15, 1.5d) }, { "crate_normal", new RewardData(20, 2d) }, { "wagon_crate_normal", new RewardData(20, 2d) },
 						{ "crate_elite", new RewardData(25, 2.5d) }, { "crate_elite_tutorial", new RewardData(25, 2.5d) }, { "crate_underwater_basic", new RewardData(5, 0.5d) }, { "crate_underwater_advanced", new RewardData(10, 1d) }, { "crate_medical", new RewardData(5, 0.5d) },
 						{ "crate_fuel", new RewardData(10, 1d) }, { "crate_ammunition", new RewardData(10, 1d) }, { "heli_crate", new RewardData(30, 3d) }, { "bradley_crate", new RewardData(30, 3d) },
-						{ "codelockedhackablecrate", new RewardData(100, 10d) }, { "codelockedhackablecrate_oilrig", new RewardData(100, 10d) }, { "codelockedhackablecrate_ghostship", new RewardData(100, 10d) }
+						{ "codelockedhackablecrate", new RewardData(100, 10d) }, { "codelockedhackablecrate_oilrig", new RewardData(100, 10d) }, { "codelockedhackablecrate_ghostship", new RewardData(100, 10d) }, { "satellite_crate_1.entity", new RewardData(30, 3d) }, { "satellite_crate_2.entity", new RewardData(30, 3d) },
+						{ "satellite_crate_3.entity", new RewardData(30, 3d) }
 					};
                     SaveRewardConfig(openPath, _openConfig);
                 }
@@ -918,7 +961,7 @@ namespace Oxide.Plugins
                     if (initial && AdvancedStatus != null)
                         PrintWarning("AdvancedStatus plugin found, but not ready yet. Waiting for it to load...");
                     else
-						PrintWarning("AdvancedStatus plugin not found! To function, it is necessary to install it!\n* https://codefling.com/plugins/advanced-status\n* https://lone.design/product/advanced-status/");
+						PrintWarning("AdvancedStatus plugin not found! To function, it is necessary to install it!\n* https://codefling.com/plugins/advanced-status");
 				}
                 else
                     OnAdvancedStatusLoaded();
@@ -975,6 +1018,11 @@ namespace Oxide.Plugins
 				KillReward(attacker, playerData, entity.ShortPrefabName);
 		}
 		
+		public static bool ModBlockerOnDied(MonumentBlocker __instance, HitInfo info)
+        {
+            Instance.OnEntityDeath(__instance, info);
+            return true;
+        }
 		void OnEntityDeath(ResourceEntity entity, HitInfo info)
         {
 			if (info != null && info.InitiatorPlayer is BasePlayer attacker && TryGetPlayerData(attacker.UserIDString, out var playerData))
@@ -986,14 +1034,42 @@ namespace Oxide.Plugins
 			if (info != null && info.InitiatorPlayer is BasePlayer attacker && TryGetPlayerData(attacker.UserIDString, out var playerData))
 				KillReward(attacker, playerData, info.damageTypes.GetMajorityDamageType() == Rust.DamageType.Suicide ? "suicide" : player.ShortPrefabName);
 		}
-
-        void OnEntityDeath(PatrolHelicopter patrol)
+		
+		void OnEntityDeath(PatrolHelicopter patrol) {}
+		void OnPatrolHelicopterKill(PatrolHelicopter patrol, HitInfo info)
         {
-			if (!patrol.IsValid() || !_patrolLastHit.TryGetValue(patrol.net.ID.Value, out var attackerID))
+			if (!patrol.IsValid())
 				return;
-			if (BasePlayer.TryFindByID(attackerID, out var attacker) && TryGetPlayerData(attacker.UserIDString, out var playerData))
-                KillReward(attacker, playerData, patrol.ShortPrefabName);
-            _patrolLastHit.Remove(patrol.net.ID.Value);
+			var netID = patrol.net.ID.Value;
+			var attacker = info?.InitiatorPlayer;
+			if (_config.PatrolMethod == PatrolHeliReward.LastHit && (attacker == null || !attacker.userID.IsSteamId()))
+				return;
+			string shortPrefab = patrol.ShortPrefabName;
+			NextTick(() =>
+            {
+				var myAi = patrol?.myAI;
+				if (myAi != null && !myAi.isDead)
+					return;
+				if (_config.PatrolMethod == PatrolHeliReward.MostDamageDealt)
+                {
+					ulong attackerID = 0uL;
+					if (_patrolMostDmg.TryGetValue(netID, out var list))
+					{
+						float maxDamage = 0f;
+						foreach (var entry in list)
+						{
+							if (entry.Value <= maxDamage)
+								continue;
+							attackerID = entry.Key;
+							maxDamage = entry.Value;
+						}
+						_patrolMostDmg.Remove(netID);
+					}
+					attacker = attackerID.IsSteamId() ? BasePlayer.FindByID(attackerID) : null;
+				}
+				if (attacker != null && TryGetPlayerData(attacker.UserIDString, out var playerData))
+					KillReward(attacker, playerData, shortPrefab);
+			});
 		}
 		
 		public static bool ModUnlock(PlayerBlueprints __instance, ItemDefinition itemDef)
@@ -1056,15 +1132,15 @@ namespace Oxide.Plugins
 		
 		void OnPlayerExitedMonument(string monumentID, BasePlayer player)
         {
-			if (TryGetPlayerData(player.UserIDString, out var playerData) && playerData.MonumentsPermissions != null && playerData.MonumentsPermissions.Count > 0 &&
-				TryGetMonumentReward(monumentID, out var rewData) && rewData.PermissionsList != null)
+			if (!TryGetPlayerData(player.UserIDString, out var playerData) || playerData.MonumentsPermissions == null || playerData.MonumentsPermissions.Count < 1)
+				return;
+			if (!TryGetMonumentReward(monumentID, out var rewData) || rewData.PermissionsList == null)
+				return;
+			foreach (var permName in rewData.PermissionsList)
             {
-				foreach (var permName in rewData.PermissionsList)
-                {
-					playerData.MonumentsPermissions.Remove(permName);
-                    permission.RevokeUserPermission(player.UserIDString, permName);
-				}
-			}
+                playerData.MonumentsPermissions.Remove(permName);
+                permission.RevokeUserPermission(player.UserIDString, permName);
+            }
 		}
         #endregion
 

@@ -2,7 +2,7 @@
 /*
 *  < ----- End-User License Agreement ----->
 *  
-*  You may not merge, publish, distribute, sublicense, or sell copies of This Software without the Developer’s consent. Copy or modify is allowed for personal use only.
+*  You may not merge, publish, distribute, sublicense, or sell copies of This Software without the Developer’s consent. Copy or modify is allowed for authorized use only.
 *
 *  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, 
 *  THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS 
@@ -56,7 +56,7 @@ using static Oxide.Plugins.RaidableBasesExtensions.Methods;
 
 namespace Oxide.Plugins
 {
-    [Info("Raidable Bases", "nivex", "3.2.2")]
+    [Info("Raidable Bases", "nivex", "3.2.4")]
     [Description("Create fully automated raidable bases with npcs.")]
     public class RaidableBases : RustPlugin
     {
@@ -85,22 +85,21 @@ namespace Oxide.Plugins
         private int despawnLimit = 10;
         private const ulong RB_SKIN_ID = 3710562502;
         private static ulong BotIdCounter = 514922525;
-        private SkinSettingsImportedWorkshop ImportedWorkshopSkins = new();
         private ProtectionProperties _elevatorProtection;
         private ProtectionProperties _turretProtection;
         private AutomatedController Automated;
         private StoredData data = new();
         public BuildingTables Buildings = new();
         public QueueController Queues;
-        private SkinsPlugin skinsPlugin = new();
         private Coroutine checkPlayersNearEventsCo;
         private Coroutine setupCopyPasteObstructionRadius;
         private List<Coroutine> loadCoroutines = new();
         public List<string> DestroyedPrefabs = new();
         public List<string> RaidableModes = new();
         public List<RaidableBase> Raids = new();
+        public Dictionary<string, List<ulong>> ImportedWorkshopSkins = new();
         public Dictionary<ulong, DelaySettings> PvpDelay = new();
-        public Dictionary<string, SkinInfo> Skins = new();
+        public Dictionary<string, HashSet<ulong>> Skins = new();
         private Dictionary<string, PasteData> _pasteData = new();
         private Dictionary<ulong, HumanoidBrain> HumanoidBrains = new();
         private Dictionary<NetworkableId, RaidableBase> EntityToRaid = new();
@@ -114,7 +113,8 @@ namespace Oxide.Plugins
         private readonly List<string> ExcludedMounts = new() { "beachchair", "boogieboard", "cardtable", "chair", "chippyarcademachine", "computerstation", "drumkit", "microphonestand", "piano", "secretlabchair", "slotmachine", "sofa", "xylophone" };
         private readonly List<string> Blocks = new() { "wall.frame.cell", "wall.doorway", "wall", "wall.frame", "wall.half", "wall.low", "wall.window", "foundation.triangle", "foundation", "wall.external.high.wood", "wall.external.high.stone", "wall.external.high.ice", "floor.triangle.frame", "floor.triangle", "floor.frame" };
         private readonly List<string> TrueDamage = new() { "spikes.floor", "barricade.metal", "barricade.woodwire", "barricade.wood", "wall.external.high.wood", "wall.external.high.stone", "wall.external.high.ice" };
-        private readonly List<string> arguments = new() { "add", "remove", "list", "clean", "enable_dome_marker", "toggle", "stability", "inventories", "maintained", "scheduled", "noexplosivecosts" };
+        private readonly List<string> ConfigArguments = new() { "add", "remove", "list", "clean", "enable_dome_marker", "toggle", "stability", "inventories", "maintained", "scheduled", "noexplosivecosts" };
+        private string[] ManualEventHelperCommands = { "despawn", "draw", "checkflat", "debug", "kill_cleanup", "despawnall", "despawn_inactive", "generateloot", "active", "expire", "resetcooldown", "expireall", "resetall", "setowner", "lockraid", "clearowner" };
         private readonly List<uint> CupboardPrefabIDs = new() { 2476970476, 785685130, 3932172323 };
         private readonly IPlayer _consolePlayer = new Game.Rust.Libraries.Covalence.RustConsolePlayer();
         private readonly List<BaseEntity.Slot> _checkSlots = new() { BaseEntity.Slot.Lock, BaseEntity.Slot.UpperModifier, BaseEntity.Slot.MiddleModifier, BaseEntity.Slot.LowerModifier };
@@ -141,8 +141,9 @@ namespace Oxide.Plugins
         {
             public bool valid;
             public float radius;
+            public Vector3 centerOffset;
+            public Bounds bounds;
             public List<Vector3> foundations;
-            public List<string> invalid;
             public PasteData() { }
         }
 
@@ -157,6 +158,8 @@ namespace Oxide.Plugins
         }
 
         public float MaxTerrainY = 150f;
+
+        public struct LookupTime { public bool Result; public long ExpiresAt; public LookupTime(bool result, long expiresAt) { Result = result; ExpiresAt = expiresAt; } }
 
         public struct DamageMultiplier { public DamageType index; public float amount; }
 
@@ -176,7 +179,9 @@ namespace Oxide.Plugins
         {
             public class NavigationBuild
             {
+                [JsonConverter(typeof(Vector3Converter))]
                 public Vector3 center;
+                [JsonConverter(typeof(Vector3Converter))]
                 public Vector3 size;
                 public NavigationBuild() { }
                 public NavigationBuild(Bounds bounds)
@@ -312,11 +317,6 @@ namespace Oxide.Plugins
             public object[] hookObjectsFallback;
         }
 
-        public class SkinInfo
-        {
-            public List<ulong> skins = new(), workshopSkins = new(), importedWorkshopSkins = new(), allSkins = new();
-        }
-
         public class Lockout
         {
             public Dictionary<string, DateTime> Levels = new(StringComparer.OrdinalIgnoreCase);
@@ -435,7 +435,7 @@ namespace Oxide.Plugins
                 Instance = instance;
                 Spawns = new();
                 Options.AdditionalBases = new();
-                Options.NPC.SetAccuracy(Options.Mode);
+                Options.NPC.SetWeapons(Options.Mode);
             }
 
             public BaseProfile(RaidableBases instance, BuildingOptions options, string name)
@@ -1215,7 +1215,7 @@ namespace Oxide.Plugins
 
                         if (rsl == null)
                         {
-                            Messages.Add("RSL is null");
+                            Messages.Add("No spawn available");
                             break;
                         }
 
@@ -1277,7 +1277,7 @@ namespace Oxide.Plugins
                             yield return SetupCopyPasteRadius(spq);
                         }
 
-                        if (spq.pasteData.foundations.IsNullOrEmpty())
+                        if (!spq.pasteData.valid || spq.pasteData.foundations.IsNullOrEmpty())
                         {
                             Instance.Buildings.Remove(spq.BaseName);
                             break;
@@ -1288,7 +1288,13 @@ namespace Oxide.Plugins
                             break;
                         }
 
-                        if (IsObstructed(spq, v) || !spq.spawns.IsCustomSpawn && SpawnsController.IsZoneBlocked(v))
+                        if (IsGridBlocked(spq, v))
+                        {
+                            Messages.Add("Base overlaps a restricted grid", v);
+                            continue;
+                        }
+
+                        if (IsObstructed(spq, v) || (!spq.spawns.IsCustomSpawn && SpawnsController.IsZoneBlocked(v)))
                         {
                             continue;
                         }
@@ -1303,6 +1309,51 @@ namespace Oxide.Plugins
                 }
 
                 _coroutine = null;
+            }
+
+            private bool IsGridBlocked(RandomBase spq, Vector3 position)
+            {
+                if (spq.isCustomSpawn)
+                {
+                    return false;
+                }
+
+                bool allowOnly = config.Settings.Management.AllowedGrids.Count > 0;
+                var grids = allowOnly ? config.Settings.Management.AllowedGrids : config.Settings.Management.BlockedGrids;
+                if (grids.Count == 0)
+                {
+                    return false;
+                }
+
+                Vector3 origin = position - spq.pasteData.centerOffset;
+                Vector3 min = origin + spq.pasteData.bounds.min;
+                Vector3 max = origin + spq.pasteData.bounds.max;
+                Vector2i first = MapHelper.PositionToGrid(new Vector3(min.x, 0f, max.z));
+                Vector2i last = MapHelper.PositionToGrid(new Vector3(max.x, 0f, min.z));
+
+                for (int x = first.x; x <= last.x; x++)
+                {
+                    for (int y = first.y; y <= last.y; y++)
+                    {
+                        string grid = MapHelper.GridToString(new Vector2i(x, y));
+                        bool found = false;
+                        for (int i = 0; i < grids.Count; i++)
+                        {
+                            if (grid.Equals(grids[i], StringComparison.OrdinalIgnoreCase))
+                            {
+                                found = true;
+                                break;
+                            }
+                        }
+
+                        if (allowOnly ? !found : found)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
             }
 
             private void CheckSpawner(RandomBase spq)
@@ -1331,77 +1382,6 @@ namespace Oxide.Plugins
                     Messages.PrintAll();
                     Instance.data.Cycle.Add(spq.type, spq.options.Mode, spq.BaseName, spq.owner);
                 }
-            }
-
-            internal bool Test(IPlayer user, string baseName, Vector3 v, out RandomBase rb, float protectionRadius = 50f)
-            {
-                rb = null;
-                bool canSpawnOnSeabed = false;
-                var player = user.Object as BasePlayer;
-                var landLevel = SpawnsController.GetLandLevel(v, 15f, 5f, canSpawnOnSeabed, player, "51800");
-                if (!SpawnsController.IsFlatTerrain(landLevel, 2.5f))
-                {
-                    user?.Message($"{landLevel.y} : {landLevel.x}, Range: {landLevel.y - landLevel.x:N1}");
-                    user?.Message("Area is not flat");
-                    return false;
-                }
-                var pair = Instance.Buildings.Profiles.FirstOrDefault(x => x.Key == baseName);
-                if (pair.Value == null)
-                {
-                    user?.Message("Base does not exist in the profiles. Add it and/or reload the profiles.");
-                    return false;
-                }
-                int? t = TerrainMeta.BiomeMap?.GetBiomeMaxType(v);
-                if (!pair.Value.Options.Biomes.IsBiomeEnabled(t, v, out var biome))
-                {
-                    user?.Message($"Area has {biome} biome disabled");
-                    return false;
-                }
-                rb = new();
-                rb.Instance = Instance;
-                rb.BaseName = baseName;
-                rb.Profile = pair.Value;
-                rb.Position = v;
-                rb.type = RaidableType.Manual;
-                rb.spawns = new(Instance);
-                rb.payments = new();
-                rb.pasteData = Instance.GetPasteData(baseName);
-                float waterHeight = Mathf.Max(0f, TerrainMeta.WaterMap.GetHeight(v));
-                var rsl = new RaidableSpawnLocation(v)
-                {
-                    WaterHeight = waterHeight,
-                    TerrainHeight = TerrainMeta.HeightMap.GetHeight(v),
-                    SpawnHeight = canSpawnOnSeabed ? v.y : SpawnsController.GetSpawnHeight(v, false),
-                    Radius = protectionRadius,
-                    AutoHeight = true,
-                };
-                if (IsAreaManuallyBlocked(rb, v))
-                {
-                    user?.Message("Area is manually blocked");
-                    return false;
-                }
-                if (IsSubmerged(rb, rsl, v))
-                {
-                    if (rb.options.Water.SubmergedAreaCheck) user?.Message("Area is submerged (surrounding area)");
-                    else user?.Message("Area is submerged");
-                    return false;
-                }
-                if (!IsAreaSafe(rb, rsl, v))
-                {
-                    user?.Message("Area is not safe");
-                    return false;
-                }
-                if (IsObstructed(rb, v))
-                {
-                    user?.Message("Area is obstructed");
-                    return false;
-                }
-                if (SpawnsController.IsZoneBlocked(v))
-                {
-                    user?.Message("Area is zone blocked");
-                    return false;
-                }
-                return true;
             }
 
             internal bool IsObstructed(RandomBase spq, Vector3 v)
@@ -1490,7 +1470,7 @@ namespace Oxide.Plugins
                 {
                     return WaterSystem.OceanLevel + spq.options.Setup.PasteHeightAdjustment;
                 }
-                return v.y + spq.options.Setup.PasteHeightAdjustment;
+                return spq.isCustomSpawn ? v.y : v.y + spq.options.Setup.PasteHeightAdjustment;
             }
 
             private bool TopologyChecks(RandomBase spq, int? t, Vector3 v, float railRadius)
@@ -1559,7 +1539,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (Instance.IsGridLoading() || !Instance.CanContinueAutomation(type))
+                if (Instance.IsGridLoading() || !Instance.GetRaidableModes().Exists(x => Instance.CanSpawnDifficultyToday(type, x)))
                 {
                     Instance.timer.Once(1f, () => StartCoroutine(type));
                     return;
@@ -1819,7 +1799,7 @@ namespace Oxide.Plugins
                 {
                     if (Direction == Elevator.Direction.Up)
                     {
-                        if (!Physics.Raycast(serverPosition, Vector3.up, out hit, 21f) || (hitEntity = hit.GetEntity()).IsNull())
+                        if (!Physics.Raycast(serverPosition, Vector3.up, out hit, 21f) || (hitEntity = hit.GetEntity()) == null)
                         {
                             return;
                         }
@@ -1828,7 +1808,7 @@ namespace Oxide.Plugins
                     }
                     else
                     {
-                        if (!Physics.Raycast(serverPosition - new Vector3(0, 2.9f, 0), Vector3.down, out hit, 21f) || (hitEntity = hit.GetEntity()).IsNull() || hitEntity.ShortPrefabName == "foundation" || hitEntity.ShortPrefabName == "elevator.static")
+                        if (!Physics.Raycast(serverPosition - new Vector3(0, 2.9f, 0), Vector3.down, out hit, 21f) || (hitEntity = hit.GetEntity()) == null || hitEntity.ShortPrefabName == "foundation" || hitEntity.ShortPrefabName == "elevator.static")
                         {
                             _elevator.Invoke(Retry, returnDelay);
                             return;
@@ -2116,6 +2096,8 @@ namespace Oxide.Plugins
 
             public bool Add(RaidableSpawnLocation rsl, CacheType cacheType, HashSet<RaidableSpawnLocation> cache, bool forced)
             {
+                if (rsl == null) return false;
+
                 if (!forced)
                 {
                     switch (cacheType)
@@ -2171,7 +2153,10 @@ namespace Oxide.Plugins
                     }
                 }
 
-                cache.RemoveWhere(Garbage.Contains);
+                foreach (var rsl in Garbage)
+                {
+                    cache.Remove(rsl);
+                }
 
                 Garbage.Clear();
             }
@@ -2205,6 +2190,7 @@ namespace Oxide.Plugins
                 }
                 else
                 {
+                    if (Spawns.Count == 0) return null;
                     rsl = buyableEvent && config.Settings.Buyable.Closest ? Spawns.ElementAt(0) : Spawns.GetRandom();
                     options.IsWaterSpawn = false;
                 }
@@ -2241,13 +2227,16 @@ namespace Oxide.Plugins
 
                 foreach (var rsl in cache)
                 {
-                    if (rsl == null || InRange2D(target, rsl.Location, radius) && locations.Add(rsl))
+                    if (InRange2D(target, rsl.Location, radius) && locations.Add(rsl))
                     {
                         Garbage.Add(rsl);
                     }
                 }
 
-                cache.RemoveWhere(Garbage.Contains);
+                foreach (var rsl in Garbage)
+                {
+                    cache.Remove(rsl);
+                }
 
                 Garbage.Clear();
             }
@@ -2275,7 +2264,7 @@ namespace Oxide.Plugins
 
                 foreach (var rsl in locations)
                 {
-                    if (rsl == null || InRange2D(target, rsl.Location, radius) && (from == CacheType.Delete || cacheTo.Add(rsl)))
+                    if (InRange2D(target, rsl.Location, radius) && (from == CacheType.Delete || cacheTo.Add(rsl)))
                     {
                         Garbage.Add(rsl);
                     }
@@ -2283,14 +2272,26 @@ namespace Oxide.Plugins
 
                 foreach (var rsl in cacheFrom)
                 {
-                    if (rsl == null || InRange2D(target, rsl.Location, radius))
+                    if (InRange2D(target, rsl.Location, radius))
                     {
                         cacheTo.Add(rsl);
                     }
                 }
 
-                locations.RemoveWhere(Garbage.Contains);
-                cacheFrom.RemoveWhere(cacheTo.Contains);
+                foreach (var rsl in Garbage)
+                {
+                    locations.Remove(rsl);
+                }
+
+                if (cacheFrom != cacheTo)
+                {
+                    foreach (var rsl in cacheTo)
+                    {
+                        cacheFrom.Remove(rsl);
+                    }
+                }
+                else cacheFrom.Clear();
+
                 Garbage.Clear();
 
                 return radius;
@@ -2406,7 +2407,7 @@ namespace Oxide.Plugins
 
             private Dictionary<string, List<string>> GetBuildingsDictionary(RaidableType type, BasePlayer player)
             {
-                if (config.Settings.Management.RequireAllSpawnedBuyableEvents && type == RaidableType.Purchased && !player.IsNull())
+                if (config.Settings.Management.RequireAllSpawnedBuyableEvents && type == RaidableType.Purchased && player != null)
                 {
                     if (!_playerBuildings.TryGetValue(player.userID, out var buildings))
                     {
@@ -2519,7 +2520,7 @@ namespace Oxide.Plugins
 
                 if ((t.position - raider.lastPosition).sqrMagnitude > 0.001f)
                 {
-                    raider.IsVanished = player._limitedNetworking;
+                    raider.IsVanished = player._limitedNetworking || player.isInvisible;
                     raider.IsFlying = player.IsFlying;
                     raider.lastPosition = t.position;
                     raider.lastActiveTime = Time.realtimeSinceStartupAsDouble;
@@ -2623,7 +2624,7 @@ namespace Oxide.Plugins
                 double now = Time.realtimeSinceStartupAsDouble;
                 if (now < nextConsumeTime) return;
                 nextConsumeTime = now + 1d;
-                if (!player.CanInteract() || !player.IsSwimming()) return;
+                if (!player.CanInteract()) return;
                 if (consume && Instance._itemModConsume.TryGetValue(item.info, out var con))
                 {
                     player.metabolism.MarkConsumption();
@@ -2670,7 +2671,7 @@ namespace Oxide.Plugins
                 {
                     constructionType = ConstructionType.Barricade;
 
-                    return AllowBarricades && Physics.Raycast(player.eyes.HeadRay(), out hit, 5f, targetMask, QueryTriggerInteraction.Ignore) && hit.GetEntity().IsNull();
+                    return AllowBarricades && Physics.Raycast(player.eyes.HeadRay(), out hit, 5f, targetMask, QueryTriggerInteraction.Ignore) && hit.GetEntity() == null;
                 }
 
                 return false;
@@ -2695,24 +2696,30 @@ namespace Oxide.Plugins
             internal double nextNavigationCheck;
             private HumanoidNPC npc;
             private RaidableBase raid;
+            private RustNavmesh lastBoundNavmesh;
 
             public void SetupNavigator(BaseCombatEntity owner, float distance, bool isStationary, float maxWaterDepth)
             {
                 npc = brain.npc;
                 raid = brain.raid;
-                CanUseNavMesh = !isStationary && !Rust.Ai.AiManager.nav_disable;
+                CanUseNavMesh = !isStationary;
                 CanUseBaseNav = false;
                 MaxRoamDistanceFromHome = BestMovementPointMaxDistance = BestRoamPointMaxDistance = distance * 0.85f;
                 DefaultArea = "Walkable";
                 topologyPreference = ((TerrainTopology.Enum)TerrainTopology.EVERYTHING);
                 Agent.agentTypeID = NavMesh.GetSettingsByIndex(1).agentTypeID; // 0:0, 1: -1372625422, 2: 1479372276, 3: -1923039037
                 MaxWaterDepth = maxWaterDepth;
+                if (!ConVar.AI.useUnityNavmesh)
+                {
+                    TurnSpeed *= 0.75f;
+                }
                 Init(owner, Agent);
+                lastBoundNavmesh = Agent.boundNavmesh;
             }
 
             public void TryEnableMovement()
             {
-                if (ConVar.AI.useUnityNavmesh || Rust.Ai.AiManager.nav_disable || brain == null || !brain.spawnedInside || !brain.isStationary || brain.isDisabled || npc.IsSleeping())
+                if (ConVar.AI.useUnityNavmesh || Rust.Ai.AiManager.nav_disable || brain == null || !brain.spawnedInside || !brain.isStationary || brain.isDisabled || brain.isDormant || npc.IsSleeping())
                 {
                     return;
                 }
@@ -2728,7 +2735,7 @@ namespace Oxide.Plugins
                 if (bed.IsKilled())
                 {
                     bed = null;
-                    if (!TryPlaceOnNav(true)) return;
+                    if (!TryPlaceOnNav()) return;
                 }
                 else if (!TryLeaveBed())
                 {
@@ -2739,7 +2746,7 @@ namespace Oxide.Plugins
                 CanUseNavMesh = true;
             }
 
-            private bool TryPlaceOnNav(bool checkClearance)
+            private bool TryPlaceOnNav()
             {
                 if (!CanSamplePosition())
                 {
@@ -2752,7 +2759,7 @@ namespace Oxide.Plugins
                     return false;
                 }
 
-                if (raid.IsPointInTerrain(hit.position) || checkClearance && !raid.HasStandingClearance(hit.position) || !HasClearNavigationPath(origin, hit.position))
+                if (raid.IsPointInTerrain(hit.position) || !raid.HasStandingClearance(hit.position) || !HasClearNavigationPath(origin, hit.position))
                 {
                     return false;
                 }
@@ -2849,17 +2856,42 @@ namespace Oxide.Plugins
 
             public bool EnsureNavReady()
             {
-                if (brain.isDisabled || brain.isStationary || !CanUseNavMesh || npc.IsSleeping() || Rust.Ai.AiManager.nav_disable || !CanSamplePosition())
+                if (brain.isDisabled || brain.isDormant || brain.isStationary || !CanUseNavMesh || Rust.Ai.AiManager.nav_disable || npc.IsSleeping() || !CanSamplePosition())
                 {
                     return false;
                 }
 
-                return Agent.enabled && Agent.isOnNavMesh && !StuckOffNavmesh || TryPlaceOnNav(false);
+                if (!Agent.enabled)
+                {
+                    Agent.enabled = true;
+                }
+
+                if (Agent.boundNavmesh == null || !Agent.boundNavmesh.IsValid())
+                {
+                    Agent.TryBindNavmesh();
+                }
+
+                Agent.EnsureAnchorValid();
+
+                if (lastBoundNavmesh != Agent.boundNavmesh)
+                {
+                    Agent.ResetPath();
+                    lastBoundNavmesh = Agent.boundNavmesh;
+                }
+
+                ulong currentPolyRef = Agent.currentPolyRef;
+                if (currentPolyRef == 0uL || Agent.boundNavmesh == null || !Agent.boundNavmesh.IsValidPolyRef(currentPolyRef))
+                {
+                    return false;
+                }
+
+                StuckOffNavmesh = false;
+                return true;
             }
 
             public bool TryMoveNear(Vector3 origin, Vector3 target, float radius)
             {
-                if (!EnsureNavReady())
+                if (!ConVar.AI.useUnityNavmesh && !EnsureNavReady())
                 {
                     return false;
                 }
@@ -2926,18 +2958,57 @@ namespace Oxide.Plugins
 
             public bool TrySetDestination(Vector3 destination, NavigationSpeed speed)
             {
-                if (!base.SetDestination(destination, speed))
+                if (!ConVar.AI.move || !ConVar.AI.navthink || Rust.Ai.AiManager.nav_disable)
                 {
                     return false;
                 }
 
+                float speedFraction = GetSpeedFraction(speed);
+                bool reached = ReachedPosition(destination);
+                if (!reached)
+                {
+                    if (ConVar.AI.usecalculatepath)
+                    {
+                        if (Agent.CalculatePath(destination, path))
+                        {
+                            if (path.status != NavMeshPathStatus.PathComplete)
+                            {
+                                return false;
+                            }
+                            if (!Agent.SetPath(path))
+                            {
+                                return false;
+                            }
+                        }
+                        else if (!ConVar.AI.usesetdestinationfallback || !Agent.SetDestination(destination))
+                        {
+                            return false;
+                        }
+                    }
+                    else if (!Agent.SetDestination(destination))
+                    {
+                        return false;
+                    }
+
+                    SetCurrentNavigationType(NavigationType.NavMesh);
+                    Destination = destination;
+                    Agent.isStopped = false;
+                    if (SpeedBasedAvoidancePriority)
+                    {
+                        Agent.avoidancePriority = UnityEngine.Random.Range(0, 21) + Mathf.FloorToInt(speedFraction * 80f);
+                    }
+                }
+
+                lastSetDestinationTime = Time.time;
+                paused = false;
+                currentSpeedFraction = speedFraction;
                 npc.finalDestination = destination;
                 return true;
             }
 
             public override void UpdatePositionAndRotation(Vector3 moveToPosition, float delta)
             {
-                if (brain == null || brain.isDisabled)
+                if (brain == null || brain.isDisabled || brain.isDormant)
                 {
                     return;
                 }
@@ -3001,11 +3072,7 @@ namespace Oxide.Plugins
             {
                 Matrix4x4 inverse = doorTransform.worldToLocalMatrix;
                 Vector3 start = inverse.MultiplyPoint3x4(from), movement = inverse.MultiplyVector(to - from);
-
-                bounds.Expand(new Vector3(
-                    x: Abs(inverse.m00) * clearance.x + Abs(inverse.m01) * clearance.y + Abs(inverse.m02) * clearance.z,
-                    y: Abs(inverse.m10) * clearance.x + Abs(inverse.m11) * clearance.y + Abs(inverse.m12) * clearance.z,
-                    z: Abs(inverse.m20) * clearance.x + Abs(inverse.m21) * clearance.y + Abs(inverse.m22) * clearance.z) * 2f);
+                bounds.Expand(GetSize(inverse, clearance));
 
                 if (bounds.Contains(start))
                 {
@@ -3041,17 +3108,30 @@ namespace Oxide.Plugins
 
             public override string displayName => DisplayNameOverride;
 
+            public bool GetBrain(out HumanoidBrain brain)
+            {
+                if (Brain != null)
+                {
+                    brain = Brain;
+                    return true;
+                }
+                brain = null;
+                return false;
+            }
+
             public override bool CanBeLooted(BasePlayer player)
             {
                 if (player == null) return false;
 
-                if (IsSleeping() && raid != null && !raid.Options.NPC.Inside.Sleepers.Lootable && !player.IsFlying && !player.limitNetworking)
+                if (IsSleeping() && raid != null && !raid.Options.NPC.Inside.Sleepers.Lootable && !player.IsFlying && !IsVanished(player))
                 {
                     Instance.Message(player, "This sleeper cannot be looted.");
                     return false;
                 }
 
-                return base.CanBeLooted(player);
+                if (!base.CanBeLooted(player)) return false;
+                if (!Instance.CanBypass(player)) RemoveOwnershipPass();
+                return true;
             }
 
             public override void AttackerInfo(ProtoBuf.PlayerLifeStory.DeathInfo info)
@@ -3171,6 +3251,10 @@ namespace Oxide.Plugins
                 }
 
                 raid.SpawnDrops(corpse.containers, drops);
+                foreach (var container in corpse.containers)
+                {
+                    Instance.RemoveRestrictedItems(container);
+                }
                 CheckCorpse(corpse);
                 return corpse;
             }
@@ -3199,22 +3283,7 @@ namespace Oxide.Plugins
 
             private bool RemoveOwnershipPass()
             {
-                if (!Instance.config.BlockPaidContent) return true;
-
-                using var itemList = Facepunch.Pool.Get<PooledList<Item>>();
-                inventory.GetAllItems(itemList);
-                for (int i = itemList.Count - 1; i >= 0; i--)
-                {
-                    Item item = itemList[i];
-                    if (Instance.RequiresOwnership(item.info, item.skin))
-                    {
-                        item.GetHeldEntity().SafelyKill();
-                        item.RemoveFromContainer();
-                        item.Remove(0f);
-                    }
-                }
-
-                return itemList.Count > 0;
+                return Instance.RemoveRestrictedItems(inventory);
             }
         }
 
@@ -3282,7 +3351,7 @@ namespace Oxide.Plugins
             {
                 get
                 {
-                    if (_attackEntity.IsNull())
+                    if (_attackEntity.IsKilled())
                     {
                         IdentifyWeapon();
                     }
@@ -3293,7 +3362,7 @@ namespace Oxide.Plugins
 
             private void Update()
             {
-                if (isDisabled)
+                if (isDisabled || isDormant)
                 {
                     return;
                 }
@@ -3424,6 +3493,7 @@ namespace Oxide.Plugins
             {
                 npc.UpdateActiveItem(item.uid);
                 yield return CoroutineEx.waitForSeconds(1f);
+                if (isDormant) { equipToolTime = 0f; yield break; }
                 if (isDisabled)
                 {
                     yield break;
@@ -3434,7 +3504,7 @@ namespace Oxide.Plugins
                     yield break;
                 }
                 tool.ServerUse();
-                if (!isDisabled)
+                if (!isDisabled && !isDormant)
                 {
                     npc.Heal(npc.MaxHealth());
                     equipToolTime = 0f;
@@ -3489,73 +3559,92 @@ namespace Oxide.Plugins
                 liquidWeapon = null;
                 AttackName = string.Empty;
 
-                if (_attackEntity.IsNull())
+                if (_attackEntity.IsKilled())
                 {
                     return;
                 }
 
                 ((AttackName = _attackEntity.ShortPrefabName) switch
                 {
-                    "double_shotgun.entity" or "shotgun_pump.entity" or "shotgun_waterpipe.entity" or "spas12.entity" or "nailgun.entity" or "t1_smg.entity" or "snowballgun.entity" or "blunderbuss.entity" or "pistol_eoka.entity" => (Action)(() =>
+                    "double_shotgun.entity" or "shotgun_pump.entity" or "krieg_shotgun.entity" or "shotgun_waterpipe.entity" or "spas12.entity" or "nailgun.entity" or "t1_smg.entity" or "snowballgun.entity" or "blunderbuss.entity" or "pistol_eoka.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 30f, 0f, 30f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 30f, 0f);
                     }),
-                    "pistol_revolver.entity" or "pistol_semiauto.entity" or "smg.entity" => (Action)(() =>
+                    "pistol_revolver.entity" or "pistol_semiauto.entity" or "pistol_semiauto.a.m15.entity" or "smg.entity" or "uzi.entity" or "m16a2.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 50f, 0f, 50f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 50f, 0f);
                     }),
                     "m4_shotgun.entity" or "glock.entity" or "python.entity" or "thompson.entity" or "m92.entity" or "mp5.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 100f, 0f, 75f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 100f, 0f);
                     }),
-                    "ak47u.entity" or "ak47u_ice.entity" or "ak47u_diver.entity" or "ak47u_med.entity" or "m249.entity" or "minigun.entity" or "sks.entity" or "m39.entity" or "semi_auto_rifle.entity" => (Action)(() =>
+                    "ak47u.entity" or "ak47u_ice.entity" or "ak47u_diver.entity" or "ak47u_med.entity" or "ak47u.glass.blue.entity" or "ak47u.glass.green.entity" or "ak47u.glass.entity" or "ak47u.glass.pink.entity" or "ak47u.glass.red.entity" or "ak47u_jungle.entity" or "m249.entity" or "minigun.entity" or "sks.entity" or "m39.entity" or "semi_auto_rifle.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 300f, 0f, 190f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 300f, 0f);
                     }),
-                    "hc_revolver.entity" or "lr300.entity" or "hmlmg.entity" or "l96.entity" or "bolt_rifle.entity" => (Action)(() =>
+                    "hc_revolver.entity" or "lr300.entity" or "lr300_space.entity" or "hmlmg.entity" or "l96.entity" or "bolt_rifle.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 400f, 0f, 380f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 400f, 0f);
+                    }),
+                    "concrete_pickaxe.entity" or "concrete_hatchet.entity" or "diver_hatchet.entity" or "frontier_hatchet.entity" or "sickle.entity" or "hatchet.entity" or "stone_pickaxe.entity" or "stonehatchet.entity" or "skinningknife.entity" or "vampirestake.entity" or "knife_bone.entity" or "bone.knife.obsidian.entity" => (Action)(() =>
+                    {
+                        baseMelee = _attackEntity as BaseMelee;
+                        SetAttackRestrictions(AttackType.Melee, 1f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.5f);
+                    }),
+                    "diver_pickaxe.entity" or "lumberjack_axe.entity" or "lumberjack_pick.entity" or "pickaxe.entity" or "hammer_salvaged.entity" or "icepick_salvaged.entity" or "mace.baseballbat" or "candy_cane.entity" or "shovel.entity" or "butcherknife.entity" or "longsword.entity" or "salvaged_cleaver.entity" => (Action)(() =>
+                    {
+                        baseMelee = _attackEntity as BaseMelee;
+                        SetAttackRestrictions(AttackType.Melee, 2f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.5f);
+                    }),
+                    "axe_salvaged.entity" or "bone_club.entity" or "knife.combat.entity" or "sunken.knife.combat.entity" or "mace.entity" or "machete.weapon" or "pitchfork.entity" or "salvaged_sword.entity" or "spear_stone.entity" or "spear_wooden.entity" or "cny_spear.entity" => (Action)(() =>
+                    {
+                        baseMelee = _attackEntity as BaseMelee;
+                        SetAttackRestrictions(AttackType.Melee, 2.5f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.5f);
                     }),
                     "chainsaw.entity" or "jackhammer.entity" => (Action)(() =>
                     {
                         baseMelee = _attackEntity as BaseMelee;
                         SetAttackRestrictions(AttackType.Melee, 2.5f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 2f);
                     }),
-                    "axe_salvaged.entity" or "bone_club.entity" or "butcherknife.entity" or "candy_cane.entity" or "hammer_salvaged.entity" or "hatchet.entity" or "icepick_salvaged.entity" or "knife.combat.entity" or "knife_bone.entity" or "longsword.entity" or "mace.baseballbat" or "mace.entity" or "machete.weapon" or "pickaxe.entity" or "pitchfork.entity" or "salvaged_cleaver.entity" or "salvaged_sword.entity" or "sickle.entity" or "spear_stone.entity" or "spear_wooden.entity" or "cny_spear.entity" or "stone_pickaxe.entity" or "stonehatchet.entity" or "vampirestake.entity" or "skinningknife.entity" or "pitchfork.entity" => (Action)(() =>
-                    {
-                        baseMelee = _attackEntity as BaseMelee;
-                        SetAttackRestrictions(AttackType.Melee, 2.5f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.5f);
-                    }),
                     "explosive.satchel.entity" or "explosive.timed.entity" => (Action)(() =>
                     {
                         SetAttackRestrictions(AttackType.Explosive, 17.5f, 10f);
                     }),
-                    "grenade.beancan.entity" or "grenade.f1.entity" or "grenade.molotov.entity" or "grenade.flashbang.entity" => (Action)(() =>
+                    "grenade.beancan.entity" or "grenade.f1.entity" or "grenade.molotov.entity" or "grenade.flashbang.entity" or "smoke_grenade.weapon" or "grenade.bee.entity" => (Action)(() =>
                     {
                         SetAttackRestrictions(AttackType.Explosive, 17.5f, 5f);
                     }),
                     "mgl.entity" => (Action)(() =>
                     {
                         launcher = _attackEntity as BaseProjectile;
-                        SetAttackRestrictions(AttackType.Explosive, 100f, 2f, 50f);
+                        SetAttackRestrictions(AttackType.Explosive, 100f, 2f);
                     }),
-                    "rocket_launcher.entity" => (Action)(() =>
+                    "rocket_launcher.entity" or "rocket_launcher_dragon.entity" or "rpg7.entity" => (Action)(() =>
                     {
                         launcher = _attackEntity as BaseProjectile;
-                        SetAttackRestrictions(AttackType.Explosive, 300f, 6f, 150f);
+                        SetAttackRestrictions(AttackType.Explosive, 300f, 6f);
+                    }),
+                    "homing_missile_launcher.entity" => (Action)(() =>
+                    {
+                        launcher = _attackEntity as LockOnLauncher;
+                        if (launcher is LockOnLauncher homingLauncher)
+                        {
+                            homingLauncher.CancelInvoke(homingLauncher.UpdateLockedEntity);
+                        }
+                        SetAttackRestrictions(AttackType.Explosive, 300f, 6f);
                     }),
                     "flamethrower.entity" or "militaryflamethrower.entity" => (Action)(() =>
                     {
                         flameThrower = _attackEntity as FlameThrower;
                         SetAttackRestrictions(AttackType.FlameThrower, 10f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 2f);
                     }),
-                    "compound_bow.entity" or "crossbow.entity" or "bow_hunting.entity" or "legacybow.entity" => (Action)(() =>
+                    "compound_bow.entity" or "crossbow.entity" or "crossbow_bowless.entity" or "bow_hunting.entity" or "legacybow.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 200f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.25f, 150f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 200f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.25f);
                     }),
                     "mini_crossbow.entity" or "speargun.entity" or "blowpipe.entity" or "boomerang.entity" => (Action)(() =>
                     {
-                        SetAttackRestrictions(AttackType.BaseProjectile, 50f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.25f, 20f);
+                        SetAttackRestrictions(AttackType.BaseProjectile, 50f, (_attackEntity.animationDelay + _attackEntity.deployDelay) * 1.25f);
                     }),
                     "watergun.entity" or "waterpistol.entity" => (Action)(() =>
                     {
@@ -3569,7 +3658,7 @@ namespace Oxide.Plugins
                 })();
             }
 
-            private void SetAttackRestrictions(AttackType attackType, float attackRange, float attackCooldown, float effectiveRange = 0f)
+            private void SetAttackRestrictions(AttackType attackType, float attackRange, float attackCooldown)
             {
                 if (attackType == AttackType.BaseProjectile && _attackEntity is BaseProjectile projectile)
                 {
@@ -3581,12 +3670,50 @@ namespace Oxide.Plugins
                     }
                 }
 
-                if (effectiveRange != 0f)
+                (this.attackType, this.attackRange, this.attackCooldown) = (attackType, attackRange, attackCooldown);
+
+                NpcWeaponSettings weapon = Settings.Weapons.Get(this);
+                if (weapon != null && weapon.EffectiveRange != 0f)
                 {
-                    _attackEntity.effectiveRange = effectiveRange;
+                    _attackEntity.effectiveRange = this.attackRange = weapon.EffectiveRange;
+                }
+            }
+
+            internal bool isDormant;
+
+            public void SetDormant(bool state)
+            {
+                if (isDormant == state || isDisabled || ShouldDestroy() || state && npc.IsSleeping())
+                {
+                    return;
                 }
 
-                (this.attackType, this.attackRange, this.attackCooldown) = (attackType, attackRange, attackCooldown);
+                isDormant = state;
+                SetEnabled(!state && !npc.IsSleeping());
+                if (!InitializedAI) return;
+                enabled = !state;
+                if (state)
+                {
+                    Forget();
+                    npc.CancelInvoke(TryToAttack);
+                    npc.CancelInvoke(TryToRoam);
+                    if (flameThrower != null) flameThrower.SetFlameState(false);
+                    npc.SetAiming(false);
+                    Navigator.Stop();
+                    StopMovementTick();
+                    if (thinker != null) AIThinkManager._processQueue.Remove(thinker);
+                }
+                else if (!npc.IsSleeping())
+                {
+                    if (thinker != null) AIThinkManager._processQueue.TryAdd(thinker);
+                    StartMovementTick();
+                    navigator.nextNavigationCheck = 0d;
+                    if (init)
+                    {
+                        movementStarted = false;
+                        SetupMovement(RandomRoamPositions);
+                    }
+                }
             }
 
             public bool ValidTarget => AttackTransform != null && !AttackTarget.IsKilled() && !ShouldForgetTarget(AttackTarget);
@@ -3617,9 +3744,10 @@ namespace Oxide.Plugins
                 base.ForceSetAge(0f);
 
                 Pet = false;
-                sleeping = false;
+                sleeping = npc.IsSleeping();
                 UseAIDesign = true;
                 AllowedToSleep = false;
+                SetEnabled(!sleeping);
                 HostileTargetsOnly = false;
                 AttackRangeMultiplier = 2f;
                 MaxGroupSize = 0;
@@ -3643,6 +3771,13 @@ namespace Oxide.Plugins
                 );
 
                 CanUseHealingItems = true;
+                if (sleeping) StopMovementTick();
+
+                if (isDormant)
+                {
+                    isDormant = false;
+                    SetDormant(true);
+                }
             }
 
             public void TryStartSleeping()
@@ -3661,7 +3796,7 @@ namespace Oxide.Plugins
 
             public void SetSleeping(bool state)
             {
-                SetEnabled(!state);
+                SetEnabled(!state && !isDormant);
                 sleeping = state;
                 AllowedToSleep = state;
                 npc.SetPlayerFlag(BasePlayer.PlayerFlags.Sleeping, state);
@@ -3671,7 +3806,7 @@ namespace Oxide.Plugins
                     Navigator?.Stop();
                     StopMovementTick();
                 }
-                else if (!isDisabled && thinker != null)
+                else if (!isDormant && !isDisabled && thinker != null)
                 {
                     AIThinkManager._processQueue.TryAdd(thinker);
                     navigator.nextNavigationCheck = 0d;
@@ -3796,7 +3931,7 @@ namespace Oxide.Plugins
                     {
                         return;
                     }
-                    if (brain.attackType == AttackType.Explosive && !brain.launcher.IsNull())
+                    if (brain.attackType == AttackType.Explosive && !brain.launcher.IsKilled())
                     {
                         brain.EmulatedFire();
                     }
@@ -4017,9 +4152,9 @@ namespace Oxide.Plugins
                 {
                     RandomMove(ServerPosition, 8f);
                 }
-                else
+                else if (!SetDestination(GetRandomRoamPosition()))
                 {
-                    SetDestination(GetRandomRoamPosition());
+                    RandomMove(ServerPosition, 8f);
                 }
             }
 
@@ -4133,7 +4268,7 @@ namespace Oxide.Plugins
 
             public bool SetTarget(BasePlayer player, bool converge = true)
             {
-                if (isDisabled || !CanInteract() || player.IsKilled() || player.limitNetworking || !converge && IsIgnoredDoorTarget(player))
+                if (isDisabled || !CanInteract() || player.IsKilled() || IsVanished(player) || !converge && IsIgnoredDoorTarget(player))
                 {
                     return false;
                 }
@@ -4210,7 +4345,7 @@ namespace Oxide.Plugins
 
                 BasePlayer attacker = GetBestTarget();
 
-                if (attacker.IsNull())
+                if (attacker == null)
                 {
                     if (!TryReturnHome())
                     {
@@ -4325,12 +4460,13 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                movementStarted = true;
                 if (!spawnedInside && positions.IsNullOrEmpty())
                 {
                     isStationary = true;
                 }
 
+                if (isDormant) return;
+                movementStarted = true;
                 navigator.TryEnableMovement();
                 if (!isStationary || spawnedInside && !ConVar.AI.useUnityNavmesh)
                 {
@@ -4354,7 +4490,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (Settings.KillUnderwater && npc.playerCollider != null && npc.IsSwimming())
+                if (Settings.KillUnderwater && npc.playerCollider != null && npc.IsSwimming() && WaterLevel.GetOverallWaterDepth(ServerPosition, waves: false, volumes: true, npc) >= 1f)
                 {
                     npc.SafelyKill();
                     return;
@@ -4434,11 +4570,16 @@ namespace Oxide.Plugins
             private void EmulatedFire()
             {
                 if (launcher.HasAttackCooldown()) return;
+                if (launcher is LockOnLauncher homingLauncher)
+                {
+                    FireHomingMissile(homingLauncher);
+                    return;
+                }
                 float dist;
                 string prefab;
                 switch (launcher.ShortPrefabName)
                 {
-                    case "rocket_launcher.entity":
+                    case "rocket_launcher.entity" or "rocket_launcher_dragon.entity" or "rpg7.entity":
                         prefab = "assets/prefabs/ammo/rocket/rocket_basic.prefab";
                         dist = ServerPosition.Distance(AttackPosition);
                         launcher.repeatDelay = 6f;
@@ -4468,9 +4609,89 @@ namespace Oxide.Plugins
                 launcher.StartAttackCooldown(launcher.repeatDelay);
             }
 
+            private void FireHomingMissile(LockOnLauncher homingLauncher)
+            {
+                if (!ValidTarget)
+                {
+                    return;
+                }
+
+                ItemDefinition ammo = homingLauncher.primaryMagazine.ammoType;
+                if (ammo == null || !ammo.TryGetComponent(out ItemModProjectile projectileMod))
+                {
+                    return;
+                }
+
+                GameObjectRef projectilePrefab = projectileMod.GetOverrideProjectile(homingLauncher);
+                if (projectilePrefab == null || !projectilePrefab.isValid)
+                {
+                    return;
+                }
+
+                Transform muzzle = homingLauncher.MuzzlePoint != null ? homingLauncher.MuzzlePoint : homingLauncher.transform;
+                Vector3 position = muzzle.position + Vector3.up * 1.6f;
+                Vector3 direction = AttackTarget.CenterPoint() - position;
+                direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : npc.eyes.BodyForward();
+
+                BaseEntity entity = GameManager.server.CreateEntity(projectilePrefab.resourcePath, position, Quaternion.LookRotation(direction));
+                if (entity == null)
+                {
+                    return;
+                }
+
+                if (!entity.TryGetComponent(out SeekingServerProjectile missile))
+                {
+                    Destroy(entity.gameObject);
+                    return;
+                }
+
+                entity.creatorEntity = npc;
+                entity.enableSaving = false;
+                missile.autoSeek = false;
+                missile.armingFinalDir = direction;
+                missile.lockedTarget = new NpcMissileTarget(AttackTarget);
+                missile.InitializeVelocity(direction * missile.speed * homingLauncher.initialSpeedMultiplier);
+                entity.Spawn();
+
+                homingLauncher.repeatDelay = 6f;
+                homingLauncher.StartAttackCooldown(homingLauncher.repeatDelay);
+                homingLauncher.SignalBroadcast(BaseEntity.Signal.Attack, string.Empty);
+            }
+
+            private class NpcMissileTarget : SeekerTarget, SeekerTarget.ISeekerTargetOwner
+            {
+                private BasePlayer target;
+                private Vector3 position;
+
+                public NpcMissileTarget(BasePlayer player)
+                {
+                    target = player;
+                    position = target.CenterPoint();
+                    owner = this;
+                    strength = SeekerTarget.SeekerStrength.LOW;
+                }
+
+                public Vector3 CenterPoint()
+                {
+                    if (IsValidHomingTarget())
+                    {
+                        position = target.CenterPoint();
+                    }
+                    return position;
+                }
+
+                public bool InSafeZone() => !target.IsKilled() && target.InSafeZone();
+
+                public bool IsValidHomingTarget() => !target.IsKilled() && !target.IsDead() && !IsVanished(target);
+
+                public bool IsVisible(Vector3 position, float maxDistance = float.PositiveInfinity) => IsValidHomingTarget() && target.IsVisible(position, maxDistance);
+
+                public void OnEntityMessage(BaseEntity from, string message) { }
+            }
+
             private void MeleeAttack()
             {
-                if (baseMelee.IsNull())
+                if (baseMelee == null || baseMelee.IsDestroyed)
                 {
                     return;
                 }
@@ -4521,7 +4742,7 @@ namespace Oxide.Plugins
 
                 npc.Invoke(() =>
                 {
-                    if (isDisabled || thrownWeapon.IsKilled())
+                    if (isDisabled || isDormant || thrownWeapon.IsKilled())
                     {
                         return;
                     }
@@ -4568,7 +4789,7 @@ namespace Oxide.Plugins
             {
                 foreach (var npc in raid.npcs)
                 {
-                    if (npc != null && !npc.IsDestroyed && npc != this.npc && npc.Brain != null && npc.Brain.AttackTarget == target && npc.Brain.SecondsSinceLastAttack < 2)
+                    if (npc != null && !npc.IsDestroyed && npc != this.npc && npc.GetBrain(out var brain) && brain.AttackTarget == target && brain.SecondsSinceLastAttack < 2)
                     {
                         return true;
                     }
@@ -4598,7 +4819,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            public bool CanRoam(Vector3 destination) => destination == DestinationOverride && IsInSenseRange(destination);
+            public bool CanRoam(Vector3 destination) => !isDormant && destination == DestinationOverride && IsInSenseRange(destination);
 
             private bool CanShoot()
             {
@@ -4624,9 +4845,16 @@ namespace Oxide.Plugins
                 {
                     return null;
                 }
-                if (AttackTarget != null)
+                if (!AttackTarget.IsKilled())
                 {
-                    return AttackTarget;
+                    if (Senses.Memory.IsPlayerKnown(AttackTarget))
+                    {
+                        return AttackTarget;
+                    }
+
+                    AttackTarget = null;
+                    AttackTransform = null;
+                    Navigator.ClearFacingDirectionOverride();
                 }
                 float sqrSenseRange = SenseRange * SenseRange;
                 float delta = -1f;
@@ -4671,7 +4899,7 @@ namespace Oxide.Plugins
 
             public bool ShouldDestroy() => npc == null || npc.IsDestroyed || npc.IsDead() || npc.Health() <= 0f || raid == null || raid.IsDespawning || raid.IsUnloading || Navigator == null || npc.inventory == null;
 
-            public bool CanInteract() => !(npc.IsWounded() || npc.IsSleeping());
+            public bool CanInteract() => !isDormant && !(npc.IsWounded() || npc.IsSleeping());
 
             private bool IsInAttackRange(float range = 0f) => InRange(ServerPosition, AttackPosition, range == 0f ? attackRange : range);
 
@@ -4687,7 +4915,7 @@ namespace Oxide.Plugins
 
             private bool IsInThrowRange() => InRange(ServerPosition, AttackPosition, attackRange);
 
-            private bool ShouldForgetTarget(BasePlayer target) => target.IsKilled() || target.health <= 0f || target.limitNetworking || target.IsDead() || target is HumanoidNPC || !IsInTargetRange(target.transform.position);
+            private bool ShouldForgetTarget(BasePlayer target) => target.IsKilled() || target.health <= 0f || IsVanished(target) || target.IsDead() || target is HumanoidNPC || !IsInTargetRange(target.transform.position);
         }
 
         public class Raider
@@ -4698,7 +4926,7 @@ namespace Oxide.Plugins
             public string id, displayName;
             public ulong userid;
             public PlayerInputEx Input;
-            private BasePlayer _player;
+            public BasePlayer _player;
             public Vector3 lastPosition;
             public IClan clan;
             public long clanId;
@@ -4853,6 +5081,7 @@ namespace Oxide.Plugins
             public bool IsAnyLooted;
             public bool IsDamaged;
             public bool IsEligible = true;
+            public bool RewardsForfeit;
             public bool IsCompleted;
             public Payments payments = new();
             public float ProtectionRadius = 50f, SqrProtectionRadius = 2500f;
@@ -4918,21 +5147,22 @@ namespace Oxide.Plugins
                 return num;
             }
 
+            public void GetMarkerInfo(Dictionary<string, object> dict)
+            {
+                bool showDespawnTime = AllowPVP ? !Options.HideDespawnTimePVP : !Options.HideDespawnTimePVE;
+                string despawnText = showDespawnTime && DespawnTime > 0 ? string.Format(" [{0}]", mx("UIFormatLockoutMinutes", null, DespawnTime)) : null;
+                string shopName = (markerName == MarkerName ? mx("MapMarkerOrderWithMode", null, mx(GetAllowKey()), Mode(), markerName, despawnText) : string.Format("{0} {1}", mx(GetAllowKey()), markerName)).Replace("{basename}", BaseName).Trim(); ;
+
+                dict["color1"] = GetMarkerColor1();
+                dict["color2"] = GetMarkerColor2();
+                dict["radius"] = Mathf.Min(2.5f, World.Size <= 3600 ? config.Settings.Markers.SubRadius : config.Settings.Markers.Radius);
+                dict["alpha"] = Mathf.Clamp01(config.Settings.Markers.Opacity);
+                dict["shopName"] = shopName;
+            }
+
             public bool IsPlayerTurret(BaseEntity entity) => entity is AutoTurret && entity.OwnerID.IsSteamId() && BuiltList.Contains(entity);
 
-            public bool Owns(AutoTurret turret)
-            {
-                if (turret == null || turret.enableSaving) return false;
-                if (turret.skinID == RB_SKIN_ID) return true;
-                foreach (TurretInfo info in turrets.Values)
-                {
-                    if (info.turret != null && info.turret == turret)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
+            public bool Owns(AutoTurret turret) => turret != null && turret.OwnerID == 0uL && !turret.enableSaving && Entities.Contains(turret);
 
             public bool Owns(BaseEntity entity) => entity != null && (entity is HumanoidNPC || (entity.OwnerID == 0uL && !entity.enableSaving && Entities.Contains(entity)));
 
@@ -5019,8 +5249,6 @@ namespace Oxide.Plugins
 
             public void FreeToPool()
             {
-                Interface.CallHook("OnRaidableBaseEnded", hookObjects);
-
                 if (EntityIds != null)
                 {
                     foreach (var id in EntityIds)
@@ -5129,6 +5357,33 @@ namespace Oxide.Plugins
                     rigidbody.useGravity = false;
                     rigidbody.detectCollisions = true;
                     rigidbody.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                }
+            }
+
+            public readonly Guid _guid = Guid.NewGuid();
+
+            public void OnRaidableBaseStart()
+            {
+                Interface.CallHook("OnRaidableBaseStart", _guid, Location, ProtectionRadius, Options.Level, BaseName, AllowPVP, ownerId, GetOwner());
+            }
+
+            private void OnRaidableBaseStarted()
+            {
+                Interface.CallHook("OnRaidableBaseStarted", hookObjects);
+                Interface.CallHook("OnRaidableBaseStarted", rb);
+            }
+
+            private void OnRaidableBaseEnded()
+            {
+                Interface.CallHook("OnRaidableBaseEnded", _guid, Location, ProtectionRadius, Options.Level, BaseName, AllowPVP, ownerId, GetOwner());
+                Interface.CallHook("OnRaidableBaseEnded", hookObjects);
+            }
+
+            private void OnRaidableBaseLocationChanged(Vector3 previous, Vector3 current)
+            {
+                if (previous != current)
+                {
+                    Interface.CallHook("OnRaidableBaseLocationChanged", _guid, previous, current, ProtectionRadius, Options.Level, BaseName, AllowPVP, ownerId, GetOwner());
                 }
             }
 
@@ -5399,7 +5654,7 @@ namespace Oxide.Plugins
 
             private void OnPreEnterRaid(BasePlayer target)
             {
-                if (target.IsNull() || !target.IsHuman())
+                if (target.IsKilled() || !target.IsHuman())
                 {
                     return;
                 }
@@ -5524,8 +5779,14 @@ namespace Oxide.Plugins
 
             public void OnPlayerExit(BasePlayer target, bool skipDelay = true)
             {
-                if (IsUnloading || target == null || !target.IsHuman())
+                if (target == null || !target.IsHuman())
                 {
+                    return;
+                }
+
+                if (IsUnloading)
+                {
+                    UpdateTime(target, false);
                     return;
                 }
 
@@ -5558,6 +5819,32 @@ namespace Oxide.Plugins
                 Interface.CallHook("OnPlayerExitedRaidableBase", new object[] { target, Location, AllowPVP, Options.Level, ID, 0f, 0f, loadTime, ownerId, BaseName, spawnDateTime, despawnDateTime, ProtectionRadius, GetLootAmountCounted() });
             }
 
+            private Dictionary<ulong, (int code, double expiry)> HintConfirmations;
+            public bool ConfirmRewardForfeit(ulong userid, string[] args, out int code, out int seconds)
+            {
+                double now = Time.realtimeSinceStartupAsDouble;
+                HintConfirmations ??= new();
+
+                if (HintConfirmations.TryGetValue(userid, out var confirmation) && confirmation.expiry > now)
+                {
+                    code = confirmation.code;
+                    seconds = Math.Max(1, (int)Math.Ceiling(confirmation.expiry - now));
+
+                    if (args.Length == 2 && int.TryParse(args[1], out int result) && result == code)
+                    {
+                        HintConfirmations.Remove(userid);
+                        return true;
+                    }
+
+                    return false;
+                }
+
+                seconds = 60;
+                code = UnityEngine.Random.Range(1000, 10000);
+                HintConfirmations[userid] = (code, now + 60d);
+                return false;
+            }
+
             public void AddHintCooldown(BasePlayer target, float cooldown)
             {
                 ulong userid = target.userID;
@@ -5576,7 +5863,7 @@ namespace Oxide.Plugins
 
             public void TrySetPVPDelay(BasePlayer target, bool isFireDamage, bool skipDelay = true, string key = "DoomAndGloom")
             {
-                if (config.Settings.Management.PVPDelay <= 0f || skipDelay || !Instance.IsPVE() || !AllowPVP || target.IsFlying || target.limitNetworking)
+                if (config.Settings.Management.PVPDelay <= 0f || skipDelay || !Instance.IsPVE() || !AllowPVP || target.IsFlying || IsVanished(target))
                 {
                     return;
                 }
@@ -5678,7 +5965,7 @@ namespace Oxide.Plugins
 
             private bool RemoveFauxAdmin(BasePlayer player)
             {
-                if (Instance.FauxAdmin != null && player.IsNetworked() && player.IsDeveloper && player.HasPermission("fauxadmin.allowed") && player.HasPermission("raidablebases.block.fauxadmin") && player.IsCheating())
+                if (Instance.FauxAdmin != null && player.HasNetworkId() && player.IsDeveloper && player.HasPermission("fauxadmin.allowed") && player.HasPermission("raidablebases.block.fauxadmin") && player.IsCheating())
                 {
                     RemovePlayer(player, Location, ProtectionRadius, Type);
                     Message(player, "NoFauxAdmin");
@@ -5722,14 +6009,6 @@ namespace Oxide.Plugins
                 return parent is BaseMountable || IsCustomEntity(parent);
             }
 
-            public bool IsMountable(BaseEntity entity)
-            {
-                if (entity is BaseMountable) return true;
-                BaseEntity parent = entity.GetParentEntity();
-                if (parent == null) return IsCustomEntity(entity);
-                return parent is BaseMountable || IsCustomEntity(parent);
-            }
-
             public bool BypassUseOwners()
             {
                 if (Type == RaidableType.Manual)
@@ -5741,7 +6020,7 @@ namespace Oxide.Plugins
 
             public bool IsHogging(BasePlayer player)
             {
-                if (!player.IsNetworked() || CanBypass(player) || player.HasPermission("raidablebases.hoggingbypass"))
+                if (!player.HasNetworkId() || CanBypass(player) || player.HasPermission("raidablebases.hoggingbypass"))
                 {
                     return false;
                 }
@@ -5882,12 +6161,79 @@ namespace Oxide.Plugins
                 else player.metabolism.radiation_level.value = 0f;
             }
 
-            private bool IsNullOrVoid(BaseEntity entity) => entity.IsNull();
-
             public bool InRangeTolerance(Vector3 v, float t = 1f) => (v.XZ2D() - Location.XZ2D()).sqrMagnitude <= ProtectionRadiusSqr(t);
             public bool InRangeTolerance(Raider ri, float t = 20f) => InRangeTolerance(ri.player.transform.position, t);
 
-            private bool requiredLootPercentageMet;
+            public bool IsRequiredLootPercentageMet;
+
+            private double npcDormantTime;
+            private bool npcsDormant, npcHadIntruders;
+
+            private int GetDormantIntruderCount()
+            {
+                int amount = 0;
+                if (raiders == null) return amount;
+                foreach (var raider in raiders.Values)
+                {
+                    if (raider.IsVanished || !intruders.Contains(raider.userid)) continue;
+                    amount++;
+                }
+                return amount;
+            }
+
+            private void UpdateNpcDormancy()
+            {
+                if (!Options.NPC.Dormant)
+                {
+                    npcHadIntruders = false;
+                    npcDormantTime = 0d;
+                    SetNpcsDormant(false);
+                    return;
+                }
+
+                if (GetDormantIntruderCount() > 0)
+                {
+                    npcHadIntruders = true;
+                    SetNpcsDormant(false);
+                    return;
+                }
+
+                double now = Time.realtimeSinceStartupAsDouble;
+                if (npcHadIntruders)
+                {
+                    npcHadIntruders = false;
+                    npcDormantTime = now + Math.Max(0d, Options.NPC.DormantDelay);
+                }
+                if (now < npcDormantTime)
+                {
+                    return;
+                }
+
+                bool dormant = true;
+                foreach (HumanoidNPC npc in npcs)
+                {
+                    if (!npc.IsKilled() && !npc.Brain.isDisabled && !npc.IsSleeping() && npc.Brain.ValidTarget)
+                    {
+                        dormant = false;
+                        break;
+                    }
+                }
+
+                SetNpcsDormant(dormant);
+            }
+
+            public void SetNpcsDormant(bool state)
+            {
+                if (IsDespawning || IsUnloading || npcsDormant == state)
+                {
+                    return;
+                }
+                npcsDormant = state;
+                foreach (HumanoidNPC npc in npcs)
+                {
+                    npc.Brain.SetDormant(state);
+                }
+            }
 
             private void Protector()
             {
@@ -5896,9 +6242,9 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (!requiredLootPercentageMet && IsCompleted && IsEligible && RequiredLootPercentageMet(Options.RequiredLootPercentage, out _))
+                if (!IsRequiredLootPercentageMet && IsCompleted && IsEligible && RequiredLootPercentageMet(Options.RequiredLootPercentage, out _))
                 {
-                    requiredLootPercentageMet = true;
+                    IsRequiredLootPercentageMet = true;
                     HandleAwards();
                 }
 
@@ -5909,13 +6255,14 @@ namespace Oxide.Plugins
                 }
 
                 if (despawnTimeUpdated) OnRaidableDespawnUpdate();
-                if (enteredEntities.Count > 0) enteredEntities.RemoveWhere(IsNullOrVoid);
+                if (enteredEntities.Count > 0) enteredEntities.RemoveWhere(IsKilled);
                 if (backpacks.Count > 0) CheckBackpacks(!AllowPVP && Options.EjectBackpacksPVE);
                 if (Options.RespawnRateMax > 0.1f) CheckNpcRespawns();
                 if (raidWindowPrivs && privs.Count > 0) RefreshRaidWindowPrivileges();
 
                 if (Type == RaidableType.None || intruders.Count == 0)
                 {
+                    UpdateNpcDormancy();
                     return;
                 }
 
@@ -5980,6 +6327,8 @@ namespace Oxide.Plugins
 
                     ri.IsAllowed = true;
                 }
+
+                UpdateNpcDormancy();
             }
 
             private void RejectPlayer(Raider ri)
@@ -6125,6 +6474,7 @@ namespace Oxide.Plugins
             public void CheckSubscribe()
             {
                 Instance.Raids.Remove(this);
+                OnRaidableBaseEnded();
 
                 if (Instance.Raids.Count == 0)
                 {
@@ -6143,6 +6493,7 @@ namespace Oxide.Plugins
                         }
                     }
                 }
+                else Instance.UpdateHooks();
 
                 if (!IsUnloading)
                 {
@@ -6183,7 +6534,7 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-                TryInvokeMethod(RemoveParentFromEntitiesOnElevators);
+                TryInvokeMethod(RemoveFromElevators);
                 foreach (var (key, ele) in Elevators)
                 {
                     if (ele.IsBMG())
@@ -6396,7 +6747,7 @@ namespace Oxide.Plugins
                     return false;
                 }
 
-                if (looter.IsFlying || looter.limitNetworking)
+                if (looter.IsFlying || IsVanished(looter))
                 {
                     return false;
                 }
@@ -6724,23 +7075,16 @@ namespace Oxide.Plugins
 
             public bool GetInitiatorPlayer(HitInfo info, DamageType damageType, BaseCombatEntity entity, out BasePlayer target)
             {
-                if (info == null)
+                if (Instance.GetInitiatorPlayer(info, damageType, entity, out target))
                 {
-                    target = entity.lastAttacker as BasePlayer;
+                    return true;
+                }
+                if (damageType == DamageType.Heat)
+                {
+                    target = GetArsonist();
                     return target != null;
                 }
-
-                var weapon = info.Initiator ?? info.WeaponPrefab ?? info.Weapon;
-
-                target = weapon switch
-                {
-                    BasePlayer player => player,
-                    { creatorEntity: BasePlayer player } => player,
-                    { parentEntity: EntityRef parentEntity } when parentEntity.Get(true) is BasePlayer player => player,
-                    _ => damageType == DamageType.Heat ? entity.lastAttacker as BasePlayer ?? GetArsonist() : null
-                };
-
-                return target != null;
+                return false;
             }
 
             private List<string> fireAmmoTypes = new() { "arrow.fire", "ammo.pistol.fire", "ammo.rifle.explosive", "ammo.rifle.incendiary", "ammo.shotgun.fire" };
@@ -6802,55 +7146,56 @@ namespace Oxide.Plugins
 
                 foreach (var ri in raiders.Values)
                 {
-                    if (CancelOnServerRestart() || !IsEligible)
+                    if (CancelOnServerRestart() || !IsEligible || RewardsForfeit)
                     {
                         ri.eligible = false;
                         continue;
                     }
 
-                    if (ri.player == null ? ri.IsFlying : ri.player.IsFlying)
+                    BasePlayer player = ri.player;
+                    if (player == null ? ri.IsFlying : player.IsFlying)
                     {
-                        if (config.EventMessages.Rewards.Flying) Message(ri.player, "No Reward: Flying");
+                        if (config.EventMessages.Rewards.Flying) Message(player, "No Reward: Flying");
                         ri.eligible = false;
                         continue;
                     }
 
-                    if (ri.player == null ? ri.IsVanished : ri.player._limitedNetworking)
+                    if (player == null ? ri.IsVanished : IsVanished(player))
                     {
-                        if (config.EventMessages.Rewards.Vanished) Message(ri.player, "No Reward: Vanished");
+                        if (config.EventMessages.Rewards.Vanished) Message(player, "No Reward: Vanished");
                         ri.eligible = false;
                         continue;
                     }
 
                     if (!IsPlayerActive(ri.userid))
                     {
-                        if (config.EventMessages.Rewards.Inactive) Message(ri.player, "No Reward: Inactive");
+                        if (config.EventMessages.Rewards.Inactive) Message(player, "No Reward: Inactive");
                         ri.eligible = false;
                         continue;
                     }
 
                     if (config.Settings.Management.OnlyAwardOwner && ri.userid != ownerId && ownerId.IsSteamId())
                     {
-                        if (config.EventMessages.Rewards.NotOwner) Message(ri.player, "No Reward: Not Owner");
+                        if (config.EventMessages.Rewards.NotOwner) Message(player, "No Reward: Not Owner");
                         ri.rewards = false;
                     }
 
                     if (!ri.IsParticipant || Options.RequiredDestroyEntity && !ri.HasDestroyed)
                     {
-                        if (config.EventMessages.Rewards.NotParticipant) Message(ri.player, "No Reward: Not A Participant");
+                        if (config.EventMessages.Rewards.NotParticipant) Message(player, "No Reward: Not A Participant");
                         ri.rewards = false;
                         continue;
                     }
 
                     if (config.Settings.Management.OnlyAwardAllies && ownerId.IsSteamId() && ri.userid != ownerId && !IsAlly(ri, ownerId))
                     {
-                        if (config.EventMessages.Rewards.NotAlly) Message(ri.player, "No Reward: Not Ally");
+                        if (config.EventMessages.Rewards.NotAlly) Message(player, "No Reward: Not Ally");
                         ri.rewards = false;
                     }
 
                     if (config.Settings.RemoveAdminRaiders && ri.IsAdmin && Type != RaidableType.None)
                     {
-                        if (config.EventMessages.Rewards.RemoveAdmin) Message(ri.player, "No Reward: Admin");
+                        if (config.EventMessages.Rewards.RemoveAdmin) Message(player, "No Reward: Admin");
                         ri.rewards = false;
                         continue;
                     }
@@ -6866,14 +7211,14 @@ namespace Oxide.Plugins
                         Interface.CallHook("OnRaidableBaseCompleted", Location, Options.Level, AllowPVP, ownerId, GetRaidersByTimeRequirement());
                     }
 
-                    if (!IsUnloading && Options.Levels.Level2 && npcMaxAmountMurderers + npcMaxAmountScientists > 0)
+                    if (!IsUnloading && Options.Levels.Level2 && npcMaxAmount > 0)
                     {
                         SpawnNpcs();
                     }
 
-                    if (!requiredLootPercentageMet && IsCompleted && RequiredLootPercentageMet(Options.RequiredLootPercentage, out _))
+                    if (!IsRequiredLootPercentageMet && IsCompleted && RequiredLootPercentageMet(Options.RequiredLootPercentage, out _))
                     {
-                        requiredLootPercentageMet = true;
+                        IsRequiredLootPercentageMet = true;
                         HandleAwards();
                     }
                 }
@@ -6941,7 +7286,7 @@ namespace Oxide.Plugins
 
             private void HandleAwards()
             {
-                if (raiders.TryGetValue(ownerId, out Raider ownerRi) && ownerRi.IsParticipant && ownerRi.eligible && ownerRi.rewards && !CancelOnServerRestart())
+                if (!RewardsForfeit && raiders.TryGetValue(ownerId, out Raider ownerRi) && ownerRi.IsParticipant && ownerRi.eligible && ownerRi.rewards && !CancelOnServerRestart())
                 {
                     Interface.CallHook("OnRaidableAwardOwner", hookObjects);
                     Interface.CallHook("OnRaidableAwardOwner", Location, Options.Level, AllowPVP, ownerId, GetRaidersByTimeRequirement());
@@ -6951,7 +7296,7 @@ namespace Oxide.Plugins
                 {
                     TrySetLockout(ri);
 
-                    if (!ri.IsParticipant || !ri.eligible)
+                    if (RewardsForfeit || !ri.IsParticipant || !ri.eligible)
                     {
                         continue;
                     }
@@ -6990,20 +7335,22 @@ namespace Oxide.Plugins
 
                     int total = raiders.Values.Count(x => x.IsParticipant && x.eligible && x.rewards);
 
-                    if (!ri.player.IsNull())
+                    BasePlayer player = ri.player;
+                    if (!player.IsKilled())
                     {
-                        if (Options.Rewards.Custom.isItem)
+                        if (Options.Rewards.Custom.isItem && !Instance.RequiresOwnership(Options.Rewards.Custom.Definition, 0uL))
                         {
                             int amount = config.Settings.Management.DivideRewards ? Math.Max(1, Options.Rewards.Custom.Amount / total) : Options.Rewards.Custom.Amount;
                             if (amount > 0)
                             {
                                 if (Options.Rewards.IsDoubledAtNighttime()) amount *= 2;
-                                Item item = ItemManager.Create(Options.Rewards.Custom.Definition, amount, Options.Rewards.Custom.Skin);
-                                if (item.skin != 0 && item.GetHeldEntity()) item.GetHeldEntity().skinID = item.skin;
+                                ulong skin = Instance.RequiresOwnership(Options.Rewards.Custom.Definition, Options.Rewards.Custom.Skin) ? 0uL : Options.Rewards.Custom.Skin;
+                                Item item = ItemManager.Create(Options.Rewards.Custom.Definition, amount, skin);
+                                if (item.skin != 0 && item.GetHeldEntity() is HeldEntity held) held.skinID = item.skin;
                                 if (!string.IsNullOrWhiteSpace(Options.Rewards.Custom.Name)) item.name = Options.Rewards.Custom.Name;
-                                if (!ri.player.inventory.GiveItem(item)) item.DropAndTossUpwards(ri.player.eyes.position);
+                                if (!player.inventory.GiveItem(item)) item.DropAndTossUpwards(player.eyes.position);
                                 string name = string.IsNullOrWhiteSpace(Options.Rewards.Custom.Name) ? item.info.displayName.english : Options.Rewards.Custom.Name;
-                                QueueNotification(ri.player, "CustomDeposit", mx("CustomDepositFormat", ri.id, amount, name));
+                                QueueNotification(player, "CustomDeposit", mx("CustomDepositFormat", ri.id, amount, name));
                             }
                         }
 
@@ -7022,7 +7369,7 @@ namespace Oxide.Plugins
                                 {
                                     plugin?.Call(option.Plugin.DepositHookName, shopName, option.Plugin.PlayerDataType switch
                                     {
-                                        2 => ri.player,
+                                        2 => player,
                                         1 => ri.id,
                                         0 or _ => ri.userid
                                     }, option.Plugin.AmountDataType switch
@@ -7034,7 +7381,7 @@ namespace Oxide.Plugins
                                 }
                                 else plugin?.Call(option.Plugin.DepositHookName, option.Plugin.PlayerDataType switch
                                 {
-                                    2 => ri.player,
+                                    2 => player,
                                     1 => ri.id,
                                     0 or _ => ri.userid
                                 }, option.Plugin.AmountDataType switch
@@ -7044,7 +7391,7 @@ namespace Oxide.Plugins
                                     0 or _ => (object)(double)amount
                                 });
 
-                                QueueNotification(ri.player, "CustomDeposit", mx("CustomDepositFormat", ri.id, amount, option.GetCurrencyName()));
+                                QueueNotification(player, "CustomDeposit", mx("CustomDepositFormat", ri.id, amount, option.GetCurrencyName()));
                             }
                         }
                     }
@@ -7054,7 +7401,7 @@ namespace Oxide.Plugins
                         double money = config.Settings.Management.DivideRewards ? Options.Rewards.Money / (double)total : Options.Rewards.Money;
                         if (Options.Rewards.IsDoubledAtNighttime()) money *= 2;
                         Instance.Economics?.Call("Deposit", ri.userid, money);
-                        QueueNotification(ri.player, "EconomicsDeposit", money);
+                        QueueNotification(player, "EconomicsDeposit", money);
                     }
 
                     if (Options.Rewards.Money > 0 && Instance.BankSystem.CanCall())
@@ -7062,7 +7409,7 @@ namespace Oxide.Plugins
                         int money = Convert.ToInt32(config.Settings.Management.DivideRewards ? Options.Rewards.Money / total : Options.Rewards.Money);
                         if (Options.Rewards.IsDoubledAtNighttime()) money *= 2;
                         Instance.BankSystem?.Call("Deposit", ri.id, money);
-                        QueueNotification(ri.player, "EconomicsDeposit", money);
+                        QueueNotification(player, "EconomicsDeposit", money);
                     }
 
                     if (Options.Rewards.Money > 0 && Instance.IQEconomic.CanCall())
@@ -7070,7 +7417,7 @@ namespace Oxide.Plugins
                         int money = Convert.ToInt32(config.Settings.Management.DivideRewards ? Options.Rewards.Money / total : Options.Rewards.Money);
                         if (Options.Rewards.IsDoubledAtNighttime()) money *= 2;
                         Instance.IQEconomic?.Call("API_SET_BALANCE", ri.userid, money);
-                        QueueNotification(ri.player, "EconomicsDeposit", money);
+                        QueueNotification(player, "EconomicsDeposit", money);
                     }
 
                     if (Options.Rewards.Points > 0 && Instance.ServerRewards.CanCall())
@@ -7078,17 +7425,17 @@ namespace Oxide.Plugins
                         int points = config.Settings.Management.DivideRewards ? Options.Rewards.Points / total : Options.Rewards.Points;
                         if (Options.Rewards.IsDoubledAtNighttime()) points *= 2;
                         Instance.ServerRewards?.Call("AddPoints", ri.userid, points);
-                        QueueNotification(ri.player, "ServerRewardPoints", points);
+                        QueueNotification(player, "ServerRewardPoints", points);
                     }
 
                     if (Options.Rewards.SkillTree > 0 && Instance.SkillTree.CanCall())
                     {
                         double xp = config.Settings.Management.DivideRewards ? Options.Rewards.SkillTree / (double)total : Options.Rewards.SkillTree;
                         if (Options.Rewards.IsDoubledAtNighttime()) xp *= 2;
-                        if (ri.player != null)
+                        if (player != null)
                         {
-                            QueueNotification(ri.player, "SkillTreeXP", xp);
-                            Instance.SkillTree?.Call("AwardXP", ri.player, xp, Name);
+                            QueueNotification(player, "SkillTreeXP", xp);
+                            Instance.SkillTree?.Call("AwardXP", player, xp, Name);
                         }
                         else Instance.SkillTree?.Call("AwardXP", ri.userid, xp, Name);
                     }
@@ -7097,16 +7444,16 @@ namespace Oxide.Plugins
                     {
                         double xp = config.Settings.Management.DivideRewards ? Options.Rewards.XPerience / (double)total : Options.Rewards.XPerience;
                         if (Options.Rewards.IsDoubledAtNighttime()) xp *= 2;
-                        QueueNotification(ri.player, "XPerienceXP", xp);
+                        QueueNotification(player, "XPerienceXP", xp);
                         Instance.XPerience?.Call("GiveXPID", ri.userid, xp);
                     }
 
-                    if (Options.Rewards.XLevels > 0 && ri.player != null && Instance.XLevels.CanCall())
+                    if (Options.Rewards.XLevels > 0 && player != null && Instance.XLevels.CanCall())
                     {
                         double xp = config.Settings.Management.DivideRewards ? Options.Rewards.XLevels / (double)total : Options.Rewards.XLevels;
                         if (Options.Rewards.IsDoubledAtNighttime()) xp *= 2;
-                        QueueNotification(ri.player, "XLevelsXP", xp);
-                        Instance.XLevels?.Call("API_GiveXP", ri.player, (float)xp);
+                        QueueNotification(player, "XLevelsXP", xp);
+                        Instance.XLevels?.Call("API_GiveXP", player, (float)xp);
                     }
                 }
             }
@@ -7134,10 +7481,7 @@ namespace Oxide.Plugins
                 return only == false || owner == 0uL || userid == owner;
             }
 
-            public bool CanBypass(BasePlayer player)
-            {
-                return !player.IsHuman() || player.IsFlying || player.limitNetworking || player.HasPermission("raidablebases.canbypass");
-            }
+            public bool CanBypass(BasePlayer player) => Instance.CanBypass(player);
 
             private bool Exceeds(BasePlayer player)
             {
@@ -7164,7 +7508,7 @@ namespace Oxide.Plugins
 
             public bool HasLockout(BasePlayer player, bool canMessage = true)
             {
-                if (!config.Settings.Management.Lockout.Any() || player.IsNull() || CanBypass(player) || player.HasPermission("raidablebases.lockoutbypass") || Type == RaidableType.None)
+                if (!config.Settings.Management.Lockout.Any() || player.IsKilled() || CanBypass(player) || player.HasPermission("raidablebases.lockoutbypass") || Type == RaidableType.None)
                 {
                     return false;
                 }
@@ -7239,7 +7583,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (!ri.player.IsNull() && (ri.player.IsFlying || ri.player._limitedNetworking))
+                if (ri.player != null && (ri.player.IsFlying || IsVanished(ri.player)))
                 {
                     return;
                 }
@@ -7363,9 +7707,10 @@ namespace Oxide.Plugins
                 Protector();
             }
 
+            public bool BypassStartPurchaseCooldown;
             public void StartPurchaseCooldown()
             {
-                if (!IsResetting && !IsUnloading && IsPayLocked && ownerId.IsSteamId())
+                if (!BypassStartPurchaseCooldown && !IsResetting && !IsUnloading && IsPayLocked && ownerId.IsSteamId())
                 {
                     config.Settings.Buyable.Cooldowns.Set(Instance, GetParticipantIds(), alliance, ownerId, Options.Mode, true);
                 }
@@ -7406,17 +7751,17 @@ namespace Oxide.Plugins
                 if (payments.ServerRewards?.RP > 0)
                 {
                     int points = (int)(payments.ServerRewards.RP * config.Settings.Buyable.Refunds.Percentage / 100.0);
-                    if (points > 0) Instance.ServerRewards?.Call("AddPoints", player.userid(), points);
-                    else Instance.ServerRewards?.Call("TakePoints", player.userid(), points);
+                    if (points > 0) Instance.ServerRewards?.Call("AddPoints", player.userID.Get(), points);
+                    else Instance.ServerRewards?.Call("TakePoints", player.userID.Get(), points);
                     QueueNotification(player, "Refunded RP", points);
                 }
 
                 if (payments.Economics?.money > 0)
                 {
                     double money = payments.Economics.money * config.Settings.Buyable.Refunds.Percentage / 100.0;
-                    Instance.BankSystem?.Call("Deposit", player.userid(), (int)money);
-                    Instance.Economics?.Call("Deposit", player.userid(), money);
-                    Instance.IQEconomic?.Call("API_SET_BALANCE", player.userid(), (int)money);
+                    Instance.BankSystem?.Call("Deposit", player.userID.Get(), (int)money);
+                    Instance.Economics?.Call("Deposit", player.userID.Get(), money);
+                    Instance.IQEconomic?.Call("API_SET_BALANCE", player.userID.Get(), (int)money);
                     QueueNotification(player, "Refunded Money", money);
                 }
             }
@@ -7675,7 +8020,7 @@ namespace Oxide.Plugins
 
             public bool IsProtectedWeapon(BaseEntity e, bool checkBuiltList = false)
             {
-                if (e.IsNull() || checkBuiltList && BuiltList.Contains(e))
+                if (e == null || checkBuiltList && BuiltList.Contains(e))
                 {
                     return false;
                 }
@@ -7696,11 +8041,6 @@ namespace Oxide.Plugins
                     return null;
                 }
 
-                //if (!player.limitNetworking && IsPickupBlacklisted(entity.ShortPrefabName))
-                //{
-                //    return true;
-                //}
-
                 if (entity.ShortPrefabName == "coffinstorage" && Mathf.Approximately(entity.transform.position.Distance(new(0f, -50f, 0f)), 0f))
                 {
                     return null;
@@ -7711,7 +8051,7 @@ namespace Oxide.Plugins
                     return null;
                 }
 
-                if (!player.limitNetworking && !CanBeLooted(player, entity))
+                if (!IsVanished(player) && !CanBeLooted(player, entity))
                 {
                     return true;
                 }
@@ -7745,7 +8085,7 @@ namespace Oxide.Plugins
                     }
                 }
 
-                if (player.IsFlying || player.limitNetworking || entity.OwnerID != 0)
+                if (entity.OwnerID != 0uL || player.IsFlying || IsVanished(player))
                 {
                     return null;
                 }
@@ -7979,7 +8319,7 @@ namespace Oxide.Plugins
             private bool centerSetFromMultiplePoints, isEventUnderground;
             public void SetCenterFromMultiplePoints()
             {
-                Vector3 vector = Location;
+                Vector3 current = Location;
 
                 if (compound.Count > 1)
                 {
@@ -7990,17 +8330,19 @@ namespace Oxide.Plugins
                         bounds.Encapsulate(compound[i]);
                     }
 
-                    vector.x = bounds.center.x;
-                    vector.z = bounds.center.z;
+                    current.x = bounds.center.x;
+                    current.z = bounds.center.z;
                 }
 
-                Location = vector;
-                LocationXZ3D = vector.XZ3D();
+                Vector3 previous = Location;
+                Location = current;
+                LocationXZ3D = current.XZ3D();
 
                 go.transform.position = Location;
 
                 centerSetFromMultiplePoints = true;
                 isEventUnderground = EnvironmentManager.Check(Location, EnvironmentType.TrainTunnels | EnvironmentType.Underground);
+                OnRaidableBaseLocationChanged(previous, current);
             }
 
             public bool SpawnLegacyShelter()
@@ -8010,7 +8352,9 @@ namespace Oxide.Plugins
                     return false;
                 }
 
+                Vector3 previous = Location;
                 Location.y = Instance.GetSpawnHeight(Location, false, true);
+                OnRaidableBaseLocationChanged(previous, Location);
 
                 Quaternion rot = new(0f, 0.07062808f, 0f, -0.9975027f);
                 LegacyShelter shelter = GameManager.server.CreateEntity("assets/prefabs/building/legacy.shelter.wood/legacy.shelter.wood.deployed.prefab", Location, rot) as LegacyShelter;
@@ -8184,9 +8528,9 @@ namespace Oxide.Plugins
                     adjusted = true;
                 }
 
-                using (var vectors1 = SpawnsController.GetCircumferencePositions(center, Options.ArenaWalls.Radius, next1, false, false, 1f))
+                using (var positions = SpawnsController.GetCircumferencePositions(center, Options.ArenaWalls.Radius, next1, false, false, Location.y))
                 {
-                    foreach (var position in vectors1)
+                    foreach (var position in positions)
                     {
                         if (IsDespawning)
                         {
@@ -8194,10 +8538,9 @@ namespace Oxide.Plugins
                         }
 
                         float y = SpawnsController.GetSpawnHeight(position, false, false, targetMask | Layers.Mask.Construction);
-                        float waterHeight = TerrainMeta.WaterMap.GetHeight(position);
 
+                        maxWaterHeight = Mathf.Max(TerrainMeta.WaterMap.GetHeight(position), maxWaterHeight);
                         maxTerrainHeight = Mathf.Max(y, maxTerrainHeight);
-                        maxWaterHeight = Mathf.Max(waterHeight, maxWaterHeight);
                         maxHeight = Mathf.Max(maxTerrainHeight, maxWaterHeight);
                         minHeight = Mathf.Min(y, minHeight);
                         center.y = minHeight;
@@ -8219,7 +8562,7 @@ namespace Oxide.Plugins
                     {
                         stacks += Mathf.FloorToInt((maxHeight - minHeight) / wallStep);
                     }
-                    else
+                    else if (!Options.ArenaWalls.IgnoreForcedHeight)
                     {
                         stacks = Mathf.FloorToInt((Options.Setup.ForcedHeight + Options.Setup.PasteHeightAdjustment) / wallStep);
                     }
@@ -8404,28 +8747,25 @@ namespace Oxide.Plugins
             {
                 public Vector3 pos;
                 public Quaternion rot;
-                public string addition;
+                public TreeEntity.TreeAdditionSpawnData[] additions;
                 public string prefab;
                 public string guid;
                 public float chance;
+                public bool hadAdditions;
                 public BaseEntity ent;
+
                 public RespawnInfo(BaseEntity entity)
                 {
-                    if (entity is VineSwingingTree vine)
+                    if (entity is VineSwingingTree vine && vine.StumpPrefab.isValid)
                     {
-                        if (vine.StumpPrefab.isValid)
-                        {
-                            guid = vine.StumpPrefab.guid;
-                            vine.StumpPrefab.guid = string.Empty;
-                        }
+                        guid = vine.StumpPrefab.guid;
+                        vine.StumpPrefab.guid = string.Empty;
                     }
-                    else if (entity is TreeEntity tree)
+                    if (entity is TreeEntity tree)
                     {
-                        if (tree.spawnTreeAddition && tree.treeAdditionPrefab.isValid)
-                        {
-                            chance = 1f;
-                            addition = tree.treeAdditionPrefab.guid;
-                        }
+                        hadAdditions = tree.treeAdditionRefs != null && tree.treeAdditionRefs.Exists(x => !x.IsKilled());
+                        chance = tree.treeAdditionSpawnChance;
+                        additions = tree.treeAdditions;
                     }
                     pos = entity.transform.position;
                     rot = entity.transform.rotation;
@@ -8442,20 +8782,20 @@ namespace Oxide.Plugins
                         }
                         ent.transform.position = pos;
                     }
-                    else
+                    else if (GameManager.server.CreateEntity(prefab, pos, rot).Is(out BaseEntity entity))
                     {
-                        BaseEntity entity = GameManager.server.CreateEntity(prefab, pos, rot);
                         if (entity is TreeEntity tree)
                         {
-                            if (chance != 0)
-                            {
-                                tree.spawnTreeAddition = true;
-                                tree.treeAdditionSpawnChance = chance;
-                                tree.treeAdditionPrefab.guid = addition;
-                            }
-                            else tree.spawnTreeAddition = false;
+                            tree.treeAdditions = hadAdditions ? additions : null;
+                            tree.treeAdditionSpawnChance = hadAdditions ? 1f : 0f;
+                            tree.Spawn();
+                            tree.treeAdditions = additions;
+                            tree.treeAdditionSpawnChance = chance;
                         }
-                        entity.Spawn();
+                        else
+                        {
+                            entity.Spawn();
+                        }
                     }
                 }
             }
@@ -8524,7 +8864,7 @@ namespace Oxide.Plugins
             {
                 if (!Options.RespawnTrees)
                 {
-                    if (ent is VineSwingingTree vine) // this should never be optional or the jungle will become baron over time.
+                    if (ent is VineSwingingTree vine)
                     {
                         if (!respawns.Exists(x => InRange(x.pos, ent.transform.position, 0.01f)))
                         {
@@ -8538,8 +8878,8 @@ namespace Oxide.Plugins
                 }
                 if (!respawns.Exists(x => InRange(x.pos, ent.transform.position, 0.01f)))
                 {
-                    if (ent is TreeEntity tree) HandleHiveAt(tree, true);
                     respawns.Add(new(ent));
+                    if (ent is TreeEntity tree) HandleHiveAt(tree, true);
                 }
                 ent.SafelyKill();
             }
@@ -8555,15 +8895,21 @@ namespace Oxide.Plugins
 
             private void HandleHiveAt(TreeEntity tree, bool kill)
             {
-                if (hives.Count == 0)
+                if (hives.Count == 0 || tree.treeAdditionRefs == null)
                 {
                     return;
                 }
-                foreach (var hive in hives)
+                for (int i = hives.Count - 1; i >= 0; i--)
                 {
-                    if (!hive.IsKilled() && tree.treeAdditionRef == hive)
+                    var hive = hives[i];
+                    if (hive.IsKilled())
                     {
-                        hives.Remove(hive);
+                        hives.RemoveAt(i);
+                        continue;
+                    }
+                    if (tree.treeAdditionRefs.Contains(hive))
+                    {
+                        hives.RemoveAt(i);
                         if (kill)
                         {
                             ClearInventory(hive.inventory);
@@ -8576,7 +8922,6 @@ namespace Oxide.Plugins
                             hive.transform.position = tree.transform.position;
                             hive.SendNetworkUpdate();
                         }
-                        return;
                     }
                 }
             }
@@ -8588,7 +8933,7 @@ namespace Oxide.Plugins
                 if (Entities.Contains(m)) return false;
                 if (m.HasParent())
                 {
-                    var parent = GetParentEntity(m);
+                    var parent = m.GetRootParentEntity();
                     if (parent is TrainCar or ZiplineMountable) return false;
                     if (Entities.Contains(parent)) return false;
                 }
@@ -8625,7 +8970,7 @@ namespace Oxide.Plugins
             {
                 foreach (var (bag, userid) in _bags)
                 {
-                    if (bag.IsNull()) continue;
+                    if (bag.IsKilled()) continue;
                     ulong oldID = bag.deployerUserID;
                     bag.deployerUserID = userid;
                     SleepingBag.OnBagChangedOwnership(bag, oldID);
@@ -8680,8 +9025,7 @@ namespace Oxide.Plugins
                         yield return null;
                     }
                     TryInvokeMethod(MakeAnnouncements);
-                    Interface.CallHook("OnRaidableBaseStarted", hookObjects);
-                    Interface.CallHook("OnRaidableBaseStarted", rb);
+                    OnRaidableBaseStarted();
                 }
                 else
                 {
@@ -8731,11 +9075,25 @@ namespace Oxide.Plugins
                     SetupBurnVisuals(e);
                 }
 
+                if (e is Barricade barricade)
+                {
+                    SetupBarricade(barricade);
+                }
+
+                if (e is TinCanAlarm alarm)
+                {
+                    SetupTinCanAlarm(alarm);
+                }
+
                 if (e is IOEntity io)
                 {
                     SetupLight(io);
 
-                    if (io is ContainerIOEntity cio)
+                    if (e is PressurePad pad)
+                    {
+                        SetupPressurePad(pad);
+                    }
+                    else if (io is ContainerIOEntity cio)
                     {
                         SetupIO(cio);
                     }
@@ -8859,6 +9217,11 @@ namespace Oxide.Plugins
                     SetupDoor(door);
                 }
                 else SetupSkin(e);
+
+                if (e is IItemContainerEntity ice && e is not (AutoTurret or Mannequin))
+                {
+                    Instance.RemoveRestrictedItems(ice.inventory);
+                }
             }
 
             public bool HasRustNavigationBuild;
@@ -9176,6 +9539,14 @@ namespace Oxide.Plugins
                 }
             }
 
+            private void SetupPressurePad(PressurePad pad)
+            {
+                if (pad.myTrigger != null)
+                {
+                    triggers[pad.myTrigger] = pad;
+                }
+            }
+
             private void SetupHBHFSensor(HBHFSensor sensor)
             {
                 if (!sensor.HasConnections())
@@ -9311,7 +9682,7 @@ namespace Oxide.Plugins
                 igniter.SelfDamagePerIgnite = 0f;
             }
 
-            public void PreSetupTurret(AutoTurret turret)
+            public bool PreSetupTurret(AutoTurret turret)
             {
                 if (Options.AutoTurret.TurretHours > 0)
                 {
@@ -9320,15 +9691,15 @@ namespace Oxide.Plugins
                     {
                         //Puts("Remove turret, elapsed {0}h, required {1}h", elapsedHours, Options.AutoTurret.TurretHours);
                         RemoveTurret(turret);
-                        return;
+                        return false;
                     }
                 }
-                turret.skinID = RB_SKIN_ID;
                 turret.dropsLoot = false;
                 if (turret.targetTrigger != null)
                 {
                     triggers[turret.targetTrigger] = turret;
                 }
+                return true;
             }
 
             public class TurretInfo
@@ -9410,14 +9781,16 @@ namespace Oxide.Plugins
                 }
             }
 
-            public bool TryRemoveOrConfirmTurret(AutoTurret turret) => turret.net != null && turrets.Remove(turret.net.ID.Value) || !turret.enableSaving && turret.skinID == RB_SKIN_ID;
+            public bool TryRemoveTurretReferences(AutoTurret turret) => (turret.net != null && turrets.Remove(turret.net.ID.Value)) | (turret.OwnerID == 0uL && !turret.enableSaving && Entities.Remove(turret));
 
             private void RemoveTurret(AutoTurret turret)
             {
                 if (ReferenceEquals(turret, null)) return;
-                turret.skinID = 0uL;
                 Entities.Remove(turret);
-                TryRemoveOrConfirmTurret(turret);
+                if (turret.net != null)
+                {
+                    turrets.Remove(turret.net.ID.Value);
+                }
                 turret.dropsLoot = false;
                 turret.DelayedSafeKill();
                 if (turret.targetTrigger != null)
@@ -9517,12 +9890,35 @@ namespace Oxide.Plugins
             }
 
             public bool UsableByTurret;
+            private ulong GetTurretWeaponSkin(AutoTurret turret, ItemDefinition def, List<ulong> skins)
+            {
+                if (skins != null && (skins.Count > 1 || skins.Count == 1 && skins[0] != 0uL))
+                {
+                    ulong result = 0uL;
+                    int valid = 0;
+
+                    foreach (ulong s in skins)
+                    {
+                        if (Instance.RequiresOwnership(def, s)) continue;
+                        if (Core.Random.Range(0, ++valid) == 0) result = s;
+                    }
+
+                    return result;
+                }
+
+                ulong skin = GetItemSkin(def, SkinType.Loot, 0, config.Skins.Loot.Stackable, config.Skins.Loot.NonStackable, config.Skins.Loot.ImportedWorkshop, 1);
+                if (skin != 0 && !config.Skins.Deployables.SkinEverything && !config.Skins.Deployables.PartialNames.Exists(turret.ShortPrefabName.Contains)) skin = 0;
+                else if (config.Skins.Deployables.Unique && _itemIdToSkin.TryGetValue(def.itemid, out ulong existingSkin)) skin = existingSkin;
+                if (skin != 0) _itemIdToSkin.TryAdd(def.itemid, skin);
+                return skin;
+            }
+
             private void EquipTurretWeapon(TurretInfo info, Dictionary<string, List<ulong>> shortnames)
             {
-                if (IsContainerKilled(info) || !info.turret.AttachedWeapon.IsNull()) return;
+                if (IsContainerKilled(info) || !info.turret.AttachedWeapon.IsKilled()) return;
 
                 AutoTurret turret = info.turret;
-                if (IsContainerKilled(turret) || turret.inventory.GetSlot(0) != null || !turret.AttachedWeapon.IsNull())
+                if (turret.inventory.GetSlot(0) != null || !turret.AttachedWeapon.IsKilled())
                     return;
 
                 using var weapons = DisposableList<(ItemDefinition, List<ulong>)>();
@@ -9543,31 +9939,19 @@ namespace Oxide.Plugins
                     {
                         continue;
                     }
-                    weapons.Add((itemToCreate, new(skinList)));
+                    weapons.Add((itemToCreate, skinList));
                 }
 
                 if (weapons.Count == 0)
                 {
                     var fallback = ItemManager.FindItemDefinition("pistol.python");
-                    if (fallback != null) weapons.Add(new(fallback, new() { 0 }));
+                    if (fallback != null) weapons.Add(new(fallback, null));
                 }
 
                 var (def, skins) = weapons.GetRandom();
 
-                if (skins.Count == 1) skins.Remove(0);
-                if (skins.Count == 0)
-                {
-                    ulong skin = GetItemSkin(def, SkinType.Loot, 0, config.Skins.Loot.Stackable, config.Skins.Loot.NonStackable, config.Skins.Loot.Random, config.Skins.Loot.Workshop, config.Skins.Loot.ImportedWorkshop, config.Skins.Loot.ApprovedOnly, 1);
-                    if (skin != 0 && !config.Skins.Deployables.SkinEverything && !config.Skins.Deployables.PartialNames.Exists(turret.ShortPrefabName.Contains)) skin = 0;
-                    else if (config.Skins.Deployables.Unique && _itemIdToSkin.TryGetValue(def.itemid, out var s)) skin = s;
-                    //if (Options.AllowPickup || config.Settings.Management.DropLoot.Get(turret))
-                    if (skin != 0 && Instance.RequiresOwnership(def, skin)) skin = 0;
-                    if (skin != 0 && !skins.Contains(skin)) skins.Add(skin);
-                    if (skin != 0) _itemIdToSkin.TryAdd(def.itemid, skin);
-                }
-                if (skins.Count > 0 && config.BlockPaidContent) skins.RemoveAll(x => Instance.RequiresOwnership(def, x));
-
-                Item item = ItemManager.Create(def, 1, skins.Count == 0 ? 0 : skins.GetRandom());
+                ulong skin = GetTurretWeaponSkin(turret, def, skins);
+                Item item = ItemManager.Create(def, 1, skin);
                 SetupTurretWeapon(turret, item);
 
                 if (!item.MoveToContainer(turret.inventory, 0, false))
@@ -9783,6 +10167,48 @@ namespace Oxide.Plugins
                 }
             }
 
+            private void SetupBarricade(Barricade barricade)
+            {
+                if (barricade.NpcTriggerBox != null)
+                {
+                    Destroy(barricade.NpcTriggerBox.gameObject);
+                    barricade.NpcTriggerBox = null;
+                }
+                barricade.canNpcSmash = false;
+            }
+
+            private void SetupTinCanAlarm(TinCanAlarm alarm)
+            {
+                if (alarm.trigger != null)
+                {
+                    triggers[alarm.trigger] = alarm;
+                    alarm.trigger._detector = new NpcFilteringDetector(alarm);
+                }
+            }
+
+            private class NpcFilteringDetector : IDetector
+            {
+                private IDetector detector;
+
+                public NpcFilteringDetector(IDetector detector) => this.detector = detector;
+
+                public bool ShouldTrigger() => detector.ShouldTrigger();
+
+                public void OnObjects() => detector.OnObjects();
+
+                public void OnObjectAdded(GameObject obj, Collider col)
+                {
+                    if (GameObjectEx.ToBaseEntity(obj) is HumanoidNPC)
+                    {
+                        return;
+                    }
+
+                    detector.OnObjectAdded(obj, col);
+                }
+
+                public void OnEmpty() => detector.OnEmpty();
+            }
+
             private void SetupOven(BaseOven oven)
             {
                 ovens.Add(oven);
@@ -9992,7 +10418,7 @@ namespace Oxide.Plugins
 
                     try { door = cdm.FindDoor(true); } catch { continue; }
 
-                    if (door.IsNetworked())
+                    if (door.HasNetworkId())
                     {
                         SetupPairedDoor(door);
                         cdm.SetTargetDoor(door);
@@ -10030,7 +10456,7 @@ namespace Oxide.Plugins
 
                 var slot = entity.GetSlot(BaseEntity.Slot.Lock);
 
-                if (slot.IsNull())
+                if (slot == null)
                 {
                     if (createKeyLock)
                     {
@@ -10262,27 +10688,27 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var si = GetItemSkins(def, config.Skins.Boxes.ApprovedOnly);
+                var si = GetItemSkins(def);
 
-                if (config.Skins.Boxes.Skins.Count > 0 && SetItemSkin(config.Skins.Boxes.Skins.ToList(), si, container, config.Skins.Boxes.Unique))
+                if (config.Skins.Boxes.Skins.Count > 0 && SetItemSkin(config.Skins.Boxes.Skins, si, container, config.Skins.Boxes.Unique))
                 {
                     return;
                 }
 
-                var skins = GetItemSkins(si, config.Skins.Boxes.Random, config.Skins.Boxes.Workshop, config.Skins.Boxes.ImportedWorkshop);
+                bool hasSkin = TrySelectItemSkin(si, config.Skins.Boxes.ImportedWorkshop, out ulong skin2);
 
                 if (!_prefabToSkin.TryGetValue(container.prefabID, out ulong value))
                 {
-                    _prefabToSkin[container.prefabID] = value = skins.Count == 0 ? container.skinID : skins.GetRandom();
+                    _prefabToSkin[container.prefabID] = value = hasSkin ? skin2 : container.skinID;
                 }
 
                 if (config.Skins.Boxes.Unique)
                 {
                     container.skinID = value;
                 }
-                else if (skins.Count > 0)
+                else if (hasSkin)
                 {
-                    container.skinID = skins.GetRandom();
+                    container.skinID = skin2;
                 }
             }
 
@@ -10296,6 +10722,7 @@ namespace Oxide.Plugins
                 if (config.Skins.Deployables.Unique && _prefabToSkin.TryGetValue(entity.prefabID, out var skin))
                 {
                     entity.skinID = skin;
+                    entity.SendNetworkUpdate();
                     return;
                 }
 
@@ -10304,9 +10731,9 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var si = GetItemSkins(def, config.Skins.Deployables.ApprovedOnly);
+                var si = GetItemSkins(def);
 
-                if (config.Skins.Deployables.Doors.Count > 0 && entity is Door && SetItemSkin(config.Skins.Deployables.Doors.ToList(), si, entity, config.Skins.Deployables.Unique))
+                if (config.Skins.Deployables.Doors.Count > 0 && entity is Door && SetItemSkin(config.Skins.Deployables.Doors, si, entity, config.Skins.Deployables.Unique))
                 {
                     return;
                 }
@@ -10316,11 +10743,11 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var skins = GetItemSkins(si, config.Skins.Deployables.Random, config.Skins.Deployables.Workshop, config.Skins.Deployables.ImportedWorkshop);
+                TrySelectItemSkin(si, config.Skins.Deployables.ImportedWorkshop, out ulong skin2);
 
                 if (!_prefabToSkin.TryGetValue(entity.prefabID, out ulong value))
                 {
-                    _prefabToSkin[entity.prefabID] = value = skins.Count == 0 ? entity.skinID : skins.GetRandom();
+                    _prefabToSkin[entity.prefabID] = value = skin2 == 0 ? entity.skinID : skin2;
                 }
 
                 if (config.Skins.Deployables.Unique && entity is Door)
@@ -10328,9 +10755,9 @@ namespace Oxide.Plugins
                     entity.skinID = value;
                     entity.SendNetworkUpdate();
                 }
-                else if (skins.Count > 0)
+                else if (skin2 != 0)
                 {
-                    entity.skinID = skins.GetRandom();
+                    entity.skinID = skin2;
                     entity.SendNetworkUpdate();
                 }
             }
@@ -10370,7 +10797,7 @@ namespace Oxide.Plugins
                         npcMaxAmountInside = Mathf.Clamp(npcMaxAmountInside, -1, npcMaxAmountScientists);
                     }
 
-                    if (npcMaxAmountMurderers > 0 || npcMaxAmountScientists > 0)
+                    if (npcMaxAmount > 0)
                     {
                         if (config.Settings.Management.BlockCustomLootNPC)
                         {
@@ -10479,6 +10906,8 @@ namespace Oxide.Plugins
                 Subscribe(nameof(CanBGrade));
                 Subscribe(nameof(CanBePenalized));
                 Subscribe(nameof(CanLootEntity));
+                Subscribe(nameof(OnLootEntity));
+                Subscribe(nameof(CanMannequinSwap));
                 Subscribe(nameof(OnEntityBuilt));
                 //Subscribe(nameof(CanGainXp));
             }
@@ -10615,7 +11044,7 @@ namespace Oxide.Plugins
 
                 lootList.ForEach(ti =>
                 {
-                    if (!string.IsNullOrWhiteSpace(ti.shortname) && ti.HasProbability())
+                    if (!string.IsNullOrWhiteSpace(ti.shortname) && ti.HasProbability() && !Instance.RequiresOwnership(ti.definition, 0uL))
                     {
                         if (ti.definition == null)
                         {
@@ -10932,11 +11361,8 @@ namespace Oxide.Plugins
 
                     LootItem clone = ti.Clone();
 
-                    if (env.config.BlockPaidContent)
-                    {
-                        if (env.RequiresOwnership(ti.definition, 0)) continue;
-                        if (env.RequiresOwnership(ti.definition, ti.skin)) clone.skin = 0;
-                    }
+                    if (env.RequiresOwnership(ti.definition, 0)) continue;
+                    if (env.RequiresOwnership(ti.definition, ti.skin)) clone.skin = 0;
 
                     to.Add(clone);
                 }
@@ -11081,29 +11507,39 @@ namespace Oxide.Plugins
 
             public static void GenerateLoot(RaidableBases Instance, IPlayer user, string mode, string[] args)
             {
-                BaseProfile profile = args.Select(arg => Instance.Get(arg, out var val) ? val.Item2 : null).FirstOrDefault(x => x != null) ?? Instance.Buildings.Profiles.FirstOrDefault(v => v.Value.Options.Mode == mode).Value;
+                BaseProfile profile = null;
+                string profileName = null;
+
+                if (args.Length >= 2 && Instance.Get(args[1], out var val))
+                {
+                    (profileName, profile) = val;
+                }
+                else if (args.Length < 2 || args[1].Equals(RaidableMode.Random, StringComparison.OrdinalIgnoreCase) || Instance.GetRaidableMode(args[1], out mode))
+                {
+                    (profileName, profile) = Instance.Buildings.Profiles.FirstOrDefault(x => x.Value.Options.Mode.Equals(mode, StringComparison.OrdinalIgnoreCase));
+                }
 
                 if (profile == null)
                 {
-                    Instance.Message(user, "Difficulty Not Available", mode);
+                    Instance.Message(user, "Difficulty Not Available", args.Length >= 2 ? args[1] : mode);
                     return;
                 }
 
-                int amount = args.Where(arg => !Instance.IsRaidableMode(arg) && arg.IsNumeric()).Select(int.Parse).FirstOrDefault();
+                int amount = args.Length >= 3 && int.TryParse(args[2], out int val2) ? val2 : 0;
 
                 LootProfile loot = new()
                 {
                     Amount = amount != 0 ? amount : profile.Options.GetLootAmount(RaidableType.None),
-                    BaseName = profile.Options.AdditionalBases.GetRandom().Key,
+                    BaseName = profileName,
                     AllowPVP = profile.Options.AllowPVP,
                     Unique = Instance.config.Loot,
                     Options = profile.Options,
-                    Instance = Instance,
+                    Instance = Instance
                 };
 
                 TakeLootFromLootTables(loot);
 
-                string text = string.Format("{0} ({1} selected, {2} expected): {3}", mode, loot.Tables.Count, loot.Amount, string.Join(", ", loot.Tables.Select(ti => $"{ti.shortname} ({ti.amount})")));
+                string text = string.Format("{0} ({1} selected, {2} expected): {3}", profile.Options.Mode, loot.Tables.Count, loot.Amount, string.Join(", ", loot.Tables.Select(ti => $"{ti.shortname} ({ti.amount})")));
 
                 Instance.LogToFile("items", text, Instance, false, true);
 
@@ -11132,7 +11568,7 @@ namespace Oxide.Plugins
                 else
                 {
                     item = ItemManager.Create(ti.definition, amount, 0uL);
-                    item.skin = GetItemSkin(ti.definition, SkinType.Loot, ti.skin, config.Skins.Loot.Stackable, config.Skins.Loot.NonStackable, config.Skins.Loot.Random, config.Skins.Loot.Workshop, config.Skins.Loot.ImportedWorkshop, config.Skins.Loot.ApprovedOnly, item.MaxStackable());
+                    item.skin = GetItemSkin(ti.definition, SkinType.Loot, ti.skin, config.Skins.Loot.Stackable, config.Skins.Loot.NonStackable, config.Skins.Loot.ImportedWorkshop, item.MaxStackable());
                 }
 
                 if (!string.IsNullOrWhiteSpace(ti.name))
@@ -11145,12 +11581,12 @@ namespace Oxide.Plugins
                     item.text = ti.text;
                 }
 
-                var e = item.GetHeldEntity();
+                var held = item.GetHeldEntity();
 
-                if (e.IsNetworked())
+                if (held.HasNetworkId())
                 {
-                    e.skinID = item.skin;
-                    e.SendNetworkUpdate();
+                    held.skinID = item.skin;
+                    held.SendNetworkUpdate();
                 }
 
                 if (ti.slots != null)
@@ -11588,9 +12024,19 @@ namespace Oxide.Plugins
                     foreach (var oven in ovens)
                     {
                         if (IsContainerKilled(oven)) continue;
+                        if (config.Settings.Management.IgnoredLights.Exists(oven.ShortPrefabName.Contains)) continue;
+                        if (oven is ElectricOven eo && eo.spawnedIo.Get(true) is IOEntity io)
+                        {
+                            if (!io.HasConnections())
+                            {
+                                io.UpdateFromInput(state ? Math.Max(35, io.ConsumptionAmount()) : 0, 0);
+                            }
+
+                            continue;
+                        }
                         if (state && (oven.ShortPrefabName.Contains("furnace") && oven.inventory.IsEmpty())) continue;
                         if (!state && (oven.ShortPrefabName.Contains("furnace") && BaseOven.cookQueue.Contains(oven))) continue;
-                        if (config.Settings.Management.IgnoredLights.Count > 0 && config.Settings.Management.IgnoredLights.Exists(oven.ShortPrefabName.Contains)) continue;
+
                         using var update = oven.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate);
                         update.Set(BaseEntity.Flags.On, state);
                     }
@@ -11639,9 +12085,9 @@ namespace Oxide.Plugins
                 return ri.IsParticipant || checkAllies && ri.IsAlly;
             }
 
-            public ulong GetItemSkin(ItemDefinition def, SkinType skinType, ulong defaultSkin, bool stackable, bool nonstackable, bool random, bool workshop, bool importedworkshop, bool approved, int stacksize)
+            public ulong GetItemSkin(ItemDefinition def, SkinType skinType, ulong defaultSkin, bool stackable, bool nonstackable, bool importedworkshop, int stacksize)
             {
-                ulong skin = defaultSkin;
+                ulong skin = defaultSkin != 0uL && Instance.RequiresOwnership(def, defaultSkin) ? 0uL : defaultSkin;
 
                 if (def.shortname != "explosive.satchel" && def.shortname != "grenade.f1" && skin == 0uL)
                 {
@@ -11650,48 +12096,33 @@ namespace Oxide.Plugins
                         return skin2;
                     }
 
-                    if (nonstackable && stacksize == 1 && _shortnameToSkin.TryGetValue(def.shortname, out var dict2) && dict2.TryGetValue(skinType, out var skin3))
+                    if (nonstackable && stacksize == 1 && _shortnameToSkin.TryGetValue(def.shortname, out var dict2) && dict2.TryGetValue(skinType, out skin2))
                     {
-                        return skin3;
+                        return skin2;
                     }
 
-                    var si = GetItemSkins(def, approved);
-                    var skins = GetItemSkins(si, random, workshop, importedworkshop);
-
-                    if (skins.Count != 0)
+                    var si = GetItemSkins(def);
+                    if (TrySelectItemSkin(si, importedworkshop, out skin2))
                     {
                         if (!_shortnameToSkin.TryGetValue(def.shortname, out dict))
                         {
                             _shortnameToSkin[def.shortname] = dict = new();
                         }
-                        dict[skinType] = skin = skins.GetRandom();
+
+                        dict[skinType] = skin = skin2;
                     }
                 }
 
                 return skin;
             }
 
-            public SkinInfo GetItemSkins(ItemDefinition def, bool approvedOnly)
+            public HashSet<ulong> GetItemSkins(ItemDefinition def)
             {
                 if (!Instance.Skins.TryGetValue(def.shortname, out var si))
                 {
                     Instance.Skins[def.shortname] = si = new();
 
-                    if (!config.BlockPaidContent && !def.skins.IsNullOrEmpty())
-                    {
-                        foreach (var skin in def.skins)
-                        {
-                            if (IsBlacklistedSkin(def, skin.id))
-                            {
-                                continue;
-                            }
-                            var id = Convert.ToUInt64(skin.id);
-                            si.skins.Add(id);
-                            si.allSkins.Add(id);
-                        }
-                    }
-
-                    if (Instance.ImportedWorkshopSkins.SkinList.TryGetValue(def.shortname, out var value) && !value.IsNullOrEmpty())
+                    if (Instance.ImportedWorkshopSkins.TryGetValue(def.shortname, out var value) && !value.IsNullOrEmpty())
                     {
                         foreach (var skin in value)
                         {
@@ -11699,49 +12130,11 @@ namespace Oxide.Plugins
                             {
                                 continue;
                             }
-                            if (approvedOnly && !IsApproved(def, skin))
+                            if (Instance.RequiresOwnership(def, skin))
                             {
                                 continue;
                             }
-                            si.importedWorkshopSkins.Add(skin);
-                            si.allSkins.Add(skin);
-                        }
-                    }
-
-                    var sp = Instance.skinsPlugin.Skins.FindAll(x => x.Shortname == def.shortname);
-                    if (sp != null && sp.Count != 0)
-                    {
-                        foreach (var item in sp)
-                        {
-                            foreach (var skin in item.Skins)
-                            {
-                                if (IsBlacklistedSkin(def, (int)skin))
-                                {
-                                    continue;
-                                }
-                                if (approvedOnly && !IsApproved(def, skin))
-                                {
-                                    continue;
-                                }
-                                si.importedWorkshopSkins.Add(skin);
-                                si.allSkins.Add(skin);
-                            }
-                        }
-                    }
-
-                    if (!config.BlockPaidContent && !def.skins2.IsNullOrEmpty())
-                    {
-                        foreach (var skin in def.skins2)
-                        {
-                            if (skin == null || IsBlacklistedSkin(def, (int)skin.WorkshopId))
-                            {
-                                continue;
-                            }
-                            if (!si.workshopSkins.Contains(skin.WorkshopId))
-                            {
-                                si.workshopSkins.Add(skin.WorkshopId);
-                                si.allSkins.Add(skin.WorkshopId);
-                            }
+                            si.Add(skin);
                         }
                     }
                 }
@@ -11757,137 +12150,59 @@ namespace Oxide.Plugins
                 return itemSkin?.Redirect != null || def.isRedirectOf != null;
             }
 
-            private bool IsApproved(ItemDefinition def, ulong skin)
+            private static bool TrySelectItemSkin(HashSet<ulong> si, bool importedWorkshop, out ulong skin)
             {
-                if (def.skins != null && Array.Exists(def.skins, x => (ulong)x.id == skin)) return true;
-                if (def.skins2 != null && Array.Exists(def.skins2, x => x.WorkshopId == skin)) return true;
-                return false;
-            }
-
-            private List<ulong> GetItemSkins(SkinInfo si, bool random, bool workshop, bool importedworkshop)
-            {
-                List<ulong> skins = new();
-
-                if (random && si.skins.Count > 0)
+                if (importedWorkshop && si.Count > 0)
                 {
-                    skins.Add(si.skins.GetRandom());
-                }
-
-                if (workshop && si.workshopSkins.Count > 0)
-                {
-                    skins.Add(si.workshopSkins.GetRandom());
-                }
-
-                if (importedworkshop && si.importedWorkshopSkins.Count > 0)
-                {
-                    skins.Add(si.importedWorkshopSkins.GetRandom());
-                }
-
-                return skins;
-            }
-
-            private bool SetItemSkin(List<ulong> skins, SkinInfo si, BaseEntity entity, bool unique)
-            {
-                Shuffle(skins);
-                foreach (ulong skin in skins)
-                {
-                    if (!si.allSkins.Contains(skin))
-                    {
-                        continue;
-                    }
-                    if (unique)
-                    {
-                        _prefabToSkin[entity.prefabID] = skin;
-                    }
-                    entity.skinID = skin;
-                    entity.SendNetworkUpdate();
+                    skin = si.GetRandom();
                     return true;
                 }
+
+                skin = 0uL;
                 return false;
             }
 
-            private struct LookupTime
+            private bool SetItemSkin(List<ulong> skins, HashSet<ulong> si, BaseEntity entity, bool unique)
             {
-                public bool Result;
-                public long ExpiresAt;
-                public LookupTime(bool result, long expiresAt)
+                ulong selectedSkin = 0;
+                int validCount = 0;
+                foreach (ulong skin in skins)
                 {
-                    Result = result;
-                    ExpiresAt = expiresAt;
+                    if (!si.Contains(skin)) continue;
+                    if (Core.Random.Range(0, ++validCount) == 0) selectedSkin = skin;
                 }
-            }
-
-            private long nextLookupCleanTime;
-            private Dictionary<(ulong first, ulong second, bool clans, bool friends, bool teams, string clanhook), LookupTime> allyLookupTimes = new();
-            private bool IsAlly(ulong first, ulong second, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly", long length = 1)
-            {
-                if (!clans && !friends && !teams)
+                if (validCount == 0)
+                {
                     return false;
-
-                var now = Stopwatch.GetTimestamp();
-                var t = first < second ? (first, second, clans, friends, teams, clanhook) : (second, first, clans, friends, teams, clanhook);
-                if (allyLookupTimes.TryGetValue(t, out var lookup) && lookup.ExpiresAt >= now) return lookup.Result;
-                if (now > nextLookupCleanTime)
-                {
-                    nextLookupCleanTime = now + Stopwatch.Frequency * 30L;
-                    using var lookups = Pool.Get<PooledList<(ulong, ulong, bool, bool, bool, string)>>();
-                    foreach (var pair in allyLookupTimes)
-                    {
-                        if (now > pair.Value.ExpiresAt)
-                        {
-                            lookups.Add(pair.Key);
-                        }
-                    }
-                    foreach (var key in lookups)
-                    {
-                        allyLookupTimes.Remove(key);
-                    }
                 }
-
-                bool result = first switch
+                if (unique)
                 {
-                    _ when teams && RelationshipManager.ServerInstance.playerToTeam.TryGetValue(first, out var team) && team.members.Contains(second) => true,
-                    _ when clans && Instance.Clans != null && Instance.Clans?.Call(clanhook, first, second) is true => true,
-                    _ when friends && Instance.Friends != null && Instance.Friends?.Call("AreFriends", first, second) is true => true,
-                    _ => false
-                };
-
-                allyLookupTimes[t] = new(result, now + Stopwatch.Frequency * length);
-                return result;
+                    _prefabToSkin[entity.prefabID] = selectedSkin;
+                }
+                entity.skinID = selectedSkin;
+                entity.SendNetworkUpdate();
+                return true;
             }
 
-            public bool IsAlly(BasePlayer a, ulong b, bool clans = true, bool friends = true, bool teams = true, string arg = "IsMemberOrAlly")
-            {
-                if (clans && a.clanId != 0 && TryGetClan(a, out IClan clan))
-                {
-                    if (clan.Creator == b)
-                    {
-                        return true;
-                    }
-                    foreach (var member in clan.Members)
-                    {
-                        if (member.SteamId == b)
-                        {
-                            return true;
-                        }
-                    }
-                }
-                return IsAlly(a.userID, b, clans, friends, teams, arg);
-            }
+            private bool IsAlly(ulong first, ulong second, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly", long length = 1) =>
+                Instance.IsAlly(first, second, clans, friends, teams, clanhook, length);
 
-            public bool IsAlly(Raider raider, ulong targetId, bool clans = true, bool friends = true, bool teams = true, string arg = "IsMemberOrAlly")
+            public bool IsAlly(BasePlayer a, ulong b, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly") =>
+                Instance.IsAlly(a, b, clans, friends, teams, clanhook);
+
+            public bool IsAlly(Raider raider, ulong targetId, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly")
             {
                 if (ownerId == targetId && raider.IsAlly) return true;
                 if (clans && raider.IsInRustClanWith(targetId)) return true;
                 BasePlayer player = raider.player ?? RelationshipManager.FindByID(raider.userid);
-                if (player != null) return IsAlly(player, targetId, clans, friends, teams, arg);
-                return IsAlly(raider.userid, targetId, clans, friends, teams, arg);
+                if (player != null) return IsAlly(player, targetId, clans, friends, teams, clanhook);
+                return IsAlly(raider.userid, targetId, clans, friends, teams, clanhook);
             }
 
-            public bool IsAlly(BasePlayer a, BasePlayer b, bool clans = true, bool friends = true, bool teams = true, string arg = "IsMemberOrAlly")
+            public bool IsAlly(BasePlayer a, BasePlayer b, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly")
             {
                 if (clans && TryGetClan(a, out IClan clan) && clan.ClanId == b.clanId) return true;
-                return IsAlly(a, b.userID, clans, friends, teams, arg);
+                return IsAlly(a, b.userID, clans, friends, teams, clanhook);
             }
 
             public bool IsAlly(BasePlayer player)
@@ -11906,9 +12221,14 @@ namespace Oxide.Plugins
 
             public bool IsEcoTool(BasePlayer attacker, HitInfo info)
             {
+                if (info.WeaponPrefab is FireBall fire)
+                {
+                    return Options.Eco.CanSpread(fire);
+                }
+
                 if (info.WeaponPrefab is TimedExplosive)
                 {
-                    return false;
+                    return Options.Eco.Molotov && info.WeaponPrefab is MolotovCocktail;
                 }
 
                 HeldEntity heldEntity = attacker.GetHeldEntity();
@@ -11918,6 +12238,7 @@ namespace Oxide.Plugins
                     {
                         return Options.Eco.Bows;
                     }
+
                     return false;
                 }
 
@@ -12017,14 +12338,32 @@ namespace Oxide.Plugins
                 return backpack;
             }
 
-            private void RemoveParentFromEntitiesOnElevators()
+            private void RemoveFromElevators()
             {
                 using var tmp = FindEntitiesOfType<BaseEntity>(Location, ProtectionRadius);
                 foreach (var e in tmp)
                 {
-                    if ((e is PlayerCorpse || e is DroppedItemContainer) && e.HasParent())
+                    if (e is PlayerCorpse or DroppedItemContainer && e.HasParent())
                     {
                         e.SetParent(null, false, true);
+                        continue;
+                    }
+                    if (!e.Is(out ElevatorLift lift) || lift.IsDestroyed)
+                    {
+                        continue;
+                    }
+                    if (lift.OwnerID == 0 && lift.owner == null && !lift.HasParent())
+                    {
+                        lift.DelayedSafeKill();
+                        continue;
+                    }
+                    foreach (var ele in Elevators.Values)
+                    {
+                        if (ele.Entity.Is(out Elevator elevator) && (lift.owner == elevator || lift.GetParentEntity() == elevator))
+                        {
+                            lift.DelayedSafeKill();
+                            break;
+                        }
                     }
                 }
             }
@@ -12036,7 +12375,7 @@ namespace Oxide.Plugins
                     return true;
                 }
 
-                if (!bypass && (!ownerId.IsSteamId() || Any(backpack.userid) || backpack.player.IsNetworked() && IsAlly(backpack.player)))
+                if (!bypass && (!ownerId.IsSteamId() || Any(backpack.userid) || backpack.player.HasNetworkId() && IsAlly(backpack.player)))
                 {
                     return false;
                 }
@@ -12068,7 +12407,10 @@ namespace Oxide.Plugins
                 QueueNotification(player, "EjectedYourCorpse");
                 if (config.Settings.Management.DrawTime > 0)
                 {
-                    AdminCommand(player, () => DrawText(player, config.Settings.Management.DrawTime, Color.red, position, mx("YourCorpse", player.UserIDString)));
+                    using (AdminCommand(player))
+                    {
+                        DrawText(player, config.Settings.Management.DrawTime, Color.red, position, mx("YourCorpse", player.UserIDString));
+                    }
                 }
             }
 
@@ -12136,7 +12478,7 @@ namespace Oxide.Plugins
 
             public bool RemovePlayer(BasePlayer player, Vector3 a, float radius, RaidableType type, bool special = false, bool towardsZero = false, float distance = 10f)
             {
-                if (player.IsNull() || !player.IsHuman() || type == RaidableType.None && !player.IsSleeping())
+                if (player.IsKilled() || !player.IsHuman() || type == RaidableType.None && !player.IsSleeping())
                 {
                     return false;
                 }
@@ -12191,7 +12533,7 @@ namespace Oxide.Plugins
                 using var targets = GetMountedPlayers(m);
                 foreach (var target in targets)
                 {
-                    if (target.IsNull()) continue;
+                    if (target.IsKilled()) continue;
 
                     m.DismountPlayer(target, true);
 
@@ -12201,14 +12543,21 @@ namespace Oxide.Plugins
 
             public static PooledList<BasePlayer> GetMountedPlayers(HotAirBalloon m)
             {
-                var players = FindEntitiesOfType<BasePlayer>(m.CenterPoint(), 1.75f, Layers.Mask.Player_Server);
-                players.RemoveAll(player => !player.IsHuman() || player.GetParentEntity() != m);
+                PooledList<BasePlayer> players = DisposableList<BasePlayer>();
+                if (m.children == null) return players;
+                foreach (var child in m.children)
+                {
+                    if (child.Is(out BasePlayer player) && player.IsHuman())
+                    {
+                        players.Add(player);
+                    }
+                }
                 return players;
             }
 
             public static PooledList<BasePlayer> GetMountedPlayers(BaseMountable m)
             {
-                BaseVehicle vehicle = m.HasParent() ? m.VehicleParent() : m as BaseVehicle;
+                BaseVehicle vehicle = GetVehicle(m);
                 PooledList<BasePlayer> players = DisposableList<BasePlayer>();
 
                 if (vehicle == null)
@@ -12227,7 +12576,7 @@ namespace Oxide.Plugins
 
             public static bool AnyMounted(BaseMountable m)
             {
-                BaseVehicle vehicle = m.HasParent() ? m.VehicleParent() : m as BaseVehicle;
+                BaseVehicle vehicle = GetVehicle(m);
 
                 if (vehicle == null)
                 {
@@ -12251,7 +12600,7 @@ namespace Oxide.Plugins
 
             private bool CanEject(BasePlayer target)
             {
-                if (target.IsNull() || target.userID == ownerId)
+                if (target.IsKilled() || target.userID == ownerId)
                 {
                     return false;
                 }
@@ -12347,7 +12696,7 @@ namespace Oxide.Plugins
 
             private bool TryRemoveMountable(BaseEntity m, PooledList<BasePlayer> players)
             {
-                if (m.IsNull() || Type == RaidableType.None || m is TrainCar || m.GetParentEntity() is TrainCar || IsControlledMount(m) || Entities.Contains(m))
+                if (m.IsKilled() || Type == RaidableType.None || m is TrainCar || m.GetParentEntity() is TrainCar || IsControlledMount(m) || Entities.Contains(m))
                 {
                     return false;
                 }
@@ -12401,7 +12750,7 @@ namespace Oxide.Plugins
                 _ => ms.Other
             };
 
-            public static bool IsWearingJetpack(BasePlayer player) => !player.IsNull() && player.GetMounted() is BaseMountable m && IsJetpack(m);
+            public static bool IsWearingJetpack(BasePlayer player) => player.GetMounted() is BaseMountable m && IsJetpack(m);
 
             public static bool IsJetpack(BaseMountable m) => (m.ShortPrefabName == "testseat" || m.ShortPrefabName == "standingdriver") && m.GetParentEntity() is DroppedItem;
 
@@ -12421,37 +12770,37 @@ namespace Oxide.Plugins
                 return player != null && player.modelState != null && !player.modelState.onground && TerrainMeta.HeightMap.GetHeight(player.transform.position) < player.transform.position.y - 1f;
             }
 
-            public bool EjectMountable(BaseEntity m, PooledList<BasePlayer> players, Vector3 position, float radius, bool special)
+            public bool EjectMountable(BaseEntity entity, PooledList<BasePlayer> players, Vector3 position, float radius, bool special)
             {
-                m = GetParentEntity(m);
-                if (m is TrainCar { OwnerID: 0uL })
+                entity = entity.GetRootParentEntity();
+                if (entity is TrainCar { OwnerID: 0uL })
                 {
                     return false;
                 }
 
-                var j = TerrainMeta.HeightMap.GetHeight(m.transform.position) - m.transform.position.y;
-                var distance = m switch { HitchTrough.IHitchable => j > 5f ? j + 5f : 5f, _ => j > 5f ? j + 10f : 10f };
-                var target = GetEjectLocation(m.transform.position, distance, position, radius, false, false);
+                var j = TerrainMeta.HeightMap.GetHeight(entity.transform.position) - entity.transform.position.y;
+                var distance = entity switch { HitchTrough.IHitchable => j > 5f ? j + 5f : 5f, _ => j > 5f ? j + 10f : 10f };
+                var target = GetEjectLocation(entity.transform.position, distance, position, radius, false, false);
 
-                if (m is BaseHelicopter || players.Exists(IsFlying))
+                if (entity is BaseHelicopter || players.Exists(IsFlying))
                 {
-                    target.y = Mathf.Max(m.transform.position.y, SpawnsController.GetSpawnHeight(target)) + 5f;
+                    target.y = Mathf.Max(entity.transform.position.y, SpawnsController.GetSpawnHeight(target)) + 5f;
                 }
-                else if (m is Drone)
+                else if (entity is Drone)
                 {
                     target.y = Mathf.Max(target.y + 15f, position.y + radius);
                 }
-                else target.y = SpawnsController.GetSpawnHeight(target) + m switch { ModularCarSeat or ModularCar => 1f, _ => 0.5f };
+                else target.y = SpawnsController.GetSpawnHeight(target) + entity switch { ModularCarSeat or ModularCar => 1f, _ => 0.5f };
 
                 if (special)
                 {
                     target.y += 15f;
                 }
 
-                BaseVehicle vehicle = m is BaseMountable b && b.HasParent() ? b.VehicleParent() : m as BaseVehicle;
-                if (vehicle.IsNull() || m is HitchTrough.IHitchable || m is not (BaseSiegeWeapon or BaseHelicopter or global::Parachute) && InRange(m.transform.position, position, radius + 1f))
+                BaseVehicle vehicle = entity is BaseMountable m ? GetVehicle(m) : null;
+                if (vehicle.IsKilled() || entity is HitchTrough.IHitchable || entity is not (BaseSiegeWeapon or BaseHelicopter or global::Parachute) && InRange(entity.transform.position, position, radius + 1f))
                 {
-                    m.transform.position = target;
+                    entity.transform.position = target;
                 }
                 else
                 {
@@ -12566,7 +12915,7 @@ namespace Oxide.Plugins
 
             private bool SetPositionAndRotation(BaseEntity m, Rigidbody rb)
             {
-                m = GetParentEntity(m);
+                m = m.GetRootParentEntity();
                 if (m is ZiplineMountable or TrainCar { OwnerID: 0uL }) return false;
 
                 float j = TerrainMeta.HeightMap.GetHeight(m.transform.position) - m.transform.position.y;
@@ -12644,7 +12993,7 @@ namespace Oxide.Plugins
                     radius += habdist;
                 }
 
-                m = GetParentEntity(m);
+                m = m.GetRootParentEntity();
                 var target = GetEjectLocation(m.transform.position, 10f, position, radius, false, false);
                 var spawnHeight = SpawnsController.GetSpawnHeight(target);
 
@@ -12679,18 +13028,6 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            internal static BaseEntity GetParentEntity(BaseEntity m)
-            {
-                int n = 0;
-                while (m != null && m.HasParent() && ++n < 30)
-                {
-                    if (!(m.GetParentEntity() is BaseEntity parent)) break;
-                    m = parent;
-                }
-
-                return m;
-            }
-
             public bool CanSetupEntity(BaseEntity e)
             {
                 if (e.IsKilled() || setupBlockedPrefabs.Exists(e.ShortPrefabName.Contains))
@@ -12703,11 +13040,8 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            public int npcMaxAmountMurderers;
-            public int npcMaxAmountScientists;
-            public int npcMaxAmountInside = -1;
-            public int npcAmountInside;
-            public int npcAmountThrown;
+            public int npcMaxAmountMurderers, npcMaxAmountScientists, npcMaxAmountInside = -1, npcAmountInside, npcAmountThrown;
+            public int npcMaxAmount => npcMaxAmountMurderers + npcMaxAmountScientists;
             public bool ExtendHookSubscription;
             private readonly List<RespawnEntry> _respawns = new(32);
 
@@ -12777,7 +13111,7 @@ namespace Oxide.Plugins
 
                 foreach (var x in npcs)
                 {
-                    if (x != null && x.Brain != null && x.Brain.isMurderer == isMurderer)
+                    if (x != null && x.GetBrain(out var brain) && brain.isMurderer == isMurderer)
                     {
                         current += 1;
                     }
@@ -12998,12 +13332,9 @@ namespace Oxide.Plugins
 
                 SceneManager.MoveGameObjectToScene(go, Rust.Server.EntityScene);
 
-                if (spawnedInside)
-                {
-                    navigator.Agent.updatePosition = false;
-                    navigator.Agent.enabled = false;
-                    go.transform.position = position;
-                }
+                navigator.Agent.updatePosition = false;
+                navigator.Agent.enabled = false;
+                go.transform.position = position;
 
                 go.SetActive(true);
 
@@ -13124,6 +13455,8 @@ namespace Oxide.Plugins
                 BasePlayer.bots.Remove(npc);
 
                 SetupNpc(npc, brain, positions);
+                UpdateNpcDormancy();
+                brain.SetDormant(npcsDormant);
 
                 return npc;
             }
@@ -13227,7 +13560,7 @@ namespace Oxide.Plugins
                     hasThrownWeapon = true;
                 }
 
-                ulong skin = GetItemSkin(def, SkinType.Npc, 0uL, config.Skins.Npc.Unique, config.Skins.Npc.Unique, config.Skins.Npc.Random, config.Skins.Npc.Workshop, config.Skins.Npc.ImportedWorkshop, config.Skins.Npc.ApprovedOnly, def.stackable);
+                ulong skin = GetItemSkin(def, SkinType.Npc, 0uL, config.Skins.Npc.Unique, config.Skins.Npc.Unique, config.Skins.Npc.ImportedWorkshop, def.stackable);
 
                 source.Add(new()
                 {
@@ -13404,7 +13737,7 @@ namespace Oxide.Plugins
                 catch
                 {
                     npc.SafelyKill();
-                    if (++failedUpdates < npcMaxAmountMurderers + npcMaxAmountScientists)
+                    if (++failedUpdates < npcMaxAmount)
                     {
                         Invoke(() => RespawnNpcNow(isMurderer), 1f);
                     }
@@ -13438,7 +13771,7 @@ namespace Oxide.Plugins
                     if (item == null || item.info == null) continue;
                     if (isKitted && config.Skins.Npc.CanSkinKit(item.skin, brain.isMurderer))
                     {
-                        item.skin = GetItemSkin(item.info, SkinType.Npc, 0uL, config.Skins.Npc.Unique, config.Skins.Npc.Unique, config.Skins.Npc.Random, config.Skins.Npc.Workshop, config.Skins.Npc.ImportedWorkshop, config.Skins.Npc.ApprovedOnly, item.info.stackable);
+                        item.skin = GetItemSkin(item.info, SkinType.Npc, 0uL, config.Skins.Npc.Unique, config.Skins.Npc.Unique, config.Skins.Npc.ImportedWorkshop, item.info.stackable);
                     }
 
                     if (item.GetHeldEntity() is HeldEntity e && e.IsValid())
@@ -13463,7 +13796,13 @@ namespace Oxide.Plugins
                             continue;
                         }
 
-                        if (!isHoldingProjectileWeapon && attackEntity.hostileScore >= 2f && item.GetRootContainer() == npc.inventory.containerBelt && brain._attackEntity.IsNull())
+                        if (attackEntity is LockOnLauncher && !CanEquipHML(npc, Options.NPC.HML))
+                        {
+                            item.Remove();
+                            continue;
+                        }
+
+                        if (!isHoldingProjectileWeapon && attackEntity.hostileScore >= 2f && item.GetRootContainer() == npc.inventory.containerBelt && brain._attackEntity.IsKilled())
                         {
                             isHoldingProjectileWeapon = brain.UpdateWeapon(attackEntity, item.uid) && e is BaseProjectile;
                         }
@@ -13487,6 +13826,28 @@ namespace Oxide.Plugins
                 brain.IdentifyWeapon();
             }
 
+            private bool CanEquipHML(HumanoidNPC npc, int remaining)
+            {
+                if (remaining <= 0)
+                {
+                    return false;
+                }
+                foreach (HumanoidNPC other in npcs)
+                {
+                    if (other == npc || other.IsDead())
+                    {
+                        continue;
+                    }
+                    foreach (AttackEntity weapon in other.Brain.AttackWeapons)
+                    {
+                        if (weapon is not LockOnLauncher || weapon.IsKilled()) continue;
+                        if (--remaining == 0) return false;
+                        break;
+                    }
+                }
+                return true;
+            }
+
             private void SortRandomNpcSpots()
             {
                 List<string> platforms = new() { "floor", "floor.triangle", "roof", "roof.triangle" };
@@ -13505,7 +13866,11 @@ namespace Oxide.Plugins
                     using var tmp = FindEntitiesOfType<BaseEntity>(block.transform.position + Vector3.up * 1.25f, 1.5f, blockLayers);
                     if (!tmp.Exists(e => Instance.DeployableItems.ContainsKey(e.PrefabName) && e.bounds.extents.y > 0.2f))
                     {
-                        var walls = tmp.Count(e => e.ShortPrefabName == "wall");
+                        int walls = 0;
+                        for (int k = 0; k < tmp.Count; k++)
+                        {
+                            if (tmp[k].ShortPrefabName == "wall") walls++;
+                        }
                         if (walls < 3 && block.ShortPrefabName == "foundation.triangle" || walls < 4 && block.ShortPrefabName == "foundation")
                         {
                             _inside.Add(center + new Vector3(0f, block.bounds.extents.y + 0.1125f));
@@ -13649,7 +14014,7 @@ namespace Oxide.Plugins
 
             private void SetupNpcKits()
             {
-                if (npcMaxAmountScientists > 0 || npcMaxAmountMurderers > 0)
+                if (npcMaxAmount > 0)
                 {
                     scientistKits.AddRange(Options.NPC.ScientistKits.Where(kit => Convert.ToBoolean(Instance.Kits?.Call("isKit", kit))));
                     murdererKits.AddRange(Options.NPC.MurdererKits.Where(kit => Convert.ToBoolean(Instance.Kits?.Call("isKit", kit))));
@@ -13714,9 +14079,7 @@ namespace Oxide.Plugins
 
                 if (config.Settings.Markers.UseVendingMarker)
                 {
-                    vendingMarker = GameManager.server.CreateEntity(StringPool.Get(3459945130), Location) as VendingMachineMapMarker;
-
-                    if (!vendingMarker.IsNull())
+                    if (GameManager.server.CreateEntity("assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab", Location).Is(out vendingMarker))
                     {
                         string flag = mx(GetAllowKey());
                         string despawnText = DespawnMinutesInactive > 0 ? string.Format(" [{0}m]", DespawnMinutesInactive.ToString()) : null;
@@ -13739,9 +14102,7 @@ namespace Oxide.Plugins
                 }
                 else if (config.Settings.Markers.UseExplosionMarker)
                 {
-                    explosionMarker = GameManager.server.CreateEntity(StringPool.Get(4060989661), Location) as MapMarkerExplosion;
-
-                    if (!explosionMarker.IsNull())
+                    if (GameManager.server.CreateEntity("assets/prefabs/tools/map/explosionmarker.prefab", Location).Is(out explosionMarker))
                     {
                         explosionMarker.Spawn();
                         explosionMarker.Invoke(() => explosionMarker.CancelInvoke(explosionMarker.DelayedDestroy), 1f);
@@ -13754,7 +14115,7 @@ namespace Oxide.Plugins
 
             private VendingMachine SpawnVendingMachine(List<AdditionalBaseCosts> costs)
             {
-                VendingMachine vm = GameManager.server.CreateEntity("assets/prefabs/deployable/vendingmachine/vendingmachine.deployed.prefab", Location.WithY(-400f)) as VendingMachine;
+                if (!GameManager.server.CreateEntity("assets/prefabs/deployable/vendingmachine/vendingmachine.deployed.prefab", Location.WithY(-400f)).Is(out VendingMachine vm)) return null;
                 vm.dropsLoot = false;
                 vm.enableSaving = false;
                 vm.limitNetworking = true;
@@ -13778,10 +14139,9 @@ namespace Oxide.Plugins
                     float radius = Mathf.Min(2.5f, World.Size <= 3600 ? config.Settings.Markers.SubRadius : config.Settings.Markers.Radius);
                     if (radius > 0f)
                     {
-                        genericMarker = GameManager.server.CreateEntity(StringPool.Get(2849728229), Location) as MapMarkerGenericRadius;
-                        if (!genericMarker.IsNull())
+                        if (GameManager.server.CreateEntity("assets/prefabs/tools/map/genericradiusmarker.prefab", Location).Is(out genericMarker))
                         {
-                            genericMarker.alpha = 0.75f;
+                            genericMarker.alpha = Mathf.Clamp01(config.Settings.Markers.Opacity);
                             genericMarker.color1 = GetMarkerColor1();
                             genericMarker.color2 = GetMarkerColor2();
                             genericMarker.radius = radius;
@@ -14028,6 +14388,18 @@ namespace Oxide.Plugins
                 return (colName.Contains("rock_") || colName.Contains("formation_", CompareOptions.OrdinalIgnoreCase)) && hit.collider.bounds.size.y <= 2f;
             }
 
+            private bool ShouldIgnoreCollider(string colName, string exclude = "51800")
+            {
+                for (int i = 0; i < AdditionalBlockedColliders.Count; i++)
+                {
+                    if (colName.Contains(AdditionalBlockedColliders[i]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
 
             private RaycastHit[] hitBuffer = new RaycastHit[32768];
             public float GetSpawnHeight(Vector3 v, bool max = true, bool skip = false, int mask = targetMask, BasePlayer player = null)
@@ -14052,7 +14424,7 @@ namespace Oxide.Plugins
                         if (player != null) DrawText(player, 15f, Color.red, hit.point, "R");
                         continue;
                     }
-                    if (AdditionalBlockedColliders.Exists(colName.Contains))
+                    if (ShouldIgnoreCollider(colName))
                     {
                         if (player != null) DrawText(player, 15f, Color.red, hit.point, "C:" + colName);
                         continue;
@@ -14088,6 +14460,10 @@ namespace Oxide.Plugins
                 if (TerrainMeta.Path?.OceanPatrolClose?.Count > 0 && TerrainMeta.Path.OceanPatrolClose.Exists(b => InRange2D(v, b, 100f))) return true;
                 if (TerrainMeta.Path?.OceanPatrolFar?.Count > 0 && TerrainMeta.Path.OceanPatrolFar.Exists(b => InRange2D(v, b, 100f))) return true;
                 string grid = MapHelper.PositionToString(v);
+                if (config.Settings.Management.AllowedGrids.Count > 0)
+                {
+                    return IsZoneBlocked(v) || !config.Settings.Management.AllowedGrids.Exists(allowedGrid => grid.Equals(allowedGrid, StringComparison.OrdinalIgnoreCase));
+                }
                 return config.Settings.Management.BlockedGrids.Exists(blockedGrid => grid.Equals(blockedGrid, StringComparison.OrdinalIgnoreCase)) || IsZoneBlocked(v);
             }
 
@@ -14316,7 +14692,23 @@ namespace Oxide.Plugins
                 return safeZones.Exists(zone => (zone.position - a).sqrMagnitude <= zone.sqrDistance);
             }
 
-            public bool IsAssetBlocked(BaseEntity entity, string colName, string entityName) => assets.Exists(colName.Contains) && (entity.IsNull() || entityName.Contains("/treessource/"));
+            public bool IsAssetBlocked(BaseEntity entity, string colName, string entityName)
+            {
+                if (entity != null && !entityName.Contains("/treessource/"))
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < assets.Count; i++)
+                {
+                    if (colName.Contains(assets[i]))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
 
             public bool IsAreaSafe(Vector3 area, float ignoreRadius, float protectionRadius, float cupboardRadius, float worldRadius, int layers, bool isCustomSpawn, out CacheType cacheType, RaidableType type = RaidableType.None, BuildingOptionsDifficultySpawns spawns = null)
             {
@@ -14410,7 +14802,7 @@ namespace Oxide.Plugins
                         goto next;
                     }
 
-                    if (e.IsNetworked())
+                    if (e.HasNetworkId())
                     {
                         if (e is Tugboat)
                         {
@@ -14711,7 +15103,87 @@ namespace Oxide.Plugins
 
         #region Hooks
 
-        private void UnsubscribeHooks()
+        [Flags] public enum SubscriptionFlags { None = 0, OnEntityTakeDamage = 1 << 0, CanEntityTakeDamage = 1 << 1, OnSamSiteTargetScan = 1 << 2, OnEntityEnter = 1 << 3, OnTurretTarget = 1 << 4, OnTrapTrigger = 1 << 5, CanEntityBeTargeted = 1 << 6, CanEntityTrapTrigger = 1 << 7, OnMlrsFire = 1 << 8, CanMlrsTargetLocation = 1 << 9 }
+        [Flags] public enum HookFlags { None = 0, Damage = 1 << 0, SamSite = 1 << 1, TurretTarget = 1 << 2, Hopper = 1 << 3, TrapTrigger = 1 << 4, MlrsFire = 1 << 5, FlameTurret = 1 << 6, TeslaCoil = 1 << 7, GunTrap = 1 << 8, TargetTrigger = TurretTarget | FlameTurret | TeslaCoil | GunTrap }
+
+        public HookFlags pluginHooks;
+        public HookFlags standardHooks;
+        public SubscriptionFlags hookSubscriptions;
+
+        public HookFlags GetFlag(BaseEntity attacker) => attacker switch { AutoTurret => HookFlags.TurretTarget, FlameTurret => HookFlags.FlameTurret, TeslaCoil => HookFlags.TeslaCoil, SamSite => HookFlags.SamSite, GunTrap => HookFlags.GunTrap, Hopper => HookFlags.Hopper, _ => HookFlags.None };
+
+        public bool IsSubscribed(SubscriptionFlags flags) => (hookSubscriptions & flags) != 0;
+
+        public bool HasAnyFlag(HookFlags flags, HookFlags flag) => (flags & flag) != 0;
+
+        public bool IsPVE(Plugin plugin) => plugin != null && plugin.Name is "TruePVE" or "SimplePVE" or "NextGenPVE" or "Imperium" or "AegisPVE" or "RealPVE";
+
+        private void OnPluginLoaded(Plugin plugin) => RefreshHooks(plugin);
+
+        private void OnPluginUnloaded(Plugin plugin) => RefreshHooks(plugin);
+
+        private void OnTruePVEDisabled() => RefreshHooks(TruePVE);
+
+        public void RefreshHooks(Plugin plugin)
+        {
+            if (IsUnloading || InstallationError || !IsPVE(plugin))
+                return;
+
+            pluginHooks = HookFlags.None;
+            UpdateHooks(true);
+        }
+
+        public void TryUpdateHooks(HookFlags flags)
+        {
+            if (IsUnloading || InstallationError || (flags & ~pluginHooks) == HookFlags.None)
+                return;
+
+            pluginHooks |= flags;
+            UpdateHooks();
+        }
+
+        public void UpdateHooks(bool force = false)
+        {
+            if (IsUnloading || InstallationError)
+                return;
+
+            bool active = Raids.Count > 0;
+            bool damage = active || config.Settings.Management.PVPDelayPersists && PvpDelay.Count > 0;
+            HookFlags required = active ? HookFlags.SamSite | HookFlags.TargetTrigger | HookFlags.Hopper | HookFlags.TrapTrigger : HookFlags.None;
+
+            foreach (var raid in Raids)
+            {
+                if (!raid.Options.MLRS)
+                {
+                    required |= HookFlags.MlrsFire;
+                    break;
+                }
+            }
+
+            if (damage) required |= HookFlags.Damage;
+            standardHooks = required & ~pluginHooks;
+
+            UpdateHook(SubscriptionFlags.OnEntityTakeDamage, nameof(OnEntityTakeDamage), HasAnyFlag(standardHooks, HookFlags.Damage), force);
+            UpdateHook(SubscriptionFlags.CanEntityTakeDamage, nameof(CanEntityTakeDamage), damage, force);
+            UpdateHook(SubscriptionFlags.OnSamSiteTargetScan, nameof(OnSamSiteTargetScan), active, force);
+            UpdateHook(SubscriptionFlags.OnTurretTarget, nameof(OnTurretTarget), HasAnyFlag(standardHooks, HookFlags.TurretTarget), force);
+            UpdateHook(SubscriptionFlags.OnTrapTrigger, nameof(OnTrapTrigger), HasAnyFlag(standardHooks, HookFlags.TrapTrigger), force);
+            UpdateHook(SubscriptionFlags.OnEntityEnter, nameof(OnEntityEnter), active, force);
+            UpdateHook(SubscriptionFlags.CanEntityBeTargeted, nameof(CanEntityBeTargeted), active, force);
+            UpdateHook(SubscriptionFlags.CanEntityTrapTrigger, nameof(CanEntityTrapTrigger), active, force);
+            UpdateHook(SubscriptionFlags.OnMlrsFire, nameof(OnMlrsFire), HasAnyFlag(standardHooks, HookFlags.MlrsFire), force);
+            UpdateHook(SubscriptionFlags.CanMlrsTargetLocation, nameof(CanMlrsTargetLocation), active, force);
+        }
+
+        public void UpdateHook(SubscriptionFlags flag, string hook, bool enabled, bool force)
+        {
+            if (!force && IsSubscribed(flag) == enabled) return;
+            if (force || !enabled) Unsubscribe(hook);
+            if (enabled) { Subscribe(hook); hookSubscriptions |= flag; }
+            else hookSubscriptions &= ~flag;
+        }
+
+        private void UnsubscribeHooks(bool force = false)
         {
             if (IsUnloading)
             {
@@ -14730,8 +15202,6 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(CanTeleport));
             Unsubscribe(nameof(canTeleport));
             Unsubscribe(nameof(canRemove));
-            Unsubscribe(nameof(CanEntityBeTargeted));
-            Unsubscribe(nameof(CanEntityTrapTrigger));
             Unsubscribe(nameof(CanOpenBackpack));
             Unsubscribe(nameof(CanBePenalized));
             Unsubscribe(nameof(OnBaseRepair));
@@ -14742,16 +15212,13 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnLoseCondition));
             Unsubscribe(nameof(OnNearbyTurretsScan));
             Unsubscribe(nameof(OnInterferenceUpdate));
-            Unsubscribe(nameof(OnMlrsFire));
             Unsubscribe(nameof(OnTeamAcceptInvite));
             Unsubscribe(nameof(OnElevatorMove));
             Unsubscribe(nameof(OnElevatorCall));
             Unsubscribe(nameof(OnButtonPress));
             Unsubscribe(nameof(OnElevatorButtonPress));
-            Unsubscribe(nameof(OnSamSiteTargetScan));
             Unsubscribe(nameof(OnPlayerCommand));
             Unsubscribe(nameof(OnServerCommand));
-            Unsubscribe(nameof(OnTrapTrigger));
             Unsubscribe(nameof(OnEntityBuilt));
             Unsubscribe(nameof(OnStructureUpgrade));
             Unsubscribe(nameof(OnEntityGroundMissing));
@@ -14765,7 +15232,6 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnPlayerDeath));
             Unsubscribe(nameof(OnBackpackDrop));
             Unsubscribe(nameof(OnPlayerDropActiveItem));
-            Unsubscribe(nameof(OnEntityEnter));
             Unsubscribe(nameof(OnNpcDuck));
             Unsubscribe(nameof(OnNpcDestinationSet));
             Unsubscribe(nameof(OnCupboardAuthorize));
@@ -14774,7 +15240,7 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnFireBallDamage));
             Unsubscribe(nameof(OnCupboardProtectionCalculated));
 
-            UnsubscribeDamageHook();
+            UpdateHooks(force);
         }
 
         private void OnMapMarkerAdded(BasePlayer player, ProtoBuf.MapNote note)
@@ -14826,8 +15292,10 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnPlayerSleepEnded));
             Unsubscribe(nameof(CanBuild));
             Unsubscribe(nameof(CanLootEntity));
+            Unsubscribe(nameof(OnLootEntity));
+            Unsubscribe(nameof(CanMannequinSwap));
             Unsubscribe(nameof(OnEntitySpawned));
-            UnsubscribeHooks();
+            UnsubscribeHooks(true);
             SpawnsController.Initialize();
             Queues = new(this);
         }
@@ -14878,7 +15346,6 @@ namespace Oxide.Plugins
             }
             RaidableBasesExtensions.Methods._permission ??= permission;
             SpawnsController.instruction0 = CoroutineEx.waitForSeconds(0.0025f);
-            if (!string.IsNullOrWhiteSpace(config.Settings.EditCommand)) AddCovalenceCommand(config.Settings.EditCommand, nameof(CommandEdit));
             if (!string.IsNullOrWhiteSpace(config.Settings.BuyCommand)) AddCovalenceCommand(config.Settings.BuyCommand, nameof(CommandBuyRaid));
             if (!string.IsNullOrWhiteSpace(config.Settings.EventCommand)) AddCovalenceCommand(config.Settings.EventCommand, nameof(CommandRaidBase));
             if (!string.IsNullOrWhiteSpace(config.Settings.HunterCommand)) AddCovalenceCommand(config.Settings.HunterCommand, nameof(CommandRaidHunter));
@@ -14899,7 +15366,7 @@ namespace Oxide.Plugins
             timer.Repeat(30f, 0, UpdateAllMarkers);
             timer.Repeat(30f, 0, CheckOceanLevel);
             setupCopyPasteObstructionRadius = ServerMgr.Instance.StartCoroutine(SetupCopyPasteObstructionRadius());
-            SubscribeDamageHook();
+            UpdateHooks(true);
             BuildPrefabIds();
             LoadOwnership();
             RebuildNavigation(initial);
@@ -15258,10 +15725,14 @@ namespace Oxide.Plugins
             }
         }
 
-        private object OnElevatorButtonPress(ElevatorLift e, BasePlayer player, Elevator.Direction Direction, bool FullTravel)
+        private object OnElevatorButtonPress(ElevatorLift lift, BasePlayer player, Elevator.Direction Direction, bool FullTravel)
         {
-            var parent = e.IsValid() && e.HasParent() ? e.GetParentEntity() : e.owner;
-            if (!parent.IsNetworked() || !Get(parent.transform.position, out var raid) || !raid.Elevators.TryGetValue(parent.net.ID, out var elevator))
+            if (lift == null || lift.IsDestroyed)
+            {
+                return null;
+            }
+            var parent = lift.HasParent() ? lift.GetParentEntity() : lift.owner;
+            if (!parent.HasNetworkId() || !Get(parent, out var raid) || !raid.Elevators.TryGetValue(parent.net.ID, out var elevator))
             {
                 return null;
             }
@@ -15287,11 +15758,11 @@ namespace Oxide.Plugins
             {
                 return;
             }
-            var buttonPos = button.transform.position;
-            if (!Get(buttonPos, out var raid) || raid.Elevators.Count == 0 || !raid.buttons.Contains(button))
+            if (!Get(button, out var raid) || raid.Elevators.Count == 0 || !raid.buttons.Contains(button))
             {
                 return;
             }
+            Vector3 buttonPos = button.transform.position;
             foreach (var ele in raid.Elevators.Values)
             {
                 if (ele.IsVanilla())
@@ -15317,7 +15788,7 @@ namespace Oxide.Plugins
 
         private object OnElevatorMove(Elevator elevator, int targetFloor)
         {
-            if (elevator.IsNetworked() && Get(elevator.transform.position, out var raid) && raid.Elevators.TryGetValue(elevator.net.ID, out var ele) && ele.IsBMG()) return true;
+            if (Get(elevator, out var raid) && raid.Elevators.TryGetValue(elevator.net.ID, out var ele) && ele.IsBMG()) return true;
             return null;
         }
 
@@ -15509,7 +15980,7 @@ namespace Oxide.Plugins
                     raid.TrySetOwner(attacker, player, info, false);
                 }
 
-                if (!raid.IsEngaged && raid.EngageOnNpcDeath && attacker != null && attacker.IsHuman() && !attacker.limitNetworking && !attacker.IsFlying)
+                if (!raid.IsEngaged && raid.EngageOnNpcDeath && attacker != null && attacker.IsHuman() && !IsVanished(attacker) && !attacker.IsFlying)
                 {
                     raid.IsEngaged = true;
                 }
@@ -15729,7 +16200,7 @@ namespace Oxide.Plugins
                 BaseEntity drop = DropLoot(io, fridge.inventory, raid.Options.BuoyantBox);
                 if (raid.Options.DespawnGreyBoxBags) raid.SetupEntity(drop);
             }
-            else if (io is AutoTurret turret && raid.TryRemoveOrConfirmTurret(turret))
+            else if (io is AutoTurret turret && raid.TryRemoveTurretReferences(turret))
             {
                 BaseEntity drop = DropLoot(io, turret.inventory, raid.Options.BuoyantBox);
                 if (config.Settings.Management.DropLoot.DespawnGreyWeaponBags) raid.SetupEntity(drop);
@@ -15831,7 +16302,43 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            if (player.IsNetworked())
+            bool? result = HandleCanPickupEntity(player, entity, raid);
+
+            if (result is false)
+            {
+                return false;
+            }
+
+            if (entity.OwnerID == 0uL)
+            {
+                if (CanBypass(player))
+                {
+                    if (entity.skinID == RB_SKIN_ID) entity.skinID = 0;
+                    return result;
+                }
+
+                if (DeployableItems.TryGetValue(entity.PrefabName, out var def))
+                {
+                    if (entity.skinID == RB_SKIN_ID) entity.skinID = 0;
+                    if (RequiresOwnership(def, 0)) return false;
+                    if (RequiresOwnership(def, entity.skinID))
+                    {
+                        entity.skinID = 0;
+                        entity.SendNetworkUpdateImmediate();
+                    }
+                }
+                if (entity is IItemContainerEntity ice)
+                {
+                    RemoveRestrictedItems(ice.inventory);
+                }
+            }
+
+            return result;
+        }
+
+        private bool? HandleCanPickupEntity(BasePlayer player, BaseEntity entity, RaidableBase raid)
+        {
+            if (player.HasNetworkId())
             {
                 if (entity is BaseLadder || player.userID == entity.OwnerID)
                 {
@@ -15853,23 +16360,9 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            if (entity.OwnerID == 0uL)
+            if (entity.OwnerID == 0uL && TryRemoveItems(entity))
             {
-                if (TryRemoveItems(entity))
-                {
-                    ItemManager.DoRemoves();
-                }
-                if (config.BlockPaidContent && DeployableItems.TryGetValue(entity.PrefabName, out var def))
-                {
-                    if (entity.skinID == RB_SKIN_ID) entity.skinID = 0;
-                    if (RequiresOwnership(def, 0) && !HasUnlocked(player, def)) return false;
-                    if (RequiresOwnership(def, entity.skinID) && !HasUnlocked(player, entity.skinID))
-                    {
-                        entity.skinID = 0;
-                        entity.SendNetworkUpdateImmediate();
-                    }
-                    return null;
-                }
+                ItemManager.DoRemoves();
             }
 
             if (entity.skinID == RB_SKIN_ID)
@@ -15890,19 +16383,28 @@ namespace Oxide.Plugins
 
         private void OnFireBallDamage(FireBall fire, BaseCombatEntity target, HitInfo info)
         {
-            if (info != null && (info.Initiator == null || info.Initiator is FireBall) && !fire.IsKilled() && EventTerritory(fire.transform.position))
+            if (info == null || fire.IsKilled() || !EventTerritory(fire.transform.position))
+            {
+                return;
+            }
+
+            if (info.Initiator == null || info.Initiator is FireBall)
             {
                 info.Initiator = fire.creatorEntity;
             }
+
+            info.WeaponPrefab ??= fire.LookupPrefab();
         }
 
         private object CanMlrsTargetLocation(MLRS mlrs, BasePlayer player)
         {
+            TryUpdateHooks(HookFlags.MlrsFire);
             return Get(mlrs.TrueHitPos, out var raid, 25f) ? raid.Options.MLRS : null;
         }
 
         private object OnMlrsFire(MLRS mlrs, BasePlayer player)
         {
+            if (!HasAnyFlag(standardHooks, HookFlags.MlrsFire)) return null;
             if (!Get(mlrs.TrueHitPos, out var raid, 25f) || raid.Options.MLRS) return null;
             Message(player, "MLRS Target Denied");
             return true;
@@ -16263,7 +16765,7 @@ namespace Oxide.Plugins
 
         private void OnLootEntityEnd(BasePlayer player, StorageContainer container)
         {
-            if (player == null || player.limitNetworking || container == null || container.inventory == null || container.OwnerID.IsSteamId() || !Get(container, out var raid))
+            if (player == null || IsVanished(player) || container == null || container.inventory == null || container.OwnerID.IsSteamId() || !Get(container, out var raid))
             {
                 return;
             }
@@ -16273,7 +16775,7 @@ namespace Oxide.Plugins
                 raid.IsAnyLooted = true;
             }
 
-            bool kill = config.BlockPaidContent && config.DestroyLootedContainer && container.inventory.IsEmpty() && PaidDeployableItems.TryGetValue(container.PrefabName, out var def) && RequiresOwnership(def, container.skinID);
+            bool kill = config.DestroyLootedContainer && container.inventory.IsEmpty() && PaidDeployableItems.TryGetValue(container.PrefabName, out var def) && RequiresOwnership(def, container.skinID);
             if (kill)
             {
                 container.Invoke(container.SafelyKill, 0.1f);
@@ -16296,26 +16798,49 @@ namespace Oxide.Plugins
 
         private void OnLootEntityEnd(BasePlayer player, ContainerIOEntity container)
         {
-            if (config.BlockPaidContent && config.DestroyLootedContainer && !IsContainerKilled(container) && container.inventory.IsEmpty() && PaidDeployableItems.TryGetValue(container.PrefabName, out var def) && Has(container) && RequiresOwnership(def, container.skinID))
+            if (config.DestroyLootedContainer && !IsContainerKilled(container) && container.inventory.IsEmpty() && PaidDeployableItems.TryGetValue(container.PrefabName, out var def) && Has(container) && RequiresOwnership(def, container.skinID))
             {
                 container.Invoke(container.SafelyKill, 0.1f);
             }
         }
 
-        private object CanLootDroppedItemContainer(BasePlayer player, BaseEntity entity) => entity switch
+        private object OnLootDroppedItemContainer(BasePlayer player, BaseEntity entity)
         {
-            _ when entity.skinID != RB_SKIN_ID || !entity.OwnerID.IsSteamId() || entity.OwnerID == player.userID => null,
-            _ when RelationshipManager.ServerInstance.playerToTeam.TryGetValue(entity.OwnerID, out var team) && team.members.Contains(player.userID) => null,
-            _ when Convert.ToBoolean(Clans?.Call("IsClanMember", entity.OwnerID.ToString(), player.UserIDString)) => null,
-            _ when Convert.ToBoolean(Friends?.Call("AreFriends", entity.OwnerID.ToString(), player.UserIDString)) => null,
-            _ => ((Func<object>)(() => { Message(player, "You do not own this loot!"); return true; }))(),
-        };
+            if (entity.skinID != RB_SKIN_ID || !entity.OwnerID.IsSteamId() || entity.OwnerID == player.userID || IsVanished(player)) return null;
+            if (IsAlly(player, entity.OwnerID, true, true, true, "IsClanMember")) return null;
+            Message(player, "You do not own this loot!");
+            return true;
+        }
 
         private object CanLootEntity(BasePlayer player, BaseEntity entity)
         {
             if (entity.IsKilled()) return null;
-            if (CanLootDroppedItemContainer(player, entity) != null) return true;
+            if (OnLootDroppedItemContainer(player, entity) != null) return true;
             return Get(entity.transform.position, out var raid) ? raid.CanLootEntityInternal(player, entity) : null;
+        }
+
+        private void OnLootEntity(BasePlayer player, BaseEntity entity)
+        {
+            if (entity is IItemContainerEntity ice && entity.OwnerID == 0uL && Get(entity, out var raid) && !CanBypass(player))
+            {
+                RemoveRestrictedItems(ice.inventory);
+            }
+        }
+
+        private object CanMannequinSwap(Mannequin mannequin, BasePlayer player)
+        {
+            if (mannequin == null || mannequin.OwnerID != 0uL || !Get(mannequin, out var raid))
+            {
+                return null;
+            }
+
+            object result = CanLootEntity(player, mannequin);
+            if (result == null && !CanBypass(player))
+            {
+                RemoveRestrictedItems(mannequin.inventory);
+            }
+
+            return result;
         }
 
         private object CanBePenalized(BasePlayer player)
@@ -16369,7 +16894,7 @@ namespace Oxide.Plugins
 
         private bool IsSentryTargetingNpc(BasePlayer player, BaseEntity entity) => entity is NPCAutoTurret && !Has(player) && !player.userID.IsSteamId();
 
-        private bool IgnorePlayer(BasePlayer player, BaseEntity entity) => player.limitNetworking || IsSentryTargetingNpc(player, entity) || IsArmoredTrain(entity);
+        private bool IgnorePlayer(BasePlayer player, BaseEntity entity) => IsVanished(player) || IsSentryTargetingNpc(player, entity) || IsArmoredTrain(entity);
 
         private bool IsPositionInSpace(Vector3 a, Vector3 b, float r) => Space != null && a.y - b.y > r + M_RADIUS;
 
@@ -16383,24 +16908,32 @@ namespace Oxide.Plugins
         private object OnEntityEnter(TriggerBase trigger, BasePlayer player)
         {
             if (trigger == null || player.IsKilled()) return null;
+            if (player is HumanoidNPC npc)
+            {
+                if (Has(trigger))
+                {
+                    if (trigger.contents != null && trigger.contents.Remove(npc.gameObject)) npc.LeaveTrigger(trigger);
+                    return true;
+                }
+                if (Get(npc.userID, out HumanoidBrain brain) && brain.raid.Options.NPC.IgnorePlayerTrapsTurrets) return true;
+            }
             if (ShouldIgnoreFlyingPlayer(player)) return true;
-            if (Has(player) && (Has(trigger) || (Get(player.userID, out HumanoidBrain brain) && brain.raid.Options.NPC.IgnorePlayerTrapsTurrets))) return true;
-            BaseEntity entity = trigger is TriggerParent p ? p.Entity : trigger.gameObject.ToBaseEntity();
+            BaseEntity entity = Get(trigger, out var raid) ? raid.triggers[trigger] : (trigger is TriggerParent p ? p.Entity : trigger.gameObject.ToBaseEntity());
             if (IsProtectedScientist(player, entity)) return true;
-            return CanEntityBeTargetedInternal(player, entity, IsPVE()) is true or null ? null : true;
+            if (HasAnyFlag(pluginHooks, GetFlag(entity))) return null;
+            return CanEntityBeTargetedInternal(player, entity) is true or null ? null : true;
         }
 
-        private bool _subscribeOnEntityEnterHopper = true;
         private object OnEntityEnter(TriggerEnterTimer trigger, BaseEntity target)
         {
-            if (!_subscribeOnEntityEnterHopper || trigger == null) return null;
+            if (!HasAnyFlag(standardHooks, HookFlags.Hopper) || trigger == null) return null;
             Hopper hopper = trigger.gameObject.ToBaseEntity() as Hopper;
             return CanEntityBeTargetedInternal(target, hopper) is bool val && !val ? true : null;
         }
 
         private object CanEntityBeTargeted(BaseEntity target, Hopper hopper)
         {
-            _subscribeOnEntityEnterHopper = false;
+            if (hopper != null) TryUpdateHooks(HookFlags.Hopper);
             return CanEntityBeTargetedInternal(target, hopper) is bool val ? val : null;
         }
 
@@ -16443,11 +16976,12 @@ namespace Oxide.Plugins
 
         private object CanEntityBeTargeted(BasePlayer player, BaseEntity entity)
         {
+            if (entity != null) TryUpdateHooks(GetFlag(entity));
             if (player.IsKilled()) return null;
-            return CanEntityBeTargetedInternal(player, entity, false);
+            return CanEntityBeTargetedInternal(player, entity);
         }
 
-        private object CanEntityBeTargetedInternal(BasePlayer player, BaseEntity entity, bool earlyExit)
+        private object CanEntityBeTargetedInternal(BasePlayer player, BaseEntity entity)
         {
             if (entity.IsKilled() || IgnorePlayer(player, entity))
             {
@@ -16455,11 +16989,6 @@ namespace Oxide.Plugins
             }
 
             if (!Get(player.transform.position, out var raid) && !Get(entity.transform.position, out raid))
-            {
-                return null;
-            }
-
-            if (earlyExit && (!raid.Options.BlockOutsideDamageToPlayersInside && !raid.Options.NPC.BlockOutsideDamageToNpcsInside))
             {
                 return null;
             }
@@ -16524,6 +17053,7 @@ namespace Oxide.Plugins
                 return null;
             }
 
+            TryUpdateHooks(HookFlags.SamSite);
             if (Get(ss.transform.position, out var raid) && !IsPositionInSpace(entity.transform.position, raid.Location, raid.ProtectionRadius))
             {
                 if (raid.IsLoading || HasRaidEntity(entity) && raid.Owns(ss))
@@ -16550,7 +17080,7 @@ namespace Oxide.Plugins
             if (!raid.IsLoading)
             {
                 var sqrDistance = raid.Options.SamSite.Range * raid.Options.SamSite.Range;
-                foreach (SamSite.ISamSiteTarget server in SamSite.ISamSiteTarget.serverList)
+                foreach (SamSite.ISamSiteTarget server in SamSite.serverTargets)
                 {
                     if (server == null)
                     {
@@ -16578,17 +17108,30 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private object OnTurretTarget(AutoTurret turret, BasePlayer target)
+        {
+            if (!HasAnyFlag(standardHooks, HookFlags.TurretTarget) || target.IsKilled()) return null;
+            return CanEntityBeTargetedInternal(target, turret) is false ? true : null;
+        }
+
         private object OnTrapTrigger(BaseTrap trap, GameObject go)
         {
+            if (!HasAnyFlag(standardHooks, HookFlags.TrapTrigger) || go == null) return null;
             var player = go.GetComponent<BasePlayer>();
-            var success = CanEntityTrapTrigger(trap, player);
+            var success = CanEntityTrapTriggerInternal(trap, player);
 
             return success is bool val && !val ? true : null;
         }
 
         private object CanEntityTrapTrigger(BaseTrap trap, BasePlayer player)
         {
-            if (player == null || player.limitNetworking)
+            TryUpdateHooks(HookFlags.TrapTrigger);
+            return CanEntityTrapTriggerInternal(trap, player);
+        }
+
+        private object CanEntityTrapTriggerInternal(BaseTrap trap, BasePlayer player)
+        {
+            if (player == null || IsVanished(player))
             {
                 return null;
             }
@@ -16626,6 +17169,12 @@ namespace Oxide.Plugins
 
         private object CanEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
+            TryUpdateHooks(HookFlags.Damage);
+            return CanEntityTakeDamageInternal(entity, info);
+        }
+
+        private object CanEntityTakeDamageInternal(BaseCombatEntity entity, HitInfo info)
+        {
             if (info == null || entity == null || entity.IsDestroyed || entity.OwnerID == 1337422)
             {
                 return null;
@@ -16655,6 +17204,18 @@ namespace Oxide.Plugins
                 return NullifyDamage(info);
             }
 
+            if (isHuman && entity is HumanoidNPC npc && npc.GetBrain(out var brain))
+            {
+                bool sleeping = npc.IsSleeping();
+
+                if (!sleeping || !raid.Options.NPC.Inside.Sleepers.IsUnwakeable)
+                {
+                    if (sleeping) brain.SetSleeping(false);
+                    if (brain.isDormant && !attacker.IsKilled() && !IsVanished(attacker)) raid.SetNpcsDormant(false);
+                    if (!brain.ShouldDestroy()) brain.SetTarget(attacker);
+                }
+            }
+
             if (isHuman && damageType != DamageType.Heat && raid != null)
             {
                 raid.CreateSpheres();
@@ -16664,31 +17225,13 @@ namespace Oxide.Plugins
             return true;
         }
 
-        protected void UnsubscribeDamageHook()
+        private void OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
-            if (Raids.Count > 0 || config == null || config.Settings.Management.PVPDelayPersists && PvpDelay.Count > 0)
+            if (HasAnyFlag(standardHooks, HookFlags.Damage))
             {
-                return;
-            }
-            Unsubscribe(nameof(OnEntityTakeDamage));
-            Unsubscribe(nameof(CanEntityTakeDamage));
-        }
-
-        private void SubscribeDamageHook()
-        {
-            if (IsPVE())
-            {
-                Unsubscribe(nameof(OnEntityTakeDamage));
-                Subscribe(nameof(CanEntityTakeDamage));
-            }
-            else
-            {
-                Unsubscribe(nameof(CanEntityTakeDamage));
-                Subscribe(nameof(OnEntityTakeDamage));
+                CanEntityTakeDamageInternal(entity, info);
             }
         }
-
-        private void OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info) => CanEntityTakeDamage(entity, info);
 
         private DamageResult HandlePlayerDamage(BasePlayer victim, HitInfo info, DamageType damageType, out RaidableBase raid, out BasePlayer attacker, out bool isHuman)
         {
@@ -16698,9 +17241,14 @@ namespace Oxide.Plugins
 
             if (!Get(victim, info, out raid) || raid.IsDespawning)
             {
-                if (config.Settings.Management.PVPDelayPersists && initiator.Is(out BasePlayer attacker2) && HasPVPDelay(attacker2.userID) && HasPVPDelay(victim.userID))
+                if (config.Settings.Management.PVPDelayPersists && initiator.Is(out BasePlayer attacker2) && HasPVPDelay(attacker2.userID) && victim.userID.IsSteamId() && GetPVPDelay(victim.userID, true, out DelaySettings ds))
                 {
-                    return DamageResult.Allowed;
+                    if (attacker2 == victim)
+                    {
+                        return ds.raid.Options.AllowSelfDamage ? DamageResult.Allowed : DamageResult.Blocked;
+                    }
+
+                    return !ds.raid.Options.AllowFriendlyFire && ds.raid.IsAlly(attacker2, victim) ? DamageResult.Blocked : DamageResult.Allowed;
                 }
                 return DamageResult.None;
             }
@@ -16822,7 +17370,7 @@ namespace Oxide.Plugins
 
             if (config.Settings.Management.PVPDelayDamageInside && HasPVPDelay(attacker.userID) && InRange2D(raid.Location, victim.transform.position, raid.ProtectionRadius))
             {
-                return DamageResult.Allowed;
+                return !raid.Options.AllowFriendlyFire && victim.IsHuman() && raid.IsAlly(attacker, victim) ? DamageResult.Blocked : DamageResult.Allowed;
             }
 
             if (isHuman && !victim.IsHuman())
@@ -16859,7 +17407,7 @@ namespace Oxide.Plugins
 
                 var parent = attacker.HasParent() ? attacker.GetParentEntity() : null;
 
-                if (parent is BaseHelicopter || parent is HotAirBalloon)
+                if (parent is BaseHelicopter or HotAirBalloon)
                 {
                     return DamageResult.Blocked;
                 }
@@ -16881,21 +17429,6 @@ namespace Oxide.Plugins
             }
 
             ApplyMaxEffectiveRangeMultiplier(raid.Options.NPC.PlayerMaxEffectiveRange, raid.SqrProtectionRadius, attacker.transform.position, info, brain);
-
-            if (victim.HasPlayerFlag(BasePlayer.PlayerFlags.Sleeping))
-            {
-                if (raid.Options.NPC.Inside.Sleepers.IsUnwakeable)
-                {
-                    return DamageResult.Allowed;
-                }
-
-                brain.SetSleeping(false);
-            }
-
-            if (!brain.ShouldDestroy())
-            {
-                brain.SetTarget(attacker);
-            }
 
             return DamageResult.Allowed;
         }
@@ -16957,7 +17490,9 @@ namespace Oxide.Plugins
                 return victim.userID.IsSteamId() ? DamageResult.Blocked : DamageResult.None;
             }
 
-            if (brain.attackType == HumanoidBrain.AttackType.BaseProjectile && brain.baseProjectile != null && UnityEngine.Random.Range(0f, 100f) > raid.Options.NPC.Accuracy.Get(brain))
+            var weapon = raid.Options.NPC.Weapons.Get(brain);
+
+            if (weapon != null && brain.attackType == HumanoidBrain.AttackType.BaseProjectile && brain.baseProjectile != null && UnityEngine.Random.Range(0f, 100f) > weapon.Accuracy)
             {
                 return victim.userID.IsSteamId() ? DamageResult.Blocked : DamageResult.None;
             }
@@ -16969,17 +17504,9 @@ namespace Oxide.Plugins
                 info.UseProtection = false;
             }
 
-            switch (brain.attackType)
+            if (weapon != null && weapon.DamageMultiplier != 1f)
             {
-                case HumanoidBrain.AttackType.BaseProjectile:
-                    info.damageTypes.ScaleAll(raid.Options.NPC.Multipliers.ProjectileDamageMultiplier);
-                    break;
-                case HumanoidBrain.AttackType.Explosive:
-                    info.damageTypes.ScaleAll(raid.Options.NPC.Multipliers.ExplosiveDamageMultiplier);
-                    break;
-                case HumanoidBrain.AttackType.Melee:
-                    info.damageTypes.ScaleAll(raid.Options.NPC.Multipliers.MeleeDamageMultiplier);
-                    break;
+                info.damageTypes.ScaleAll(weapon.DamageMultiplier);
             }
 
             return DamageResult.Allowed;
@@ -16990,13 +17517,33 @@ namespace Oxide.Plugins
             raid = null;
             attacker = null;
             isHuman = false;
+            bool isAttacker = false;
+            bool isAttackerSet = false;
 
             if (info.Initiator is SamSite ss)
             {
                 return HasRaidEntity(ss) ? DamageResult.Allowed : DamageResult.None;
             }
 
-            if (!Get(entity.transform.position, out raid) || !ValidateEventTurretDamage(info, raid, entity))
+            bool found = Get(entity.transform.position, out raid);
+
+            if (config.Settings.Management.PVPDelayMountDamageAnywhere && PvpDelay.Count > 0 && IsMountable(entity))
+            {
+                isAttacker = found ? raid.GetInitiatorPlayer(info, damageType, entity, out attacker) : GetInitiatorPlayer(info, damageType, entity, out attacker);
+                isHuman = isAttacker && attacker.IsHuman();
+                isAttackerSet = true;
+                if (isHuman)
+                {
+                    DamageResult result = HandlePVPDelayMountDamage(entity, attacker);
+                    if (result != DamageResult.None)
+                    {
+                        raid = null;
+                        return result;
+                    }
+                }
+            }
+
+            if (!found || !ValidateEventTurretDamage(info, raid, entity))
             {
                 return DamageResult.None;
             }
@@ -17007,8 +17554,11 @@ namespace Oxide.Plugins
                 return eventHeli ? DamageResult.None : DamageResult.Allowed;
             }
 
-            bool isAttacker = raid.GetInitiatorPlayer(info, damageType, entity, out attacker);
-            isHuman = isAttacker && attacker.IsHuman();
+            if (!isAttackerSet)
+            {
+                isAttacker = raid.GetInitiatorPlayer(info, damageType, entity, out attacker);
+                isHuman = isAttacker && attacker.IsHuman();
+            }
 
             if (entity is LivestockAnimal livestock)
             {
@@ -17062,7 +17612,7 @@ namespace Oxide.Plugins
                     return handleBuildingResult;
                 }
             }
-            else if (raid.IsMountable(entity))
+            else if (IsMountable(entity))
             {
                 DamageResult handleMountableResult = HandleMountable(entity, info, raid, isHuman, attacker);
                 if (handleMountableResult != DamageResult.None)
@@ -17088,7 +17638,7 @@ namespace Oxide.Plugins
                 ScaleTorpedoDamage(info, raid);
             }
 
-            if (!attacker.IsNetworked())
+            if (!attacker.HasNetworkId())
             {
                 return ValidateUnknownAttacker(info, raid, entity) ? DamageResult.Allowed : DamageResult.None;
             }
@@ -17292,11 +17842,9 @@ namespace Oxide.Plugins
 
             if (isHuman && !ExcludedMountsExists(entity.ShortPrefabName))
             {
-                BaseMountable mountable = entity as BaseMountable;
-                if (mountable != null)
+                if (entity.Is(out BaseMountable m))
                 {
-                    BaseVehicle vehicle = mountable.HasParent() ? mountable.VehicleParent() : mountable as BaseVehicle;
-
+                    BaseVehicle vehicle = GetVehicle(m);
                     if (vehicle != null && vehicle.GetDriver() == attacker)
                     {
                         return config.Settings.Management.MountDamageFromPlayers ? DamageResult.Allowed : DamageResult.Blocked;
@@ -17312,7 +17860,7 @@ namespace Oxide.Plugins
                     TryMessage(attacker, "NoMountedDamageFrom");
                     return DamageResult.Blocked;
                 }
-                if (raid.Options.BlockOutsideDamageToBaseInside && CanBlockOutsideDamage(raid, attacker) && !(info.WeaponPrefab is MLRSRocket))
+                if (raid.Options.BlockOutsideDamageToBaseInside && CanBlockOutsideDamage(raid, attacker) && info.WeaponPrefab is not MLRSRocket)
                 {
                     TryMessage(attacker, "NoDamageFromOutsideToBaseInside");
                     return DamageResult.Blocked;
@@ -17330,7 +17878,7 @@ namespace Oxide.Plugins
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ExcludedMountsExists(string prefabName)
         {
-            foreach (var prefix in ExcludedMounts)
+            foreach (string prefix in ExcludedMounts)
             {
                 if (prefabName.StartsWith(prefix))
                 {
@@ -17348,7 +17896,7 @@ namespace Oxide.Plugins
         private bool ValidateUnknownAttacker(HitInfo info, RaidableBase raid, BaseCombatEntity entity)
         {
             BaseEntity initiator = info.Initiator;
-            return initiator.IsNull() || HasRaidEntity(initiator) || IsLootingWeapon(info);
+            return initiator == null || HasRaidEntity(initiator) || IsLootingWeapon(info);
         }
 
         private DamageResult HandleNonHumanAttacker(BaseCombatEntity entity, RaidableBase raid, BasePlayer attacker, HitInfo info, DamageType damageType)
@@ -17602,11 +18150,6 @@ namespace Oxide.Plugins
                 raid.PlayerDamageMultiplier.Add(new() { index = index, amount = amount });
             }
 
-            if (!raid.Options.MLRS)
-            {
-                Subscribe(nameof(OnMlrsFire));
-            }
-
             if ((config.Settings.NoWizardryPVP && raid.AllowPVP || config.Settings.NoWizardryPVE && !raid.AllowPVP) && Wizardry.CanCall())
             {
                 Subscribe(nameof(OnActiveItemChanged));
@@ -17626,22 +18169,9 @@ namespace Oxide.Plugins
                 Subscribe(nameof(OnServerCommand));
             }
 
-            if (IsPVE())
-            {
-                Subscribe(nameof(CanEntityTrapTrigger));
-                Subscribe(nameof(CanEntityBeTargeted));
-            }
-            else
-            {
-                Subscribe(nameof(OnTrapTrigger));
-            }
-
-            SubscribeDamageHook();
-            Subscribe(nameof(OnSamSiteTargetScan));
             Subscribe(nameof(OnNearbyTurretsScan));
             Subscribe(nameof(OnInterferenceUpdate));
             Subscribe(nameof(OnStructureUpgrade));
-            Subscribe(nameof(OnEntityEnter));
             Subscribe(nameof(CanBuild));
             Subscribe(nameof(OnEntitySpawned));
 
@@ -17649,6 +18179,8 @@ namespace Oxide.Plugins
             raid._undoLimit = Mathf.Clamp(raid.Options.Setup.DespawnLimit, 1, 500);
 
             Raids.Add(raid);
+            raid.OnRaidableBaseStart();
+            UpdateHooks();
 
             raid.CheckPaste();
             raid.SendDronePatrol(rb);
@@ -17700,7 +18232,7 @@ namespace Oxide.Plugins
 
         private Payment TryBuyRaidServerRewards(int cost, BasePlayer buyer, BasePlayer player)
         {
-            int points = Convert.ToInt32(ServerRewards?.Call("CheckPoints", buyer.userid()));
+            int points = Convert.ToInt32(ServerRewards?.Call("CheckPoints", buyer.userID.Get()));
             if (points > 0 && points - cost >= 0)
             {
                 return new(this, buyer, player, null, cost);
@@ -17713,7 +18245,7 @@ namespace Oxide.Plugins
         private Payment TryBuyRaidEconomics(double cost, BasePlayer buyer, BasePlayer player)
         {
             object obj;
-            if ((obj = Economics?.Call("Balance", buyer.userid())) != null || (obj = IQEconomic?.Call("API_GET_BALANCE", buyer.userid())) != null || (obj = BankSystem?.Call("Balance", buyer.userid())) != null)
+            if ((obj = Economics?.Call("Balance", buyer.userID.Get())) != null || (obj = IQEconomic?.Call("API_GET_BALANCE", buyer.userID.Get())) != null || (obj = BankSystem?.Call("Balance", buyer.userID.Get())) != null)
             {
                 var balance = Convert.ToDouble(obj);
 
@@ -17745,14 +18277,14 @@ namespace Oxide.Plugins
                             {
                                 2 => buyer,
                                 1 => buyer.UserIDString,
-                                0 or _ => buyer.userid()
+                                0 or _ => buyer.userID.Get()
                             }));
                         }
                         else balance = Convert.ToDouble(plugin?.Call(option.Plugin.BalanceHookName, option.Plugin.PlayerDataType switch
                         {
                             2 => buyer,
                             1 => buyer.UserIDString,
-                            0 or _ => buyer.userid()
+                            0 or _ => buyer.userID.Get()
                         }));
 
                         if (balance < option.Plugin.Amount)
@@ -17794,7 +18326,7 @@ namespace Oxide.Plugins
 
                 if (amount < option.Amount && config.Settings.ShoppyStock != null)
                 {
-                    amount += Convert.ToInt32(ShoppyStock?.Call("GetCurrencyAmount", config.Settings.ShoppyStock.ShopName, player.userid()));
+                    amount += Convert.ToInt32(ShoppyStock?.Call("GetCurrencyAmount", config.Settings.ShoppyStock.ShopName, player.userID.Get()));
                 }
 
                 if (amount < option.Amount)
@@ -17905,7 +18437,7 @@ namespace Oxide.Plugins
                                     {
                                         2 => target,
                                         1 => target.UserIDString,
-                                        0 or _ => target.userid()
+                                        0 or _ => target.userID.Get()
                                     }, option.Plugin.AmountDataType switch
                                     {
                                         2 => (object)(int)amount,
@@ -17917,7 +18449,7 @@ namespace Oxide.Plugins
                                 {
                                     2 => target,
                                     1 => target.UserIDString,
-                                    0 or _ => target.userid()
+                                    0 or _ => target.userID.Get()
                                 }, option.Plugin.AmountDataType switch
                                 {
                                     2 => (object)(int)amount,
@@ -17979,7 +18511,7 @@ namespace Oxide.Plugins
                                 {
                                     2 => buyer,
                                     1 => buyer.UserIDString,
-                                    0 or _ => buyer.userid()
+                                    0 or _ => buyer.userID.Get()
                                 }, option.Plugin.AmountDataType switch
                                 {
                                     2 => (object)(int)option.Plugin.Amount,
@@ -17996,7 +18528,7 @@ namespace Oxide.Plugins
                                 {
                                     2 => buyer,
                                     1 => buyer.UserIDString,
-                                    0 or _ => buyer.userid()
+                                    0 or _ => buyer.userID.Get()
                                 }, option.Plugin.AmountDataType switch
                                 {
                                     2 => (object)(int)option.Plugin.Amount,
@@ -18044,7 +18576,7 @@ namespace Oxide.Plugins
 
                     if (amountLeft > 0 && Instance.ShoppyStock != null && config.Settings.ShoppyStock != null && config.Settings.ShoppyStock.IsItem(option))
                     {
-                        Instance.ShoppyStock?.Call("TakeCurrency", config.Settings.ShoppyStock.ShopName, buyer.userid(), amountLeft);
+                        Instance.ShoppyStock?.Call("TakeCurrency", config.Settings.ShoppyStock.ShopName, buyerId, amountLeft);
                         CuiHelper.DestroyUi(buyer, $"PopUpAPI_{config.Settings.ShoppyStock.PanelName}_Parent");
                         paid = true;
                     }
@@ -18246,6 +18778,9 @@ namespace Oxide.Plugins
 
         private IEnumerator SetupCopyPasteObstructionRadius(string baseName, float radius)
         {
+            var pasteData = GetPasteData(baseName);
+            pasteData.valid = false;
+
             var filename = Path.Combine("copypaste", baseName);
             if (!Interface.Oxide.DataFileSystem.ExistsDatafile(filename))
             {
@@ -18274,10 +18809,21 @@ namespace Oxide.Plugins
             var entities = data["entities"] as List<object>;
             using var foundations = DisposableList<Vector3>();
             using var floors = DisposableList<Vector3>();
-            //using var invalid = DisposableList<string>();
+            var prefabs = new Dictionary<string, BaseEntity>();
+            Plugin copyPaste = CopyPaste;
+            bool initialized = false;
             int checks = 0;
             float x = 0f;
             float z = 0f;
+
+            pasteData.bounds = default;
+
+            void Invalid(string source, string baseName, string prefab)
+            {
+                Puts("Invalid {0} found in copypaste file: {1} ({2})", source, baseName, prefab);
+                Queues.Messages.Log(baseName, $"Invalid entity! {prefab}");
+                Buildings.Remove(baseName);
+            }
 
             foreach (var obj in entities)
             {
@@ -18290,38 +18836,34 @@ namespace Oxide.Plugins
                     checks = 0;
                     yield return Automated.instruction0;
                 }
-                if (!entity.ContainsKey("prefabname") || !entity.ContainsKey("pos"))
+                if (!entity.TryGetValue("prefabname", out var prefabname))
                 {
                     continue;
                 }
-                var prefab = entity["prefabname"].ToString();
-                try
+                var prefab = prefabname?.ToString();
+                if (string.IsNullOrEmpty(prefab) || prefab.Contains("testridablehorse"))
                 {
-                    if (prefab.Contains("testridablehorse"))
-                    {
-                        Puts($"{baseName} contains a broken prefab that must be removed: {prefab}");
-                        Queues.Messages.Log(baseName, $"Invalid entity! {prefab}");
-                        Buildings.Remove(baseName);
-                        //invalid.Add(prefab);
-                        yield break;
-                    }
-                    var axes = entity["pos"] as Dictionary<string, object>;
-                    var position = new Vector3(Convert.ToSingle(axes?["x"]), Convert.ToSingle(axes?["y"]), Convert.ToSingle(axes?["z"]));
-                    if (IsPrefabFoundation(entity) || IsPrefabExternalWall(entity))
-                    {
-                        foundations.Add(position);
-                        x += position.x;
-                        z += position.z;
-                    }
-                    if (IsPrefabFloor(entity))
-                    {
-                        floors.Add(position);
-                    }
+                    Invalid("prefab", baseName, prefab);
+                    yield break;
                 }
-                catch (Exception ex)
+                if (!entity.TryGetValue("pos", out var axes) || !TryParse(axes, out Vector3 position))
                 {
-                    Puts(ex);
-                    Puts("Invalid entity found in copypaste file: {0} ({1})", baseName, prefab);
+                    Invalid("position", baseName, prefab);
+                    yield break;
+                }
+                if (IsPrefabFoundation(entity) || IsPrefabExternalWall(entity))
+                {
+                    foundations.Add(position);
+                    x += position.x;
+                    z += position.z;
+                }
+                if (IsPrefabFloor(entity))
+                {
+                    floors.Add(position);
+                }
+                if (entity.TryGetValue("rot", out var rot) && TryParse(rot, out Vector3 euler))
+                {
+                    AddGridBounds(pasteData, entity, prefab, position, euler, Matrix4x4.identity, Quaternion.identity, null, prefabs, copyPaste, ref initialized);
                 }
             }
 
@@ -18353,16 +18895,103 @@ namespace Oxide.Plugins
                 radius = Vector3.Distance(foundations[0], foundations[^1]);
             }
 
-            var pasteData = GetPasteData(baseName);
-
             pasteData.radius = Mathf.Ceil(Mathf.Max(CELL_SIZE, radius));
             pasteData.foundations = new(foundations);
-            pasteData.valid = true;
+            pasteData.centerOffset = new(center.x, 0f, center.z);
 
-            //if (invalid.Count > 0)
-            //{
-            //    pasteData.invalid = new(invalid);
-            //}
+            pasteData.valid = true;
+        }
+
+        private static void AddGridBounds(PasteData pasteData, Dictionary<string, object> dict, string prefabName, Vector3 position, Vector3 euler, Matrix4x4 parentMatrix, Quaternion parentRotation, BaseEntity parentPrefab, Dictionary<string, BaseEntity> prefabs, Plugin copyPaste, ref bool initialized)
+        {
+            if (!prefabs.TryGetValue(prefabName, out BaseEntity entity))
+            {
+                string strPrefab = copyPaste?.Call("GetPrefabName", prefabName) is string replacement ? replacement : prefabName;
+                GameObject go = GameManager.server.FindPrefab(strPrefab);
+                entity = go == null ? null : go.GetComponent<BaseEntity>();
+                prefabs[prefabName] = entity;
+            }
+
+            if (entity == null)
+            {
+                return;
+            }
+
+            bool isChild = parentPrefab != null;
+            bool boatChild = parentPrefab is PlayerBoat && entity is not DroppedItem;
+            if (isChild && !boatChild && dict.TryGetValue("parentbone", out var obj) && obj is string boneName && !string.IsNullOrEmpty(boneName) && StringPool.Get(boneName) != StringPool.closest)
+            {
+                Transform bone = parentPrefab.FindBone(boneName);
+                if (bone != null)
+                {
+                    if (bone.TryGetComponent<ReparentToTargetBone>(out var reparent) && reparent.TargetBone != null)
+                    {
+                        bone = reparent.TargetBone;
+                    }
+                    Transform root = parentPrefab.transform;
+                    parentMatrix *= root.worldToLocalMatrix * bone.localToWorldMatrix;
+                    parentRotation *= Quaternion.Inverse(root.rotation) * bone.rotation;
+                }
+            }
+
+            Quaternion localRotation = Quaternion.Euler(isChild ? euler : euler * Mathf.Rad2Deg);
+            Vector3 scale = isChild && !boatChild ? Vector3.one : entity.transform.localScale;
+            if (dict.TryGetValue("scale", out var scaleObj) && scaleObj is Dictionary<string, object> && !TryParse(scaleObj, out scale))
+            {
+                return;
+            }
+
+            Quaternion rotation = parentRotation * localRotation;
+            Matrix4x4 matrix = boatChild ? Matrix4x4.TRS(parentMatrix.MultiplyPoint3x4(position), rotation, scale) : parentMatrix * Matrix4x4.TRS(position, localRotation, scale);
+            Vector3 extents = entity.bounds.extents;
+            Vector3 center = matrix.MultiplyPoint3x4(entity.bounds.center);
+            Bounds bounds = new Bounds(center, GetSize(matrix, extents));
+
+            if (initialized)
+            {
+                pasteData.bounds.Encapsulate(bounds);
+            }
+            else
+            {
+                pasteData.bounds = bounds;
+                initialized = true;
+            }
+
+            if (!dict.TryGetValue("children", out obj) || obj is not List<object> children)
+            {
+                return;
+            }
+
+            foreach (var raw in children)
+            {
+                if (raw is not Dictionary<string, object> child || !child.TryGetValue("prefabname", out obj) || obj is not string prefab)
+                {
+                    continue;
+                }
+                if (!child.TryGetValue("pos", out obj) || !TryParse(obj, out position) || !child.TryGetValue("rot", out obj) || !TryParse(obj, out euler))
+                {
+                    continue;
+                }
+
+                AddGridBounds(pasteData, child, prefab, position, euler, matrix, rotation, entity, prefabs, copyPaste, ref initialized);
+            }
+        }
+
+        private static Vector3 GetSize(Matrix4x4 m, Vector3 e)
+        {
+            return new Vector3(Abs(m.m00) * e.x + Abs(m.m01) * e.y + Abs(m.m02) * e.z, Abs(m.m10) * e.x + Abs(m.m11) * e.y + Abs(m.m12) * e.z, Abs(m.m20) * e.x + Abs(m.m21) * e.y + Abs(m.m22) * e.z) * 2f;
+        }
+
+        private static bool TryParse(object obj, out Vector3 value)
+        {
+            Dictionary<string, object> data = obj as Dictionary<string, object>;
+            if (data == null || !data.TryGetValue("x", out var x) || !data.TryGetValue("y", out var y) || !data.TryGetValue("z", out var z))
+            {
+                value = default;
+                return false;
+            }
+            value = new(Convert.ToSingle(x), Convert.ToSingle(y), Convert.ToSingle(z));
+            return true;
         }
 
         private readonly Dictionary<string, object> _emptyProtocol = new();
@@ -18385,7 +19014,7 @@ namespace Oxide.Plugins
 
             yield return ApplyStartPositionAdjustment(rb, data);
 
-            if (rb.pasteData.foundations.IsNullOrEmpty())
+            if (!rb.pasteData.valid || rb.pasteData.foundations.IsNullOrEmpty())
             {
                 Queues.Messages.Log(rb.BaseName, $"{rb.BaseName} is missing foundation/floor data #2");
                 Buildings.Remove(rb.BaseName);
@@ -18509,7 +19138,7 @@ namespace Oxide.Plugins
                 Vector3 position = e.transform.position;
                 if (e is AutoTurret turret)
                 {
-                    raid.PreSetupTurret(turret);
+                    if (!raid.PreSetupTurret(turret)) return;
                 }
                 else if (raid.IsWeapon(e))
                 {
@@ -18576,34 +19205,24 @@ namespace Oxide.Plugins
         {
             ParseListedOptions(rb);
 
-            using var foundations = DisposableList<Vector3>();
-            float x = 0f, z = 0f;
-
             if (!rb.pasteData.valid)
             {
                 yield return SetupCopyPasteObstructionRadius(rb.BaseName, rb.options.ProtectionRadii.Obstruction == -1 ? 0f : GetObstructionRadius(rb.options.ProtectionRadii, RaidableType.None));
             }
 
-            if (rb.pasteData.foundations.IsNullOrEmpty())
+            if (!rb.pasteData.valid || rb.pasteData.foundations.IsNullOrEmpty())
             {
                 Queues.Messages.Log(rb.BaseName, $"{rb.BaseName} is missing foundation/floor data #3");
                 yield break;
             }
 
-            foreach (var foundation in rb.pasteData.foundations)
-            {
-                var a = foundation + rb.Position;
-                a.y = GetSpawnHeight(a);
-                foundations.Add(a);
-                x += a.x;
-                z += a.z;
-            }
-
-            var center = new Vector3(x / foundations.Count, 0f, z / foundations.Count);
+            var center = rb.Position + rb.pasteData.centerOffset;
 
             center.y = rb.isCustomSpawn ? rb.Position.y : GetSpawnHeight(center, !rb.options.Water.IsWaterSpawn);
 
-            rb.Position += (rb.Position - center);
+            rb.Position.x -= rb.pasteData.centerOffset.x;
+            rb.Position.z -= rb.pasteData.centerOffset.z;
+            rb.Position.y += rb.Position.y - center.y;
 
             if (rb.options.Setup.ForcedHeight == -1)
             {
@@ -18890,7 +19509,7 @@ namespace Oxide.Plugins
                 return default;
             }
 
-            bool isBaseNull = string.IsNullOrWhiteSpace(baseName) || baseName.Length == 1 && baseName[0] >= '0' && baseName[0] <= '4';
+            bool isBaseNull = string.IsNullOrWhiteSpace(baseName) || int.TryParse(baseName, out int level) && level >= 0 && GetModeFromLevel(level, out _);
             using var profiles = DisposableList<(string, BaseProfile)>();
 
             foreach (var (key, profile) in Buildings.Profiles)
@@ -19083,8 +19702,7 @@ namespace Oxide.Plugins
             }
 
             var player = arg.Player();
-
-            if (player.IsNull() || player.IPlayer == null)
+            if (player == null || player.IPlayer == null)
             {
                 return;
             }
@@ -19273,486 +19891,6 @@ namespace Oxide.Plugins
             GridController.SetupGrid();
         }
 
-        private readonly Dictionary<string, string> prefabReplacements = new()
-        {
-            ["assets/prefabs/building/gates.external.high.adobe/gates.external.high.adobe.prefab"] = "assets/prefabs/building/gates.external.high/gates.external.high.stone/gates.external.high.stone.prefab",
-            ["assets/prefabs/building/gates.external.high.legacy/gates.external.high.legacy.prefab"] = "assets/prefabs/building/gates.external.high/gates.external.high.stone/gates.external.high.stone.prefab",
-            ["assets/prefabs/building/wall.external.high.adobe/wall.external.high.adobe.prefab"] = "assets/prefabs/building/wall.external.high.stone/wall.external.high.stone.prefab",
-            ["assets/prefabs/building/wall.external.high.legacy/wall.external.high.legacy.prefab"] = "assets/prefabs/building/wall.external.high.stone/wall.external.high.stone.prefab",
-            ["assets/prefabs/building/wall.external.high.frontier/wall.external.high.frontier.prefab"] = "assets/prefabs/building/wall.external.high.stone/wall.external.high.stone.prefab",
-            ["assets/prefabs/deployable/chair/ice_throne/chair.icethrone.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/deployable/floor_half_shelves/halfheight_salvaged_bamboo_shelves.prefab"] = "assets/prefabs/deployable/shelves/shelves.prefab",
-            ["assets/prefabs/deployable/hazmatplushy/hazmatplushy_deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/deployable/jack o lantern/jackolantern.angry.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/deployable/jack o lantern/jackolantern.happy.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/deployable/large wood storage/skins/abyss_dlc_large_wood_box/abyss_dlc_storage_horizontal/abyss_barrel_horizontal.prefab"] = "assets/prefabs/deployable/large wood storage/box.wooden.large.prefab",
-            ["assets/prefabs/deployable/large wood storage/skins/abyss_dlc_large_wood_box/abyss_dlc_storage_vertical/abyss_barrel_vertical.prefab"] = "assets/prefabs/deployable/woodenbox/woodbox_deployed.prefab",
-            ["assets/prefabs/deployable/large wood storage/skins/jungle_dlc_large_wood_box/jungle_dlc_storage_horizontal/wicker_barrel.prefab"] = "assets/prefabs/deployable/large wood storage/box.wooden.large.prefab",
-            ["assets/prefabs/deployable/large wood storage/skins/jungle_dlc_large_wood_box/jungle_dlc_storage_vertical/bamboo_barrel.prefab"] = "assets/prefabs/deployable/woodenbox/woodbox_deployed.prefab",
-            ["assets/prefabs/deployable/large wood storage/skins/medieval_large_wood_box/medieval.box.wooden.large.prefab"] = "assets/prefabs/deployable/large wood storage/box.wooden.large.prefab",
-            ["assets/prefabs/deployable/legacyfurnace/legacy_furnace.prefab"] = "assets/prefabs/deployable/furnace/furnace.prefab",
-            ["assets/prefabs/deployable/lunar_new_year_2025_wall_divider/lunar_near_year_2025_wall_divider_a.prefab"] = "",
-            ["assets/prefabs/deployable/lunar_new_year_2025_wall_divider/lunar_near_year_2025_wall_divider_b.prefab"] = "",
-            ["assets/prefabs/deployable/lunar_new_year_2025_wall_divider/lunar_near_year_2025_wall_divider_c.prefab"] = "",
-            ["assets/prefabs/deployable/sculptures/icesculpture/sculpture.ice.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/deployable/secretlab chair/secretlabchair.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/deployable/shelves/skins/salvaged_bamboo_shelves/salvaged_bamboo_shelves.prefab"] = "assets/prefabs/deployable/shelves/shelves.prefab",
-            ["assets/prefabs/deployable/signs/sign.pictureframe.portrait.prefab"] = "assets/prefabs/deployable/signs/sign.small.wood.prefab",
-            ["assets/prefabs/deployable/signs/sign.pictureframe.xl.prefab"] = "assets/prefabs/deployable/signs/sign.large.wood.prefab",
-            ["assets/prefabs/deployable/sofa/sofa.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/deployable/sofa/sofa.pattern.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/deployable/tool cupboard/retro/cupboard.tool.retro.deployed.prefab"] = "assets/prefabs/deployable/tool cupboard/cupboard.tool.deployed.prefab",
-            ["assets/prefabs/deployable/tool cupboard/shockbyte/cupboard.tool.shockbyte.deployed.prefab"] = "assets/prefabs/deployable/tool cupboard/cupboard.tool.deployed.prefab",
-            ["assets/prefabs/deployable/wall_single_shallow_shelves/wall_single_shallow_shelf.prefab"] = "assets/prefabs/deployable/shelves/shelves.prefab",
-            ["assets/prefabs/deployable/youtooz_figurines/hazmat_youtooz.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/deployable/youtooz_figurines/heavyscientist_youtooz.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/instruments/drumkit/drumkit.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/instruments/piano/piano.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/instruments/xylophone/xylophone.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/misc/chinesenewyear/chineselantern/chineselantern.deployed.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/misc/chinesenewyear/chineselantern/chineselantern_white.deployed.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/misc/chippy arcade/chippyarcademachine.prefab"] = "assets/prefabs/deployable/furnace/furnace.prefab",
-            ["assets/prefabs/misc/decor_dlc/bardoors/door.double.hinged.bardoors.prefab"] = "assets/prefabs/building/door.double.hinged/door.double.hinged.metal.prefab",
-            ["assets/prefabs/misc/decor_dlc/rockingchair/rockingchair.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/misc/decor_dlc/rockingchair/skins/rockingchair.rockingchair2.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/misc/decor_dlc/rockingchair/skins/rockingchair.rockingchair3.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/misc/decor_dlc/storagebarrel/storage_barrel_b.prefab"] = "assets/prefabs/deployable/woodenbox/woodbox_deployed.prefab",
-            ["assets/prefabs/misc/decor_dlc/storagebarrel/storage_barrel_c.prefab"] = "assets/prefabs/deployable/woodenbox/woodbox_deployed.prefab",
-            ["assets/prefabs/misc/decor_dlc/storagebarrel/unused_storage_barrel_a.prefab"] = "assets/prefabs/deployable/woodenbox/woodbox_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_a/rustigeegg_a.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_b/rustigeegg_b.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_c/rustigeegg_c.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_d/rustigeegg_d.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_e/rustigeegg_e.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_f/rustigeegg_f.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/easter/faberge_egg_g/rustigeegg_g.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-            ["assets/prefabs/misc/halloween/candles/largecandleset.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/misc/halloween/candles/smallcandleset.prefab"] = "assets/prefabs/deployable/lantern/lantern.deployed.prefab",
-            ["assets/prefabs/misc/halloween/cursed_cauldron/cursedcauldron.deployed.prefab"] = "assets/prefabs/deployable/campfire/campfire.prefab",
-            ["assets/prefabs/misc/halloween/skull_fire_pit/skull_fire_pit.prefab"] = "assets/prefabs/deployable/campfire/campfire.prefab",
-            ["assets/prefabs/misc/medieval door skin/medieval.door.double.hinged.metal.prefab"] = "assets/prefabs/building/door.double.hinged/door.double.hinged.metal.prefab",
-            ["assets/prefabs/misc/medieval door skin/medieval.door.hinged.metal.prefab"] = "assets/prefabs/building/door.hinged/door.hinged.metal.prefab",
-            ["assets/prefabs/misc/permstore/factorydoor/door.hinged.industrial.d.prefab"] = "assets/prefabs/building/door.hinged/door.hinged.metal.prefab",
-            ["assets/prefabs/misc/summer_dlc/beach_chair/beachchair.deployed.prefab"] = "assets/prefabs/deployable/chair/chair.deployed.prefab",
-            ["assets/prefabs/misc/summer_dlc/beach_chair/beachtable.deployed.prefab"] = "assets/prefabs/deployable/table/table.deployed.prefab",
-            ["assets/prefabs/misc/summer_dlc/beach_towel/beachtowel.deployed.prefab"] = "assets/prefabs/deployable/sleeping bag/sleepingbag_leather_deployed.prefab",
-            ["assets/prefabs/misc/summer_dlc/photoframe/photoframe.landscape.prefab"] = "assets/prefabs/deployable/signs/sign.small.wood.prefab",
-            ["assets/prefabs/misc/summer_dlc/photoframe/photoframe.large.prefab"] = "assets/prefabs/deployable/signs/sign.small.wood.prefab",
-            ["assets/prefabs/misc/summer_dlc/photoframe/photoframe.portrait.prefab"] = "assets/prefabs/deployable/signs/sign.small.wood.prefab",
-            ["assets/prefabs/misc/twitch/hobobarrel/hobobarrel.deployed.prefab"] = "assets/prefabs/deployable/furnace/furnace.prefab",
-            ["assets/prefabs/misc/twitch/industrialdoora/door.hinged.industrial.a.prefab"] = "assets/prefabs/building/door.hinged/door.hinged.metal.prefab",
-            ["assets/prefabs/misc/xmas/snowman/snowman.deployed.prefab"] = "assets/prefabs/misc/xmas/pookie/pookie_deployed.prefab",
-        };
-
-        private readonly Dictionary<string, string> DlcReplacements = new()
-        {
-            ["abovegroundpool"] = "planter.large",
-            ["krieg_storage_horizontal"] = "box.wooden.large",
-            ["krieg_storage_vertical"] = "box.wooden.large",
-            ["abyss.barrel.horizontal"] = "box.wooden.large",
-            ["abyss.barrel.vertical"] = "locker",
-            ["arcade.machine.chippy"] = "electric.battery.rechargable.medium",
-            ["attire.egg.suit"] = "wood.armor.pants",
-            ["attire.nesthat"] = "wood.armor.helmet",
-            ["attire.ninja.suit"] = "hazmatsuit",
-            ["attire.snowman.helmet"] = "deer.skull.mask",
-            ["bamboo.barrel"] = "box.wooden.large",
-            ["barricade.medieval"] = "barricade.metal",
-            ["bathtub.planter"] = "planter.triangle",
-            ["beachchair"] = "chair",
-            ["beachparasol"] = "storageadaptor",
-            ["beachtable"] = "table",
-            ["beachtowel"] = "sleepingbag",
-            ["blunderbuss"] = "shotgun.waterpipe",
-            ["boogieboard"] = "kayak",
-            ["boombox"] = "electric.audioalarm",
-            ["boots.frog"] = "attire.hide.boots",
-            ["carvable.pumpkin"] = "lantern",
-            ["cassette"] = "telephone",
-            ["cassette.medium"] = "electric.battery.rechargable.small",
-            ["cassette.short"] = "electric.timer",
-            ["chair.icethrone"] = "bed",
-            ["chicken.costume"] = "roadsign.kilt",
-            ["chineselantern"] = "hat.miner",
-            ["chineselanternwhite"] = "nightvisiongoggles",
-            ["clatter.helmet"] = "bucket.helmet",
-            ["cocoknight.armor.gloves"] = "burlap.gloves",
-            ["cocoknight.armor.helmet"] = "burlap.headwrap",
-            ["cocoknight.armor.pants"] = "attire.hide.pants",
-            ["cocoknight.armor.torso"] = "attire.hide.poncho",
-            ["concretehatchet"] = "hatchet",
-            ["concretepickaxe"] = "pickaxe",
-            ["connected.speaker"] = "electric.solarpanel.large",
-            ["cupboard.tool.retro"] = "cupboard.tool",
-            ["cupboard.tool.shockbyte"] = "cupboard.tool",
-            ["cursedcauldron"] = "electric.furnace",
-            ["discoball"] = "fireplace.stone",
-            ["discofloor"] = "drone",
-            ["discofloor.largetiles"] = "smart.switch",
-            ["discord.trophy"] = "bucket.helmet",
-            ["diverhatchet"] = "axe.salvaged",
-            ["diverpickaxe"] = "pickaxe",
-            ["divertorch"] = "Torch",
-            ["door.double.hinged.bardoors"] = "door.double.hinged.wood",
-            ["door.hinged.industrial.a"] = "wall.frame.garagedoor",
-            ["draculacape"] = "hoodie",
-            ["draculamask"] = "riot.helmet",
-            ["dragondoorknocker"] = "door.hinged.metal",
-            ["drumkit"] = "fun.guitar",
-            ["easterdoorwreath"] = "sign.wooden.small",
-            ["factorydoor"] = "door.hinged.metal",
-            ["firework.boomer.blue"] = "tunalight",
-            ["firework.boomer.champagne"] = "flare",
-            ["firework.boomer.green"] = "fuse",
-            ["firework.boomer.orange"] = "weapon.mod.simplesight",
-            ["firework.boomer.pattern"] = "largemedkit",
-            ["firework.boomer.red"] = "battery.small",
-            ["firework.boomer.violet"] = "bucket.helmet",
-            ["firework.romancandle.blue"] = "trap.bear",
-            ["firework.romancandle.green"] = "tincan.alarm",
-            ["firework.romancandle.red"] = "electric.button",
-            ["firework.romancandle.violet"] = "chocolate",
-            ["firework.volcano"] = "pickaxe",
-            ["firework.volcano.red"] = "chair",
-            ["firework.volcano.violet"] = "electric.button",
-            ["fishtrophy"] = "waterjug",
-            ["fogmachine"] = "electric.fuelgenerator.small",
-            ["frankensteinmask"] = "riot.helmet",
-            ["frontier_hatchet"] = "hatchet",
-            ["fun.bass"] = "fun.guitar",
-            ["fun.boomboxportable"] = "fun.guitar",
-            ["fun.casetterecorder"] = "fun.guitar",
-            ["fun.cowbell"] = "fun.guitar",
-            ["fun.flute"] = "fun.guitar",
-            ["fun.jerrycanguitar"] = "fun.guitar",
-            ["fun.tambourine"] = "fun.guitar",
-            ["fun.trumpet"] = "fun.guitar",
-            ["fun.tuba"] = "fun.guitar",
-            ["gates.external.high.adobe"] = "gates.external.high.stone",
-            ["gates.external.high.legacy"] = "gates.external.high.stone",
-            ["gates.external.high.frontier"] = "gates.external.high.stone",
-            ["giantcandycanedecor"] = "electric.audioalarm",
-            ["giantlollipops"] = "water.catcher.small",
-            ["gun.water"] = "waterjug",
-            ["gunrack.horizontal"] = "box.wooden",
-            ["gunrack.single.1.horizontal"] = "box.wooden",
-            ["gunrack.single.2.horizontal"] = "box.wooden.large",
-            ["gunrack.single.3.horizontal"] = "box.wooden.large",
-            ["gunrack_stand"] = "locker",
-            ["gunrack_tall.horizontal"] = "locker",
-            ["gunrack_wide.horizontal"] = "locker",
-            ["half.bamboo.shelves"] = "shelves",
-            ["halloween.surgeonsuit"] = "hazmatsuit",
-            ["hat.bunnyhat"] = "wood.armor.helmet",
-            ["hat.dragonmask"] = "coffeecan.helmet",
-            ["hat.oxmask"] = "coffeecan.helmet",
-            ["hat.rabbitmask"] = "diving.mask",
-            ["hat.ratmask"] = "coffeecan.helmet",
-            ["hat.snakemask"] = "burlap.headwrap",
-            ["hat.tigermask"] = "hat.cap",
-            ["hat.wellipets"] = "prisonerhood",
-            ["hazmat.plushy"] = "diving.mask",
-            ["hazmatsuit.arcticsuit"] = "hazmatsuit_scientist",
-            ["hazmatsuit.diver"] = "hazmatsuit",
-            ["hazmatsuit.frontier"] = "metal.facemask",
-            ["hazmatsuit.lumberjack"] = "hazmatsuit_scientist_peacekeeper",
-            ["hazmatsuit.nomadsuit"] = "metal.plate.torso",
-            ["hazmatsuit.spacesuit"] = "hazmatsuit",
-            ["hazmatyoutooz"] = "jacket.snow",
-            ["heavyscientistyoutooz"] = "pookie.bear",
-            ["hobobarrel"] = "box.wooden.large",
-            ["horse.costume"] = "hoodie",
-            ["huntingtrophylarge"] = "ceilinglight",
-            ["huntingtrophysmall"] = "flashlight.held",
-            ["industrial.wall.light"] = "searchlight",
-            ["industrial.wall.light.blue"] = "electric.simplelight",
-            ["industrial.wall.light.green"] = "electric.simplelight",
-            ["industrial.wall.light.red"] = "electric.simplelight",
-            ["innertube"] = "sled",
-            ["innertube.horse"] = "sled.xmas",
-            ["innertube.unicorn"] = "wrappedgift",
-            ["jackolantern.angry"] = "lantern",
-            ["jackolantern.happy"] = "tunalight",
-            ["jungle.rock"] = "rock",
-            ["knife.bone.obsidian"] = "knife.bone",
-            ["knife.skinning"] = "knife.combat",
-            ["knightsarmour.helmet"] = "coffeecan.helmet",
-            ["knightsarmour.skirt"] = "roadsign.kilt",
-            ["knighttorso.armour"] = "roadsign.jacket",
-            ["largecandles"] = "torch",
-            ["laserlight"] = "weapon.mod.lasersight",
-            ["legacy bow"] = "bow.hunting",
-            ["legacyfurnace"] = "furnace",
-            ["lumberjack.hatchet"] = "hatchet",
-            ["lumberjack.pickaxe"] = "pickaxe",
-            ["mace.baseballbat"] = "mace",
-            ["medieval.box.wooden.large"] = "box.wooden.large",
-            ["medieval.door.double.hinged.metal"] = "door.double.hinged.metal",
-            ["medieval.door.hinged.metal"] = "door.hinged.metal",
-            ["megaphone"] = "fun.guitar",
-            ["metal.facemask.hockey"] = "metal.facemask",
-            ["metal.facemask.icemask"] = "metal.facemask",
-            ["metal.plate.torso.icevest"] = "metal.plate.torso",
-            ["microphonestand"] = "pumpkin",
-            ["minecart.planter"] = "planter.triangle",
-            ["mobilephone"] = "telephone",
-            ["movembermoustache"] = "attire.hide.helterneck",
-            ["movembermoustachecard"] = "attire.hide.pants",
-            ["mummymask"] = "attire.hide.vest",
-            ["newyeargong"] = "black.raspberries",
-            ["paddlingpool"] = "planter.large",
-            ["photoframe.landscape"] = "sign.wooden.huge",
-            ["photoframe.large"] = "sign.wooden.medium",
-            ["photoframe.portrait"] = "sign.wooden.large",
-            ["piano"] = "fun.guitar",
-            ["pistol.water"] = "pistol.eoka",
-            ["rail.road.planter"] = "planter.large",
-            ["rifle.ak.diver"] = "rifle.ak",
-            ["rifle.ak.ice"] = "rifle.lr300",
-            ["rifle.ak.jungle"] = "rifle.m39",
-            ["rifle.ak.med"] = "rifle.ak",
-            ["rocket.launcher.dragon"] = "rocket.launcher",
-            ["rockingchair"] = "attire.hide.boots",
-            ["rockingchair.rockingchair2"] = "fish.herring",
-            ["rockingchair.rockingchair3"] = "hatchet",
-            ["rustige_egg_a"] = "weapon.mod.small.scope",
-            ["rustige_egg_b"] = "smg.2",
-            ["rustige_egg_c"] = "crossbow",
-            ["rustige_egg_d"] = "diving.fins",
-            ["rustige_egg_e"] = "door.closer",
-            ["rustige_egg_f"] = "electric.hbhfsensor",
-            ["rustige_egg_g"] = "carburetor3",
-            ["salvaged.bamboo.shelves"] = "fuse",
-            ["santabeard"] = "egg",
-            ["scarecrow"] = "torch",
-            ["sculpture.ice"] = "wallpaper",
-            ["secretlabchair"] = "chair",
-            ["sign.hanging"] = "lantern",
-            ["sign.hanging.banner.large"] = "wallpaper",
-            ["sign.hanging.ornate"] = "pie.pumpkin",
-            ["sign.neon.125x125"] = "sign.wooden.large",
-            ["sign.neon.125x215"] = "sign.wooden.large",
-            ["sign.neon.125x215.animated"] = "sign.wooden.large",
-            ["sign.neon.xl"] = "sign.woodsign.wooden.hugeen.huge",
-            ["sign.neon.xl.animated"] = "sign.wooden.huge",
-            ["sign.pictureframe.landscape"] = "sign.wooden.medium",
-            ["sign.pictureframe.portrait"] = "sign.wooden.medium",
-            ["sign.pictureframe.tall"] = "sign.wooden.medium",
-            ["sign.pictureframe.xl"] = "sign.wooden.small",
-            ["sign.pictureframe.xxl"] = "sign.wooden.small",
-            ["sign.pole.banner.large"] = "sign.wooden.small",
-            ["sign.post.double"] = "advancedcraftingtea_quality",
-            ["sign.post.single"] = "advanceharvestingtea",
-            ["sign.post.town"] = "maxhealthtea.advanced",
-            ["sign.post.town.roof"] = "scraptea.advanced",
-            ["single.shallow.wall.shelves"] = "shelves",
-            ["skull"] = "hat.wolf",
-            ["skull.trophy"] = "pumpkin",
-            ["skull.trophy.jar"] = "lantern",
-            ["skull.trophy.jar2"] = "smgbody",
-            ["skull.trophy.table"] = "sofa",
-            ["skull_fire_pit"] = "fireplace.stone",
-            ["skulldoorknocker"] = "electric.button",
-            ["skullspikes"] = "spraycan",
-            ["skullspikes.candles"] = "lantern",
-            ["skullspikes.pumpkin"] = "pumpkin",
-            ["skylantern"] = "lantern",
-            ["skylantern.skylantern.green"] = "pistol.prototype17",
-            ["skylantern.skylantern.orange"] = "rock",
-            ["skylantern.skylantern.purple"] = "chair",
-            ["skylantern.skylantern.red"] = "lantern",
-            ["smallcandles"] = "lantern",
-            ["snowmachine"] = "batteringram",
-            ["snowman"] = "apple",
-            ["snowmobiletomaha"] = "snowmobilee",
-            ["sofa"] = "table",
-            ["sofa.pattern"] = "chair",
-            ["soundlight"] = "lantern",
-            ["spear.cny"] = "spear.wooden",
-            ["spookyspeaker"] = "mailbox",
-            ["unused_storage_barrel_a"] = "tunalight",
-            ["storage_barrel_b"] = "rug",
-            ["storage_barrel_c"] = "trap.landmine",
-            ["strobelight"] = "lantern",
-            ["sunglasses"] = "mask.bandana",
-            ["sunglasses02black"] = "mask.bandana",
-            ["sunglasses02camo"] = "pants.shorts",
-            ["sunglasses02red"] = "wood.armor.pants",
-            ["sunglasses03black"] = "pants",
-            ["sunglasses03chrome"] = "tshirt.long",
-            ["sunglasses03gold"] = "shirt.collared",
-            ["sunken.knife"] = "knife.combat",
-            ["tool.instant_camera"] = "cctv.camera",
-            ["toolgun"] = "hammer",
-            ["torch.torch.skull"] = "torch",
-            ["torchholder"] = "torch",
-            ["triangle.rail.road.planter"] = "planter.large",
-            ["trophy"] = "ammo.rocket.mlrs",
-            ["trophy2023"] = "ammo.rocket.mlrs",
-            ["twitch.headset"] = "hat.cap",
-            ["twitchrivals2023desk"] = "table",
-            ["twitchsunglasses"] = "hat.miner",
-            ["vehicle.car_radio"] = "lantern",
-            ["wall.external.high.adobe"] = "wall.external.high",
-            ["wall.external.high.legacy"] = "wall.external.high.stone",
-            ["wall.frame.lunar2025_a"] = "woodframe.small",
-            ["wall.frame.lunar2025_b"] = "woodframe.medium",
-            ["wall.frame.lunar2025_c"] = "woodframe.large",
-            ["wantedposter"] = "rug.bear",
-            ["wantedposter.wantedposter2"] = "rug",
-            ["wantedposter.wantedposter3"] = "shirt.collared",
-            ["wantedposter.wantedposter4"] = "semibody",
-            ["wicker.barrel"] = "tunalight",
-            ["xmas.door.garland"] = "door.hinged.wood",
-            ["xmas.double.door.garland"] = "door.double.hinged.wood",
-            ["xmas.lightstring"] = "wiretool",
-            ["xmas.lightstring.advanced"] = "wiretool",
-            ["xmas.window.garland"] = "wall.window.glass.reinforced",
-            ["xmasdoorwreath"] = "door.hinged.wood",
-            ["xylophone"] = "telephone",
-        };
-
-        private Dictionary<string, int> replaced = new();
-        private Dictionary<string, int> removed = new();
-        private Coroutine _editCo;
-        private int _editCode;
-
-        private void CommandEdit(IPlayer user, string command, string[] args)
-        {
-            if (user.IsServer || (user.Object as BasePlayer).Connection.authLevel >= 2)
-            {
-                if (_editCo != null) return;
-
-                if (_editCode == 0) _editCode = UnityEngine.Random.Range(1000, 9999);
-
-                if (!Array.Exists(args, arg => arg == _editCode.ToString()))
-                {
-                    user.Message($"This action will modify your copypaste files and loot tables to comply with Facepunch's Terms of Service regarding paid content. You should backup your copypaste folder, and loot tables, before proceeding. To confirm, type: {config.Settings.EditCommand} {_editCode}");
-                    user.Message($"Default behavior will delete any content rather than replace it. If you prefer to have it replaced, then specify which to replace: {config.Settings.EditCommand} {_editCode} replace_prefabs replace_loot");
-                    return;
-                }
-
-                _editCode = 0;
-                _editCo = ServerMgr.Instance.StartCoroutine(CheckFilesForPaidContent(user, args.Contains("test"), args.Contains("replace_prefabs"), args.Contains("replace_loot")));
-            }
-        }
-
-        private IEnumerator CheckFilesForPaidContent(IPlayer user, bool test, bool prefabs, bool loot)
-        {
-            using var sb = DisposableBuilder.Get();
-            if (prefabs)
-            {
-                HashSet<string> files = new();
-
-                foreach (string file in GetCopyPasteFiles())
-                {
-                    files.Add(Path.Combine("copypaste", Oxide.Core.Utility.GetFileNameWithoutExtension(file)).Replace(".json", ""));
-                }
-
-                Puts("Confirmed. Updating content within {0} copypaste files...", files.Count);
-
-                foreach (string file in files)
-                {
-                    yield return CheckFileForPaidContent(file, test, prefabs);
-                }
-            }
-
-            foreach (var pair in replaced.OrderByAscending(x => x.Value)) sb.AppendLine($"{pair.Key} ({pair.Value})");
-            Puts("{0} replacements:\n{1}", replaced.Sum(x => x.Value), sb.ToString());
-            sb.Clear();
-
-            foreach (var pair in removed.OrderByAscending(x => x.Value)) sb.AppendLine($"{pair.Key} ({pair.Value})");
-            Puts("{0} removals:\n{1}", removed.Sum(x => x.Value), sb.ToString());
-            sb.Clear();
-
-            Puts("Updating content within loot table files...");
-            yield return ReloadTables(user, sb, true, loot);
-            Puts("{0} loot table removals:\n{1}", sb.ToString().Count(c => c == ','), sb.ToString());
-            sb.Clear();
-
-            Puts($"{user.Name} ({user.Id}) has removed paid content from all copypaste and loot table files.");
-            if (!user.IsServer) user.Message("Edit completed, see server console for additional information.");
-        }
-
-        private IEnumerator CheckFileForPaidContent(string filename, bool test, bool prefabs)
-        {
-            DynamicConfigFile data;
-            try
-            {
-                data = Interface.Oxide.DataFileSystem.GetDatafile(filename);
-            }
-            catch (Exception ex)
-            {
-                Puts("Error loading {0}: {1}", filename, ex);
-                yield break;
-            }
-
-            if (data["entities"] == null)
-            {
-                Puts($"{filename} is missing entity data");
-                yield break;
-            }
-
-            var entities = data["entities"] as List<object>;
-            bool changed = false;
-            int checks = 0;
-
-            for (int i = entities.Count - 1; i >= 0; i--)
-            {
-                var obj = entities[i];
-                if (++checks >= 1000)
-                {
-                    checks = 0;
-                    yield return CoroutineEx.waitForSeconds(0.075f);
-                }
-                if (!(obj is Dictionary<string, object> entity))
-                {
-                    continue;
-                }
-                if (!entity.TryGetValue("prefabname", out var val))
-                {
-                    continue;
-                }
-                var prefab = val.ToString();
-                try
-                {
-                    if (!PaidDeployableItems.ContainsKey(prefab))
-                    {
-                        continue;
-                    }
-
-                    string replacement = prefabReplacements.GetValueOrDefault(prefab);
-
-                    changed = true;
-
-                    if (!prefabs || string.IsNullOrEmpty(replacement))
-                    {
-                        if (!test) entities.RemoveAt(i);
-                        removed.TryAdd(prefab, 0);
-                        removed[prefab]++;
-                    }
-                    else
-                    {
-                        if (!test) entity["prefabname"] = replacement;
-                        replaced.TryAdd(prefab, 0);
-                        replaced[prefab]++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Puts("Error with prefab: {0}", ex);
-                }
-            }
-
-            if (changed)
-            {
-                Puts("Updated {0}", filename);
-                if (!test) data.Save();
-            }
-
-            _editCo = null;
-        }
-
         private readonly List<string> _buyers = new();
         private void CommandBuyRaid(IPlayer user, string command, string[] args)
         {
@@ -19773,7 +19911,7 @@ namespace Oxide.Plugins
                 player = BasePlayer.FindByID(ulong.Parse(args[1]));
             }
 
-            if (!player.IsNetworked())
+            if (!player.HasNetworkId())
             {
                 Message(user, args.Length > 1 ? m("TargetNotFoundId", user.Id, args[1]) : "TargetNotFoundNoId");
                 return;
@@ -19842,7 +19980,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args[0].Equals("reset", StringComparison.CurrentCultureIgnoreCase) && config.Settings.Buyable.Cooldowns.Costs.Any)
+            if (args[0].Equals("reset", StringComparison.CurrentCultureIgnoreCase) && config.Settings.Buyable.Cooldowns.Costs.Any && data.BuyableCooldowns.ContainsKey(player.userID))
             {
                 CommandBuyRaidTakePayments(user, buyer, player, Array.Empty<string>());
                 return;
@@ -20253,7 +20391,7 @@ namespace Oxide.Plugins
                     }
                 case "savefix":
                     {
-                        if (user.IsAdmin || user.HasPermission("raidablebases.allow"))
+                        if (user.IsAdmin || user.HasPermission("raidablebases.admin"))
                         {
                             int removed = BaseEntity.saveList.RemoveWhere(IsKilled);
 
@@ -20271,7 +20409,7 @@ namespace Oxide.Plugins
                     }
                 case "tp":
                     {
-                        if (player.IsNetworked() && (isAdmin || user.HasPermission("raidablebases.allow")))
+                        if (player.HasNetworkId() && (isAdmin || user.HasPermission("raidablebases.admin")))
                         {
                             RaidableBase raid = null;
                             float num = 9999f;
@@ -20306,10 +20444,7 @@ namespace Oxide.Plugins
                                 v = hit.point;
                                 DrawText(player, 5f, Color.red, v, "!");
                             }
-                            var blocked = SpawnsController.IsLocationBlocked(v);
-                            Message(user, "IsLocationBlocked: " + blocked);
-                            var baseName = Buildings.Profiles.FirstOrDefault().Key;
-                            Queues.Test(user, baseName, v, out _, 50f);
+                            Message(user, "IsLocationBlocked: " + SpawnsController.IsLocationBlocked(v));
                         }
                         return;
                     }
@@ -20342,7 +20477,7 @@ namespace Oxide.Plugins
                     }
                 case "grid":
                     {
-                        if (player.IsNetworked() && (isAdmin || user.HasPermission("raidablebases.ddraw")))
+                        if (player.HasNetworkId() && (isAdmin || user.HasPermission("raidablebases.ddraw")))
                         {
                             ShowGrid(player, args.Length == 2 && args[1] == "all", args.Length == 2 ? args[1] : string.Empty);
                         }
@@ -20391,7 +20526,7 @@ namespace Oxide.Plugins
                     }
                 case "hint":
                     {
-                        HandleHintsCommand(player);
+                        HandleHintsCommand(player, args);
                         return;
                     }
             }
@@ -20406,7 +20541,7 @@ namespace Oxide.Plugins
                 ShowNextScheduledEvent(user);
             }
 
-            if (player.IsNetworked())
+            if (player.HasNetworkId())
             {
                 DrawRaidLocations(player, isAdmin || player.HasPermission("raidablebases.ddraw"));
             }
@@ -20467,7 +20602,7 @@ namespace Oxide.Plugins
             return raid.ownerId == 0uL || raid.BypassUseOwners() || raid.ownerId.IsSteamId() || raid.IsAlly(player);
         }
 
-        public void HandleHintsCommand(BasePlayer player)
+        public void HandleHintsCommand(BasePlayer player, string[] args)
         {
             var nearest = GetNearestBase(player.transform.position);
             if (nearest == null)
@@ -20511,10 +20646,6 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (opt.Cooldown > 0)
-                {
-                    nearest.AddHintCooldown(player, opt.Cooldown);
-                }
             }
 
             float drawTime = Mathf.Max(1f, opt.DrawTime);
@@ -20539,15 +20670,38 @@ namespace Oxide.Plugins
                 }
             }
 
+            if (objects.Count > 0 && !canBypass && opt.ForfeitRewardsOnHint && !nearest.RewardsForfeit)
+            {
+                if (nearest.IsRequiredLootPercentageMet)
+                {
+                    Message(player, "Hints Rewards Already Issued");
+                    return;
+                }
+
+                if (!nearest.ConfirmRewardForfeit(player.userID, args, out int code, out int seconds))
+                {
+                    Message(player, "Hints Reward Confirmation", code, seconds);
+                    return;
+                }
+
+                nearest.RewardsForfeit = true;
+                Message(player, "Hints Rewards Forfeited");
+            }
+
+            if (!canBypass && opt.Cooldown > 0)
+            {
+                nearest.AddHintCooldown(player, opt.Cooldown);
+            }
+
             if (objects.Count > 0)
             {
-                AdminCommand(player, () =>
+                using (AdminCommand(player))
                 {
                     foreach (var obj in objects)
                     {
                         player.SendConsoleCommand("ddraw.text", obj[0], obj[1], obj[2], obj[3]);
                     }
-                });
+                }
             }
 
             Message(player, objects.Count > 0 ? "Hints Drawn On Screen" : "Hints None Available");
@@ -20595,7 +20749,7 @@ namespace Oxide.Plugins
             if (!isAllowed && !raid.IsPayLocked && raid.HasLockout(target)) { Message(user, "Invite Lockout Error"); Message(target, "Invite Failed"); return; }
             if (!raid.raiders.TryGetValue(target.userID, out var raider)) raid.raiders[target.userID] = raider = new(target);
             if (InRange(raid.Location, target.transform.position, raid.ProtectionRadius * 1.5f)) raider.lastActiveTime = Time.realtimeSinceStartupAsDouble;
-            if (user.IsServer || player.IsAdmin || user.HasPermission("raidablebases.allow")) Message(user, $"You can use this command to set them as the owner of this raid: {config.Settings.EventCommand} setowner {target.userID}");
+            if (user.IsServer || player.IsAdmin || user.HasPermission("raidablebases.admin")) Message(user, $"You can use this command to set them as the owner of this raid: {config.Settings.EventCommand} setowner {target.userID}");
             raider.IsAlly = true;
             raider.IsAllowed = true;
             raider.IsParticipant = true;
@@ -20618,18 +20772,18 @@ namespace Oxide.Plugins
 
             if (hasPerm)
             {
-                AdminCommand(player, () =>
+                using (AdminCommand(player))
                 {
                     foreach (var raid in Raids)
                     {
-                        int num = BasePlayer.activePlayerList.Count(x => x.IsNetworked() && x.Distance(raid.Location) <= raid.ProtectionRadius * 3f);
+                        int num = BasePlayer.activePlayerList.Count(x => x.HasNetworkId() && x.Distance(raid.Location) <= raid.ProtectionRadius * 3f);
                         int distance = Mathf.CeilToInt(player.transform.position.Distance(raid.Location));
                         string message = mx("RaidMessage", player.UserIDString, distance, num);
                         string flag = mx(raid.GetAllowKey(), player.UserIDString);
 
                         DrawText(player, 15f, Color.yellow, raid.Location, string.Format("<size=24>{0}{1} {2} [{3} {4}] {5}</size>", raid.BaseName, flag, raid.Type + ":" + raid.Mode(player.UserIDString, true), message, FormatGridReference(player, raid.Location), raid.Location));
 
-                        foreach (var ri in raid.raiders.Values.Where(x => x.IsAlly && x.player.IsNetworked()))
+                        foreach (var ri in raid.raiders.Values.Where(x => x.IsAlly && x.player.HasNetworkId()))
                         {
                             DrawText(player, 15f, Color.yellow, ri.player.transform.position, $"<size=24>{mx("Ally", player.UserIDString).Replace(":", string.Empty)}</size>");
                         }
@@ -20639,7 +20793,7 @@ namespace Oxide.Plugins
                             DrawText(player, 15f, Color.yellow, owner.transform.position, $"<size=24>{mx("Owner", player.UserIDString).Replace(":", string.Empty)}</size>");
                         }
                     }
-                });
+                }
             }
         }
 
@@ -20902,9 +21056,9 @@ namespace Oxide.Plugins
 
                 foreach (var key in mapping.Keys)
                 {
-                    if (!arguments.Contains(key))
+                    if (!ConfigArguments.Contains(key))
                     {
-                        arguments.Add(key);
+                        ConfigArguments.Add(key);
                     }
                 }
 
@@ -20931,7 +21085,7 @@ namespace Oxide.Plugins
 
         protected void ShowGrid(BasePlayer player, bool showAll, string profile)
         {
-            AdminCommand(player, () =>
+            using (AdminCommand(player))
             {
                 foreach (var (type, spawns) in GridController.Spawns)
                 {
@@ -20951,7 +21105,7 @@ namespace Oxide.Plugins
                     DrawSphere(player, 30f, Color.blue, cmi.position, cmi.radius);
                     DrawText(player, 30f, Color.cyan, cmi.position, $"<size=16>{cmi.text} ({cmi.radius})</size>");
                 }
-            });
+            }
         }
 
         private static void ShowSpawns(BasePlayer player, RaidableSpawns spawns, bool showAll, float distance, string profile)
@@ -21017,8 +21171,37 @@ namespace Oxide.Plugins
         private void CommandRaidBase(IPlayer user, string command, string[] args)
         {
             var player = user.Player();
-            bool isAllowed = user.IsServer || player.IsAdmin || user.HasPermission("raidablebases.allow");
-            if (!CanCommandContinue(player, user, isAllowed, args))
+            bool isAllowed = user.IsServer || player.IsAdmin || user.HasPermission("raidablebases.admin");
+
+            if (command == config.Settings.EventCommand && args.Length == 0)
+            {
+                if (!isAllowed)
+                {
+                    using var builder = DisposableBuilder.Get();
+                    if (user.HasPermission("raidablebases.despawn.buyraid")) builder.Append("despawn");
+                    if (user.HasPermission("raidablebases.clearowner")) builder.Append(builder.Length == 0 ? "clearowner" : "|clearowner");
+                    if (user.HasPermission("raidablebases.setowner")) builder.Append(builder.Length == 0 ? "setowner" : "|setowner");
+                    if (builder.Length != 0) Message(user, $"Syntax: /{command} <{builder}>");
+                    return;
+                }
+                Message(user, $"Syntax: /{command} <difficulty, base name, or command>");
+                return;
+            }
+
+            if (HandledCommandArguments(player, user, isAllowed, args))
+            {
+                return;
+            }
+
+            string mode = RaidableMode.Random;
+            string baseName = null;
+
+            if (command == config.Settings.EventCommand && !GetEventArguments(user, args, out mode, out baseName))
+            {
+                return;
+            }
+
+            if (!CanCommandContinue(player, user, isAllowed))
             {
                 return;
             }
@@ -21029,7 +21212,7 @@ namespace Oxide.Plugins
             }
             if (command == config.Settings.EventCommand) // rbe
             {
-                ProcessEventCommand(user, player, isAllowed, args);
+                ProcessEventCommand(user, player, isAllowed, mode, baseName);
             }
             else if (command == config.Settings.ConsoleCommand) // rbevent
             {
@@ -21037,15 +21220,19 @@ namespace Oxide.Plugins
             }
         }
 
-        protected void ProcessEventCommand(IPlayer user, BasePlayer player, bool isAllowed, string[] args) // rbe
+        protected void ProcessEventCommand(IPlayer user, BasePlayer player, bool isAllowed, string mode, string baseName) // rbe
         {
-            if (!isAllowed || !player.IsNetworked())
+            if (!isAllowed || !player.HasNetworkId())
             {
                 return;
             }
 
-            var baseName = Array.Find(args, FileExists);
-            var mode = GetRaidableMode(Array.Find(args, IsRaidableMode));
+            if (baseName != null && !FileExists(baseName))
+            {
+                QueueNotification(user, "FileDoesNotExist2", baseName);
+                return;
+            }
+
             var (key, profile) = GetBuilding(RaidableType.Manual, mode, baseName, null);
 
             if (!IsProfileValid(key, profile, true, RaidableType.Manual))
@@ -21075,16 +21262,21 @@ namespace Oxide.Plugins
             {
                 var spawns = GridController.Spawns.Values.FirstOrDefault(s => s.GetLocations(CacheType.Generic).Exists(t => InRange2D(t.Location, hit.point, M_RADIUS)) || s.GetLocations(CacheType.Seabed).Exists(t => InRange2D(t.Location, hit.point, M_RADIUS)));
                 var point = hit.point + new Vector3(0f, profile.Options.Setup.PasteHeightAdjustment);
-                RandomBase rb = new();
-                rb.Instance = this;
-                rb.BaseName = key;
-                rb.Profile = profile;
-                rb.Position = point;
-                rb.type = RaidableType.Manual;
-                rb.spawns = spawns ??= new(this);
-                rb.payments = new();
-                rb.payments.admin = player.IsAdmin;
-                rb.pasteData = GetPasteData(key);
+                spawns ??= new(this);
+                RandomBase rb = new()
+                {
+                    Instance = this,
+                    BaseName = key,
+                    Profile = profile,
+                    spawns = spawns,
+                    Position = spawns.IsCustomSpawn ? hit.point : point,
+                    type = RaidableType.Manual,
+                    payments = new()
+                    {
+                        admin = player.IsAdmin
+                    },
+                    pasteData = GetPasteData(key)
+                };
                 ParseListedOptions(rb);
                 if (profile.Options.Setup.ForcedHeight != -1)
                 {
@@ -21126,13 +21318,8 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool CanCommandContinue(BasePlayer player, IPlayer user, bool isAllowed, string[] args)
+        private bool CanCommandContinue(BasePlayer player, IPlayer user, bool isAllowed)
         {
-            if (HandledCommandArguments(player, user, isAllowed, args))
-            {
-                return false;
-            }
-
             if (!IsCopyPasteLoaded(out var error))
             {
                 Message(user, error);
@@ -21148,6 +21335,179 @@ namespace Oxide.Plugins
             return true;
         }
 
+        public bool GetRaidableMode(string value, out string result)
+        {
+            if (value.Equals(RaidableMode.Random, StringComparison.OrdinalIgnoreCase))
+            {
+                result = RaidableMode.Random;
+                return true;
+            }
+
+            if (int.TryParse(value, out int level) && GetModeFromLevel(level, out result))
+            {
+                return true;
+            }
+
+            foreach (string mode in GetRaidableModes())
+            {
+                if (value.Equals(mode, StringComparison.OrdinalIgnoreCase))
+                {
+                    result = mode;
+                    return true;
+                }
+            }
+
+            result = RaidableMode.Random;
+            return false;
+        }
+
+        public bool GetRaidableBase(string value, out string baseName)
+        {
+            foreach (var (key, profile) in Buildings.Profiles)
+            {
+                if (key.Equals(value, StringComparison.OrdinalIgnoreCase))
+                {
+                    baseName = key;
+                    return true;
+                }
+
+                foreach (string additionalBase in profile.Options.AdditionalBases.Keys)
+                {
+                    if (additionalBase.Equals(value, StringComparison.OrdinalIgnoreCase))
+                    {
+                        baseName = additionalBase;
+                        return true;
+                    }
+                }
+            }
+
+            baseName = null;
+            return false;
+        }
+
+        public bool GetEventArguments(IPlayer user, string[] args, out string mode, out string baseName)
+        {
+            bool hasDifficulty = false;
+            bool hasBaseName = false;
+            mode = RaidableMode.Random;
+            baseName = null;
+
+            foreach (string arg in args)
+            {
+                bool isDifficulty = GetRaidableMode(arg, out string modeResult);
+                bool isBase = GetRaidableBase(arg, out string baseNameResult);
+
+                if (!isDifficulty && !isBase)
+                {
+                    ReplyUnknownArgument(user, arg);
+                    return false;
+                }
+
+                if (isDifficulty && !hasDifficulty)
+                {
+                    mode = modeResult;
+                    hasDifficulty = true;
+                }
+
+                if (isBase && !hasBaseName)
+                {
+                    baseName = baseNameResult;
+                    hasBaseName = true;
+                }
+            }
+
+            return true;
+        }
+
+        private void ReplyUnknownArgument(IPlayer user, string value)
+        {
+            using var args = DisposableIgnoreCaseSet(ManualEventHelperCommands);
+
+            foreach (string mode in GetRaidableModes())
+            {
+                args.Add(mode);
+            }
+
+            args.Add(RaidableMode.Random);
+
+            foreach (var (key, profile) in Buildings.Profiles)
+            {
+                args.Add(key);
+
+                foreach (string extra in profile.Options.AdditionalBases.Keys)
+                {
+                    args.Add(extra);
+                }
+            }
+
+            int maxDistance = Math.Max(2, value.Length / 3);
+            using var matches = DisposableList<(string Value, int Distance)>();
+            using var previous = DisposableList<int>();
+            using var current = DisposableList<int>();
+
+            foreach (string arg in args)
+            {
+                bool prefix = value.Length >= 4 && arg.StartsWith(value, StringComparison.OrdinalIgnoreCase);
+                int distance = prefix ? 0 : GetLevenshteinDistance(value, arg, previous, current);
+
+                if (prefix || distance <= maxDistance)
+                {
+                    matches.Add((arg, distance));
+                }
+            }
+
+            matches.Sort((a, b) =>
+            {
+                int result = a.Distance.CompareTo(b.Distance);
+                return result != 0 ? result : string.Compare(a.Value, b.Value, StringComparison.OrdinalIgnoreCase);
+            });
+
+            using var closest = DisposableList<string>();
+
+            for (int i = 0; i < matches.Count && i < 3; i++)
+            {
+                closest.Add(matches[i].Value);
+            }
+
+            string suggestions = closest.Count == 0 ? string.Empty : en ? $" Did you mean: {string.Join(", ", closest)}?" : $" Возможно, вы имели в виду: {string.Join(", ", closest)}?";
+
+            ReplyOrLog(user, en ? $"Unknown argument '{value}'.{suggestions}" : $"Неизвестный аргумент '{value}'.{suggestions}");
+        }
+
+        private static int GetLevenshteinDistance(string value, string arg, List<int> previous, List<int> current)
+        {
+            previous.Clear();
+            current.Clear();
+
+            for (int i = 0; i <= arg.Length; i++)
+            {
+                previous.Add(i);
+                current.Add(0);
+            }
+
+            for (int j = 1; j <= value.Length; j++)
+            {
+                current[0] = j;
+                char c = char.ToLowerInvariant(value[j - 1]);
+
+                for (int k = 1; k <= arg.Length; k++)
+                {
+                    int cost = c == char.ToLowerInvariant(arg[k - 1]) ? 0 : 1;
+                    current[k] = Math.Min(Math.Min(current[k - 1] + 1, previous[k] + 1), previous[k - 1] + cost);
+                }
+
+                (previous, current) = (current, previous);
+            }
+
+            return previous[arg.Length];
+        }
+
+        private void ReplyOrLog(IPlayer user, string message)
+        {
+            if (user.IsServer) Puts(message);
+            else user.Reply(message);
+        }
+
         private bool HandledCommandArguments(BasePlayer player, IPlayer user, bool isAllowed, string[] args)
         {
             if (args.Length == 0)
@@ -21155,16 +21515,17 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            bool isConnected = player != null && player.IsConnected;
             switch (args[0].ToLower())
             {
                 case "despawn":
-                    if (player.IsNetworked() && (isAllowed || player.HasPermission("raidablebases.despawn.buyraid")))
+                    if (isConnected && (isAllowed || player.HasPermission("raidablebases.despawn.buyraid")))
                     {
                         DespawnBase(player, isAllowed);
                     }
                     return true;
                 case "draw":
-                    if (player.IsNetworked())
+                    if (isConnected)
                     {
                         DrawSpheres(player, isAllowed);
                     }
@@ -21189,10 +21550,6 @@ namespace Oxide.Plugins
                         if (DebugMode)
                         {
                             if (!_ownershipReady) Message(user, "Steam Inventory definitions are not yet available.");
-                            if (IsGridBroken())
-                            {
-                                Message(user, "Another plugin has prevented the grid from loading? It is not functioning, it has been canceled by another process.");
-                            }
                             if (GridController.step != 0)
                             {
                                 if (GridController.step == int.MaxValue) Message(user, "Grid has not initialied.");
@@ -21203,6 +21560,19 @@ namespace Oxide.Plugins
                             Message(user, $"Scheduled Events Running: {Automated._scheduledCoroutine != null}");
                             Message(user, $"Maintained Events Running: {Automated._maintainedCoroutine != null}");
                             Message(user, $"Queues Pending: {Queues.queue.Count}");
+                            RustNavmesh navmesh = RustNavigation.Instance?.DefaultNavmesh;
+                            if (navmesh != null)
+                            {
+                                foreach (var raid in Raids)
+                                {
+                                    if (!raid.Options.NPC.Enabled || raid.npcMaxAmount <= 0 || isConnected && !raid.InRangeTolerance(player.transform.position, 25f)) continue;
+                                    Vector2Int tile = navmesh.rcCalcTileCoordFromPos(raid.Location);
+                                    if (navmesh.IsTileFarFromShore(tile.x, tile.y))
+                                    {
+                                        Message(user, $"RustNav WARNING: {raid.BaseName} at {raid.Location} is too far from the navmesh/too far offshore.");
+                                    }
+                                }
+                            }
                             if (!AnyCopyPasteFileExists && !GridController.BadFrameRate)
                             {
                                 Message(user, "No copypaste file in any profile exists!");
@@ -21232,16 +21602,17 @@ namespace Oxide.Plugins
                             }
                             if (IsGridBroken())
                             {
-                                if (points > 1000) { GridController.gridCoroutine = null; Puts("Grid activated with {0} points, you need to find whatever plugin you have that's breaking this plugin. There's no reason the grid should partially load then stop without finishing.", points); }
+                                if (points > 1000) { GridController.gridCoroutine = null; Message(user, "Another plugin has prevented the grid from loading? It is not functioning, it has been canceled by another plugin."); }
                                 else Message(user, "You must reload RaidableBases or type rb.reloadconfig to load the grid.");
                             }
+                            else if (config.Settings.Management.AllowedGrids.Count > 0) Message(user, $"Configured to spawn only in these grids: {string.Join(", ", config.Settings.Management.AllowedGrids)}");
 
                         }
                         return true;
                     }
                 case "kill_cleanup":
                     {
-                        if (!isAllowed || player == null) return false;
+                        if (!isAllowed || !isConnected) return false;
                         var num = 0;
                         using var tmp = FindEntitiesOfType<BaseEntity>(player.transform.position, 100f);
                         foreach (var entity in tmp)
@@ -21345,7 +21716,7 @@ namespace Oxide.Plugins
                         {
                             var target = RustCore.FindPlayer(args[1]);
 
-                            if (!target.IsNull())
+                            if (target != null)
                             {
                                 if (args.Length == 2 || args[2] == "buyable")
                                 {
@@ -21409,7 +21780,7 @@ namespace Oxide.Plugins
                     }
                 case "clearowner":
                     {
-                        if (player.IsNetworked() && (isAllowed || user.HasPermission("raidablebases.clearowner")))
+                        if (isConnected && (isAllowed || user.HasPermission("raidablebases.clearowner")))
                         {
                             var target = player;
                             if (isAllowed && args.Length >= 2 && RustCore.FindPlayer(args[1]) is BasePlayer other)
@@ -21440,13 +21811,13 @@ namespace Oxide.Plugins
         {
             if (isAllowed || player.HasPermission("raidablebases.ddraw"))
             {
-                AdminCommand(player, () =>
+                using (AdminCommand(player))
                 {
                     foreach (var raid in Raids)
                     {
                         DrawSphere(player, 30f, Color.blue, raid.Location, raid.ProtectionRadius);
                     }
-                });
+                }
             }
         }
 
@@ -21614,9 +21985,9 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args.Length == 0 || !arguments.Exists(str => args[0].Equals(str, StringComparison.OrdinalIgnoreCase)))
+            if (args.Length == 0 || !ConfigArguments.Exists(str => args[0].Equals(str, StringComparison.OrdinalIgnoreCase)))
             {
-                Message(user, "ConfigUseFormat", string.Join("|", arguments));
+                Message(user, "ConfigUseFormat", string.Join("|", ConfigArguments));
                 return;
             }
 
@@ -21794,7 +22165,7 @@ namespace Oxide.Plugins
 
         private void KillEntity(BaseEntity entity, UndoLoopSettings us)
         {
-            if (entity.IsNull())
+            if (entity.IsKilled())
             {
                 return;
             }
@@ -21890,6 +22261,7 @@ namespace Oxide.Plugins
         {
             try
             {
+                if (ent.OwnerID == 0uL) RemoveRestrictedItems(container);
                 string prefab = buoyant ? "assets/prefabs/misc/item drop/item_drop_buoyant.prefab" : "assets/prefabs/misc/item drop/item_drop.prefab";
                 Vector3 position = ent.CenterPoint();
                 if (ent.skinID == 102201)
@@ -21926,12 +22298,12 @@ namespace Oxide.Plugins
             {
                 AutoTurret => 0,
                 WeaponRack => -1,
+                PoweredWaterPurifier => 1,
                 IceFence or SimpleBuildingBlock => 6,
                 BuildingBlock => 5,
-                _ when DeployableItems.ContainsKey(entity.PrefabName) => 4,
-                StorageContainer sc when IsBox(sc, true) => 3,
-                IOEntity io when !IsBox(io, true) => 2,
-                BaseVehicle => 1,
+                StorageContainer sc when !DeployableItems.ContainsKey(sc.PrefabName) && IsBox(sc, true) => 3,
+                IOEntity io when !DeployableItems.ContainsKey(io.PrefabName) && !IsBox(io, true) => 2,
+                BaseVehicle vehicle when !DeployableItems.ContainsKey(vehicle.PrefabName) => 1,
                 _ => 4
             };
 
@@ -21940,7 +22312,11 @@ namespace Oxide.Plugins
                 if (ReferenceEquals(x, y)) return 0;
                 if (x == null) return -1;
                 if (y == null) return 1;
-                return Evaluate(x).CompareTo(Evaluate(y));
+                int result = Evaluate(x).CompareTo(Evaluate(y));
+                if (result != 0) return result;
+                ulong first = x.net?.ID.Value ?? 0uL;
+                ulong second = y.net?.ID.Value ?? 0uL;
+                return second.CompareTo(first);
             }
         }
 
@@ -22010,21 +22386,21 @@ namespace Oxide.Plugins
 
             int checks = 0;
 
-            while (entities.Count > 0)
+            for (int i = 0; i < entities.Count; i++)
             {
                 if (++checks >= threshold)
                 {
                     checks = 0;
                     threshold = Performance.report.frameRate < 15 ? 1 : limit;
-                    yield return instruction;
+                    yield return limit == 1 && Performance.report.frameRate >= ConVar.FPS.limit * 0.5f ? null : instruction;
                 }
 
-                BaseEntity entity = entities[0];
-
-                entities.RemoveAt(0);
+                BaseEntity entity = entities[i];
 
                 KillEntity(entity, UndoSettings);
             }
+
+            entities.Clear();
 
             if (bounds.Count > 0)
             {
@@ -22073,14 +22449,175 @@ namespace Oxide.Plugins
 
         #region Helpers
 
+        private static bool IsInvalidGrid(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            Vector2i? grid = MapHelper.StringToGrid(value);
+            return !grid.HasValue || !MapHelper.GridToString(grid.Value).Equals(value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool GetInitiatorPlayer(HitInfo info, DamageType damageType, BaseCombatEntity entity, out BasePlayer target)
+        {
+            if (info == null)
+            {
+                target = entity.lastAttacker as BasePlayer;
+                return target != null && !target.IsDestroyed;
+            }
+
+            var weapon = info.Initiator ?? info.WeaponPrefab ?? info.Weapon;
+
+            target = weapon switch
+            {
+                BasePlayer player => player,
+                { creatorEntity: BasePlayer player } => player,
+                { parentEntity: EntityRef parentEntity } when parentEntity.Get(true) is BasePlayer player => player,
+                _ => damageType == DamageType.Heat ? entity.lastAttacker as BasePlayer : null
+            };
+
+            return target != null && !target.IsDestroyed;
+        }
+
+        public static bool IsMountable(BaseEntity entity)
+        {
+            if (entity is BaseMountable or HotAirBalloon) return true;
+            BaseEntity parent = entity.GetParentEntity();
+            if (parent == null) return IsCustomEntity(entity);
+            return parent is BaseMountable || IsCustomEntity(parent);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static BaseVehicle GetVehicle(BaseMountable m)
+        {
+            return m switch
+            {
+                BaseVehicleModule module => module.Vehicle,
+                BaseVehicle vehicle => vehicle,
+                _ => m.VehicleParent()
+            };
+        }
+
+        private DamageResult HandlePVPDelayMountDamage(BaseEntity entity, BasePlayer attacker)
+        {
+            if (entity is HotAirBalloon hab)
+            {
+                DamageResult result = DamageResult.None;
+                using var players = RaidableBase.GetMountedPlayers(hab);
+                foreach (BasePlayer player in players)
+                {
+                    if (player == attacker || !GetPVPDelay(player.userID, true, out DelaySettings first))
+                    {
+                        continue;
+                    }
+
+                    if (!first.raid.Options.AllowFriendlyFire && first.raid.IsAlly(attacker, player))
+                    {
+                        return DamageResult.Blocked;
+                    }
+
+                    result = DamageResult.Allowed;
+                }
+                return result;
+            }
+
+            if (HasDriver(entity, out BasePlayer driver) && driver != attacker && driver.userID.IsSteamId() && GetPVPDelay(driver.userID, true, out DelaySettings second))
+            {
+                return !second.raid.Options.AllowFriendlyFire && second.raid.IsAlly(attacker, driver) ? DamageResult.Blocked : DamageResult.Allowed;
+            }
+
+            return DamageResult.None;
+        }
+
+        private static bool HasDriver(BaseEntity entity, out BasePlayer driver)
+        {
+            while (entity != null)
+            {
+                if (entity is BasePlayer) break;
+                if (entity is BaseMountable m)
+                {
+                    BaseVehicle vehicle = GetVehicle(m);
+                    driver = vehicle != null ? vehicle.GetDriver() : m.GetMounted();
+                    if (driver != null) return true;
+                }
+                entity = entity.GetParentEntity();
+            }
+            driver = null;
+            return false;
+        }
+
+        private long nextLookupCleanTime;
+        private Dictionary<(ulong first, ulong second, bool clans, bool friends, bool teams, string clanhook), LookupTime> allyLookupTimes = new();
+        private bool IsAlly(ulong first, ulong second, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly", long length = 1)
+        {
+            if (!clans && !friends && !teams)
+                return false;
+
+            var now = Stopwatch.GetTimestamp();
+            var t = first < second ? (first, second, clans, friends, teams, clanhook) : (second, first, clans, friends, teams, clanhook);
+            if (allyLookupTimes.TryGetValue(t, out var lookup) && lookup.ExpiresAt >= now) return lookup.Result;
+            if (now > nextLookupCleanTime)
+            {
+                nextLookupCleanTime = now + Stopwatch.Frequency * 30L;
+                using var lookups = Pool.Get<PooledList<(ulong, ulong, bool, bool, bool, string)>>();
+                foreach (var pair in allyLookupTimes)
+                {
+                    if (now > pair.Value.ExpiresAt)
+                    {
+                        lookups.Add(pair.Key);
+                    }
+                }
+                foreach (var key in lookups)
+                {
+                    allyLookupTimes.Remove(key);
+                }
+            }
+
+            bool result = first switch
+            {
+                _ when teams && RelationshipManager.ServerInstance.playerToTeam.TryGetValue(first, out var team) && team.members.Contains(second) => true,
+                _ when clans && Clans != null && Clans?.Call(clanhook, first, second) is true => true,
+                _ when friends && Friends != null && Friends?.Call("AreFriends", first, second) is true => true,
+                _ => false
+            };
+
+            allyLookupTimes[t] = new(result, now + Stopwatch.Frequency * length);
+            return result;
+        }
+
+        public bool IsAlly(BasePlayer a, ulong b, bool clans = true, bool friends = true, bool teams = true, string clanhook = "IsMemberOrAlly")
+        {
+            if (clans && a.clanId != 0 && TryGetClan(a, out IClan clan))
+            {
+                if (clan.Creator == b)
+                {
+                    return true;
+                }
+                foreach (var member in clan.Members)
+                {
+                    if (member.SteamId == b)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return IsAlly(a.userID, b, clans, friends, teams, clanhook);
+        }
+
         public static bool CanSamplePosition() => ConVar.AI.useUnityNavmesh || RustNavigation.Instance != null && RustNavigation.Instance.IsDefaultNavmeshBuilt();
+
+        private static bool IsTileFarFromShore(Vector3 pos)
+        {
+            RustNavmesh navmesh = RustNavigation.Instance?.DefaultNavmesh;
+            if (navmesh == null) return false;
+            Vector2Int tile = navmesh.rcCalcTileCoordFromPos(pos);
+            return navmesh.IsTileFarFromShore(tile.x, tile.y);
+        }
 
         private static float Abs(float value) => value < 0 ? -value : value;
 
         private RaycastHit[] SharedRockHits = new RaycastHit[256];
         private Collider[] SharedRockColliders = new Collider[256];
 
-        private static bool IsRocketLauncher(HeldEntity weapon) => weapon != null && weapon is BaseLauncher && weapon.ShortPrefabName == "rocket_launcher.entity";
+        private static bool IsRocketLauncher(HeldEntity weapon) => weapon != null && weapon is BaseLauncher && weapon.ShortPrefabName is "rocket_launcher.entity" or "rocket_launcher_dragon.entity";
 
         private bool IsLauncherProjectile(BaseLauncher launcher, TimedExplosive projectile)
         {
@@ -22127,6 +22664,10 @@ namespace Oxide.Plugins
             projectile.InitializeVelocity(direction * speed);
         }
 
+        private static bool IsVanished(BasePlayer player) => player != null && (player.isInvisible || player.limitNetworking);
+
+        private bool CanBypass(BasePlayer player) => player != null && (!player.IsHuman() || player.isInvisible || player.limitNetworking || player.IsFlying || player.HasPermission("raidablebases.canbypass"));
+
         private static bool IsDeepSeaOpen()
         {
             DeepSeaManager dsm = PointEntity<DeepSeaManager>.ServerInstance;
@@ -22156,6 +22697,13 @@ namespace Oxide.Plugins
 
         public static bool IsCustomEntity(BaseEntity m) => m.PrefabName.StartsWith("assets/custom/");
         public static PooledList<T> DisposableList<T>() => Pool.Get<PooledList<T>>();
+        public static PooledIgnoreCaseSet DisposableIgnoreCaseSet() => Pool.Get<PooledIgnoreCaseSet>(); 
+        public static PooledIgnoreCaseSet DisposableIgnoreCaseSet(IEnumerable<string> other)
+        {
+            PooledIgnoreCaseSet set = Pool.Get<PooledIgnoreCaseSet>();
+            set.UnionWith(other);
+            return set;
+        }
         private static void SafelyKill(BaseEntity entity) => entity.SafelyKill();
 
         private bool IsCustomSpawn(Vector3 v)
@@ -22202,9 +22750,27 @@ namespace Oxide.Plugins
             checkPlayersNearEventsCo = null;
         }
 
+        public void SwitchPermission(string previous, string current)
+        {
+            permission.RegisterPermission(current, this);
+
+            foreach (string user in permission.GetPermissionUsers(previous))
+            {
+                string userid = user.Split('(')[0].Trim();
+                permission.GrantUserPermission(userid, current, this);
+                permission.RevokeUserPermission(userid, previous);
+            }
+
+            foreach (string group in permission.GetPermissionGroups(previous))
+            {
+                permission.GrantGroupPermission(group, current, this);
+                permission.RevokeGroupPermission(group, previous);
+            }
+        }
+
         private void RegisterPermissions()
         {
-            permission.RegisterPermission("raidablebases.allow", this);
+            SwitchPermission("raidablebases.allow", "raidablebases.admin");
             permission.RegisterPermission("raidablebases.allow.commands", this);
             permission.RegisterPermission("raidablebases.bypassmaxmanualeventlimit", this);
             permission.RegisterPermission("raidablebases.setowner", this);
@@ -22247,6 +22813,7 @@ namespace Oxide.Plugins
         {
             try { data = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name); } catch (Exception ex) { Puts(ex); }
             data ??= new();
+            data.RustNavigationBuilds ??= new();
             data.Players ??= new();
             data.BuyableCooldowns ??= new();
             data.RustNavigationBuilds ??= new();
@@ -22351,28 +22918,32 @@ namespace Oxide.Plugins
 
             if (wiped)
             {
+                if (revoke)
+                {
+                    RevokePermissionsAndGroups(config.Settings.Wipe.Remove);
+                }
+
                 using var raids = DisposableList<int>();
 
                 if (data.Players.Count > 0)
                 {
-                    if (AssignTreasureHunters())
+                    AssignTreasureHunters();
+
+                    foreach (var info in data.Players.Values)
                     {
-                        foreach (var info in data.Players.Values)
+                        if (info.Raids > 0)
                         {
-                            if (info.Raids > 0)
-                            {
-                                raids.Add(info.Raids);
-                            }
+                            raids.Add(info.Raids);
+                        }
 
-                            if (config.Settings.Wipe.Current)
-                            {
-                                info.ResetWipe();
-                            }
+                        if (config.Settings.Wipe.Current)
+                        {
+                            info.ResetWipe();
+                        }
 
-                            if (config.Settings.Wipe.Lifetime)
-                            {
-                                info.ResetLifetime();
-                            }
+                        if (config.Settings.Wipe.Lifetime)
+                        {
+                            info.ResetLifetime();
                         }
                     }
 
@@ -22389,11 +22960,6 @@ namespace Oxide.Plugins
                 wiped = false;
                 data.Lockouts.Clear();
                 NextTick(SaveData);
-
-                if (revoke)
-                {
-                    RevokePermissionsAndGroups(config.Settings.Wipe.Remove);
-                }
             }
 
             return ret;
@@ -22478,6 +23044,8 @@ namespace Oxide.Plugins
         {
             return player is HumanoidNPC;
         }
+
+        private bool Owns(BaseEntity entity) => Get(entity, out var raid) && raid.Owns(entity);
 
         private bool Has(BaseEntity entity)
         {
@@ -22652,7 +23220,7 @@ namespace Oxide.Plugins
 
         private static bool TryGetNetworkId(BaseEntity entity, out NetworkableId id)
         {
-            if (!HasNetworkId(entity))
+            if (!entity.HasNetworkId())
             {
                 id = default;
                 return false;
@@ -22661,8 +23229,6 @@ namespace Oxide.Plugins
             id = entity.net.ID;
             return true;
         }
-
-        private static bool HasNetworkId(BaseEntity entity) => entity.IsValid() && entity.net.ID.IsValid && !entity.IsDestroyed;
 
         internal void DestroyProtection()
         {
@@ -22808,33 +23374,34 @@ namespace Oxide.Plugins
             }
         }
 
-        public static void AdminCommand(BasePlayer player, Action action)
+        private struct TemporaryAdmin : IDisposable
         {
-            if (!player.IsAdmin && !player.IsDeveloper && player.IsFlying)
-            {
-                return; // BasePlayer => FinalizeTick => NoteAdminHack => Ban => Cheat Detected!
-            }
+            private BasePlayer Player;
+            private bool isAdmin;
 
-            bool isAdmin = player.IsAdmin;
+            public TemporaryAdmin(BasePlayer player)
+            {
+                Player = player;
+                isAdmin = player.IsAdmin;
 
-            if (!isAdmin)
-            {
-                player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, true);
-                player.SendNetworkUpdateImmediate();
-            }
-            try
-            {
-                action();
-            }
-            finally
-            {
                 if (!isAdmin)
                 {
-                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, false);
+                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, true);
                     player.SendNetworkUpdateImmediate();
                 }
             }
+
+            public void Dispose()
+            {
+                if (!isAdmin && Player != null && !Player.IsDestroyed && Player.IsAdmin)
+                {
+                    Player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, false);
+                    Player.SendNetworkUpdateImmediate();
+                }
+            }
         }
+
+        private static TemporaryAdmin AdminCommand(BasePlayer player) => new(player);
 
         private static IClan GetClan(BasePlayer player)
         {
@@ -22975,8 +23542,13 @@ namespace Oxide.Plugins
             {
                 ds.Timer.Destroy();
             }
+
             PvpDelay.Remove(userid);
-            UnsubscribeDamageHook();
+
+            if (Raids.Count > 0 || (config.Settings.Management.PVPDelayPersists && PvpDelay.Count > 0))
+                return;
+
+            UpdateHooks();
         }
 
         private void ExpirePVPDelay(ulong userid, DelaySettings ds)
@@ -22991,7 +23563,9 @@ namespace Oxide.Plugins
 
             RemovePVPDelay(userid, ds);
 
-            Interface.CallHook("OnPlayerPvpDelayExpired", raid == null ? ds.hookObjectsFallback : raid.GetDelayHookObjects(target, userid));
+            object[] hookObjects = raid == null ? ds.hookObjectsFallback : raid.GetDelayHookObjects(target, userid);
+            hookObjects[0] = target;
+            Interface.CallHook("OnPlayerPvpDelayExpired", hookObjects);
         }
 
         private bool IsBox(BaseEntity entity, bool inherit) =>
@@ -23486,6 +24060,7 @@ namespace Oxide.Plugins
 
             if (raid.IsPayLocked)
             {
+                raid.BypassStartPurchaseCooldown = config.Settings.Buyable.Refunds.BypassStartPurchaseCooldown;
                 if (raid.GetOwner() is BasePlayer owner) raid.Refund(owner);
                 else raid.Refund(player);
                 raid.IsEligible = !config.Settings.Buyable.Refunds.Ineligible;
@@ -23527,7 +24102,7 @@ namespace Oxide.Plugins
 
         private bool IsTrueDamage(BaseEntity entity, bool isProtectedWeapon)
         {
-            if (entity.IsNull())
+            if (entity == null)
             {
                 return false;
             }
@@ -23571,6 +24146,24 @@ namespace Oxide.Plugins
             return entity is HumanoidNPC || entity.skinID == RB_SKIN_ID || EntityToRaid.ContainsKey(entity.net.ID);
         }
 
+        [HookMethod("GetMarkerInfo")]
+        public void GetMarkerInfo(Dictionary<string, object> dict, Vector3 position, float x = 0f)
+        {
+            if (dict == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < Raids.Count; i++)
+            {
+                if (InRange2D(Raids[i].Location, position, Raids[i].ProtectionRadius + x))
+                {
+                    Raids[i].GetMarkerInfo(dict);
+                    break;
+                }
+            }
+        }
+
         [HookMethod("GetAllEventsCount")]
         public int GetAllEventsCount() => Raids.Count;
 
@@ -23607,6 +24200,29 @@ namespace Oxide.Plugins
                 RaidableBase r = Raids[i];
 
                 m.Add((r.Location, r.Options.Mode, r.Options.Level, r.AllowPVP, r.ID, 0f, 0f, 0f, r.ownerId, r.GetOwner(), r.GetRaiders(), r.GetIntruders(), r.Entities, r.BaseName, r.spawnDateTime, r.despawnDateTime, r.ProtectionRadius, r.GetLootAmountCounted()));
+            }
+        }
+
+        [HookMethod("GetAllEventsNonAlloc")]
+        public void GetAllEventsNonAlloc(List<(Guid guid, Vector3 pos, float protectionRadius, int level, string baseName, bool allowPVP, ulong ownerId, BasePlayer owner)> m)
+        {
+            if (m == null)
+            {
+                return;
+            }
+
+            m.Clear();
+
+            if (m.Capacity < Raids.Count)
+            {
+                m.Capacity = Raids.Count;
+            }
+
+            for (int i = 0; i < Raids.Count; i++)
+            {
+                RaidableBase r = Raids[i];
+
+                m.Add((r._guid, r.Location, r.ProtectionRadius, r.Options.Level, r.BaseName, r.AllowPVP, r.ownerId, r.GetOwner()));
             }
         }
 
@@ -23781,22 +24397,25 @@ namespace Oxide.Plugins
             }
         }
 
-        private bool AssignTreasureHunters()
+        private void AssignTreasureHunters()
         {
             var records = config.RankedLadder.GetRecords();
 
             if (records.Count == 0)
             {
-                return true;
+                return;
             }
 
-            RevokePermissionsAndGroups(records.Select(record => record.Permission).Union(records.Select(record => record.Group)));
+            using var players = DisposableList<(IPlayer user, PlayerInfo info)>();
+            bool any = false;
 
-            var players = data.Players.Where(x => IsNormalUser(x.Key));
-
-            if (!players.Exists(entry => entry.Value.Any()))
+            foreach (var (userid, info) in data.Players)
             {
-                return false;
+                if (IsNormalUser(userid, out IPlayer user))
+                {
+                    players.Add((user, info));
+                    if (info.Any()) any = true;
+                }
             }
 
             foreach (var target in covalence.Players.All)
@@ -23815,31 +24434,35 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (config.RankedLadder.Enabled && config.RankedLadder.Amount > 0 && players.Count > 0)
+            if (any && config.RankedLadder.Enabled && config.RankedLadder.Amount > 0 && players.Count > 0)
             {
                 records.ForEach(record => AssignTreasureHunters(record, players));
 
                 Puts(mx("Log Saved", null, "topraider"));
             }
-
-            return true;
         }
 
-        private bool IsNormalUser(string userid)
+        public bool IsNormalUser(string userid, out IPlayer user)
         {
-            return userid.IsSteamId() && !userid.HasPermission("raidablebases.notitle") && covalence.Players.FindPlayerById(userid) is IPlayer user && !user.IsBanned;
+            if (!userid.IsSteamId() || userid.HasPermission("raidablebases.ladder.exclude") || userid.HasPermission("raidablebases.notitle"))
+            {
+                user = null;
+                return false;
+            }
+            user = covalence.Players.FindPlayerById(userid);
+            return user != null && !user.IsBanned;
         }
 
-        private void AssignTreasureHunters(RankedRecord record, List<KeyValuePair<string, PlayerInfo>> players)
+        private void AssignTreasureHunters(RankedRecord record, List<(IPlayer user, PlayerInfo info)> players)
         {
-            List<(string userid, int score)> ladder = new();
+            using var ladder = DisposableList<(IPlayer user, int score)>();
 
-            foreach (var (userid, info) in players)
+            foreach (var (user, info) in players)
             {
                 int value = record.Mode == RaidableMode.Points ? info.Points : info.Get(record.Mode);
-                (string, int) score = value > 0 && (record.Mode == RaidableMode.Points || config.RankedLadder.Assign.Dictionary.TryGetValue(record.Mode, out var val) && val == 0) ? new(userid, value) : default;
+                (IPlayer, int) score = value > 0 && (record.Mode == RaidableMode.Points || config.RankedLadder.Assign.Dictionary.TryGetValue(record.Mode, out var val) && val == 0) ? new(user, value) : default;
 
-                if (score.Item2 != 0 && !score.Item1.HasPermission("raidablebases.ladder.exclude") && !score.Item1.HasPermission("raidablebases.notitle"))
+                if (score.Item2 != 0)
                 {
                     ladder.Add(score);
                 }
@@ -23854,19 +24477,15 @@ namespace Oxide.Plugins
 
             for (int i = 0; i < ladder.Count && i < config.RankedLadder.Amount; i++)
             {
-                var (userid, score) = ladder[i];
-                var user = covalence.Players.FindPlayerById(userid);
-                var username = user?.Name ?? ConVar.Admin.GetPlayerName(Convert.ToUInt64(userid));
+                var (user, score) = ladder[i];
 
-                permission.GrantUserPermission(userid, record.Permission, this);
-                permission.AddUserGroup(userid, record.Group);
+                permission.GrantUserPermission(user.Id, record.Permission, this);
+                permission.AddUserGroup(user.Id, record.Group);
 
-                LogToFile("topraider", $"{DateTime.Now} : {mx("Log Stolen", null, username, userid, $"{record.Mode}: {score}")}", this, true);
-                Puts(mx("Log Granted", null, username, userid, record.Permission, record.Group));
+                LogToFile("topraider", $"{DateTime.Now} : {mx("Log Stolen", null, user.Name, user.Id, $"{record.Mode}: {score}")}", this, true);
+                Puts(mx("Log Granted", null, user.Name, user.Id, record.Permission, record.Group));
             }
         }
-
-        private bool CanContinueAutomation(RaidableType type) => GetRaidableModes().Exists(x => CanSpawnDifficultyToday(type, x));
 
         private static bool IsModeValid(string mode) => mode != RaidableMode.Disabled && mode != RaidableMode.Random && mode != RaidableMode.Points;
 
@@ -24015,19 +24634,6 @@ namespace Oxide.Plugins
 
                     options.AdditionalBases ??= new();
 
-                    if (options._AdditionalBases != null)
-                    {
-                        foreach (var (baseName, pasteOptions) in options._AdditionalBases)
-                        {
-                            options.AdditionalBases.Add(baseName, new()
-                            {
-                                Options = pasteOptions,
-                                Costs = DefaultCostOptions()
-                            });
-                        }
-                        options._AdditionalBases = null;
-                    }
-
                     //foreach (var abo in options.AdditionalBases.Values)
                     //{
                     //    var autoheight = abo.Options.Find(x => x.Key == "autoheight");
@@ -24118,11 +24724,6 @@ namespace Oxide.Plugins
                     if (!options.AllowPVP)
                     {
                         allProfilesPVP = false;
-                    }
-
-                    if (options.NPC.Accuracy.MINIGUN == 0)
-                    {
-                        options.NPC.Accuracy.MINIGUN = options.NPC.Accuracy.M249;
                     }
 
                     if (options.Rewards.XPerience == -125)
@@ -24241,7 +24842,96 @@ namespace Oxide.Plugins
                     }
                 }
 
-                profile.Options.NPC.SetAccuracy(profile.Options.Mode);
+                var npc = profile.Options.NPC;
+                npc.SetWeapons(profile.Options.Mode);
+                var weapons = npc.Weapons;
+
+                if (profile.Options.NPC._Accuracy != null)
+                {
+                    var old = npc._Accuracy;
+                    weapons.AK47.Accuracy = old.AK47;
+                    weapons.AK47ICE.Accuracy = old.AK47ICE;
+                    weapons.BOLT_RIFLE.Accuracy = old.BOLT_RIFLE;
+                    weapons.COMPOUND_BOW.Accuracy = old.COMPOUND_BOW;
+                    weapons.CROSSBOW.Accuracy = old.CROSSBOW;
+                    weapons.DOUBLE_SHOTGUN.Accuracy = old.DOUBLE_SHOTGUN;
+                    weapons.EOKA.Accuracy = old.EOKA;
+                    weapons.GLOCK.Accuracy = old.GLOCK;
+                    weapons.HC_REVOLVER.Accuracy = old.GLOCK;
+                    weapons.HMLMG.Accuracy = old.HMLMG;
+                    weapons.L96.Accuracy = old.L96;
+                    weapons.LR300.Accuracy = old.LR300;
+                    weapons.M249.Accuracy = old.M249;
+                    weapons.MINIGUN.Accuracy = old.MINIGUN;
+                    weapons.M39.Accuracy = old.M39;
+                    weapons.M92.Accuracy = old.M92;
+                    weapons.MP5.Accuracy = old.MP5;
+                    weapons.NAILGUN.Accuracy = old.NAILGUN;
+                    weapons.PUMP_SHOTGUN.Accuracy = old.PUMP_SHOTGUN;
+                    weapons.M4_SHOTGUN.Accuracy = old.PUMP_SHOTGUN;
+                    weapons.PYTHON.Accuracy = old.PYTHON;
+                    weapons.REVOLVER.Accuracy = old.REVOLVER;
+                    weapons.SEMI_AUTO_PISTOL.Accuracy = old.SEMI_AUTO_PISTOL;
+                    weapons.SEMI_AUTO_RIFLE.Accuracy = old.SEMI_AUTO_RIFLE;
+                    weapons.SPAS12.Accuracy = old.SPAS12;
+                    weapons.SPEARGUN.Accuracy = old.SPEARGUN;
+                    weapons.BOOMERANG.Accuracy = old.SPEARGUN;
+                    weapons.SMG.Accuracy = old.SMG;
+                    weapons.T1_SMG.Accuracy = old.SMG;
+                    weapons.SNOWBALL_GUN.Accuracy = old.SNOWBALL_GUN;
+                    weapons.THOMPSON.Accuracy = old.THOMPSON;
+                    weapons.WATERPIPE_SHOTGUN.Accuracy = old.WATERPIPE_SHOTGUN;
+                    npc._Accuracy = null;
+                }
+
+                if (npc._Multipliers != null)
+                {
+                    var old = npc._Multipliers;
+                    var gun = old.ProjectileDamageMultiplier;
+                    weapons.AK47.DamageMultiplier = gun;
+                    weapons.AK47ICE.DamageMultiplier = gun;
+                    weapons.BOLT_RIFLE.DamageMultiplier = gun;
+                    weapons.COMPOUND_BOW.DamageMultiplier = gun;
+                    weapons.CROSSBOW.DamageMultiplier = gun;
+                    weapons.DOUBLE_SHOTGUN.DamageMultiplier = gun;
+                    weapons.EOKA.DamageMultiplier = gun;
+                    weapons.GLOCK.DamageMultiplier = gun;
+                    weapons.HMLMG.DamageMultiplier = gun;
+                    weapons.L96.DamageMultiplier = gun;
+                    weapons.LR300.DamageMultiplier = gun;
+                    weapons.M249.DamageMultiplier = gun;
+                    weapons.MINIGUN.DamageMultiplier = gun;
+                    weapons.M39.DamageMultiplier = gun;
+                    weapons.M92.DamageMultiplier = gun;
+                    weapons.MP5.DamageMultiplier = gun;
+                    weapons.NAILGUN.DamageMultiplier = gun;
+                    weapons.PUMP_SHOTGUN.DamageMultiplier = gun;
+                    weapons.PYTHON.DamageMultiplier = gun;
+                    weapons.REVOLVER.DamageMultiplier = gun;
+                    weapons.SEMI_AUTO_PISTOL.DamageMultiplier = gun;
+                    weapons.SEMI_AUTO_RIFLE.DamageMultiplier = gun;
+                    weapons.SPAS12.DamageMultiplier = gun;
+                    weapons.SPEARGUN.DamageMultiplier = gun;
+                    weapons.SMG.DamageMultiplier = gun;
+                    weapons.SNOWBALL_GUN.DamageMultiplier = gun;
+                    weapons.THOMPSON.DamageMultiplier = gun;
+                    weapons.WATERPIPE_SHOTGUN.DamageMultiplier = gun;
+                    weapons.Explosives.DamageMultiplier = old.ExplosiveDamageMultiplier;
+                    weapons.HOMING_MISSILE_LAUNCHER.DamageMultiplier = old.ExplosiveDamageMultiplier;
+                    weapons.MGL.DamageMultiplier = old.ExplosiveDamageMultiplier;
+                    weapons.ROCKET_LAUNCHER.DamageMultiplier = old.ExplosiveDamageMultiplier;
+                    weapons.Melee.DamageMultiplier = old.MeleeDamageMultiplier;
+                    weapons.HC_REVOLVER.DamageMultiplier = gun;
+                    weapons.M4_SHOTGUN.DamageMultiplier = gun;
+                    weapons.BOOMERANG.DamageMultiplier = gun;
+                    weapons.T1_SMG.DamageMultiplier = gun;
+                    npc._Multipliers = null;
+                }
+
+                if (weapons.MINIGUN.Accuracy == 0)
+                {
+                    weapons.MINIGUN.Accuracy = weapons.M249.Accuracy;
+                }
 
                 yield return CoroutineEx.waitForFixedUpdate;
 
@@ -24363,6 +25053,9 @@ namespace Oxide.Plugins
                     if (!permission.GroupExists(record.Group))
                     {
                         permission.CreateGroup(record.Group, record.Group, 0);
+                    }
+                    if (!permission.GroupHasPermission(record.Group, record.Permission))
+                    {
                         permission.GrantGroupPermission(record.Group, record.Permission, this);
                     }
                 }
@@ -24403,34 +25096,59 @@ namespace Oxide.Plugins
             yield return LoadProfiles(sb, user);
         }
 
-        private IEnumerator ReloadTables(IPlayer user, bool edit = false, bool test = false, bool loot = false)
+        private IEnumerator ReloadTables(IPlayer user)
         {
             using var sb = DisposableBuilder.Get();
-            yield return LoadTables(sb, user, edit, test, loot);
+            yield return LoadTables(sb, user);
         }
 
-        private IEnumerator ReloadTables(IPlayer user, DisposableBuilder sb, bool edit = false, bool test = false, bool loot = false)
+        public void LoadImportedSkins()
         {
-            yield return LoadTables(sb, user, edit, test, loot);
+            ImportedWorkshopSkins.Clear();
+            LoadImportedSkinboxPlugin();
+            LoadImportedSkinsPlugin();
+            Skins.Clear();
         }
 
-        private void LoadImportedSkins()
+        public void LoadImportedSkinboxPlugin()
         {
-            string skinBoxFilename = Path.Combine(Name, "ImportedWorkshopSkins");
+            SkinSettingsImportedWorkshop skinboxPlugin = null;
             try
             {
-                ImportedWorkshopSkins = Interface.Oxide.DataFileSystem.ReadObject<SkinSettingsImportedWorkshop>(skinBoxFilename);
+                skinboxPlugin = Interface.Oxide.DataFileSystem.ReadObject<SkinSettingsImportedWorkshop>(Path.Combine(Name, "ImportedWorkshopSkins"));
             }
             catch (Exception ex)
             {
                 Puts(ex);
             }
-            ImportedWorkshopSkins ??= new();
-            ImportedWorkshopSkins.SkinList ??= new();
-            string skinsFilename = Path.Combine(Name, "SkinsPlugin");
+            skinboxPlugin ??= new();
+            skinboxPlugin.SkinList ??= new();
+            foreach (var pair in skinboxPlugin.SkinList)
+            {
+                if (pair.Value == null || string.IsNullOrWhiteSpace(pair.Key))
+                {
+                    continue;
+                }
+                if (!ImportedWorkshopSkins.TryGetValue(pair.Key, out var value))
+                {
+                    ImportedWorkshopSkins[pair.Key] = value = new();
+                }
+                foreach (ulong skin in pair.Value)
+                {
+                    if (!value.Contains(skin))
+                    {
+                        value.Add(skin);
+                    }
+                }
+            }
+        }
+
+        public void LoadImportedSkinsPlugin()
+        {
+            SkinsPlugin skinsPlugin = null;
             try
             {
-                skinsPlugin = Interface.Oxide.DataFileSystem.ReadObject<SkinsPlugin>(skinsFilename);
+                skinsPlugin = Interface.Oxide.DataFileSystem.ReadObject<SkinsPlugin>(Path.Combine(Name, "SkinsPlugin"));
             }
             catch (Exception ex)
             {
@@ -24438,6 +25156,24 @@ namespace Oxide.Plugins
             }
             skinsPlugin ??= new();
             skinsPlugin.Skins ??= new();
+            foreach (SkinItem skinItem in skinsPlugin.Skins)
+            {
+                if (skinItem?.Skins == null || string.IsNullOrWhiteSpace(skinItem.Shortname))
+                {
+                    continue;
+                }
+                foreach (ulong skin in skinItem.Skins)
+                {
+                    if (!ImportedWorkshopSkins.TryGetValue(skinItem.Shortname, out var value))
+                    {
+                        ImportedWorkshopSkins[skinItem.Shortname] = value = new();
+                    }
+                    if (!value.Contains(skin))
+                    {
+                        value.Add(skin);
+                    }
+                }
+            }
         }
 
         protected void SaveProfile(string key, BuildingOptions options)
@@ -24445,7 +25181,7 @@ namespace Oxide.Plugins
             Interface.Oxide.DataFileSystem.WriteObject(Path.Combine(Name, "Profiles", key), options);
         }
 
-        protected IEnumerator LoadTables(DisposableBuilder _sb, IPlayer user = null, bool edit = false, bool test = false, bool loot = false)
+        protected IEnumerator LoadTables(DisposableBuilder _sb, IPlayer user = null)
         {
             _sb.Length = 0;
             _sb.AppendLine("-");
@@ -24472,7 +25208,7 @@ namespace Oxide.Plugins
                 {
                     if (GetTable(file, out var lootList))
                     {
-                        LoadTable(mode, _sb, file, Buildings.DifficultyLootLists[mode] = lootList, edit, test, loot);
+                        LoadTable(mode, _sb, file, Buildings.DifficultyLootLists[mode] = lootList);
                     }
                 }
                 catch (Exception ex)
@@ -24489,7 +25225,7 @@ namespace Oxide.Plugins
                 {
                     if (GetTable(file, out var lootList))
                     {
-                        LoadTable(RaidableMode.Disabled, _sb, file, Buildings.WeekdayLootLists[day] = lootList, edit, test, loot);
+                        LoadTable(RaidableMode.Disabled, _sb, file, Buildings.WeekdayLootLists[day] = lootList);
                     }
                 }
                 catch (Exception ex)
@@ -24499,10 +25235,10 @@ namespace Oxide.Plugins
                 yield return CoroutineEx.waitForFixedUpdate;
             }
 
-            yield return LoadBaseTables(_sb, user, edit);
+            yield return LoadBaseTables(_sb, user);
         }
 
-        protected IEnumerator LoadBaseTables(DisposableBuilder _sb, IPlayer user = null, bool edit = false, bool test = false, bool loot = false)
+        protected IEnumerator LoadBaseTables(DisposableBuilder _sb, IPlayer user = null)
         {
             var profiles = Buildings.Profiles.ToList();
             profiles.Sort((x, y) => x.Value.Options.Level.CompareTo(y.Value.Options.Level));
@@ -24514,7 +25250,7 @@ namespace Oxide.Plugins
                 {
                     if (GetTable(file, out var lootList))
                     {
-                        LoadTable(profile.Options.Mode, _sb, file, profile.BaseLootList = lootList, edit, test, loot);
+                        LoadTable(profile.Options.Mode, _sb, file, profile.BaseLootList = lootList);
                     }
                 }
                 catch (Exception ex)
@@ -24524,10 +25260,7 @@ namespace Oxide.Plugins
                 yield return CoroutineEx.waitForFixedUpdate;
             }
 
-            if (!edit)
-            {
-                Interface.Oxide.LogInfo("{0}", _sb.ToString());
-            }
+            Interface.Oxide.LogInfo("{0}", _sb.ToString());
         }
 
         protected void ModifyDifficultyMode(IPlayer user, string mode, bool create, bool notice = true, string color = null, string profileName = null)
@@ -24639,7 +25372,15 @@ namespace Oxide.Plugins
                 {
                     if (string.IsNullOrEmpty(profileName))
                     {
-                        profileName = mode.Contains("Bases", CompareOptions.OrdinalIgnoreCase) ? mode : $"{mode} Bases";
+                        profileName = mode switch
+                        {
+                            RaidableMode.Easy => "Easy Bases",
+                            RaidableMode.Medium => "Medium Bases",
+                            RaidableMode.Hard => "Hard Bases",
+                            RaidableMode.Expert => "Expert Bases",
+                            RaidableMode.Nightmare => "Nightmare Bases",
+                            _ => mode.Contains("Bases", CompareOptions.OrdinalIgnoreCase) ? mode : $"{mode} Bases"
+                        };
                     }
                     if (!Buildings.Profiles.TryGetValue(profileName, out var profile))
                     {
@@ -24662,9 +25403,9 @@ namespace Oxide.Plugins
                         RaidableModes.Add(mode);
                         RegisterLanguageMessages();
                     }
-                    if (!arguments.Contains(mode))
+                    if (!ConfigArguments.Contains(mode))
                     {
-                        arguments.Add(mode);
+                        ConfigArguments.Add(mode);
                     }
                     SaveConfig();
                     if (DataFileExists(Path.Combine(Name, "Difficulty_Loot", mode)))
@@ -24768,7 +25509,7 @@ namespace Oxide.Plugins
             else user.Message("Syntax: rb.difficulty add|remove \"name\"");
         }
 
-        private void LoadTable(string mode, DisposableBuilder _sb, string file, List<LootItem> lootList, bool edit, bool test, bool loot)
+        private void LoadTable(string mode, DisposableBuilder _sb, string file, List<LootItem> lootList)
         {
             if (lootList.Count == 0)
             {
@@ -24785,39 +25526,7 @@ namespace Oxide.Plugins
                 ti.InitializeArmorSlots();
             });
 
-            if (edit)
-            {
-                lootList.RemoveAll(ti =>
-                {
-                    if (RequiresOwnership(ti.definition, ti.skin))
-                    {
-                        _sb.Append(ti.shortname).Append(", ");
-                        if (loot && DlcReplacements.TryGetValue(ti.shortname, out string r))
-                        {
-                            LootItem other = lootList.Find(x => x.shortname == r);
-                            if (other != null)
-                            {
-                                if (other.definition?.stackable == 1) return true;
-                                other.amount += ti.amount;
-                                return true;
-                            }
-                            ti.shortname = r;
-                            return false;
-                        }
-                        return true;
-                    }
-                    return false;
-                });
-                if (_sb.Length > 3)
-                {
-                    _sb.Length -= 2;
-                }
-            }
-
-            if (!test)
-            {
-                Interface.Oxide.DataFileSystem.WriteObject(file, lootList);
-            }
+            Interface.Oxide.DataFileSystem.WriteObject(file, lootList);
 
             //var probs = new Dictionary<float, int>();
 
@@ -24860,7 +25569,7 @@ namespace Oxide.Plugins
             //    _sb.AppendLine();
             //}
 
-            if (!edit) _sb.AppendLine($"Loaded {lootList.Count} items from {file}");
+            _sb.AppendLine($"Loaded {lootList.Count} items from {file}");
 
             Buildings.LootID[mode] = DateTime.Now;
 
@@ -24931,7 +25640,7 @@ namespace Oxide.Plugins
 
         #region Configuration
 
-        private const string en_ru_compressed_64 = "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";
+        private const string en_ru_compressed_64 = "H4sIAG8Z2moA/+19a3Mcx5Hg9/0VBa0dIiMoSKJsxwaskw8kQBkRfMAkKNsnK24bMw2gl4Pp8fQMSVhkBB9L0z7qYft8cQ7frrSWL+7uy0VAICCBIAD9hcFf0C+5fNWzq3t6AEq+D2uHiJmeqqys6qysfFXm+3+n1Etp96UZ9T58gs+Xc7WY9tezoshyfPzSz/Ohaueqmw/UWnIzVT3zqxrkalikarCWFaqVr68n3fb0S2cicNRSrua7g7Q/HmCKzRhkehO+VAM8N9wYD255uMHA2tnKStYadgYbtRDVhayTjgfbG/ZbawnNPVUvv//a3ZfVMnw1oM8Ns047664qGHm5k7dupG21kvdV0UtudYspHODNVt7J+//h7y9ceA3+91asx7A7yDoqUf0kayfLnZTG0DDefJUAvFUzZNNxumnS9wcpg7+YtNtpv1BJP60DH2mmsu444OeSfj9rJe10LPx4ywZDnB/2lvOk3x47wlKed1Qr1rrBKHr6V9NfDjPoaVZ7sZ/dBMpaTWNDIq11UxhgWTfv6eZEbJ2klaoOgy4NudjPV6CpugyUOt9F3No4xBISfU9+g49IyCn/PKOC8YF+NVRDwXNmv6i5rDBgnce0qfgXom3cCnrAyQZA1GHvIahgjGo4ek7JzSTrYM8qwLO6wfFBK9j0SXdD5StqIx/2zWsqxo6pZtvrWfebGFktMdcddpAu27AnBsiNkgE3PJ/3NhaTAp7h+2AyRsjIvrBjkfZvAp/NuvTa8ttZO321nQwSQKS30eOOeQcIzkzxUnJbzSNHLnA68C1bH66rTraeDRA9mAUz7EKdCif4upngaWCmwHfSFHZSmrTWcAsa+N1h0uEh1AWYPxMcf1+h77gZikHSH0yp60TK+CBfHiQwjUTdTDpZW/XyIhsAl55Wi52UOHR/QyWr0MTM5Mdpp4egX0Wc3xz03lKvMFgAss5Y0EzOwNLDmGkn7eXwI4xFJC4DqGxFLS3Cwq4O1xFFXNRe2spWMkAUO8J7oGVPADmkAjP+VeAhV3ppd7YH/7TT9oW8v54MECNA6F1YLfX+2bvvha0vpUWRrKYu+zj/Gv7/rVlafP+QoAnQYufQFzEaOHSHL8Z9LVPq54KsbTP7fWxz9u66Ic7kVrIxrd59/42774VMSCN5Ob+U9E6GaTUur0dwOVvG5XJ6exAZG057oU+EjWNNK2wqCAAJhetj92V5ul04DxbzTHZDgCmuhro2SAbFjO75i26ADm3fW1kvJTohEQPXxefOPG+HP9CpQ9w2AXocAKXC1iuvk2nfIxSn1MVsJR1k63JsVY501vYcM8YbpTF+0f1F9/3v3Y0v1U+zbnE28lLeydJbxL5uZm3cd1ZKAxy7N5DTqeUNkDLxUAxwoO3Lp6J67c7rd87eeePO9wxWgH60vV6IUo8YSTuUfFUT7TkkWgC1rmirwuG8Acfye/58WQ7wSYOI6l2QM3u0C7DzKaKCnwIVnFaGjmd8UEv4CsZD0m84BoixUQvdYojLmyG9LzLeEcCXcz0p3il8RMhCb6SDqdiGU7PDQQ5cDDgNrhSCpceJeYw0h7sMMQZmBEhbORwll3y4uqaudDtZl9b7Mskr9FBjk9OP6hRCAH6K589pDQOkNnUJT0oLAR+t46Nofz6/Trtvm18tSDuDpNuKsS+fBsrbdD1cmbm0GPTzDWdR7JNEddIVODrxGKa1IW6IK/OaWZkFOB6g/bA1yESACYVVOEWLIbwlOEoLYW2Z16ksouarwJvyDil9eOLAgrx+9zRhWODJ4zZ8G3bhgA9i+ahsD0clgm7EMVb7+RCI8g0PyDVgbm29h9SPh6jhFczySBLo5KurdLjPuHNf7Kcr2W3s9q5Z6u+99oNzb3zffw+F2fLvKfM2UzrP59JB2hL05ZFqy7OQ+QtRDQeplermW3k3X89axVxKp77WC5lbp600g4mFx8Z3XH5NOt8gBckE+Bduo4G8sKnSGD/NBmvtfnLLG6SHKzZugEBBrAYNa5AOIjveg3gLTmIaFkGTLNkCjaid30KRDfpXg387W9FSDJ3nceRf95GnERrib6XCUDt/YUvk6jpLvt0AbR2FSnUPdWsta62B2Nd9eQAkDCqplWWvkXR9Nb0FKqSVEsaSDi7c1cUJiKc8zlJyI+2OJaHIQFUrVDFEFSkFkBsTU3mYJtSEJ18wjxp6Ko/RmKBOtGBjaerqYi0x3cg6HWD06c8WG1PRzyahop9dBC7YKb4x8ItpH0SO1jeG//lhAULGJDx6MhbN8Bvz56a8xwdbs6Em300+6IY7qek28oFPsoWOsSx1ewfn0s1VizrAUhTGwmWALXaGqxlopYOLtKcYCtIFmefaIBri73WoikUm2JMLXbI2LAzSdYQpX1UG31WxlvcH3WQ9JXFmWl0Hse5V5FQgQVODN02Lt9SbyXoOAtFb6t0CtB2jRcyCsG2g0xeCPcPSM3WZQRH6jMJuM67Yxuu3KFaKa0xU/FCkHTIgw4xaCdkxgHBC2cuHcTVdz0WCq4PT52ZGerpC6rw1GfF3HIZWg5Vx27rLGgm5CaBbK68wlBJtpdwKbStwIKNkv2HJafGdRSapUPQNxmg0wORgF9+ZPxn2802HmXgC4yH3N66m/2SE5gjwVtJlUzK6aXACRApkeGznKW+W5bSTIzPNkY1ERrtI5vSlXCtFkWHYXnlLieWdbG/osUAnSxnghaxfDGrebWxXI6tfwX6u1ykNjFO1VjM7/nnUvpi+Jxy4SNmH1MnR7FtroysPi+t3ARThYs1hbcjcI4AcHIwJdtjVbhC97+nlnksvIYOxXF3eOeHonpAotcBKrXPrAMqS2E01EG2BTjqd/Ja8Um1aXekDU4n4/BgS858aOMx58CUCv0L7WAW4S8C9zqWzwwHw3+xXdn7r8Fz00agDJmm10qJgiCXp4MqtbtpnijaHlFkg3gkFvel8Pc27gGXHPexogvAO25rZEpclqz5OcgV+oS3cbcOUtOnZHm9oqAfyEykA+7LRP0Nrh5EOTHtADlYE1Fli3RFSRQrCI2Y88VsqajM0dF9tlDqcraZfQeYFYcEmzQlRODfcuLbRHSS3I0jwD3ziwtvcuLOetrPh+p01kOtVhAssJf3VdACixgXYDu2FGCPgJgSRXi42PIOWSvbMoHVquh7s5TwK+HJOIuw6+j/6+U1cienIXGdhnLW0b11RgWPq5Wqm8XLJNXUGhCfrYGHIMS97bFy0eC5l6yWX4kQIsBQpA1eTyAR4WkxgvY0PbylvJydaKdj9AGECPJCvAwbn8+5KtjrEs76f99J+ZyPy6hclEsG6+FqmGxID9ZsOfY6zyDy1DViHPqCAQ1ZA97TSLl52hgHT1T7eIpTyXcDvWP1NRPJpZTgtPwlfGcwW9OYBYQEIgbBi3yC86Baw1AHLMAaBjLyiKusWWSEyiLb1ypG1LNNC7lDEtgTN11UyyjuL+iJAYDRqGS3SdFLzaQBEHAOLhsmLKBinMTbQ38hYPCL2zo5dYnWhSA0SUAz6ebRPdzrUpsChrjEDno0pkD834A2v1Pyajc1k/QSBfIo0lTL31AzevFFAvEUYTCsPE0OB/XQFeFUSsz7jkptf/4aoEzWLeQDW/f037n5X0K56nS8G0Qrgs0CtQ8ALPckVVrU1V/lPrLfgdQZ+9m4T2LDJiryTNhkCBT0ETgOdAvinabg3eLjvRYaDhj8ZpsPoPrIrdCsDHsJ0fmstRce99agXfCZOqwXyp7eG/T4gDdoR7mzdSpYT8fslDjdd4XWBPUbTjzmDbRPf91InuXfr5BBxHZSjc1AcWyjOdYyA6AjUOujAoqC1qdQRMC/m+Y15EBpv4VOEYGMfRDzUS/NDFNFvkIRJjUvhaN6hEiJDr0QIi3ipnGP2PHEi5zTEwocH7JItISZQxfHzRACJJEr7a0hSdvxlYSNtn8NoNXh9zqpVKJpzWjCdNeYvK6vKRDnegynMcUnarp1OpC9QMDvSdXejYeTtlKyp2KlDH8ozvQxqgBeVFMzXHJTLuFvgnOmq1197bR3d8Ik/a0FJZYPpisnr8VBLaVeNlWywDUKDk7UxgQk62rFdN8pcsp6sVo4hRBaMQGRmFQmGUDcI7IXBhGPkwPowhgrXcdUO1iFIpbHe7mfthQKthdBa69SrfbTtFWQEhMc/1JLcrSQbSJBmxvNYEW18OgqPA32MP9UDigFdFD9HqibCGqCfhbhdgU4nkEEK2PFJn2iCWLOWEwo0LQJdiqse0Z12HOOLoCf3V4adOZAGYz5kihSkGEP4sDoE/YYVKWQs3BOYQ9YHIiMZrg1gWGi5hYcoUOcK7MiyemcHfgGDwqImMOvxw6J45KjDEdMSbS16de7aRmKZywwlz9dnu+23gXbW62xv5NhPCPyvUOVHfEV+hNefmGhgrQXguxQ8SmPOUgfkFBf6+fqV4aAA7a5ucBwILWfhYM5ky6cUiMhzaYfVHPOFIyWucZ/Tlvdblo/bkYL0+v28P6OA+5ONiA5xfUYz15/yumPEHkjppNL6/YckiWMnaSPA9Az+Iy6WA2xebD4RUNYcRBBEEAsBnMtvpzWILOPPY3DAVRDpMLIY6LSRg8M50tGbwBGP2IW/cwwCByBykPe038GJkXV6LPPTeJdLsIq0ku3SOPqHeMdrGJw57JT6Ffp5vJtvW3D6EY37PRa68H5AWvgVNEFuaLmi/oG1INiOwHAHqQkf0nsW9xXCXQeRMtMPMWKW4lEKAAzT7Am/BMG1Byy/i5AlZq0SEyD6RB/7YSc3KKpIk2Xo4jFckLGylQ1WrW1kp96ts3Nz/zD/g7fex+g2GxOtgtPsfXQOWeHylBi3QvkTRK1hGgsODBsy5mHIntnSvKFBhbL4wpcZ1V+e5t2r3oSVeEu9iyO8p94thstFOnjP7z7bbpMYZ+xpAQg4olQXtK3br/Of7/Gf7/OfH2hgeP9iLk8LWMb526DWIyT1Fkc7U2i58TKk+PMvulUdzxprbKSb5+1aKCSGXsaSbxb05fwdFGpR5kWR9qdJvyvSQUTeRfJwTDBEfDo4mTAhoYewKKbVXMaBwqaH07IQJRUlBA49Jm/ljxwnoaDBn7xJkdNwsZ+tJ33SAq0jUR5S8FS5C4LCXZd0/F72ebmjZzcTj+Nc6KcdhEqAaJn2msKU8i4tkKLI/QKjHx7ULHZRdyPTxRQMgwbgtZQHmEVcn+QDm+3006S9QXRUMB0l5PNC0x3/pt+gDTlDH0Ql9YuLgjeA1wflwj7LE7/o6iceSuJ/lffGwWz0BL0U+CjWWsPUTZGVkV/E0XLkN5xyxoZ4t3Uqj408t7raSWVvOBdNiEe690xuGZNftKtrbIv01fZG51xBEQYEH9cBJG7BfCi+Ix1WzuzPmSIIMxc6yao4ZN8NhCZ47NoqbQChdIv1qWg/Hxvmtdf+wQ4zX9kt1qei/aKaP39FXV8gQQM+wRP3R/7Bezhf6jHv/qh7zJecwbezQQMhdwL3OAAc47Quw6zwWPtmlWsDYJSzt5KNSewrwDJayVDUXKSpQZ6rVidnzZpOdxRXptV8RkI67V9hPt281cl6zt5HFs3HIO8iUeqEI01PB021VHaeyOXaIO/1gJq1SAa9+kDZ6A3yu2mZzO+mJbLqbiR99oNe/LCyE4pEHNoiohHqqHYeaM87n/d7hfbL4pUj+qr5KEcRRNq16Kvl2hJvwBvZxB258tQsu3qjaiTw5aSlrYeuXziTm06ogZXUfIH4n+A34nvyXYxgIuiJtIkALJ8XkjM95XuDntcXWLxChgZLfokthsIG1+10oU1HSaOChQz/kdV0aZNodZfRKT3Ul56AB+NRQwYKfA81wRekIbMpg19IJ9H2NtGillPgs6n6J5gukrkosqVljg56vpNUqOZAG/CbwvsC6h9hmH/0MIERshCV1+82G3MpTdarxkTH6Tcx5gWMemxXjbpCvx5/SHSfuhfHZubO3kWrEP6F8/As/g1JRcQavJyaAv9sIwwvBiJmFUGZB1RMes3eNToBquNdidmKPOrwYPTACQcWc79cPexLQD5KfLASyF7GQDZ3KY8JXkk/tYw3HHU8x0aP5K1X+8sqW+0CVf9n6RrF5lpyc8wcWcRPzQ1L0P6pz3T8ZVD4SATeOgioGai94rqMd7buFv8VsnBMW7fXT29m+bBgXwlFPqLxnK1crFZP1QEHzpiNGSLBJsXLEw3FYQ1LeX4h6ZuTYcDxEdrvQGex3AHCKBz/XPD6Wud3fSfclzr6zNxIcWzCEmwWE6ixG2w4V0ruMEc2hiG6FhN004w46GoCd6N90UjmdQM9s74HXcCkU76D7hF73SanU96qSPyzu4rnccmW8lnt0tF3p4wspM2UWsd1yIXjBdyDR+I9tZymPQck4ppv79lLvz11Kenf4C2g7URuNCubYn0hoCIMLLTfqn6Gvnp0oruOK8KT0TyfF4OyBysIMU5stgfQt1pplUMshOvoSA2A5j0SYkLVKQK4hG8AiRagrGRHE2B4wE2gi48uhtExVr5Jd9hn8xxFt1TBdBYBXqAFm0nAiskgEANdBRT1mxLJBfMe5JY8SDfRq1RwJEs392NJSJ0nJ0yfZZsgksQssnEl6ewcDhjCgQJVOK5rmUwMeHYpExhDftukU+BFPSQD7ulcs+/xhrjSb6d9DINHn6LsDtkczv26cnMULb0ezm46B3NBE49zjpLe5Qa+khVxeplaOlf8pqamfCjuRpTWEneZakWrcF6ghJSyl5CZr+uzo8ccSVpMVfTSJg23X667eqGoOl7YgWRBiA9lKUc71kJX+1Ncr2tGT9HhiisjSqMZCp95Vxai0CW46jgDJEJ8pQGW8vluum7seRV8UEMRts2wXpZg2AhMcoEYa+lyfhvJOFtfH3ZTC869FHml29nwZoScFyPZkYY4tCnv0H1byxfQegWa5M002rmnf60D8dO8f2M57bbWyMMOUqwBox3YCEoDuJUmPXSNDns4CdNXUWe6mWFXQl857qaOfivQrWEQVp6MKPTBKpIbwtw2nICNAXs/8sGMFyZM1yDww4xzvrFkRHG/Vy4tXpxfmp9zMhTlup/5rNXJbKGLmu9NiqS8mJo7PkaVxAwEw2KG5nHl+lV1bWl26fo1c+sfTfpOCIt76HYSHZx5Sj4bQQMvpWil9bZnTFzUR/hVY336Dj76jidLYYgV3of274JJRhD+kWNuLRTTSV+Iqenmo6Q7XoI3u1HX08Vxqb8xi4oO7QidPATVsISOrxRDkozr3W6LTnozGQDP/3GadAZrRCjBo7Dl231E4nzSb3utJdpc7iihqLBKDeV5C9pPlWCd64DE3QDUMrarhXQV1qsBILpbUgfnGiZDSTpNYBXStBaeyaBU1EIrR/AX7q2tDNT86zqnw6scSkYP36T7WEFL2qvFWtZT5NQt3xfITQMbnAPcRmBKyP90AFUMOT5MOdCkJ7tFAHTeNZ4OMgtI1/R2D2cbQraX8XBmt5IiPBoEPJo82ciZ6eQDjjGUZpboscIxnDgts5sYLLsNAC6ahSKWPAEQCPJ2Ozp4EgQtldAqU3CIy7UFGqVb6tgjxTkPs9QVABRfyZ1RFzobZRUetKIuUTW2EWFihRpOR0C8k9hLN2OA3EyCiCAHjGbgDcBk0jQGxshz9AHE2D7ujMIDx8CKWHdcQc8KoYUUygxF6qPIKZq8l/EWS7aauVm3AoDuK4nAo6tjFHd3DNBqEe1BrayXdAfhGCA62R+bAb+QDG97IjGKE7hwuB8ocxNm10jYrEsbE2gssQL7xavXlNzsmEu7Wa2KKhYOgqKPkClH5tAXaFHPl0b5YCq4XRv8aHNepAP25pC32mSmKmZ0iMgdbUO408b4njuyw+8UJCgYjntT0lmtDDn40X8QaPZ+frUrXRMtSKpZqruia6+cqk3fEVM/QUuR3H5achJu6dgWgvOjUjeJTcL7ArPAlXr+7e/AkJlQCzO27SCfTLRhS2eQ0R9j98y9pF2exxGV8CXJQVWy05C7oFALJF2zEivn1TL/QhlcqmTvSxvK2FCUSVlD+djiv2j7NHkl5vroorjSVddaKFDo6EYn1kpfa9A5uTRnblPPXJh6Qd2nfeAoPPu0QKq0bAJ3EHbyDWIX9BgUys06g6IOiKdnffuMYtPwHvF3T/vxBevONfjLaWAgxDyXSVUOMvMCTcIO+WRMZZKIiT/YW2wFh5ptGPNtqqNLjVJV2cCFUnTStIcuuUow1S28BWRuqchQhFQqG+s6ZdGioLQ1akcRFit5fyXNBtpGyze56bAg2xEsTX8D361mfnSkq6WNXunCBZrQEbDychZwALMT4kiXMBi1KN6FusAoiVI0AV4Oya5oGBVjiJFbLRTFsHagALgO/2CJ5RbFrU4zya6Z8LBht8zrxFolHnDH4W5+WAx89/KDvMalbMD7Sr6b/R5v7nJUw6uFVf0o3sUBHjQ4l7RuELPCv/5PF4AX4E/01/8JaeS6XQkTR2OT5yIRVebxRG0P7b7EnfXlWujOij3JEMgns5jz13txVR5YOT2ETxe2FUW/mvW2wbGmAWvWpoXJ9zcswjazRsCTT8HvWv93CLCyjUul8CVohf8SmCKKyNUUwwtE8O2bL0GrS3LR+tIVS5/6tzkxk8xduez8RpEYi/0cdNQiXJF0MOzZlpw1DcP02GFgv9kmct1i1soZ/JDj4bQVeSXohVAwFWrXnLls01Vf3/tMuWcztAWCLIpsVQyYzjfb5HIu/Vd0WHDwxDZdFJcXNvr63jP67kISMYBSjX19b8/56Wq6Aiu2ZifmP7ANr4Gw00LjAwcP5oqzs+pk0hTTMaZJDbBqGGHXy6SdWou1TtLnPbPNXSmOj9dAtPPOXFxKxNncYA9/UKdIEj9tr7jrB35DPOFI9yXhY8OEi+U3hPTHNnK4hXIuyuuPpR/TtvMz68DTJexzMXo632yThS5mHBzYd+E/gHZ3sfFL/WFNmvbRX9Voa7R5dF+NDkY7Rw/U6Kuje6PN0ZYabY+eH30Mvx49GX01Ohw9xwbw3y48PPrw6AE8eqZGe/BnH9ofjLaPnjTI4l4aj0b7Ev7dOfqNgQ9/NnHkRwB9Gz7IgOroPjz4/OgJfNkd7YzN8T7JYDjFvaOH8Bf+tROEEZ/Dhy+g0eHRfRy3WR744w89+pwaPuH88CdIDT/6y9EDGO8QRnoAIz4/+oAmsAXrOPoSxvicZrYHP2OjLXqJh/jaDwmlo4/h2XOLqkZL6AJnMnoGXzaPm1L+mPgdEs09x4+EUgOEGiahH/0PeDmIAs741zjVCjTwpy0ZHt7xoyZr0jhV/ej3APIegNqFQTdxW71IPBrns8e3g+sMYyAR78Jo9/F9AZ3uI1HAr5vwafdFIne8NPijPzLch/TuiEoAgz1E7bn7QmlDjvZh08EcvmBi2sXJwLQ+MHwPn+Ku5NnGqLNpKv3R/8UV1Cz18OifYbTnOBIwBAVD7REX23LX7CQp9kd/8TkVjgSjw0I8P/ro6DFt5E3D1V2UPj5Z3v3IwDWp6ukU2ZaWyPM8rCwndBhtXWb+FzH4AZIKfYLThshnHynjS+bgv4EX9AipfJtoa3f0bIL0/X8T9BRTngLaxqHp9HlIzAT4N3V6wGS4SRQCoz2kf5G64VhVQBabsEMR8S2nIoB+UzgMYwGH4w7Q0Rb9u0Pb/Sv4Gd/eTrQ4QEVVANjBcriOnuLuxD2zTzvkPu3QTdw3yFFQ4nhOj3axDS4CCmSeWPCstpDAuLoBo09wRYFr7eFkkbV9hYyFvrrDHH08pUb/Cq8LGAI029cvmWn4OfR5jDjiOsMLZSCE3j58+ohbfYlcCf77CN7YpwQAJ/pw9IwZ2RluRTsVhsXnD3CVd45+iy+J5Ina4gQWfcIYkfEFKBSx7hGqB4zVrmJmB/+hBHCP+gl3wv4ASYQWTVBMDZE5nUFEUXja9doqPNxGT+0pgsUQkMC38LyA4w7fLfFr5r+bxEPvfWNFEGCD+gvinE9ABTtMeSzr8lG2QyTHrBVW6Alvta3aMgmjP+DsDvAYpE1MZwrM8AO/o86mD9RveQKdIMgYdk5WROHFzHTCubxeN5fmRRhc3JkCdzy8QPVQxGqBfSIt4g7BPeJTOx6CNOcvX1zNBhKTNgkv3t/EKPTCwsapLuUA7GNTKxr7LJw8gz20w3uBcCfOSgyJ9pGAhQa11R5cmWvXY0gEBtk0LguuUUzBqSsMAW0ek/y9BYTw31lJu0+cg/oeothKX2GL3yMJ8BhTOfvNTeWN6FSOVYNi9CmJUPeR9xOrYjmSZ0akcACn2a6RbZBct/U2A5p8hBIr89aDKvTtuXKGllgW4AM4yB8iTE/7nqzQhazgCy12Mfq3CEPZNMojkAsxlH0ugcFEIvrcVvNKGKPP8FS0JSzg+w5KjUAFePqP/sAb6TilMUqgicT/wCT+J6LphyevlEEb39dN7LmuzTDe4jStnRHwQFoO0GmYxQibekzn8h79aLahwxrpFW2NLbRBwo/IqnJKP9Y6lYM5nTMoJiI5n+LXzwc8SkKj/bpKHDSbXeAZe8wh9+l4etpsDCM9eqM0qtcxnozLzNc55qqreIz+Sm/7Mb2PL7RGJksIr+k3OArJWNGj2UMBX9EEFT/gnHpIbOIhacag0hNX3hMOtAvUIur8AVEC2aqAjH5DS/ikcTkQfEHU/XNkMDV1QYh9OhSkjU14aGhVfNOpGkJrRbKR8FPajMAQv4IeVZVDQJp/RIz3gE5mNla4i6sNGPToqZE6QzNG0wojMcoBrWXHWM+aFR0ZfQLtD8gM9JDpBI8+2aBWJZlQ5rGbDzWs2molLOOFp21dtQymSfvyxXCoEXLorL6ECY9MkwQYxLGajR3bMayW8NI/bFDfBNadR2VryWGDUe/DWpMY4L0heHEfAypAcc3KnoQTri1/ItsfdX+0VB9/3o7WG1qrayce2vGi2gPwjEbVUoyVzEhDyAQ+iEpDgQTElo0P6RAggwRu8qOHZ0guEml006gLuMRP7Y4abY4pu9JoDwQFPo6xC2pqsTTcCzEcmlPFuEIt4/ZEdPTGu6K+fsu4bRHUcTnuxqgr8DJuZ4TTn3Rv1Jd9OenmuLrobga2n8U2Q1XRmMZ74Gcn2gNeJZlva0y/vMy3NGqp5kzTcU8+6DFO2RMcshVVahpwk+OykuriNQ3YyIl5SFV1mwb84/jMo7rmzegP1rLkmhminEM0ThQ4tdMLFGrFFh2ytkvTuvo4pA+i5ClWQdQaEGdadxStQYitm3stWwrq5ojhHakBV8Yh/U2Sgg/kMWEhzq4dMi2jjrgpBXZGfwo4JtvXT1RzBz0Z9JpEmwnG5itK4sAWVZydilKWRzTzg/GleUb/Ip0PJTpDa5TCCr4iJA5KbovQT/pcNiI2bVbM5wQjE1HLiJUFf0Bpc03rvnNnRhcCmqwCEDM8WGdQaMVwWLm3MXBP728lTvAP8J2ZDfqhDkFAY0TEOjO+YNBx8Tl2EaHJBpx/sQsQT990XJSOXYdIey52HM8omduRuzIr3Ar0Z0+XOBTzHG9qNGKhvwrJ+Qv2R1J8weSFi8iASYcbOVHGBHwcWK+B9dS8iOJGcr5ivNcznLc4tuj9wLuofT+GXGodYcepfBTFCjgJuqq3Ga9teWOPx43foBaStuDwOtfhBSPC4Gwqi72ruupIFZTItEdANq271rPRnXFcb2QrRIoh0sFH+zXFlMguvq+dwvfY3CwWW/cgtN7ekjNYcXjMFpHBvo0DfBqw6aOPK0sxVWOhTweYFceuALT/Qpb9B8InJhs5VrVJQoW8GAsQ9/aMsIQML1hzIioJHCqLOK6xclzcUEXpJ4nWKL3raj6zx6i+wjt0mwSmp/xsTIkolJzsOXzI9IPwmf+hdEhqCHpQRIbarz7t6wpKkdeE7bp7sjbWYcxxBMJPvuAorHHy/dgiVBg4Z51MW7VSPm1eDmOwIsnmiylDdRw8Sgrd5ouqRzX6C1l8H2iHyNH9F1qbavS/mMh5sgd8Qm7SGSHuDfHUHkjMgfhpjlewisjXiNSB50Bdw5RsC3ONS1hFgrNqCzTFwrOqgnRkU9LhGOpcRx80r3L1InCMn2VuqSuaQ8Pwo+YzG1MXa9KpIekQm9sGev74G3obk9TQoqAtE64YKtAirO2YA2JXq/KlslogdNjYcIkasx5OOnpsZCQfzagUaGnMcSuVIj4pcICiNPTOkahPemqabsK/Dxqg5WSxnZZIoG06Fb4QT5mBuBsEO/KK/ZlM9SywBLFlrOdsuRlvNfOgo5EiHKXh/Cv+VJxgM5af5VUA/rt0eIukTwc0HfSgarMb9nNsbhd71xHLnjLAyNK/Ypf+ONXBgPIxRuSxsQuJCeLj8mD1A9XWCyPy/IrkIn0CazWn5kzXUaU7jsHJ6H2Ocn/iAmMoCaLH23Fpm1OZhep9Ix1qd7cEJqipKuPN+Fpe/ovH7bIvdxyQE2D0CJLaFovgKM3RWcMynDa+6k4oGh44JxK5ZU04EKgAJypj9v/jAoVRWPSMqqBJIKwsHAvCztIdpzzaiRbg+BXTaFdYY7Gr2lLY0taLqZpWNQwFHlHdNBzpDR5w0rpp0aVDWddeRXIXj80cwPC2/ZaeLCexzdtG+eSAgzpmgvvJhIyzPXifHLUc+kuHQVw3MBejJKAY6E7eLgUa7YgIuHucKm6RMJxdjqg2UZuevT0mxDuWgJqwUlfUN5EXDYq9VVmqDshz4p8Mgu5OObbbCS7V72inujycqxruOK9BnxmTvvsf8i0yyxB3xdrmaawOauPLzlWZTSw920h3vZ8qogECWQ3Os7FF6lj5CDseygUNfTfjKZtJd0SM3rJ2APuzuazhmCsalbQDyrXq6i7HFeF9iC/oNfGhXUnGTQrdBRcCjHocYYR1Ne9qwYgsKlhFS+D57u5j1MKLiKY+k/lAmyCMNrlDzPgR1szDEFV2u1etpXdI2ukx5e1E7LEN6+ox3h5x+8B9c3yExtkcS0Iwy5EkIB+vAl/VfgvmW7nTjHUDmcOWGHvEMHCscn2TIaQZ0HNsItZCQnJztCc3qA44Zo7epZjTGOlDzVW2hDhQbxtb9Q8Fey1uu75Mw1F/WKdqb9MvcqNCnu2xcUiOSXGRmlh6PEPtOF/iG29QQnAslngfidSrXxNLvc/NQOnGiE6+b0UR1xhQyheGybL0iBf8HroxWVTa9r2hJAPs1yogMMa+vu8mtqI952gYX5bQ3n2TEXAnP6KXiRMwJxueSr9lhBRJ7mQ/F6VW+M+B1T/RDfIRX297zte0t5S5ovQIztXJ6hi+ICy1s8D6DybGs77wYYSPupTKkkhIEoFuXeVc+BDtNv4dhoeT1k604TN7LF6xyo7joHZGZ9FuIESRiIRsYpOtoq5zjWPwkXbdCR27uiKJ4ffFmsD3Gr1BGY8tcrSIwWZXrl3Vju8VXsRLCiSv34M54qbGX0+FMGoLMbq3HmeUEXRc0d842eTaDQVdkv3lKe2WTZbS6ws2jhnHkJcjZpKUw4M9oMOY4tOtTaJRdcfx49Il2N/6UTGbDSo/HnNG8mHP3g9qUCEyGOuP5o3os8Fox8Ze5sW5huUjiXDckNhDpjwtuuEdpRoJ/1l1mckKyL65luHv+be+dyYZ0a9SWTUoMyy9QcQeiL67yabnVbasGstEmtFZZvNWTLyYgaeiYrgaeLFILzdsJlZFc/QnuY20K9L6l7yt2fTHZ/GuL4KI7UW7u3zJYJelgH06Rp/TSeD8Sh33yNcXaHH3SDNE2xQKEm/wO6Ttf6CRk5sV+3xlma/y0XWOscU5+dqlES34jL1HgVdGe6uwSmhyiqGC9/kYEZjiN1rVk/gLHfBxx05Q3tPPkjKuxKe9FVlX5tM3LhoqB84Wqf6pTVDvwUfei3yR6wsb/TauJmiz8U5WKtTGWkv6AyUBk3QwCKocVz2meugEkGoLiooQLnlDmtQVxfOnHMpp2E+YieBJkDmCr4X5WMpFwn03K4QWQL1xxKdUGsNJKEHioH+VSWsuu9rXYqJFI/VKw+hKJoAx1UtLnfjKnYQ/+rfqmtQ1jcHbNhz4wLP3VMKOlT6NJXCJ26psHJ4JgvETukyp+uQzjoXXPZIpYFWu1+3Gd9zRx4FiWoYYoFtXUzUy5Wh46mY5PDVecJWmrRN30HU+hIisJrr9KsuwNmM4Dauzhla7MVVaveZlYq2r2hp0ZfUHr/7VFW/1OnlyDB/Yz8aVcvX5FMsBD7yQRtclPb6861h4gZM7XvPV3nGoCKS0crdr5hPB/99LwX5jpWArdHZRjHFjSpKcZoHPleVhJxinJri4pmRsIy9N4JTR6v+u4136kjgnsKozWrqUSMTHEoLLOTS8u/Cfi3xOZuA9xzN/9JCyCfEJ67hEdI4WOWh3o97hMQVqDVzP5shifNQaMKaCLSi0UV6/J4ZsTqKxybGgFJpoFDjfeRKrc9sUOGF7X7hdBWC3Em5juDZYgi7UVxTKrda5KsvminN3R8fnHtYWzy21tiZuGu0p6ROSueFLL/zDEGuzqrogGW3auzeeD0xbroPA4y0nkp1sdhHPSVhz14tK0kblHasF7kazV27pAdDF4+ZaDQvzkqodSz15smFqq/iO9mvK+GIyALLymEwCPm7wqba0rxOlJnaPyljbSYv+RqzDgXuCOaAxSos3hiL4PsJHhhlL+MYZ7Y8jPxG51in6jdzH90mg3Jb8YMaHt+c6lJ+dqJgw7xUJxWYzjpTaNbMkGflEszxh8WGN4wMxIePK/PZvh2VluWLBU7+bbwXDWHXjo8dS3phMSvTkfsMCx8f0fsRJ2MalurZ/8dGK4ziW2a+mXnKVAOIBdRbNOK+daB83h2M0y4jjFmxaaPnbxkuV3eay1kH2Qzps+AoNXSvexNQuE5dwPv70tOLsTQ65je/7c0OmdsYVgG6EzYEkfXJiBwRBg97YWtFNdoNrHAg3933nKi5MbNtm7NKSAd3yDiO8GpaZ/hthx2/vI2jEKYbwNmRVsWoTlId+dVJtQ6le6+F77BB+ENMXIpWs2Rt8ElhhgevR76TtpqOnmHCOquzc2jA1pg726C9I6GyoKUszm65m3qA0tgstJtVUwyuVy9bm08nAxGpow6t+zl5ZyvP267jix1cIiaB2WSgeV2A7TIkWqIH+XTA30OyjaPXtqGzo36eLl+Qe/Zk6ic3ohHW55U4gG5uiUfETxRBMULUbXriToFEi+J5VJUmIWWLDJAmUSTyaxXpMrW9EhUOTyGpcvqUiKNBdOWO6dU3tjPqvXbdzIyyaRDk2mGhglB5TOiFeQZwuRjhXfKrjDPSFsjC9uROLuVl31ae63jhGLFcOGlgeOcPp/WhejTFVyBtsvdiNIuYifoTNgREaRSvejL0eGJfvAlX5ovzrQWgAWHxnnlNTO9djq+7KcHRLeH2FA635pbqnb+AzcAMWQo8FWeecS4QxBwEFPNEScDr/e07ddCAirpuugz3NDP8mxdOdhDA72uVRKg0C04zVVY8WU9cxRvFD+bkJpvuQiOpRQGNHj+qLrdfYOJnUtWgtEXOUehMVIa4PMa4m+6TgY9ffad/bUXcmqd7eOE6YQ/dR2Q4WMNyKVcsiiRomLP7+7eFntrVzh7yifnxNJoFK+B5SH7mCSpDPdbOu0rz1rEv8FGs2D0FG+5LMjPvmFNIRnJuxCvSRZa3JgWCVJi/xiZtKdydaIcV6mSKm1FJl++MiJVkCqCYCWcfFUBhHyKbwMJiYIvcUf381/aXFxtuUzZYovJbCZnEy3O9wsDCwyFc4c4PJTMU0jNrYfat4eJdJ7R0Kh2HZVMRHDxxbucbf+oqBeh3PoiwTEpBjZdYSiKPOOZdlBtb3zzF3M146h5jQP+NIvU4lviuXnApSuenM8t+O5JngrLSPaI3lJq8xJWe6ADTaqS6mJtGZNSNz5b0ZQep3o/+DmWI/gw+fjf46+ovJuI7xOc4dJVdO7yT6BjolwXbs3Ien3UqL2oR92/MxL2rx/6pxI34HH33H0wvxIiRmR150mYqk9WJvHacqsEBMH5Nvq7KXj5DudwlIZqOmo4vgUn9jdjWRU/vTcZU4mlxsMtXnf5wmncGaQ5GPXTkfNbx/xm1Q6vc2VtBV55N+2y2bgvIWaX/SkbI20T78XEt2X0oilwNdtY2i7oTf2FQoU6URz3WG6TEGpNTbnNZ+gsGuwhs6xuT2xIU38eSu9dJWlnSONz80EjgRgJOObUpaFRPO1tTna5htRgreX9dJ+l/lKEY6M57SnSd9WL/J+fLeCnoSfyvWsp6a7/fFUPJHW0VKQ3Gq2kkk5SvWfe0fayYCf8syTMD818T9IgeUICJeMQeNCukxNjk3YdBjdoTS3Z49c/3GKiZczIIi8nHFIzaqEDWb8NHmQbHVl6IIaS1gS3weztW9M0rbZvmukqQgcnWGJkg59wglFsJHg5QDSw01/jXtE953cmI6hhYZL2LSCTWbw7FjWfBnYvmPOMHjPt/tCBGgIlydThCcEVho3SsKUtZ5Rl3obIwx7pfKOh1wDASV6HtYyk8l4YCUb3I6MuA7iZNz7LhDBvmTkGwfk9nyQF+e9IIZnOG1BHH84aOJyAKE8ACwde6iFTQ1QlY//l1VDSgPS8feIBmryjg+iQ2ENGIltv/t5gCpKgVYmvjJOVqAkCHabxkfY1jZMZnUPF/GfiXCahF9fq2sl3AehReOubzU+6Z4w2HVSl5IhrfHuh6rdBdbcsxockLwT/zwlEPiuJsBBV+6ePWaYj+Pmku7mcf9KhRk9v5wHFNQVO3D4FbglKPUqHZOtcpBY+Aa5R1QSqb8QpPPeVfYdHUVKeSmnOIT6YAD+Ei3CSO3w2ptR09m1DJbM++0xHlyp4030e50+HS+49cR5/p6gO3KkK+Hh2XIONLUlhc+DB0OQb1HL1emn/7p0NjwS2F3tfUlTXnpn6D7X2fKi8TQOadUaM6IwP9RCb5UjsdawVyevsIgWH+hUt4o50k0k3AAfuo2sNerW6auzidsxeYbrm4jLz25V1rPi4jtZ610SSq1ldxhFFBVqIX19aEu4xPKqKVQJj4qtshwxNNDAsRs6HyRPXaDnK4K2424oYyHSpkqP5Ku+JBemuOx4sh8z1ThhuqbgBe8G6Pm+glsuStdda2F6hfB/HPsQuKBW8/No0DxHBxK0MEXNj3YpiNckXmJ4wAcpZGRQFtHsBP+tW44qZDH1hST6bF0jxKnHoyEtg5dgVdnyRl9xjqIGwhP70RYDkgjpyQv83dPa9dMUDfcMrPLaeKJ7+VKguJ15YmxiMqv5pDABtPdwXRe4d1CxxRoDg1DwKbIh3wyTlcpDMYfbKbHQqV4pXRDtSirplqmsu+DtD3t818nZ2ngwWRsKWzF27YEvOikaS/t10HX5/NXknsltJo2HI5fMZ/kihx/uMc1y6u89KAvsd6XQp6HWkWVHATkA+OKduGhveVpXo7k4YgCkldrR2dH8a8Xch6hP1oOu00aLl/n3HZiLyVXw24s0RUG+azB5JWXw7d889rc/I4uWaGAKa6kmU3je589Uv6sd6vmLEvGdyEDcXX8IsQxkngYtVAUQ+PCdYRggRsBWIGl3JehnbbNlyWkQK0lAOLZ3q3wnUhCxnJQkUTqO5cFzA+Lwb0D+UGIdCkbCNv7NE4BmkjN8RuH4x3xf3ZCpOSM+1G8W2Tkbf/olPbnktYN8w5wzbeDBhfgDKEGvyfngU4B5gg+0nBpo5de7yYeyzfuD2R7X5Uc8OELcANK0GKKYRckJniJh30DvSgEn5N+zmfxV0TcT0ryrJMYMEZIVbHPIgWJ8GCDMa8vUEoD+6YjeQ1sWzZx28ZShxXl1wjH1+1nrdb7O6OYwlTCdtpib/Bwtk5V23assWO2l+b4L8HVlRMR5bDR1XQ9ycytzuAcDxtf0rm1Px39t9G/wX//Mh02mdOukv86+gRE6E9AQ/nEtqE7Lov9fLWfFkWw0/ClSqyxV9rWWVouqIhXYdnW9D/tbU86tZ2WkiOKGaf/XK0YAMJWza1RpyGOolroStbCp1etXH197zPlyqrQBTZRUWSr2l3+e8rU5t+XdFqDokuIqBWT4sGZz0Epv4PTdbGf3szyIc3h63vPVJkHIHyRm+myxHNKP/T1vT2nwdV0BV7DmrMcXA2Q04KTahxbmGugZLQGKqF+apArKriu8r4y+bJR3sK8/SYXm72fLPrLlpOze9fLvlqKB4sN2XykSphoXMi6ALNnr0LrsLwwfsPpZlQswCK9aaTWMH19qLi5Lw+XK0hc7jF43UadStDYcDrWVp2y9oTTQUfYzHTIUMI9tQEKfdInQe+GtTy6GdN1usMDYbrurWfK3YtXd56TnOyyWuUkSDc3O8OJmJxt5fufM8G1FZl0rp3Un7meZ5deXIaw0MXiqgOHIH6P4ig5o59waJjcjXoJ+tz9u7v/D6UMZwRQ5gAA";
 
         private Dictionary<string, Dictionary<string, string>> DecompressedLanguageMessages() => JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, string>>>(Encoding.UTF8.GetString(Facepunch.Utility.Compression.Uncompress(Convert.FromBase64String(en_ru_compressed_64))));
 
@@ -24963,7 +25672,7 @@ namespace Oxide.Plugins
 
         public void Message(BasePlayer player, string key, params object[] args)
         {
-            if (player.IsNetworked())
+            if (player.HasNetworkId())
             {
                 QueueNotification(player, key, args);
             }
@@ -25772,7 +26481,7 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Pianos" : "Пианино")]
             public bool Pianos = true;
 
-            [JsonProperty(PropertyName = en ? "Siege" : "Siege")]
+            [JsonProperty(PropertyName = en ? "Siege" : "Осада")]
             public bool Siege;
 
             [JsonProperty(PropertyName = en ? "Scrap Transport Helicopters" : "Грузовой вертолет (Корова)")]
@@ -25783,6 +26492,15 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Tugboats" : "Буксиры")]
             public bool Tugboats;
+
+            [JsonProperty(PropertyName = en ? "_Siege" : "Siege", NullValueHandling = NullValueHandling.Ignore)]
+            public bool? _Siege = null;
+
+            [OnDeserialized]
+            private void OnDeserializedNames(StreamingContext context)
+            {
+                if (_Siege.HasValue) { Siege = _Siege.Value; _Siege = null; }
+            }
         }
 
         public class BuildingOptionsSetupSettings
@@ -26238,7 +26956,7 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Tundra" : "Tundra")]
             public bool Tundra = true;
 
-            [JsonProperty(PropertyName = en ? "Jungle" : "Jungle")]
+            [JsonProperty(PropertyName = en ? "Jungle" : "Джунгли")]
             public bool Jungle = true;
 
             public bool IsBiomeEnabled(int? t, Vector3 a, out TerrainBiome.Enum biome)
@@ -26259,10 +26977,22 @@ namespace Oxide.Plugins
                     _ => true
                 };
             }
+
+            [JsonProperty(PropertyName = en ? "_Jungle" : "Jungle", NullValueHandling = NullValueHandling.Ignore)]
+            public bool? _Jungle = null;
+
+            [OnDeserialized]
+            private void OnDeserializedNames(StreamingContext context)
+            {
+                if (_Jungle.HasValue) { Jungle = _Jungle.Value; _Jungle = null; }
+            }
         }
 
         public class ManagementSettings : ConfigurationExtension<DayLimitSettings>
         {
+            [JsonProperty(PropertyName = en ? "Spawn Only In These Grids" : "Спавн только в этих квадратах карты", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+            public List<string> AllowedGrids = new();
+
             [JsonProperty(PropertyName = en ? "Block Grid On Spawns Database Positions" : "Не использовать сетку на позициях Spawns Database (Plugin)", ObjectCreationHandling = ObjectCreationHandling.Replace)]
             public bool BlockAtSpawnsDatabase;
 
@@ -26533,6 +27263,9 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Player Cupboard Detection Radius" : "Радиус Обнаружения Шкафов Игроков")]
             public float CupboardDetectionRadius = 125f;
 
+            [JsonProperty(PropertyName = en ? "Mounts With Players Under PVP Delay Can Take Damage Anywhere" : "Транспорт с Игроками с Задержкой PVP Может Получать Урон Везде")]
+            public bool PVPDelayMountDamageAnywhere;
+
             [JsonProperty(PropertyName = en ? "Players With PVP Delay Can Damage Anything Inside Zone" : "Игроки с Задержкой PVP Могут Наносить Урон Любому Объекту в Зоне")]
             public bool PVPDelayDamageInside;
 
@@ -26645,6 +27378,9 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Radius (Map Size 3600 Or Less)" : "Радиус (Размер Карты 3600 или Меньше)")]
             public float SubRadius = 0.5f;
+
+            [JsonProperty(PropertyName = en ? "Map Marker Circle Opacity (0-1)" : "Непрозрачность круга маркера на карте (0-1)")]
+            public float Opacity = 0.75f;
 
             [JsonProperty(PropertyName = en ? "Use Vending Map Marker" : "Использовать Маркер Торгового Автомата на Карте")]
             public bool UseVendingMarker = true;
@@ -26832,9 +27568,6 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Server Console Command" : "Команда Консоли Сервера")]
             public string ConsoleCommand = "rbevent";
-
-            [JsonProperty(PropertyName = en ? "Remove Paid Content Command" : "Remove Paid Content Command")]
-            public string EditCommand = null;
 
             internal bool AnyCustomCost()
             {
@@ -27093,7 +27826,257 @@ namespace Oxide.Plugins
             };
         }
 
-        public class NpcMultiplierSettings
+        public class NpcWeaponSettings
+        {
+            [JsonProperty(PropertyName = en ? "Accuracy (0 - 100)" : "Точность (0 - 100)")]
+            public double Accuracy;
+
+            [JsonProperty(PropertyName = en ? "Effective Range (m)" : "Эффективная дальность (м)")]
+            public float EffectiveRange;
+
+            [JsonProperty(PropertyName = en ? "Damage Multiplier" : "Множитель урона")]
+            public float DamageMultiplier = 1f;
+
+            public NpcWeaponSettings(double accuracy, float effectiveRange = 0f)
+            {
+                Accuracy = accuracy;
+                EffectiveRange = effectiveRange;
+                DamageMultiplier = 1f;
+            }
+        }
+
+        public class NpcWeaponSettingsDifficulty
+        {
+            [JsonProperty(PropertyName = "AK47")]
+            public NpcWeaponSettings AK47;
+
+            [JsonProperty(PropertyName = "AK47 ICE")]
+            public NpcWeaponSettings AK47ICE;
+
+            [JsonProperty(PropertyName = "Bolt Rifle")]
+            public NpcWeaponSettings BOLT_RIFLE;
+
+            [JsonProperty(PropertyName = "Compound Bow")]
+            public NpcWeaponSettings COMPOUND_BOW;
+
+            [JsonProperty(PropertyName = "Crossbow")]
+            public NpcWeaponSettings CROSSBOW;
+
+            [JsonProperty(PropertyName = "Double Barrel Shotgun")]
+            public NpcWeaponSettings DOUBLE_SHOTGUN;
+
+            [JsonProperty(PropertyName = "Eoka")]
+            public NpcWeaponSettings EOKA;
+
+            [JsonProperty(PropertyName = "Glock")]
+            public NpcWeaponSettings GLOCK;
+
+            [JsonProperty(PropertyName = "HC Revolver")]
+            public NpcWeaponSettings HC_REVOLVER;
+
+            [JsonProperty(PropertyName = "HMLMG")]
+            public NpcWeaponSettings HMLMG;
+
+            [JsonProperty(PropertyName = "L96")]
+            public NpcWeaponSettings L96;
+
+            [JsonProperty(PropertyName = "LR300")]
+            public NpcWeaponSettings LR300;
+
+            [JsonProperty(PropertyName = "M249")]
+            public NpcWeaponSettings M249;
+
+            [JsonProperty(PropertyName = "Minigun")]
+            public NpcWeaponSettings MINIGUN;
+
+            [JsonProperty(PropertyName = "M16A2")]
+            public NpcWeaponSettings M16A2;
+
+            [JsonProperty(PropertyName = "M39")]
+            public NpcWeaponSettings M39;
+
+            [JsonProperty(PropertyName = "M92")]
+            public NpcWeaponSettings M92;
+
+            [JsonProperty(PropertyName = "MP5")]
+            public NpcWeaponSettings MP5;
+
+            [JsonProperty(PropertyName = "Nailgun")]
+            public NpcWeaponSettings NAILGUN;
+
+            [JsonProperty(PropertyName = "Pump Shotgun")]
+            public NpcWeaponSettings PUMP_SHOTGUN;
+
+            [JsonProperty(PropertyName = "M4 Shotgun")]
+            public NpcWeaponSettings M4_SHOTGUN;
+
+            [JsonProperty(PropertyName = "Python")]
+            public NpcWeaponSettings PYTHON;
+
+            [JsonProperty(PropertyName = "Revolver")]
+            public NpcWeaponSettings REVOLVER;
+
+            [JsonProperty(PropertyName = "Semi Auto Pistol")]
+            public NpcWeaponSettings SEMI_AUTO_PISTOL;
+
+            [JsonProperty(PropertyName = "Semi Auto Rifle")]
+            public NpcWeaponSettings SEMI_AUTO_RIFLE;
+
+            [JsonProperty(PropertyName = "Spas12")]
+            public NpcWeaponSettings SPAS12;
+
+            [JsonProperty(PropertyName = "Speargun")]
+            public NpcWeaponSettings SPEARGUN;
+
+            [JsonProperty(PropertyName = "Boomerang")]
+            public NpcWeaponSettings BOOMERANG;
+
+            [JsonProperty(PropertyName = "SMG")]
+            public NpcWeaponSettings SMG;
+
+            [JsonProperty(PropertyName = "T1 SMG")]
+            public NpcWeaponSettings T1_SMG;
+
+            [JsonProperty(PropertyName = "Snowball Gun")]
+            public NpcWeaponSettings SNOWBALL_GUN;
+
+            [JsonProperty(PropertyName = "Thompson")]
+            public NpcWeaponSettings THOMPSON;
+
+            [JsonProperty(PropertyName = "Waterpipe Shotgun")]
+            public NpcWeaponSettings WATERPIPE_SHOTGUN;
+
+            [JsonProperty(PropertyName = "Multiple Grenade Launcher")]
+            public NpcWeaponSettings MGL;
+
+            [JsonProperty(PropertyName = "Rocket Launcher")]
+            public NpcWeaponSettings ROCKET_LAUNCHER;
+
+            [JsonProperty(PropertyName = en ? "Homing Missile Launcher" : "Самонаводящаяся ракетная установка")]
+            public NpcWeaponSettings HOMING_MISSILE_LAUNCHER = new(100, 150f);
+
+            [JsonProperty(PropertyName = en ? "Explosives" : "Взрывчатка")]
+            public NpcWeaponSettings Explosives = new(100);
+
+            [JsonProperty(PropertyName = en ? "Melee" : "Ближний бой")]
+            public NpcWeaponSettings Melee = new(100);
+
+            [JsonProperty(PropertyName = en ? "Flamethrower" : "Огнемёт")]
+            public NpcWeaponSettings FLAMETHROWER = new(100);
+
+            [JsonProperty(PropertyName = en ? "Military Flamethrower" : "Военный огнемёт")]
+            public NpcWeaponSettings MILITARY_FLAMETHROWER = new(100);
+
+            [JsonProperty(PropertyName = en ? "Water Gun" : "Водяной автомат")]
+            public NpcWeaponSettings WATER_GUN = new(100);
+
+            [JsonProperty(PropertyName = en ? "Water Pistol" : "Водяной пистолет")]
+            public NpcWeaponSettings WATER_PISTOL = new(100);
+
+            public NpcWeaponSettingsDifficulty(double accuracy)
+            {
+                AK47 = new(accuracy, 190f);
+                AK47ICE = new(accuracy, 190f);
+                BOLT_RIFLE = new(accuracy, 150f);
+                COMPOUND_BOW = new(50, 15f);
+                CROSSBOW = new(50, 15f);
+                DOUBLE_SHOTGUN = new(accuracy, 15f);
+                EOKA = new(accuracy, 10f);
+                GLOCK = new(accuracy, 15f);
+                HC_REVOLVER = new(accuracy, 15f);
+                HMLMG = new(accuracy, 380f);
+                L96 = new(accuracy, 150f);
+                LR300 = new(accuracy, 380f);
+                M249 = new(accuracy, 190f);
+                MINIGUN = new(accuracy, 190f);
+                M16A2 = new(accuracy, 40f);
+                M39 = new(accuracy, 190f);
+                M92 = new(accuracy, 75f);
+                MP5 = new(accuracy, 75f);
+                NAILGUN = new(accuracy, 15f);
+                PUMP_SHOTGUN = new(accuracy, 15f);
+                M4_SHOTGUN = new(accuracy, 75f);
+                PYTHON = new(accuracy, 15f);
+                REVOLVER = new(accuracy, 50f);
+                SEMI_AUTO_PISTOL = new(accuracy, 15f);
+                SEMI_AUTO_RIFLE = new(accuracy, 190f);
+                SPAS12 = new(accuracy, 30f);
+                SPEARGUN = new(accuracy, 15f);
+                BOOMERANG = new(accuracy, 20f);
+                SMG = new(accuracy, 20f);
+                T1_SMG = new(accuracy, 20f);
+                SNOWBALL_GUN = new(accuracy, 5f);
+                THOMPSON = new(accuracy, 20f);
+                WATERPIPE_SHOTGUN = new(accuracy, 15f);
+                MGL = new(100, 20f);
+                ROCKET_LAUNCHER = new(100, 150f);
+                HOMING_MISSILE_LAUNCHER = new(100, 150f);
+            }
+
+            public NpcWeaponSettings Get(HumanoidBrain brain) => brain.attackType switch
+            {
+                HumanoidBrain.AttackType.BaseProjectile or HumanoidBrain.AttackType.FlameThrower or HumanoidBrain.AttackType.Water => Get(brain.AttackName),
+                HumanoidBrain.AttackType.Explosive => brain.AttackName switch
+                {
+                    "mgl.entity" => MGL,
+                    "rocket_launcher.entity" or "rocket_launcher_dragon.entity" or "rpg7.entity" => ROCKET_LAUNCHER,
+                    "homing_missile_launcher.entity" => HOMING_MISSILE_LAUNCHER,
+                    _ => Explosives
+                },
+                HumanoidBrain.AttackType.Melee => Melee,
+                _ => null
+            };
+
+            public NpcWeaponSettings Get(string attackName)
+            {
+                NpcWeaponSettings weapon = attackName switch
+                {
+                    "ak47u.entity" or "ak47u_med.entity" or "ak47u_diver.entity" or "sks.entity" => AK47,
+                    "ak47u_ice.entity" or "ak47u.glass.blue.entity" or "ak47u.glass.green.entity" or "ak47u.glass.entity" or "ak47u.glass.pink.entity" or "ak47u.glass.red.entity" or "ak47u_jungle.entity" => AK47ICE,
+                    "bolt_rifle.entity" => BOLT_RIFLE,
+                    "compound_bow.entity" or "legacybow.entity" => COMPOUND_BOW,
+                    "crossbow.entity" or "crossbow_bowless.entity" or "bow_hunting.entity" or "mini_crossbow.entity" => CROSSBOW,
+                    "double_shotgun.entity" => DOUBLE_SHOTGUN,
+                    "glock.entity" => GLOCK,
+                    "hc_revolver.entity" => HC_REVOLVER,
+                    "hmlmg.entity" => HMLMG,
+                    "mgl.entity" => MGL,
+                    "rocket_launcher.entity" or "rocket_launcher_dragon.entity" or "rpg7.entity" => ROCKET_LAUNCHER,
+                    "homing_missile_launcher.entity" => HOMING_MISSILE_LAUNCHER,
+                    "l96.entity" => L96,
+                    "lr300.entity" or "lr300_space.entity" => LR300,
+                    "m249.entity" => M249,
+                    "minigun.entity" => MINIGUN,
+                    "m16a2.entity" => M16A2,
+                    "m39.entity" => M39,
+                    "m92.entity" => M92,
+                    "mp5.entity" => MP5,
+                    "nailgun.entity" => NAILGUN,
+                    "pistol_eoka.entity" => EOKA,
+                    "pistol_revolver.entity" => REVOLVER,
+                    "pistol_semiauto.entity" or "pistol_semiauto.a.m15.entity" => SEMI_AUTO_PISTOL,
+                    "python.entity" => PYTHON,
+                    "semi_auto_rifle.entity" => SEMI_AUTO_RIFLE,
+                    "shotgun_pump.entity" or "blunderbuss.entity" or "krieg_shotgun.entity" => PUMP_SHOTGUN,
+                    "m4_shotgun.entity" => M4_SHOTGUN,
+                    "shotgun_waterpipe.entity" => WATERPIPE_SHOTGUN,
+                    "spas12.entity" => SPAS12,
+                    "speargun.entity" or "blowpipe.entity" => SPEARGUN,
+                    "boomerang.entity" => BOOMERANG,
+                    "smg.entity" or "uzi.entity" => SMG,
+                    "t1_smg.entity" => T1_SMG,
+                    "snowballgun.entity" => SNOWBALL_GUN,
+                    "flamethrower.entity" => FLAMETHROWER,
+                    "militaryflamethrower.entity" => MILITARY_FLAMETHROWER,
+                    "watergun.entity" => WATER_GUN,
+                    "waterpistol.entity" => WATER_PISTOL,
+                    _ => THOMPSON,
+                };
+                return weapon;
+            }
+        }
+
+        public class NpcMultiplierSettingsObsolete
         {
             [JsonProperty(PropertyName = en ? "Explosive Damage Multiplier" : "Множитель урона от взрывов")]
             public float ExplosiveDamageMultiplier = 1f;
@@ -27105,7 +28088,7 @@ namespace Oxide.Plugins
             public float MeleeDamageMultiplier = 1f;
         }
 
-        public class NpcSettingsAccuracyDifficulty
+        public class NpcSettingsAccuracyDifficultyObsolete
         {
             [JsonProperty(PropertyName = "AK47")]
             public double AK47;
@@ -27190,44 +28173,6 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = "Waterpipe Shotgun")]
             public double WATERPIPE_SHOTGUN;
-
-            public NpcSettingsAccuracyDifficulty(double accuracy)
-            {
-                AK47 = AK47ICE = BOLT_RIFLE = DOUBLE_SHOTGUN = EOKA = GLOCK = HMLMG = L96 = LR300 = M249 = MINIGUN = M39 = M92 = MP5 = NAILGUN = PUMP_SHOTGUN = PYTHON = REVOLVER = SEMI_AUTO_PISTOL = SEMI_AUTO_RIFLE = SPAS12 = SPEARGUN = SMG = SNOWBALL_GUN = THOMPSON = WATERPIPE_SHOTGUN = accuracy;
-                COMPOUND_BOW = CROSSBOW = 50;
-            }
-
-            public double Get(HumanoidBrain brain) => brain.AttackName switch
-            {
-                "ak47u.entity" or "ak47u_med.entity" or "ak47u_diver.entity" or "sks.entity" => AK47,
-                "ak47u_ice.entity" => AK47ICE,
-                "bolt_rifle.entity" => BOLT_RIFLE,
-                "compound_bow.entity" or "legacybow.entity" => COMPOUND_BOW,
-                "crossbow.entity" or "bow_hunting.entity" or "mini_crossbow.entity" => CROSSBOW,
-                "double_shotgun.entity" => DOUBLE_SHOTGUN,
-                "glock.entity" or "hc_revolver.entity" => GLOCK,
-                "hmlmg.entity" or "mgl.entity" => HMLMG,
-                "l96.entity" => L96,
-                "lr300.entity" => LR300,
-                "m249.entity" => M249,
-                "minigun.entity" => MINIGUN,
-                "m39.entity" => M39,
-                "m92.entity" => M92,
-                "mp5.entity" => MP5,
-                "nailgun.entity" => NAILGUN,
-                "pistol_eoka.entity" => EOKA,
-                "pistol_revolver.entity" => REVOLVER,
-                "pistol_semiauto.entity" => SEMI_AUTO_PISTOL,
-                "python.entity" => PYTHON,
-                "semi_auto_rifle.entity" => SEMI_AUTO_RIFLE,
-                "shotgun_pump.entity" or "blunderbuss.entity" or "m4_shotgun.entity" => PUMP_SHOTGUN,
-                "shotgun_waterpipe.entity" => WATERPIPE_SHOTGUN,
-                "spas12.entity" => SPAS12,
-                "speargun.entity" or "blowpipe.entity" or "boomerang.entity" => SPEARGUN,
-                "smg.entity" or "t1_smg" => SMG,
-                "snowballgun.entity" => SNOWBALL_GUN,
-                "thompson.entity" or _ => THOMPSON,
-            };
         }
 
         public class NpcSettings
@@ -27236,22 +28181,31 @@ namespace Oxide.Plugins
 
             public NpcSettings(double accuracy)
             {
-                Accuracy = new(accuracy);
+                Weapons = new(accuracy);
             }
 
-            public void SetAccuracy(string mode)
+            public void SetWeapons(string mode)
             {
-                Accuracy ??= new(mode == RaidableMode.Easy || mode == RaidableMode.Medium ? 15.0 : mode == RaidableMode.Hard ? 20.0 : mode == RaidableMode.Expert ? 25.0 : 30.0);
+                Weapons ??= new(mode == RaidableMode.Easy || mode == RaidableMode.Medium ? 15.0 : mode == RaidableMode.Hard ? 20.0 : mode == RaidableMode.Expert ? 25.0 : 30.0);
             }
 
             [JsonProperty(PropertyName = en ? "Enabled" : "Включено")]
             public bool Enabled = true;
 
-            [JsonProperty(PropertyName = en ? "Weapon Accuracy (0 - 100)" : "Точность оружия (0 - 100)")]
-            public NpcSettingsAccuracyDifficulty Accuracy;
+            [JsonProperty(PropertyName = en ? "Npcs Remain Dormant Without Intruders" : "NPC остаются неактивными, пока в рейде нет игроков")]
+            public bool Dormant;
 
-            [JsonProperty(PropertyName = en ? "Damage Multipliers" : "Множители урона")]
-            public NpcMultiplierSettings Multipliers = new();
+            [JsonProperty(PropertyName = en ? "Npcs Become Dormant X Seconds After All Intruders Leave" : "NPC становятся неактивными через X секунд после ухода всех игроков")]
+            public double DormantDelay = 30d;
+
+            [JsonProperty(PropertyName = en ? "Weapon Settings" : "Настройки оружия")]
+            public NpcWeaponSettingsDifficulty Weapons;
+
+            [JsonProperty(PropertyName = en ? "Weapon Accuracy (0 - 100)" : "Точность оружия (0 - 100)", NullValueHandling = NullValueHandling.Ignore)]
+            public NpcSettingsAccuracyDifficultyObsolete _Accuracy;
+
+            [JsonProperty(PropertyName = en ? "Damage Multipliers" : "Множители урона", NullValueHandling = NullValueHandling.Ignore)]
+            public NpcMultiplierSettingsObsolete _Multipliers;
 
             [JsonProperty(PropertyName = en ? "Spawn Inside Bases" : "Заселение внутри базы")]
             public NpcSettingsInsideBase Inside = new();
@@ -27310,6 +28264,9 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Amount That Can Throw Weapons" : "Количество, Которое Может Метать Оружие")]
             public int Thrown = 2;
+
+            [JsonProperty(PropertyName = en ? "Amount That Can Equip Homing Missile Launchers" : "Количество НПС, Которые Могут Вооружаться Самонаводящимися Ракетницами")]
+            public int HML = 2;
 
             [JsonProperty(PropertyName = en ? "Amount Of Murderers To Spawn" : "Количество Спавна Убийц")]
             public int SpawnAmountMurderers = 1;
@@ -27529,7 +28486,7 @@ namespace Oxide.Plugins
             public bool RandomEvery;
 
             [JsonProperty(PropertyName = en ? "Random Building Skin List" : "Список случайных скинов для здания", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public List<ulong> Skins = new() { 0, 2, 10220, 10221, 10223, 10225, 10232 };
+            public List<ulong> Skins = new() { 0, 2, 10220, 10221, 10223, 10225, 10232, 10326, 10430 };
 
             [JsonProperty(PropertyName = en ? "Do not upgrade twig" : "Не обновляйте Twig")]
             public bool SkipTwig = true;
@@ -28003,13 +28960,26 @@ namespace Oxide.Plugins
 
         public class AdditionalBaseOptions
         {
-            [JsonProperty(PropertyName = en ? "CopyPaste Options" : "CopyPaste Options", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+            [JsonProperty(PropertyName = en ? "CopyPaste Options" : "Настройки CopyPaste", ObjectCreationHandling = ObjectCreationHandling.Replace)]
             public List<PasteOption> Options = new();
 
-            [JsonProperty(PropertyName = en ? "Explosive Costs" : "Explosive Costs", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+            [JsonProperty(PropertyName = en ? "Explosive Costs" : "Стоимость взрывчатки", ObjectCreationHandling = ObjectCreationHandling.Replace)]
             public List<AdditionalBaseCosts> Costs = new();
 
             internal bool Any => !Costs.IsNullOrEmpty() && Costs.Exists(x => x.Enabled);
+
+            [JsonProperty(PropertyName = en ? "_Options" : "CopyPaste Options", NullValueHandling = NullValueHandling.Ignore)]
+            public List<PasteOption> _Options = null;
+
+            [JsonProperty(PropertyName = en ? "_Costs" : "Explosive Costs", NullValueHandling = NullValueHandling.Ignore)]
+            public List<AdditionalBaseCosts> _Costs = null;
+
+            [OnDeserialized]
+            private void OnDeserializedNames(StreamingContext context)
+            {
+                if (_Options != null) { Options = _Options; _Options = null; }
+                if (_Costs != null) { Costs = _Costs; _Costs = null; }
+            }
         }
 
         public class AdditionalBaseCosts
@@ -28031,6 +29001,9 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Can bypass restrictions (vanish, noclip, raidablebases.canbypass)" : "Может обходить ограничения (vanish, noclip, raidablebases.canbypass)")]
             public bool CanBypass = true;
+
+            [JsonProperty(PropertyName = en ? "Forfeit Completion Rewards For All Raiders When Hints Are Used" : "Лишать всех участников наград за завершение рейда при использовании подсказок")]
+            public bool ForfeitRewardsOnHint;
 
             [JsonProperty(PropertyName = en ? "Permission Required" : "Требуется разрешение")]
             public string Permission = "";
@@ -28175,7 +29148,7 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Enable Profile For Buyable Bases Plugin" : "Включить профиль для плагина Buyable Bases")]
             public bool BuyableBase;
 
-            [JsonProperty(PropertyName = en ? "Loot Hints" : "Loot Hints")]
+            [JsonProperty(PropertyName = en ? "Loot Hints" : "Подсказки о добыче")]
             public BuildingOptionsDrawContainers DrawLoot = new();
 
             [JsonProperty(PropertyName = en ? "Allow Raid Bases In Biomes" : "Спавнить рейд-базы по разным биомам")]
@@ -28262,7 +29235,7 @@ namespace Oxide.Plugins
                 new("Stab", 1f, 1f),
             };
 
-            [JsonProperty(PropertyName = "Siege")]
+            [JsonProperty(PropertyName = en ? "Siege" : "Осада")]
             public SiegeSettings Siege = new();
 
             [JsonProperty(PropertyName = en ? "Player Damage To Tool Cupboard Multiplier" : "Множитель Урона Игрока По Инструментальному Шкафу")]
@@ -28568,6 +29541,33 @@ namespace Oxide.Plugins
                 int maxTreasure = type == RaidableType.Purchased && MaxBuyableTreasure > 0 ? MaxBuyableTreasure : MaxTreasure;
                 return MinTreasure > 0 ? UnityEngine.Random.Range(MinTreasure, maxTreasure + 1) : maxTreasure;
             }
+
+            [JsonProperty(PropertyName = en ? "_DrawLoot" : "Loot Hints", NullValueHandling = NullValueHandling.Ignore)]
+            public BuildingOptionsDrawContainers _DrawLoot = null;
+
+            [JsonProperty(PropertyName = en ? "_Siege" : "Siege", NullValueHandling = NullValueHandling.Ignore)]
+            public SiegeSettings _Siege = null;
+
+            [OnDeserialized]
+            private void OnDeserializedNames(StreamingContext context)
+            {
+                if (_DrawLoot != null) { DrawLoot = _DrawLoot; _DrawLoot = null; }
+                if (_Siege != null) { Siege = _Siege; _Siege = null; }
+                if (_EnforceDurability.HasValue) { EnforceConditionLoss = _EnforceDurability.Value; _EnforceDurability = null; }
+                if (_AdditionalBases != null)
+                {
+                    AdditionalBases ??= new();
+                    foreach (var (baseName, pasteOptions) in _AdditionalBases)
+                    {
+                        AdditionalBases.Add(baseName, new()
+                        {
+                            Options = pasteOptions,
+                            Costs = DefaultCostOptions()
+                        });
+                    }
+                    _AdditionalBases = null;
+                }
+            }
         }
 
         public class RaidableBaseSettingsEventTypeBase
@@ -28668,14 +29668,23 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "VIP Permission: raidablebases.vipcooldown" : "VIP Разрешение: raidablebases.vipcooldown")]
             public double VIP = 1800;
 
-            [JsonProperty(PropertyName = en ? "Admin Permission: raidablebases.allow" : "Админ Разрешение: raidablebases.allow")]
+            [JsonProperty(PropertyName = en ? "Admin Permission: raidablebases.admin" : "Админ Разрешение: raidablebases.admin", NullValueHandling = NullValueHandling.Ignore)]
             public double Allow;
+
+            [JsonProperty(PropertyName = en ? "Admin Permission: raidablebases.allow" : "Админ Разрешение: raidablebases.allow", NullValueHandling = NullValueHandling.Ignore)]
+            public double? _Allow = null;
 
             [JsonProperty(PropertyName = en ? "Server Admins" : "Серверные администраторы")]
             public double Admin;
 
             [JsonProperty(PropertyName = en ? "Normal Users" : "Обычные пользователи")]
             public double Cooldown = 1800;
+
+            [OnDeserialized]
+            private void OnDeserializedNames(StreamingContext context)
+            {
+                if (_Allow.HasValue) { Allow = _Allow.Value; _Allow = null; }
+            }
         }
 
         public class BuyableCooldownResetCosts
@@ -28811,7 +29820,7 @@ namespace Oxide.Plugins
                 BasePlayer player = BasePlayer.FindByID(userid);
                 if (player != null)
                 {
-                    if (player.IsFlying || player.limitNetworking)
+                    if (player.IsFlying || IsVanished(player))
                     {
                         return Cache(key, false);
                     }
@@ -28827,7 +29836,7 @@ namespace Oxide.Plugins
                     cooldowns.Add(diff.VIP);
                 }
 
-                if (userid.HasPermission("raidablebases.allow"))
+                if (userid.HasPermission("raidablebases.admin"))
                 {
                     cooldowns.Add(diff.Allow);
                 }
@@ -28888,6 +29897,9 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Purchase Same Base While On Despawn Cooldown" : "Покупка той же базы во время кулдауна на удаление")]
             public bool Repeat;
+
+            [JsonProperty(PropertyName = en ? "Bypass Buyable Cooldown On Despawn" : "Не применять кулдаун покупки при деспавне базы")]
+            public bool BypassStartPurchaseCooldown;
         }
 
         public class BuyableSettings : RaidableBaseSettingsEventTypeBase
@@ -29245,17 +30257,8 @@ namespace Oxide.Plugins
 
         public class SkinSettingsDefault
         {
-            [JsonProperty(PropertyName = en ? "Use Random Skin" : "Использовать случайный скин")]
-            public bool Random = true;
-
-            [JsonProperty(PropertyName = en ? "Use Workshop Skins" : "Использовать скины из мастерской")]
-            public bool Workshop = true;
-
             [JsonProperty(PropertyName = en ? "Use Imported Workshop Skins File" : "Использовать импортированные скины из мастерской")]
             public bool ImportedWorkshop = true;
-
-            [JsonProperty(PropertyName = en ? "Use Approved Workshop Skins Only" : "Использовать только одобренные скины из мастерской")]
-            public bool ApprovedOnly;
         }
 
         public class SkinSettings
@@ -29406,12 +30409,6 @@ namespace Oxide.Plugins
 
         public void LoadOwnership()
         {
-            if (!config.BlockPaidContent)
-            {
-                _ownershipReady = true;
-                return;
-            }
-
             if ((Steamworks.SteamInventory.Definitions?.Length ?? 0) == 0)
             {
                 timer.In(3f, LoadOwnership);
@@ -29442,12 +30439,53 @@ namespace Oxide.Plugins
                 }
             }
 
+            Skins.Clear();
             _ownershipReady = true;
+        }
+
+        private bool RemoveRestrictedItems(PlayerInventory inv)
+        {
+            return inv != null && (RemoveRestrictedItems(inv.containerBelt) | RemoveRestrictedItems(inv.containerMain) | RemoveRestrictedItems(inv.containerWear));
+        }
+
+        private bool RemoveRestrictedItems(ItemContainer container)
+        {
+            if (container == null) return false;
+
+            for (int i = container.itemList.Count - 1; i >= 0; i--)
+            {
+                Item item = container.itemList[i];
+                if (RequiresOwnership(item.info, 0uL))
+                {
+                    item.GetHeldEntity().SafelyKill();
+                    item.RemoveFromContainer();
+                    item.Remove(0f);
+                    continue;
+                }
+
+                if (item.skin != 0uL && RequiresOwnership(item.info, item.skin))
+                {
+                    item.skin = 0uL;
+                    BaseEntity held = item.GetHeldEntity();
+                    if (held != null)
+                    {
+                        held.skinID = 0uL;
+                        held.SendNetworkUpdate();
+                    }
+                    item.MarkDirty();
+                }
+
+                if (item.contents != null)
+                {
+                    RemoveRestrictedItems(item.contents);
+                }
+            }
+
+            return container.itemList.Count > 0;
         }
 
         public bool RequiresOwnership(ItemDefinition def, ulong skin)
         {
-            if (!config.BlockPaidContent) return false;
             if (skin != 0uL && !_ownershipReady) return true;
             if (skin != 0uL && _ownershipIds.Contains(skin)) return true;
             if (def != null && !_ownershipReady) return RequiresOwnership(def);
@@ -29466,22 +30504,6 @@ namespace Oxide.Plugins
             _ => false
         };
 
-        public bool HasUnlocked(BasePlayer player, ItemDefinition def)
-        {
-            return false;
-            //if (def == null || !config.BlockPaidContent || player.UnlockAllSkins) return true;
-            //if (_ownershipReady ? !_dlcItemIds.Contains(def.itemid) : !RequiresOwnership(def)) return true;
-            //return def.steamDlc != null && def.steamDlc.HasLicense(player.userID);
-        }
-
-        public bool HasUnlocked(BasePlayer player, ulong skin)
-        {
-            return false;
-            //if (skin == 0 || !config.BlockPaidContent || player.UnlockAllSkins) return true;
-            //if (!_ownershipReady) return false;
-            //if (!_ownershipIds.Contains(skin)) return true;
-            //return player.blueprints.CheckSkinOwnership((int)skin, player.userID);
-        }
 
         #endregion Facepunch TOS Compliance
 
@@ -30035,9 +31057,6 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Log Debug To File" : "Запись отладочных сообщений в файл")]
             public bool LogToFile;
 
-            [JsonProperty(PropertyName = "Block paid and restricted content to comply with Facepunch TOS")]
-            public bool BlockPaidContent = true;
-
             [JsonProperty(PropertyName = en ? "Destroy DLC containers once looted" : "Уничтожать DLC-контейнеры после того, как они разграблены")]
             public bool? DestroyDlcContainerOnceLooted = null;
 
@@ -30088,7 +31107,7 @@ namespace Oxide.Plugins
             }
             if (config.DestroyDlcContainerOnceLooted == null)
             {
-                config.DestroyDlcContainerOnceLooted = config.BlockPaidContent;
+                config.DestroyDlcContainerOnceLooted = true;
             }
             if (config.Settings.Management._AllowBuilding.HasValue)
             {
@@ -30110,17 +31129,10 @@ namespace Oxide.Plugins
                 config.Settings.Management.RequireCupboardLooted = config.Settings.Management._RequireCupboardLooted.Value;
                 config.Settings.Management._RequireCupboardLooted = null;
             }
-            if (string.IsNullOrWhiteSpace(config.Settings.EditCommand))
-            {
-                const int len = 8;
-                const string choices = "abcdefghijklmnopqrstuvwxyz";
-                char[] buffer = new char[len];
-                for (int i = 0; i < len; i++)
-                {
-                    buffer[i] = choices[Oxide.Core.Random.Range(0, choices.Length)];
-                }
-                config.Settings.EditCommand = new string(buffer);
-            }
+            config.Settings.Management.AllowedGrids ??= new();
+            config.Settings.Management.AllowedGrids.RemoveAll(IsInvalidGrid);
+            config.Settings.Management.BlockedGrids ??= new();
+            config.Settings.Management.BlockedGrids.RemoveAll(IsInvalidGrid);
             config.Settings.Management.Inherit.RemoveAll(string.IsNullOrWhiteSpace);
             UndoSettings = new(config.Settings.Management, config.LogToFile);
             config.Settings.Management._Players = null;
@@ -30191,29 +31203,68 @@ namespace Oxide.Plugins
 
         public UiHandler UI = new();
 
-        public class Vector2Converter : JsonConverter
+        private static bool TryParse(string value, out float result) => float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result) && !result.IsNaNOrInfinity();
+
+        private class Vector3Converter : JsonConverter
         {
-            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-            {
-                if (reader.TokenType == JsonToken.String)
-                {
-                    var values = reader.Value.ToString().Trim().Split(' ');
-                    return new Vector2(Convert.ToSingle(values[0]), Convert.ToSingle(values[1]));
-                }
-                var o = Newtonsoft.Json.Linq.JObject.Load(reader);
-                return new Vector2(Convert.ToSingle(o["x"]), Convert.ToSingle(o["y"]));
-            }
             public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
             {
-                var vector = (Vector2)value;
-                writer.WriteValue($"{vector.x} {vector.y}");
+                Vector3 vector = (Vector3)value;
+                if (vector.IsNaNOrInfinity()) vector = Vector3.zero;
+                writer.WriteValue(FormattableString.Invariant($"{vector.x:0.######} {vector.y:0.######} {vector.z:0.######}"));
             }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                if (reader.TokenType == JsonToken.StartObject)
+                {
+                    JObject obj = JObject.Load(reader);
+                    return new Vector3(obj.Value<float>("x"), obj.Value<float>("y"), obj.Value<float>("z"));
+                }
+
+                if (reader.TokenType != JsonToken.String) return Vector3.zero;
+
+                string[] values = reader.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (values.Length != 3) return Vector3.zero;
+                if (!TryParse(values[0], out float x)) return Vector3.zero;
+                if (!TryParse(values[1], out float y)) return Vector3.zero;
+                if (!TryParse(values[2], out float z)) return Vector3.zero;
+
+                return new Vector3(x, y, z);
+            }
+
             public override bool CanConvert(Type objectType)
             {
                 return objectType == typeof(Vector3);
             }
         }
 
+        public class Vector2Converter : JsonConverter
+        {
+            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            {
+                Vector2 vector = (Vector2)value;
+                if (vector.x.IsNaNOrInfinity() || vector.y.IsNaNOrInfinity()) vector = Vector2.zero;
+                writer.WriteValue(FormattableString.Invariant($"{vector.x:0.######} {vector.y:0.######}"));
+            }
+
+            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            {
+                if (reader.TokenType != JsonToken.String) return Vector2.zero;
+
+                string[] values = reader.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (values.Length != 2) return Vector2.zero;
+                if (!TryParse(values[0], out float x)) return Vector2.zero;
+                if (!TryParse(values[1], out float y)) return Vector2.zero;
+
+                return new Vector2(x, y);
+            }
+
+            public override bool CanConvert(Type objectType)
+            {
+                return objectType == typeof(Vector2);
+            }
+        }
         public class UiOffsets
         {
             [JsonConverter(typeof(Vector2Converter))]
@@ -31256,14 +32307,19 @@ namespace Oxide.Plugins.RaidableBasesExtensions
             public override string ToString() => _builder.ToString();
             public int Length { get => _builder.Length; set => _builder.Length = value; }
         }
+        public class PooledIgnoreCaseSet : HashSet<string>, IDisposable, Pool.IPooled
+        {
+            public void Dispose() { PooledIgnoreCaseSet obj = this; Pool.Free(ref obj); }
+            public void EnterPool() => Clear();
+            public void LeavePool() { }
+            public PooledIgnoreCaseSet() : base(StringComparer.OrdinalIgnoreCase) { }
+        }
         public static string[] ToStringArray(this string[] args) => args;
         public static string[] ToStringArray(this StringView[] args) { if (args == null || args.Length == 0) return Array.Empty<string>(); string[] array = new string[args.Length]; for (int i = 0; i < args.Length; i++) array[i] = args[i].ToString(); return array; }
         public static string ToFriendlyJson(this string s) => string.IsNullOrEmpty(s) ? s : Convert.ToBase64String(Encoding.UTF8.GetBytes(s)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         public static string FromFriendlyJson(this string s) => string.IsNullOrEmpty(s) ? s : Encoding.UTF8.GetString(Convert.FromBase64String((s.Replace('-', '+').Replace('_', '/')).PadRight(s.Length + (4 - s.Length % 4) % 4, '=')));
-        public static PooledList<T> ToPooledList<T>(this IEnumerable<T> a) { var b = Facepunch.Pool.Get<PooledList<T>>(); if (a != null) b.AddRange(a); return b; }
-        public static PooledList<T> TakePooledList<T>(this IEnumerable<T> a, int n) { var b = Facepunch.Pool.Get<PooledList<T>>(); if (a != null) { foreach (var d in a) { b.Add(d); if (b.Count >= n) { break; } } } return b; }
-        public static PooledList<Item> GetAllItems(this BasePlayer a) { var b = Facepunch.Pool.Get<PooledList<Item>>(); if (a != null && a.inventory != null) { a.inventory.GetAllItems(b); } return b; }
-        public static KeyValuePair<K, V> GetRandom<K, V>(this IDictionary<K, V> a) => a == null || a.Count == 0 ? default : a.ElementAt(UnityEngine.Random.Range(0, a.Count));
+        public static PooledList<T> ToPooledList<T>(this IEnumerable<T> a) { var b = Pool.Get<PooledList<T>>(); if (a != null) b.AddRange(a); return b; }
+        public static PooledList<Item> GetAllItems(this BasePlayer a) { var b = Pool.Get<PooledList<Item>>(); if (a != null && a.inventory != null) { a.inventory.GetAllItems(b); } return b; }
         public static bool All<T>(this IEnumerable<T> a, Func<T, bool> b) { foreach (T c in a) { if (!b(c)) { return false; } } return true; }
         public static int Average(this IList<int> a) { if (a.Count == 0) { return 0; } int b = 0; for (int i = 0; i < a.Count; i++) { b += a[i]; } return b != 0 ? b / a.Count : 0; }
         public static T ElementAt<T>(this IEnumerable<T> a, int b) { if (a is IList<T> c) { return c[b]; } using IEnumerator<T> d = a.GetEnumerator(); while (d.MoveNext()) { if (b == 0) { return d.Current; } b--; } return default; }
@@ -31287,11 +32343,9 @@ namespace Oxide.Plugins.RaidableBasesExtensions
         public static bool BelongsToGroup(this string a, string b) { _permission ??= Interface.Oxide.GetLibrary<Core.Libraries.Permission>(null); return !string.IsNullOrEmpty(a) && _permission.UserHasGroup(a, b); }
         public static bool BelongsToGroup(this ulong a, string b) => a.ToString().BelongsToGroup(b);
         public static bool BelongsToGroup(this BasePlayer a, string b) => a != null && a.UserIDString.BelongsToGroup(b);
-        public static bool IsOnline(this BasePlayer a) => a.IsNetworked() && a.net.connection != null;
+        public static bool IsOnline(this BasePlayer a) => a.HasNetworkId() && a.net.connection != null;
         public static bool IsKilled(this BaseNetworkable a) => a == null || a.IsDestroyed || !a.isSpawned;
-        public static bool IsNull(this BaseNetworkable a) => a == null || a.IsDestroyed;
-        public static bool IsNullOrEmpty<T>(this IReadOnlyCollection<T> c) => c == null || c.Count == 0;
-        public static bool IsNetworked(this BaseNetworkable a) => !(a == null || a.IsDestroyed || !a.isSpawned || a.net == null);
+        public static bool HasNetworkId(this BaseNetworkable a) => a.IsValid() && a.net.ID.IsValid && !a.IsDestroyed && a.isSpawned;
         public static void SafelyKill(this BaseNetworkable a) { try { if (!a.IsKilled()) a.Kill(BaseNetworkable.DestroyMode.None); } catch { } }
         public static void DelayedSafeKill(this BaseNetworkable a) { if (!a.IsKilled()) a.Invoke(a.SafelyKill, 0.0625f); }
         public static bool CanCall(this Plugin o) => o != null && o.IsLoaded;
@@ -31309,6 +32363,5 @@ namespace Oxide.Plugins.RaidableBasesExtensions
         public static T GetRandom<T>(this HashSet<T> h) { if (h == null || h.Count == 0) { return default; } return h.ElementAt(UnityEngine.Random.Range(0, h.Count)); }
         public static float Distance(this Vector3 a, Vector3 b) => (a - b).magnitude;
         public static float Distance2D(this Vector3 a, Vector3 b) => (a.XZ2D() - b.XZ2D()).magnitude;
-        public static ulong userid(this BasePlayer player) => (ulong)player.userID;
     }
 }
