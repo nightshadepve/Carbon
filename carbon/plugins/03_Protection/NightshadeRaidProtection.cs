@@ -381,7 +381,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.3.0")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.3.1")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -1499,7 +1499,7 @@ namespace Oxide.Plugins
             BaseEntity current = entity;
             for (int i = 0; current != null && i < 6; i++)
             {
-                string name = (current.ShortPrefabName ?? "") + " " + (current.PrefabName ?? "");
+                string name = Text(current.ShortPrefabName) + " " + Text(current.PrefabName);
                 if (name.IndexOf("excavator", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 current = current.GetParentEntity();
             }
@@ -1509,6 +1509,13 @@ namespace Oxide.Plugins
         private static string Num(float value)
         {
             return value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        // ShortPrefabName and PrefabName are Facepunch.StringView on the live host.
+        // Boxing covers both that struct and a real string, including null.
+        private static string Text(object value)
+        {
+            return value == null ? "" : value.ToString();
         }
 
         #endregion

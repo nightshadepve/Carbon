@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeExcavatorTest", "Nightshade", "1.0.0")]
+    [Info("NightshadeExcavatorTest", "Nightshade", "1.0.1")]
     [Description("Admin-only live check for the Giant Excavator weekend boost. Unload clears any test clock this plugin set.")]
     public class NightshadeExcavatorTest : RustPlugin
     {
@@ -57,7 +57,7 @@ namespace Oxide.Plugins
         private void CmdForce(ConsoleSystem.Arg arg)
         {
             if (!Allowed(arg)) return;
-            string mode = arg.Args != null && arg.Args.Length > 0 ? arg.Args[0] : "";
+            string mode = arg.Args != null && arg.Args.Length > 0 ? Text(arg.Args[0]) : "";
             if (mode.Equals("on", StringComparison.OrdinalIgnoreCase) || mode.Equals("start", StringComparison.OrdinalIgnoreCase))
             {
                 PushClock(true, arg);
@@ -93,7 +93,7 @@ namespace Oxide.Plugins
                 return;
             }
             int seconds;
-            if (!int.TryParse(arg.Args[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out seconds) || seconds < 5 || seconds > 600)
+            if (!int.TryParse(Text(arg.Args[0]), NumberStyles.Integer, CultureInfo.InvariantCulture, out seconds) || seconds < 5 || seconds > 600)
             {
                 arg.ReplyWith("Seconds must be a whole number from 5 to 600.");
                 return;
@@ -301,7 +301,7 @@ namespace Oxide.Plugins
                 if (arm == null || arm.net == null) continue;
                 ArmSample sample = new ArmSample();
                 sample.Id = arm.net.ID.Value;
-                sample.Prefab = arm.ShortPrefabName ?? "";
+                sample.Prefab = Text(arm.ShortPrefabName);
                 sample.Ore = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 sample.Tick = arm.resourceProductionTickRate;
                 sample.Full = arm.timeForFullResources;
@@ -371,7 +371,7 @@ namespace Oxide.Plugins
             BaseEntity current = entity;
             for (int i = 0; current != null && i < 6; i++)
             {
-                string name = (current.ShortPrefabName ?? "") + " " + (current.PrefabName ?? "");
+                string name = Text(current.ShortPrefabName) + " " + Text(current.PrefabName);
                 if (name.IndexOf("excavator", StringComparison.OrdinalIgnoreCase) >= 0) return true;
                 current = current.GetParentEntity();
             }
@@ -466,6 +466,13 @@ namespace Oxide.Plugins
         private static string Num(float value)
         {
             return value.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        // Args, ShortPrefabName, and PrefabName are Facepunch.StringView on the live host.
+        // Boxing covers both that struct and a real string, including null.
+        private static string Text(object value)
+        {
+            return value == null ? "" : value.ToString();
         }
 
         private class ArmSample
