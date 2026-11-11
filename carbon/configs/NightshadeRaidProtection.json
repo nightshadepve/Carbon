@@ -9,5 +9,10 @@
   "Drive TruePVE from the Eastern weekend window": true,
   "TruePVE ruleset during the weekend window": "nightshade_pvp_weekend",
   "TruePVE ruleset outside the weekend window": "default",
-  "Yield TruePVE changes while a purge is active": true
+  "Yield TruePVE changes while a purge is active": true,
+  "Excavator": {
+    "Enabled": true,
+    "SpeedMultiplier": 2.0,
+    "KeepYieldPerDiesel": true
+  }
 }
