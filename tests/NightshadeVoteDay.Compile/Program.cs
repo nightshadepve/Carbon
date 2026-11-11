@@ -97,7 +97,7 @@ public static class Program
             return "default panel overlaps the hotbar";
         if (panel.Right > NightshadeVoteDayRules.DefaultHotbarLeft - NightshadeVoteDayRules.DefaultGap)
             return "panel crosses the hotbar's left edge";
-        if (panel.OffsetMin != "-364 16" || panel.OffsetMax != "-212 134")
+        if (panel.OffsetMin != "-364 16" || panel.OffsetMax != "-212 152")
             return panel.OffsetMin + " / " + panel.OffsetMax;
         NightshadeVoteDayRules.ScreenBox chip = NightshadeVoteDayRules.LeftOfHotbar(-204f, 8f, 16f, 48f, 48f, "0.5 0");
         if (NightshadeVoteDayRules.Overlaps(chip, hotbar))
@@ -142,6 +142,10 @@ public static class Program
         if (NightshadeVoteDayRules.StatusKey("bought") != "UiPurchased") return "buy";
         if (NightshadeVoteDayRules.StatusKind("passed") != "ok") return "ok";
         if (NightshadeVoteDayRules.StatusKind("failed") != "bad") return "bad";
+        if (NightshadeVoteDayRules.NormalizeCursorKey(" Middle ") != "firethird") return "middle";
+        if (NightshadeVoteDayRules.NormalizeCursorKey("e") != "use") return "use";
+        if (NightshadeVoteDayRules.NormalizeCursorKey("off") != "none") return "none";
+        if (NightshadeVoteDayRules.NormalizeCursorKey("nope") != "firethird") return "fallback";
         return null;
     }
 }
