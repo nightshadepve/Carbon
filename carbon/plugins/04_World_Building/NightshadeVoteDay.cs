@@ -1,23 +1,41 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core;
-using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
+using Oxide.Game.Rust.Cui;
 using UnityEngine;
 
 [assembly: System.Runtime.CompilerServices.InternalsVisibleTo("VoteDayTests")]
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.2.2")]
-    [Description("Vote for day at configurable night time. 75%+ required. One vote per night. Players can buy day instantly via /buyday.")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.3.0")]
+    [Description("Vote for day at a configurable night time. One vote per night. Players can buy day with /buyday. Shows a compact panel to the left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
         // --- Config ---
         private const string SkipDataPath = "Nightshade/NightshadeVoteDay";
+        private const string PanelDataPath = "Nightshade/NightshadeVoteDay/Panel";
+        private const string Root = "NightshadeVoteDay";
+        private const string BgName = "NightshadeVoteDay.Bg";
+        private const string LogoName = "NightshadeVoteDay.Logo";
+        private const string SunName = "NightshadeVoteDay.Sun";
+        private const string TitleName = "NightshadeVoteDay.Title";
+        private const string CountName = "NightshadeVoteDay.Count";
+        private const string TrackName = "NightshadeVoteDay.Track";
+        private const string FillName = "NightshadeVoteDay.Fill";
+        private const string VotesName = "NightshadeVoteDay.Votes";
+        private const string HaveName = "NightshadeVoteDay.Have";
+        private const string StatusName = "NightshadeVoteDay.Status";
+        private const string PriceName = "NightshadeVoteDay.Price";
+        private const string CommandName = "NightshadeVoteDay.Command";
+        private const string ToggleName = "NightshadeVoteDay.Toggle";
+        private const string UiCommand = "nightshadevoteday.ui";
+        private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
         private const int SkipStateVersion = 2;
         internal const string ModeKey = "Vote mode (Daily = vote every night, SkipMultiple = a pass sets this night to morning, then the next N nights have no vote and run normally)";
         internal const string QuietNightsKey = "Nights without a vote after a pass (SkipMultiple only, default 2; these nights are not set to morning)";
@@ -55,14 +73,80 @@ namespace Oxide.Plugins
             [JsonProperty("VoteThreshold (Fraction of online players required to pass, e.g. 0.75 = 75%)")]
             public float VoteThreshold  = 0.75f;
 
-            [JsonProperty("Currency (ServerRewards or Economics)")]
+            [JsonProperty(NightshadeVoteDayRules.CurrencyKey)]
             public string Currency      = "ServerRewards";
 
-            [JsonProperty("ServerRewards Cost")]
+            [JsonProperty(NightshadeVoteDayRules.RpCostKey)]
             public int RPCost           = 500;
 
-            [JsonProperty("Economics Cost")]
+            [JsonProperty(NightshadeVoteDayRules.EcoCostKey)]
             public double EcoCost       = 500.0;
+
+            [JsonProperty("Show vote panel")]
+            public bool ShowPanel = true;
+
+            [JsonProperty("Panel layer (Hud sits with the hotbar, Overlay stays up in menus)")]
+            public string PanelLayer = "Hud";
+
+            [JsonProperty("Panel anchor")]
+            public string PanelAnchor = "0.5 0";
+
+            [JsonProperty("Hotbar left edge (px from bottom center, negative is left)")]
+            public float HotbarLeft = NightshadeVoteDayRules.DefaultHotbarLeft;
+
+            [JsonProperty("Gap between panel and hotbar (px)")]
+            public float PanelGap = NightshadeVoteDayRules.DefaultGap;
+
+            [JsonProperty("Panel bottom (px)")]
+            public float PanelBottom = NightshadeVoteDayRules.DefaultBottom;
+
+            [JsonProperty("Panel width (px)")]
+            public float PanelWidth = NightshadeVoteDayRules.DefaultWidth;
+
+            [JsonProperty("Panel height (px)")]
+            public float PanelHeight = NightshadeVoteDayRules.DefaultHeight;
+
+            [JsonProperty("Collapsed size (px)")]
+            public float CollapsedSize = NightshadeVoteDayRules.DefaultCollapsed;
+
+            [JsonProperty("Panel opacity (0-100)")]
+            public float PanelOpacity = 94f;
+
+            [JsonProperty("Panel color")]
+            public string PanelColor = "#1A1024";
+
+            [JsonProperty("Panel accent color")]
+            public string AccentColor = "#A267D3";
+
+            [JsonProperty("Panel text color")]
+            public string TextColor = "#F2EAF7";
+
+            [JsonProperty("Panel muted color")]
+            public string MutedColor = "#A898B8";
+
+            [JsonProperty("Panel success color")]
+            public string SuccessColor = "#3DDC84";
+
+            [JsonProperty("Panel fail color")]
+            public string FailColor = "#D58D7C";
+
+            [JsonProperty("Panel sun color")]
+            public string SunColor = "#E2B968";
+
+            [JsonProperty("Panel track color")]
+            public string TrackColor = "#120A1C";
+
+            [JsonProperty("Panel title")]
+            public string PanelTitle = "Skip Night";
+
+            [JsonProperty("Buy command shown on the panel")]
+            public string BuyCommandText = "/buyday confirm";
+
+            [JsonProperty("Panel logo URL (empty hides the logo)")]
+            public string PanelLogoUrl = DefaultLogo;
+
+            [JsonProperty("Seconds to keep the panel after the vote ends (0 removes it immediately)")]
+            public float ResultHoldSeconds = 6f;
         }
 
         internal class SkipState
@@ -110,7 +194,40 @@ namespace Oxide.Plugins
             try { _config = raw == null ? new PluginConfig() : raw.ToObject<PluginConfig>() ?? new PluginConfig(); }
             catch { _config = new PluginConfig(); }
             ApplyConfigMigrations(raw, _config);
+            NormalizeConfig(_config);
             SaveConfig();
+            if (_ready) OnConfigReloaded();
+        }
+
+        private static void NormalizeConfig(PluginConfig config)
+        {
+            if (config == null) return;
+            config.PanelAnchor = NightshadeVoteDayRules.CleanAnchor(config.PanelAnchor);
+            if (string.IsNullOrWhiteSpace(config.PanelLayer)) config.PanelLayer = "Hud";
+            else config.PanelLayer = config.PanelLayer.Trim();
+            if (string.IsNullOrWhiteSpace(config.PanelTitle)) config.PanelTitle = "Skip Night";
+            if (string.IsNullOrWhiteSpace(config.BuyCommandText)) config.BuyCommandText = "/buyday confirm";
+            if (string.IsNullOrWhiteSpace(config.PanelColor)) config.PanelColor = "#1A1024";
+            if (string.IsNullOrWhiteSpace(config.AccentColor)) config.AccentColor = "#A267D3";
+            if (string.IsNullOrWhiteSpace(config.TextColor)) config.TextColor = "#F2EAF7";
+            if (string.IsNullOrWhiteSpace(config.MutedColor)) config.MutedColor = "#A898B8";
+            if (string.IsNullOrWhiteSpace(config.SuccessColor)) config.SuccessColor = "#3DDC84";
+            if (string.IsNullOrWhiteSpace(config.FailColor)) config.FailColor = "#D58D7C";
+            if (string.IsNullOrWhiteSpace(config.SunColor)) config.SunColor = "#E2B968";
+            if (string.IsNullOrWhiteSpace(config.TrackColor)) config.TrackColor = "#120A1C";
+            if (config.PanelLogoUrl == null) config.PanelLogoUrl = DefaultLogo;
+            if (float.IsNaN(config.PanelWidth) || config.PanelWidth < 132f) config.PanelWidth = NightshadeVoteDayRules.DefaultWidth;
+            if (config.PanelWidth > 420f) config.PanelWidth = 420f;
+            if (float.IsNaN(config.PanelHeight) || config.PanelHeight < 118f) config.PanelHeight = NightshadeVoteDayRules.DefaultHeight;
+            if (config.PanelHeight > 320f) config.PanelHeight = 320f;
+            if (float.IsNaN(config.CollapsedSize) || config.CollapsedSize < 36f) config.CollapsedSize = NightshadeVoteDayRules.DefaultCollapsed;
+            if (config.CollapsedSize > 96f) config.CollapsedSize = 96f;
+            if (float.IsNaN(config.PanelGap) || config.PanelGap < 0f) config.PanelGap = 0f;
+            if (config.PanelOpacity < 0f || float.IsNaN(config.PanelOpacity)) config.PanelOpacity = 0f;
+            if (config.PanelOpacity > 100f) config.PanelOpacity = 100f;
+            if (float.IsNaN(config.ResultHoldSeconds) || config.ResultHoldSeconds < 0f) config.ResultHoldSeconds = 0f;
+            if (float.IsNaN(config.HotbarLeft) || float.IsInfinity(config.HotbarLeft)) config.HotbarLeft = NightshadeVoteDayRules.DefaultHotbarLeft;
+            if (float.IsNaN(config.PanelBottom) || float.IsInfinity(config.PanelBottom)) config.PanelBottom = NightshadeVoteDayRules.DefaultBottom;
         }
 
         protected override void LoadDefaultConfig() => _config = new PluginConfig();
@@ -193,6 +310,12 @@ namespace Oxide.Plugins
                 ["CurrencyInvalid"]     = "Invalid currency config. Must be ServerRewards or Economics. Contact an admin.",
                 ["PluginMissingRP"]     = "ServerRewards plugin not found. Contact an admin.",
                 ["PluginMissingEco"]    = "Economics plugin not found. Contact an admin.",
+
+                ["UiVotes"]             = "Votes required",
+                ["UiVoteHint"]          = "Type /day to vote",
+                ["UiWillSkip"]          = "The night will be skipped",
+                ["UiFailed"]            = "Not enough votes",
+                ["UiPurchased"]         = "Day purchased",
             }, this);
         }
 
@@ -229,7 +352,24 @@ namespace Oxide.Plugins
         private int             _handledNightId = 0;
         private Timer           _windowTimer;
         private Timer           _voteTimer;
+        private Timer           _uiTimer;
+        private Timer           _holdTimer;
         private HashSet<ulong>  _votes          = new HashSet<ulong>();
+        private bool            _ready;
+        private bool            _panelOpen;
+        private bool            _holdingResult;
+        private bool            _priceReadFailed;
+        private string          _phase = NightshadeVoteDayRules.PhaseVoting;
+        private string          _buyerName = string.Empty;
+        private float           _voteEndsAt;
+        private int             _displayVotes;
+        private int             _displayNeeded;
+        private string          _shownPhase;
+        private int             _shownSeconds = int.MinValue;
+        private int             _shownVotes = int.MinValue;
+        private int             _shownNeeded = int.MinValue;
+        private string          _shownCost = string.Empty;
+        private Dictionary<string, bool> _collapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
 
         // --- Plugin references ---
         [PluginReference] Plugin ServerRewards;
@@ -240,13 +380,35 @@ namespace Oxide.Plugins
         void OnServerInitialized()
         {
             LoadSkips();
+            LoadPanel();
+            _ready = true;
             timer.Every(10f, CheckGameTime);
         }
 
         void Unload()
         {
+            _ready = false;
             _windowTimer?.Destroy();
             _voteTimer?.Destroy();
+            ClosePanel();
+        }
+
+        private void OnPlayerConnected(BasePlayer player)
+        {
+            if (player == null || !_panelOpen) return;
+            NextTick(() => ShowIfOpen(player));
+        }
+
+        private void OnPlayerRespawned(BasePlayer player)
+        {
+            if (player == null || !_panelOpen) return;
+            NextTick(() => ShowIfOpen(player));
+        }
+
+        private void OnPlayerSleepEnded(BasePlayer player)
+        {
+            if (player == null || !_panelOpen) return;
+            NextTick(() => ShowIfOpen(player));
         }
 
         // --- Time watcher ---
@@ -284,6 +446,7 @@ namespace Oxide.Plugins
             if (result.Action == "daytime")
             {
                 if (windowWasOpen) _windowTimer?.Destroy();
+                if (!_voteActive && _panelOpen) ClosePanel();
                 return;
             }
             if (result.Action == "natural")
@@ -422,9 +585,12 @@ namespace Oxide.Plugins
         {
             _voteActive = true;
             _votes.Clear();
+            _phase = NightshadeVoteDayRules.PhaseVoting;
+            _buyerName = string.Empty;
+            _voteEndsAt = Time.realtimeSinceStartup + Math.Max(0f, _config.VoteDuration);
 
             int    pop    = BasePlayer.activePlayerList.Count;
-            int    needed = Mathf.CeilToInt(pop * _config.VoteThreshold);
+            int    needed = NeededVotes();
             int    pct    = Mathf.RoundToInt(_config.VoteThreshold * 100f);
 
             Say(null, L("VoteStart", null,
@@ -436,6 +602,7 @@ namespace Oxide.Plugins
             Say(null, L("VoteStartBuyHint"));
 
             _voteTimer = timer.Once(_config.VoteDuration, EndVote);
+            BeginVotePanel();
         }
 
         private void EndVote()
@@ -452,7 +619,8 @@ namespace Oxide.Plugins
             int    votes    = _votes.Count;
             float  ratio    = pop > 0 ? (float)votes / pop : 0f;
             bool   passed   = ratio >= _config.VoteThreshold;
-            int    needed   = Mathf.CeilToInt(pop * _config.VoteThreshold);
+            int    needed   = NeededVotes();
+            FreezeVotes(votes, needed);
             string daytime  = FormatHour(_config.DayTime);
 
             if (passed)
@@ -486,6 +654,9 @@ namespace Oxide.Plugins
             }
 
             _votes.Clear();
+            _phase = passed ? NightshadeVoteDayRules.PhasePassed : NightshadeVoteDayRules.PhaseFailed;
+            _buyerName = string.Empty;
+            BeginResultPanel();
         }
 
         private void ForceDayByPurchase(BasePlayer buyer)
@@ -496,7 +667,10 @@ namespace Oxide.Plugins
             _windowOpen     = false;
             _votedThisNight = true;
             _naturalTonight = false;
+            FreezeVotes(_votes.Count, NeededVotes());
             _votes.Clear();
+            _phase = NightshadeVoteDayRules.PhaseBought;
+            _buyerName = NightshadeVoteDayRules.CleanName(buyer == null ? null : buyer.displayName);
             _nightsWithoutVote = QuietNightsAfterPurchase(_nightsWithoutVote);
             RememberNight();
             SaveSkips();
@@ -506,6 +680,7 @@ namespace Oxide.Plugins
                 ("player",  buyer.displayName),
                 ("cost",    CostLabel()),
                 ("daytime", FormatHour(_config.DayTime))));
+            BeginResultPanel();
         }
 
         private void ApplyDay()
@@ -562,7 +737,7 @@ namespace Oxide.Plugins
             _votes.Add(player.userID);
 
             int pop       = BasePlayer.activePlayerList.Count;
-            int needed    = Mathf.CeilToInt(pop * _config.VoteThreshold);
+            int needed    = NeededVotes();
             int voteCount = _votes.Count;
 
             Say(player, L("VoteRegistered", player.UserIDString,
@@ -579,7 +754,9 @@ namespace Oxide.Plugins
             {
                 _voteTimer?.Destroy();
                 EndVote();
+                return;
             }
+            TickPanel();
         }
 
         // --- /buyday command ---
@@ -587,6 +764,7 @@ namespace Oxide.Plugins
         [ChatCommand("buyday")]
         private void CmdBuyDay(BasePlayer player, string command, string[] args)
         {
+            RefreshPriceFromDisk();
             float  t    = TOD_Sky.Instance?.Cycle.Hour ?? -1f;
             string uid  = player.UserIDString;
             string mode = _config.Currency == null ? string.Empty : _config.Currency.ToLowerInvariant();
@@ -680,9 +858,19 @@ namespace Oxide.Plugins
 
         private string CostLabel()
         {
-            if (_config.Currency != null && _config.Currency.ToLowerInvariant() == "economics")
-                return _config.EcoCost.ToString(CultureInfo.InvariantCulture) + " coins";
-            return _config.RPCost.ToString(CultureInfo.InvariantCulture) + " RP";
+            return NightshadeVoteDayRules.FormatCost(_config.Currency, _config.RPCost, _config.EcoCost);
+        }
+
+        private int NeededVotes()
+        {
+            int pop = BasePlayer.activePlayerList == null ? 0 : BasePlayer.activePlayerList.Count;
+            return NightshadeVoteDayRules.Needed(pop, _config.VoteThreshold);
+        }
+
+        private void FreezeVotes(int votes, int needed)
+        {
+            _displayVotes = votes < 0 ? 0 : votes;
+            _displayNeeded = needed < 0 ? 0 : needed;
         }
 
         // --- Utility ---
@@ -733,6 +921,763 @@ namespace Oxide.Plugins
             int h = (int)hour % 24;
             if (h < 0) h += 24;
             return h.ToString("00", CultureInfo.InvariantCulture) + "00";
+        }
+
+        // --- Panel ---
+
+        private class PanelStore
+        {
+            public Dictionary<string, bool> Collapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
+        }
+
+        private void OnConfigReloaded()
+        {
+            bool period = _voteActive || _holdingResult;
+            if (_config == null || !_config.ShowPanel || !period)
+            {
+                if (_panelOpen) ClosePanel();
+                return;
+            }
+            Puts("Vote panel config reloaded. Day buy price is " + CostLabel() + ".");
+            RebuildAll();
+        }
+
+        private void BeginVotePanel()
+        {
+            if (_holdTimer != null) { _holdTimer.Destroy(); _holdTimer = null; }
+            _holdingResult = false;
+            if (_config == null || !_config.ShowPanel)
+            {
+                ClosePanel();
+                return;
+            }
+            _panelOpen = true;
+            if (_uiTimer == null) _uiTimer = timer.Every(1f, TickPanel);
+            RebuildAll();
+        }
+
+        private void BeginResultPanel()
+        {
+            _holdingResult = true;
+            if (_config == null || !_config.ShowPanel || _config.ResultHoldSeconds <= 0f)
+            {
+                _holdingResult = false;
+                ClosePanel();
+                return;
+            }
+            _panelOpen = true;
+            if (_uiTimer == null) _uiTimer = timer.Every(1f, TickPanel);
+            RebuildAll();
+            if (_holdTimer != null) _holdTimer.Destroy();
+            _holdTimer = timer.Once(_config.ResultHoldSeconds, delegate()
+            {
+                _holdingResult = false;
+                ClosePanel();
+            });
+        }
+
+        private void ClosePanel()
+        {
+            _panelOpen = false;
+            _holdingResult = false;
+            if (_holdTimer != null) { _holdTimer.Destroy(); _holdTimer = null; }
+            if (_uiTimer != null) { _uiTimer.Destroy(); _uiTimer = null; }
+            if (BasePlayer.activePlayerList == null) return;
+            foreach (BasePlayer player in BasePlayer.activePlayerList)
+            {
+                if (player != null) CuiHelper.DestroyUi(player, Root);
+            }
+        }
+
+        private void ShowIfOpen(BasePlayer player)
+        {
+            if (player == null || !player.IsConnected || !_panelOpen) return;
+            Show(player);
+        }
+
+        private void RebuildAll()
+        {
+            if (!_panelOpen) return;
+            RefreshPriceFromDisk();
+            RememberShown();
+            EachPlayer(Show);
+        }
+
+        private void RememberShown()
+        {
+            _shownPhase = _phase;
+            _shownSeconds = RemainingSeconds();
+            _shownVotes = DisplayVotes();
+            _shownNeeded = DisplayNeeded();
+            _shownCost = CostLabel();
+        }
+
+        private void TickPanel()
+        {
+            if (!_panelOpen || _config == null) return;
+            try
+            {
+                RefreshPriceFromDisk();
+                if (_phase != _shownPhase)
+                {
+                    RebuildAll();
+                    return;
+                }
+                int seconds = RemainingSeconds();
+                int votes = DisplayVotes();
+                int needed = DisplayNeeded();
+                string cost = CostLabel();
+                bool secondsChanged = seconds != _shownSeconds;
+                bool votesChanged = votes != _shownVotes || needed != _shownNeeded;
+                bool priceChanged = cost != _shownCost;
+                if (!secondsChanged && !votesChanged && !priceChanged) return;
+                string headline = NightshadeVoteDayRules.Headline(_phase, seconds, _buyerName);
+                string have = NightshadeVoteDayRules.VotesLabel(votes, needed);
+                float fraction = NightshadeVoteDayRules.VoteFraction(votes, needed);
+                int font = HeadlineFont(headline);
+                string countColor = HeadlineColor();
+                string secondText = seconds.ToString(CultureInfo.InvariantCulture);
+                EachPlayer(delegate(BasePlayer player)
+                {
+                    bool collapsed = IsCollapsed(player);
+                    var container = new CuiElementContainer();
+                    if (secondsChanged)
+                    {
+                        if (collapsed) AddTextUpdate(container, CountName, secondText, Hex(_config.TextColor), 12, TextAnchor.MiddleLeft, true);
+                        else AddTextUpdate(container, CountName, headline, countColor, font, TextAnchor.MiddleCenter, true);
+                    }
+                    if (!collapsed && votesChanged)
+                    {
+                        AddFill(container, fraction);
+                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(_config.TextColor), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
+                        AddEdgeText(container, HaveName, TrackName, have, Hex(_config.TextColor), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
+                    }
+                    if (priceChanged)
+                    {
+                        int priceSize = collapsed ? 9 : 11;
+                        AddTextUpdate(container, PriceName, cost, Hex(_config.AccentColor), priceSize, collapsed ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter, true);
+                    }
+                    if (container.Count > 0) CuiHelper.AddUi(player, container);
+                });
+                _shownSeconds = seconds;
+                _shownVotes = votes;
+                _shownNeeded = needed;
+                _shownCost = cost;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Vote panel refresh failed: " + ex.Message);
+            }
+        }
+
+        private void RefreshPriceFromDisk()
+        {
+            if (_config == null || Config == null) return;
+            try
+            {
+                string path = Config.Filename;
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+                string json = File.ReadAllText(path);
+                string currency = _config.Currency;
+                int rp = _config.RPCost;
+                double eco = _config.EcoCost;
+                if (!NightshadeVoteDayRules.ApplyLiveCostsJson(json, ref currency, ref rp, ref eco)) return;
+                _config.Currency = currency;
+                _config.RPCost = rp;
+                _config.EcoCost = eco;
+                _priceReadFailed = false;
+            }
+            catch (Exception ex)
+            {
+                if (_priceReadFailed) return;
+                _priceReadFailed = true;
+                PrintWarning("Day buy price could not be read from the config file. The panel will keep the last good price. " + ex.Message);
+            }
+        }
+
+        private int RemainingSeconds()
+        {
+            if (_phase != NightshadeVoteDayRules.PhaseVoting) return 0;
+            float left = _voteEndsAt - Time.realtimeSinceStartup;
+            if (float.IsNaN(left) || left < 0f) return 0;
+            return (int)Math.Ceiling(left);
+        }
+
+        private int DisplayVotes()
+        {
+            if (_phase == NightshadeVoteDayRules.PhaseVoting) return _votes.Count;
+            return _displayVotes;
+        }
+
+        private int DisplayNeeded()
+        {
+            if (_phase == NightshadeVoteDayRules.PhaseVoting) return NeededVotes();
+            return _displayNeeded;
+        }
+
+        private void Show(BasePlayer player)
+        {
+            if (player == null || !player.IsConnected) return;
+            try
+            {
+                CuiHelper.DestroyUi(player, Root);
+                var container = new CuiElementContainer();
+                if (IsCollapsed(player)) BuildCollapsed(container);
+                else BuildExpanded(container);
+                CuiHelper.AddUi(player, container);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Vote panel could not be shown: " + ex.Message);
+            }
+        }
+
+        private void BuildExpanded(CuiElementContainer container)
+        {
+            float width = _config.PanelWidth;
+            float height = _config.PanelHeight;
+            NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
+            AddRoot(container, box);
+            AddLogo(container, 7f, -6f, 14f);
+            AddSun(container, (width - 18f) * 0.5f, -4f, 18f);
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "v", Hex(_config.MutedColor), 12, TextAnchor.MiddleCenter, true, width - 20f, -18f, width - 4f, -3f);
+            AddToggle(container, width - 22f, -2f, 20f, 20f);
+            string title = string.IsNullOrWhiteSpace(_config.PanelTitle) ? "Skip Night" : _config.PanelTitle.Trim();
+            AddText(container, TitleName, BgName, title, Hex(_config.TextColor), 12, TextAnchor.MiddleCenter, true, 24f, -38f, width - 24f, -22f);
+            string headline = NightshadeVoteDayRules.Headline(_phase, RemainingSeconds(), _buyerName);
+            AddText(container, CountName, BgName, headline, HeadlineColor(), HeadlineFont(headline), TextAnchor.MiddleCenter, true, 8f, -58f, width - 8f, -38f);
+            AddRect(container, TrackName, BgName, Hex(_config.TrackColor), null, 8f, -73f, width - 8f, -60f);
+            AddFill(container, NightshadeVoteDayRules.VoteFraction(DisplayVotes(), DisplayNeeded()));
+            AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(_config.TextColor), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
+            AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(_config.TextColor), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
+            AddText(container, StatusName, BgName, StatusText(), StatusColor(), 9, TextAnchor.MiddleCenter, false, 6f, -87f, width - 6f, -75f);
+            AddText(container, PriceName, BgName, CostLabel(), Hex(_config.AccentColor), 11, TextAnchor.MiddleCenter, true, 6f, -101f, width - 6f, -88f);
+            string command = string.IsNullOrWhiteSpace(_config.BuyCommandText) ? "/buyday confirm" : _config.BuyCommandText.Trim();
+            AddText(container, CommandName, BgName, command, Hex(_config.MutedColor), 8, TextAnchor.MiddleCenter, false, 6f, -114f, width - 6f, -102f);
+        }
+
+        private void BuildCollapsed(CuiElementContainer container)
+        {
+            float width = _config.PanelWidth;
+            float height = _config.CollapsedSize;
+            NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
+            AddRoot(container, box);
+            float sun = Math.Min(16f, Math.Max(12f, height * 0.4f));
+            AddSun(container, 6f, -3f, sun);
+            float mid = -3f - sun;
+            AddText(container, CountName, BgName, RemainingSeconds().ToString(CultureInfo.InvariantCulture), Hex(_config.TextColor), 12, TextAnchor.MiddleLeft, true, 8f + sun, mid, 46f + sun, -3f);
+            AddText(container, PriceName, BgName, CostLabel(), Hex(_config.AccentColor), 9, TextAnchor.MiddleLeft, true, 50f + sun, mid, width - 18f, -3f);
+            string command = string.IsNullOrWhiteSpace(_config.BuyCommandText) ? "/buyday confirm" : _config.BuyCommandText.Trim();
+            AddText(container, CommandName, BgName, command, Hex(_config.MutedColor), 8, TextAnchor.MiddleLeft, false, 8f, 3f - height, width - 8f, mid - 1f);
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "^", Hex(_config.MutedColor), 10, TextAnchor.MiddleCenter, true, width - 16f, -16f, width - 2f, -2f);
+            AddToggle(container, 0f, 0f, width, height);
+        }
+
+        private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box)
+        {
+            container.Add(new CuiPanel
+            {
+                Image = { Color = Hex(_config.AccentColor, 0.95f) },
+                RectTransform = { AnchorMin = box.Anchor, AnchorMax = box.Anchor, OffsetMin = box.OffsetMin, OffsetMax = box.OffsetMax },
+                CursorEnabled = false
+            }, string.IsNullOrEmpty(_config.PanelLayer) ? "Hud" : _config.PanelLayer, Root);
+            container.Add(new CuiPanel
+            {
+                Image = { Color = Hex(_config.PanelColor, _config.PanelOpacity / 100f) },
+                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "1 1", OffsetMax = "-1 -1" },
+                CursorEnabled = false
+            }, Root, BgName);
+        }
+
+        private void AddLogo(CuiElementContainer container, float left, float top, float size)
+        {
+            if (string.IsNullOrWhiteSpace(_config.PanelLogoUrl)) return;
+            container.Add(new CuiElement
+            {
+                Name = LogoName,
+                Parent = BgName,
+                Components =
+                {
+                    new CuiRawImageComponent
+                    {
+                        Url = _config.PanelLogoUrl.Trim(),
+                        Color = "1 1 1 1",
+                        Sprite = "assets/content/textures/generic/fulltransparent.tga"
+                    },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 1",
+                        AnchorMax = "0 1",
+                        OffsetMin = Px(left, top - size),
+                        OffsetMax = Px(left + size, top)
+                    }
+                }
+            });
+        }
+
+        private void AddSun(CuiElementContainer container, float left, float top, float size)
+        {
+            string color = Hex(_config.SunColor);
+            float body = size * 0.46f;
+            float inset = (size - body) * 0.5f;
+            float bodyLeft = left + inset;
+            float bodyTop = top - inset;
+            float bodyBottom = bodyTop - body;
+            AddRect(container, SunName, BgName, color, "assets/icons/circle_closed.png", bodyLeft, bodyBottom, bodyLeft + body, bodyTop);
+            float thick = 1.5f;
+            float ray = size * 0.2f;
+            float cx = left + size * 0.5f;
+            float mid = (bodyTop + bodyBottom) * 0.5f;
+            AddRect(container, SunName + "U", BgName, color, null, cx - thick * 0.5f, bodyTop + 1f, cx + thick * 0.5f, bodyTop + 1f + ray);
+            AddRect(container, SunName + "D", BgName, color, null, cx - thick * 0.5f, bodyBottom - 1f - ray, cx + thick * 0.5f, bodyBottom - 1f);
+            AddRect(container, SunName + "L", BgName, color, null, bodyLeft - 1f - ray, mid - thick * 0.5f, bodyLeft - 1f, mid + thick * 0.5f);
+            AddRect(container, SunName + "R", BgName, color, null, bodyLeft + body + 1f, mid - thick * 0.5f, bodyLeft + body + 1f + ray, mid + thick * 0.5f);
+        }
+
+        private void AddToggle(CuiElementContainer container, float left, float top, float width, float height)
+        {
+            container.Add(new CuiElement
+            {
+                Name = ToggleName,
+                Parent = BgName,
+                Components =
+                {
+                    new CuiButtonComponent { Command = UiCommand + " toggle", Color = "0 0 0 0.02" },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 1",
+                        AnchorMax = "0 1",
+                        OffsetMin = Px(left, top - height),
+                        OffsetMax = Px(left + width, top)
+                    }
+                }
+            });
+        }
+
+        private void AddFill(CuiElementContainer container, float fraction)
+        {
+            float track = Math.Max(0f, _config.PanelWidth - 16f);
+            float inner = Math.Max(0f, track - 2f);
+            float width = inner * (fraction < 0f ? 0f : (fraction > 1f ? 1f : fraction));
+            string color = _phase == NightshadeVoteDayRules.PhasePassed || _phase == NightshadeVoteDayRules.PhaseBought
+                ? Hex(_config.SuccessColor)
+                : Hex(_config.AccentColor);
+            float right = width < 0.5f ? 1f : 1f + width;
+            float top = width < 0.5f ? 1f : 12f;
+            container.Add(new CuiElement
+            {
+                Name = FillName,
+                Parent = TrackName,
+                DestroyUi = FillName,
+                Components =
+                {
+                    new CuiImageComponent { Color = width < 0.5f ? "0 0 0 0" : color },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 0",
+                        AnchorMax = "0 0",
+                        OffsetMin = "1 1",
+                        OffsetMax = right.ToString("0.##", CultureInfo.InvariantCulture) + " " + top.ToString("0.##", CultureInfo.InvariantCulture)
+                    }
+                }
+            });
+        }
+
+        private void AddRect(CuiElementContainer container, string name, string parent, string color, string sprite, float left, float bottom, float right, float top)
+        {
+            var image = new CuiImageComponent { Color = color };
+            if (!string.IsNullOrEmpty(sprite)) image.Sprite = sprite;
+            container.Add(new CuiElement
+            {
+                Name = name,
+                Parent = parent,
+                Components =
+                {
+                    image,
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(left, bottom), OffsetMax = Px(right, top) }
+                }
+            });
+        }
+
+        private void AddText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, float left, float bottom, float right, float top)
+        {
+            container.Add(new CuiElement
+            {
+                Name = name,
+                Parent = parent,
+                Components =
+                {
+                    TextComponent(text, color, size, align, bold),
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(left, bottom), OffsetMax = Px(right, top) }
+                }
+            });
+        }
+
+        private void AddStretchText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax)
+        {
+            container.Add(new CuiElement
+            {
+                Name = name,
+                Parent = parent,
+                DestroyUi = name,
+                Components =
+                {
+                    TextComponent(text, color, size, align, bold),
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = offsetMin, OffsetMax = offsetMax }
+                }
+            });
+        }
+
+        private void AddEdgeText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax)
+        {
+            container.Add(new CuiElement
+            {
+                Name = name,
+                Parent = parent,
+                DestroyUi = name,
+                Components =
+                {
+                    TextComponent(text, color, size, align, bold),
+                    new CuiRectTransformComponent { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = offsetMin, OffsetMax = offsetMax }
+                }
+            });
+        }
+
+        private void AddTextUpdate(CuiElementContainer container, string name, string text, string color, int size, TextAnchor align, bool bold)
+        {
+            container.Add(new CuiElement
+            {
+                Name = name,
+                Update = true,
+                Components = { TextComponent(text, color, size, align, bold) }
+            });
+        }
+
+        private static CuiTextComponent TextComponent(string text, string color, int size, TextAnchor align, bool bold)
+        {
+            return new CuiTextComponent
+            {
+                Text = text ?? string.Empty,
+                FontSize = size,
+                Align = align,
+                Color = color,
+                Font = bold ? "robotocondensed-bold.ttf" : "robotocondensed-regular.ttf"
+            };
+        }
+
+        private string StatusText()
+        {
+            return Ui(NightshadeVoteDayRules.StatusKey(_phase));
+        }
+
+        private string StatusColor()
+        {
+            string kind = NightshadeVoteDayRules.StatusKind(_phase);
+            if (kind == "ok") return Hex(_config.SuccessColor);
+            if (kind == "bad") return Hex(_config.FailColor);
+            return Hex(_config.MutedColor);
+        }
+
+        private string HeadlineColor()
+        {
+            if (_phase == NightshadeVoteDayRules.PhaseBought && !string.IsNullOrEmpty(_buyerName)) return Hex(_config.AccentColor);
+            return Hex(_config.TextColor);
+        }
+
+        private static int HeadlineFont(string text)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= 3) return 18;
+            if (text.Length > 10) return 11;
+            return 13;
+        }
+
+        private string Ui(string key)
+        {
+            string msg = lang.GetMessage(key, this, null);
+            if (string.IsNullOrEmpty(msg) || msg == key) return FallbackUi(key);
+            return msg;
+        }
+
+        private static string FallbackUi(string key)
+        {
+            if (key == "UiVotes") return "Votes required";
+            if (key == "UiVoteHint") return "Type /day to vote";
+            if (key == "UiWillSkip") return "The night will be skipped";
+            if (key == "UiFailed") return "Not enough votes";
+            if (key == "UiPurchased") return "Day purchased";
+            return key;
+        }
+
+        [ConsoleCommand(UiCommand)]
+        private void CmdPanel(ConsoleSystem.Arg arg)
+        {
+            BasePlayer player = arg == null ? null : arg.Player();
+            if (player == null || !_panelOpen) return;
+            string action = string.Empty;
+            if (arg.Args != null && arg.Args.Length > 0)
+            {
+                object first = arg.Args.GetValue(0);
+                if (first != null) action = first.ToString();
+            }
+            if (!string.Equals(action, "toggle", StringComparison.OrdinalIgnoreCase)) return;
+            _collapsed[player.UserIDString] = !IsCollapsed(player);
+            SavePanel();
+            Show(player);
+        }
+
+        private bool IsCollapsed(BasePlayer player)
+        {
+            if (player == null || string.IsNullOrEmpty(player.UserIDString)) return false;
+            bool value;
+            return _collapsed.TryGetValue(player.UserIDString, out value) && value;
+        }
+
+        private void LoadPanel()
+        {
+            PanelStore store = null;
+            try { store = Interface.Oxide.DataFileSystem.ReadObject<PanelStore>(PanelDataPath); }
+            catch { store = null; }
+            _collapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
+            if (store == null || store.Collapsed == null) return;
+            foreach (KeyValuePair<string, bool> pair in store.Collapsed)
+            {
+                if (!string.IsNullOrEmpty(pair.Key)) _collapsed[pair.Key] = pair.Value;
+            }
+        }
+
+        private void SavePanel()
+        {
+            try
+            {
+                Interface.Oxide.DataFileSystem.WriteObject(PanelDataPath, new PanelStore { Collapsed = _collapsed });
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Could not save vote panel state: " + ex.Message);
+            }
+        }
+
+        private void EachPlayer(Action<BasePlayer> action)
+        {
+            if (action == null || BasePlayer.activePlayerList == null) return;
+            foreach (BasePlayer player in BasePlayer.activePlayerList)
+            {
+                if (player == null || !player.IsConnected) continue;
+                action(player);
+            }
+        }
+
+        private static string Px(float x, float y)
+        {
+            return x.ToString("0.##", CultureInfo.InvariantCulture) + " " + y.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private static string Hex(string hex, float alpha = -1f)
+        {
+            if (string.IsNullOrEmpty(hex)) return "1 1 1 1";
+            hex = hex.Trim();
+            if (hex.Length > 0 && hex[0] == '#') hex = hex.Substring(1);
+            if (hex.Length < 6) return "1 1 1 1";
+            int r;
+            int g;
+            int b;
+            if (!int.TryParse(hex.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r)) return "1 1 1 1";
+            if (!int.TryParse(hex.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out g)) return "1 1 1 1";
+            if (!int.TryParse(hex.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out b)) return "1 1 1 1";
+            float a = alpha >= 0f ? alpha : 1f;
+            if (a < 0f) a = 0f;
+            if (a > 1f) a = 1f;
+            return (r / 255f).ToString("0.###", CultureInfo.InvariantCulture) + " "
+                + (g / 255f).ToString("0.###", CultureInfo.InvariantCulture) + " "
+                + (b / 255f).ToString("0.###", CultureInfo.InvariantCulture) + " "
+                + a.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+    }
+
+    internal static class NightshadeVoteDayRules
+    {
+        internal const string CurrencyKey = "Currency (ServerRewards or Economics)";
+        internal const string RpCostKey = "ServerRewards Cost";
+        internal const string EcoCostKey = "Economics Cost";
+        internal const string PhaseVoting = "voting";
+        internal const string PhasePassed = "passed";
+        internal const string PhaseFailed = "failed";
+        internal const string PhaseBought = "bought";
+        internal const float DefaultHotbarLeft = -204f;
+        internal const float DefaultGap = 8f;
+        internal const float DefaultBottom = 16f;
+        internal const float DefaultWidth = 152f;
+        internal const float DefaultHeight = 118f;
+        internal const float DefaultCollapsed = 40f;
+
+        internal struct ScreenBox
+        {
+            public float Left;
+            public float Bottom;
+            public float Right;
+            public float Top;
+            public string Anchor;
+            public string OffsetMin;
+            public string OffsetMax;
+        }
+
+        internal static ScreenBox LeftOfHotbar(float hotbarLeft, float gap, float bottom, float width, float height, string anchor)
+        {
+            if (float.IsNaN(hotbarLeft) || float.IsInfinity(hotbarLeft)) hotbarLeft = DefaultHotbarLeft;
+            if (float.IsNaN(bottom) || float.IsInfinity(bottom)) bottom = DefaultBottom;
+            if (float.IsNaN(width) || width < 1f) width = DefaultWidth;
+            if (float.IsNaN(height) || height < 1f) height = DefaultHeight;
+            if (float.IsNaN(gap) || gap < 0f) gap = 0f;
+            float right = hotbarLeft - gap;
+            float left = right - width;
+            float top = bottom + height;
+            string clean = CleanAnchor(anchor);
+            return new ScreenBox
+            {
+                Left = left,
+                Bottom = bottom,
+                Right = right,
+                Top = top,
+                Anchor = clean,
+                OffsetMin = Num(left) + " " + Num(bottom),
+                OffsetMax = Num(right) + " " + Num(top)
+            };
+        }
+
+        internal static bool Overlaps(ScreenBox a, ScreenBox b)
+        {
+            if (a.Right <= b.Left || b.Right <= a.Left) return false;
+            if (a.Top <= b.Bottom || b.Top <= a.Bottom) return false;
+            return true;
+        }
+
+        internal static string CleanAnchor(string anchor)
+        {
+            if (string.IsNullOrWhiteSpace(anchor)) return "0.5 0";
+            string[] parts = anchor.Trim().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2) return "0.5 0";
+            float x;
+            float y;
+            if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)) return "0.5 0";
+            if (!float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) return "0.5 0";
+            return Num(x) + " " + Num(y);
+        }
+
+        internal static string FormatCost(string currency, int rpCost, double ecoCost)
+        {
+            if (currency != null && string.Equals(currency.Trim(), "economics", StringComparison.OrdinalIgnoreCase))
+                return ecoCost.ToString(CultureInfo.InvariantCulture) + " coins";
+            return rpCost.ToString(CultureInfo.InvariantCulture) + " RP";
+        }
+
+        internal static bool ApplyLiveCostsJson(string json, ref string currency, ref int rp, ref double eco)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return false;
+            JObject raw;
+            try { raw = JObject.Parse(json); }
+            catch (JsonException) { return false; }
+            return ApplyLiveCosts(raw, ref currency, ref rp, ref eco);
+        }
+
+        internal static bool ApplyLiveCosts(JObject raw, ref string currency, ref int rp, ref double eco)
+        {
+            if (raw == null) return false;
+            bool any = false;
+            JToken token = raw[CurrencyKey];
+            if (token != null && token.Type != JTokenType.Null)
+            {
+                string text = token.Type == JTokenType.String ? (string)token : token.ToString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    currency = text.Trim();
+                    any = true;
+                }
+            }
+            double number;
+            token = raw[RpCostKey];
+            if (token != null && token.Type != JTokenType.Null && TryNumber(token, out number))
+            {
+                rp = (int)number;
+                any = true;
+            }
+            token = raw[EcoCostKey];
+            if (token != null && token.Type != JTokenType.Null && TryNumber(token, out number))
+            {
+                eco = number;
+                any = true;
+            }
+            return any;
+        }
+
+        internal static int Needed(int population, float threshold)
+        {
+            if (population < 0) population = 0;
+            if (float.IsNaN(threshold) || float.IsInfinity(threshold) || threshold < 0f) threshold = 0f;
+            return (int)Math.Ceiling((double)population * threshold);
+        }
+
+        internal static float VoteFraction(int votes, int needed)
+        {
+            if (votes < 0) votes = 0;
+            if (needed <= 0) return votes > 0 ? 1f : 0f;
+            float value = (float)votes / needed;
+            if (value < 0f) return 0f;
+            if (value > 1f) return 1f;
+            return value;
+        }
+
+        internal static string VotesLabel(int votes, int needed)
+        {
+            if (votes < 0) votes = 0;
+            if (needed < 0) needed = 0;
+            return votes.ToString(CultureInfo.InvariantCulture) + "/" + needed.ToString(CultureInfo.InvariantCulture);
+        }
+
+        internal static string Headline(string phase, int seconds, string buyer)
+        {
+            if (phase == PhaseBought && !string.IsNullOrEmpty(buyer)) return buyer;
+            if (seconds < 0) seconds = 0;
+            return seconds.ToString(CultureInfo.InvariantCulture);
+        }
+
+        internal static string CleanName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return string.Empty;
+            name = name.Replace("<", string.Empty).Replace(">", string.Empty).Replace("\n", " ").Replace("\r", " ").Trim();
+            if (name.Length > 16) name = name.Substring(0, 16);
+            return name;
+        }
+
+        internal static string StatusKey(string phase)
+        {
+            if (phase == PhasePassed) return "UiWillSkip";
+            if (phase == PhaseFailed) return "UiFailed";
+            if (phase == PhaseBought) return "UiPurchased";
+            return "UiVoteHint";
+        }
+
+        internal static string StatusKind(string phase)
+        {
+            if (phase == PhasePassed || phase == PhaseBought) return "ok";
+            if (phase == PhaseFailed) return "bad";
+            return "idle";
+        }
+
+        private static bool TryNumber(JToken token, out double number)
+        {
+            number = 0d;
+            if (token == null) return false;
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+            {
+                number = token.Value<double>();
+                return !double.IsNaN(number) && !double.IsInfinity(number);
+            }
+            return double.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number);
+        }
+
+        private static string Num(float value)
+        {
+            return value.ToString("0.###", CultureInfo.InvariantCulture);
         }
     }
 }
