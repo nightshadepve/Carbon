@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.4.0")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.5.0")]
     [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel to the left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
@@ -50,12 +50,6 @@ namespace Oxide.Plugins
 
         internal class PluginConfig
         {
-            [JsonProperty("Chat server name (sender of vote messages)")]
-            public string ChatServerName = "Nightshade";
-
-            [JsonProperty("Chat avatar SteamID (0 = server icon)")]
-            public ulong ChatAvatarSteamId = 0;
-
             [JsonProperty(ModeKey)]
             public string VoteMode = "SkipMultiple";
 
@@ -89,8 +83,14 @@ namespace Oxide.Plugins
             [JsonProperty("Show vote panel")]
             public bool ShowPanel = true;
 
-            [JsonProperty("Panel layer (Hud sits with the hotbar, Overlay stays up in menus)")]
-            public string PanelLayer = "Hud";
+            [JsonProperty(NightshadeVoteDayRules.LayerKey)]
+            public string PanelLayer = NightshadeVoteDayRules.MenuLayer;
+
+            [JsonProperty("Theme mode (Shop, Auto, or a theme name)")]
+            public string ThemeMode = "Shop";
+
+            [JsonProperty("Theme source config file")]
+            public string ThemeFile = "NightshadeShop.json";
 
             [JsonProperty("Panel anchor")]
             public string PanelAnchor = "0.5 0";
@@ -210,8 +210,10 @@ namespace Oxide.Plugins
         {
             if (config == null) return;
             config.PanelAnchor = NightshadeVoteDayRules.CleanAnchor(config.PanelAnchor);
-            if (string.IsNullOrWhiteSpace(config.PanelLayer)) config.PanelLayer = "Hud";
+            if (string.IsNullOrWhiteSpace(config.PanelLayer)) config.PanelLayer = NightshadeVoteDayRules.MenuLayer;
             else config.PanelLayer = config.PanelLayer.Trim();
+            if (string.IsNullOrWhiteSpace(config.ThemeMode)) config.ThemeMode = "Shop";
+            if (string.IsNullOrWhiteSpace(config.ThemeFile)) config.ThemeFile = "NightshadeShop.json";
             if (string.IsNullOrWhiteSpace(config.PanelTitle)) config.PanelTitle = "Skip Night";
             config.CursorKey = NightshadeVoteDayRules.NormalizeCursorKey(config.CursorKey);
             if (string.IsNullOrWhiteSpace(config.PanelColor)) config.PanelColor = "#1A1024";
@@ -223,9 +225,10 @@ namespace Oxide.Plugins
             if (string.IsNullOrWhiteSpace(config.SunColor)) config.SunColor = "#E2B968";
             if (string.IsNullOrWhiteSpace(config.TrackColor)) config.TrackColor = "#120A1C";
             if (config.PanelLogoUrl == null) config.PanelLogoUrl = DefaultLogo;
-            if (float.IsNaN(config.PanelWidth) || config.PanelWidth < 132f) config.PanelWidth = NightshadeVoteDayRules.DefaultWidth;
+            NightshadeVoteDayRules.MigratePanelSize(config);
+            if (float.IsNaN(config.PanelWidth) || config.PanelWidth < 120f) config.PanelWidth = NightshadeVoteDayRules.DefaultWidth;
             if (config.PanelWidth > 420f) config.PanelWidth = 420f;
-            if (float.IsNaN(config.PanelHeight) || config.PanelHeight < 136f) config.PanelHeight = NightshadeVoteDayRules.DefaultHeight;
+            if (float.IsNaN(config.PanelHeight) || config.PanelHeight < NightshadeVoteDayRules.DefaultHeight) config.PanelHeight = NightshadeVoteDayRules.DefaultHeight;
             if (config.PanelHeight > 320f) config.PanelHeight = 320f;
             if (float.IsNaN(config.CollapsedSize) || config.CollapsedSize < 40f) config.CollapsedSize = NightshadeVoteDayRules.DefaultCollapsed;
             if (config.CollapsedSize > 96f) config.CollapsedSize = 96f;
@@ -254,6 +257,20 @@ namespace Oxide.Plugins
                     oldNights = oldValue.ToString(CultureInfo.InvariantCulture);
             }
             ApplyMigratedValues(hasNewMode, oldMode, hasNewNights, oldNights, config);
+            MigrateLayer(raw, config);
+        }
+
+        internal static void MigrateLayer(JObject raw, PluginConfig config)
+        {
+            if (raw == null || config == null) return;
+            if (raw[NightshadeVoteDayRules.LayerKey] != null && raw[NightshadeVoteDayRules.LayerKey].Type != JTokenType.Null) return;
+            JToken old = raw[NightshadeVoteDayRules.OldLayerKey];
+            if (old == null || old.Type == JTokenType.Null) return;
+            string text = old.Type == JTokenType.String ? (string)old : old.ToString();
+            if (string.IsNullOrWhiteSpace(text)) return;
+            text = text.Trim();
+            if (text.Equals("Hud", StringComparison.OrdinalIgnoreCase)) return;
+            config.PanelLayer = text;
         }
 
         internal static void ApplyMigratedValues(bool hasNewMode, string oldMode, bool hasNewNights, string oldNightsText, PluginConfig config)
@@ -267,7 +284,6 @@ namespace Oxide.Plugins
                 if (double.TryParse(oldNightsText, NumberStyles.Float, CultureInfo.InvariantCulture, out number))
                     config.NightsWithoutVote = (int)number;
             }
-            if (string.IsNullOrWhiteSpace(config.ChatServerName)) config.ChatServerName = "Nightshade";
             config.VoteMode = NormalizeMode(config.VoteMode);
             if (config.NightsWithoutVote < 0) config.NightsWithoutVote = 2;
         }
@@ -288,73 +304,36 @@ namespace Oxide.Plugins
         {
             lang.RegisterMessages(new Dictionary<string, string>
             {
-                ["VoteStart"]           = "It's {time}! Vote on the night panel. Need {threshold}% ({needed} votes) \u2022 {duration}s to vote.",
-                ["VoteStartBuyHint"]    = "The same panel can buy the day outright.",
-
-                ["VoteRegistered"]      = "Vote registered! {current}/{needed} needed.",
-                ["VoteProgress"]        = "{current}/{needed} votes ({percent}%).",
-                ["AlreadyVoted"]        = "You've already voted.",
-
-                ["VotePassed"]          = "Vote Day PASSED \u2014 {votes}/{pop} voted ({percent}%). Time set to {daytime}!",
-                ["VotePassedLater"]     = "This night is now morning ({daytime}). The next {nights} night(s) have no vote.",
-                ["VoteFailed"]          = "Vote Day FAILED \u2014 {votes}/{pop} voted ({percent}%). Needed {needed}. See you tomorrow night!",
-
-                ["NoVoteNatural"]       = "No vote tonight. {left} more night(s) without a vote after this one.",
-                ["NoVoteNaturalLast"]   = "No vote tonight. Voting opens again next night.",
-
-                ["NoVoteYet"]           = "No vote yet - Don't be greedy",
-                ["NoVoteAtTime"]        = "No active vote right now.",
-                ["VoteAlreadyDone"]     = "The vote already happened tonight. Check back tomorrow at {time}.",
-
-                ["BuyDayDaytime"]       = "It's already daytime \u2014 nothing to buy!",
-                ["BuyDayClosed"]        = "The vote window for tonight has already closed.",
-                ["BuyDayPurchasedOne"]  = "{player} spent {cost} to set this night to {daytime}. Only this night was changed.",
-
-                ["NotEnoughRP"]         = "Not enough RP. Need {need} RP, you have {have}.",
-                ["NotEnoughEco"]        = "Not enough coins. Need {need}, you have {have}.",
-                ["CurrencyInvalid"]     = "Invalid currency config. Must be ServerRewards or Economics. Contact an admin.",
-                ["PluginMissingRP"]     = "ServerRewards plugin not found. Contact an admin.",
-                ["PluginMissingEco"]    = "Economics plugin not found. Contact an admin.",
-
-                ["UiVotes"]             = "Votes required",
-                ["UiVoteHint"]          = "Waiting on votes",
-                ["UiWillSkip"]          = "The night will be skipped",
-                ["UiFailed"]            = "Not enough votes",
-                ["UiPurchased"]         = "Day purchased",
-                ["UiVote"]              = "Vote",
-                ["UiVoted"]             = "Voted",
-                ["UiBuy"]               = "Buy Day {cost}",
-                ["UiConfirm"]           = "Confirm {cost}",
-                ["UiCancel"]            = "Cancel",
-                ["UiHintMiddle"]        = "Middle-click to use the buttons",
-                ["UiHintUse"]           = "Press E to use the buttons",
-                ["UiHintReload"]        = "Press R to use the buttons",
-                ["UiHintReady"]         = "Click Vote or Buy Day",
+                ["UiVotes"]        = "Votes required",
+                ["UiVoteHint"]     = "Waiting on votes",
+                ["UiWillSkip"]     = "Night will be skipped",
+                ["UiQuietAfter"]   = "Skipped. {nights} quiet nights",
+                ["UiFailed"]       = "Not enough votes",
+                ["UiPurchased"]    = "Day purchased",
+                ["UiVote"]         = "Vote",
+                ["UiVoted"]        = "Voted",
+                ["UiBuy"]          = "Buy Day {cost}",
+                ["UiConfirm"]      = "Confirm",
+                ["UiCancel"]       = "Cancel",
+                ["UiPay"]          = "Pay {cost}?",
+                ["UiHintMiddle"]   = "Middle-click buttons",
+                ["UiHintUse"]      = "Press E for buttons",
+                ["UiHintReload"]   = "Press R for buttons",
+                ["UiHintReady"]    = "Click Vote or Buy",
+                ["UiCounted"]      = "Vote counted",
+                ["UiAlready"]      = "Already voted",
+                ["UiNeedRp"]       = "Need {need} RP, have {have}",
+                ["UiNeedEco"]      = "Need {need} coins, have {have}",
+                ["UiClosed"]       = "Vote is closed",
+                ["UiDaytime"]      = "Already daytime",
+                ["UiQuiet"]        = "No vote tonight",
+                ["UiQuietLeft"]    = "No vote. {left} nights left",
+                ["UiNotYet"]       = "Vote is not open",
+                ["UiDone"]         = "Vote already finished",
+                ["UiCurrency"]     = "Currency is not set up",
+                ["UiNoRewards"]    = "Rewards plugin missing",
+                ["UiNoEco"]        = "Economics plugin missing",
             }, this);
-        }
-
-        private string L(string key, string playerId = null, params (string token, string value)[] replacements)
-        {
-            string msg = lang.GetMessage(key, this, playerId);
-            foreach (var (token, value) in replacements)
-                msg = msg.Replace("{" + token + "}", value);
-            return msg;
-        }
-
-        private void Say(BasePlayer player, string message)
-        {
-            if (string.IsNullOrEmpty(message)) return;
-            string name = string.IsNullOrWhiteSpace(_config.ChatServerName) ? "Nightshade" : _config.ChatServerName.Trim();
-            name = name.Replace("<", string.Empty).Replace(">", string.Empty);
-            string line = "<color=#C4A6E0>" + name + "</color>: " + message;
-            ulong avatar = _config.ChatAvatarSteamId;
-            if (player == null)
-            {
-                ConsoleNetwork.BroadcastToAllClients("chat.add", new object[] { 2, avatar, line });
-                return;
-            }
-            if (player.IsConnected)
-                player.SendConsoleCommand("chat.add", 2, avatar, line);
         }
 
         // --- State ---
@@ -387,6 +366,21 @@ namespace Oxide.Plugins
         private readonly HashSet<ulong> _cursor = new HashSet<ulong>();
         private readonly HashSet<ulong> _confirming = new HashSet<ulong>();
         private readonly Dictionary<ulong, float> _uiNext = new Dictionary<ulong, float>();
+        private readonly Dictionary<ulong, Note> _notes = new Dictionary<ulong, Note>();
+        private Palette _palette;
+        private int _themeDay = -1;
+        private DateTime _themeStamp = DateTime.MinValue;
+        private string _themeModeSeen = string.Empty;
+        private bool _themeWarned;
+        private bool _warnedRewards;
+        private bool _warnedEco;
+        private bool _warnedCurrency;
+
+        private class Note
+        {
+            public string Text = string.Empty;
+            public string Kind = "idle";
+        }
 
         // --- Plugin references ---
         [PluginReference] Plugin ServerRewards;
@@ -434,6 +428,7 @@ namespace Oxide.Plugins
             _cursor.Remove(player.userID);
             _confirming.Remove(player.userID);
             _uiNext.Remove(player.userID);
+            _notes.Remove(player.userID);
             CuiHelper.DestroyUi(player, Root);
         }
 
@@ -491,7 +486,7 @@ namespace Oxide.Plugins
             if (result.Action == "natural")
             {
                 SaveSkips();
-                AnnounceNaturalNight(null);
+                Puts("Quiet night. Nights still queued after this one: " + _nightsWithoutVote.ToString(CultureInfo.InvariantCulture) + ".");
                 return;
             }
             if (result.Action == "vote")
@@ -499,15 +494,6 @@ namespace Oxide.Plugins
                 SaveSkips();
                 OpenWindow();
             }
-        }
-
-        private void AnnounceNaturalNight(BasePlayer player)
-        {
-            string playerId = player == null ? null : player.UserIDString;
-            if (_nightsWithoutVote > 0)
-                Say(player, L("NoVoteNatural", playerId, ("left", _nightsWithoutVote.ToString(CultureInfo.InvariantCulture))));
-            else
-                Say(player, L("NoVoteNaturalLast", playerId));
         }
 
         internal static ClockResult Advance(ClockInput s)
@@ -628,17 +614,8 @@ namespace Oxide.Plugins
             _buyerName = string.Empty;
             _voteEndsAt = Time.realtimeSinceStartup + Math.Max(0f, _config.VoteDuration);
 
-            int    pop    = BasePlayer.activePlayerList.Count;
-            int    needed = NeededVotes();
-            int    pct    = Mathf.RoundToInt(_config.VoteThreshold * 100f);
-
-            Say(null, L("VoteStart", null,
-                ("time",      FormatHour(_config.VoteStartTime)),
-                ("threshold", pct.ToString(CultureInfo.InvariantCulture)),
-                ("needed",    needed.ToString(CultureInfo.InvariantCulture)),
-                ("duration",  ((int)_config.VoteDuration).ToString(CultureInfo.InvariantCulture))));
-
-            Say(null, L("VoteStartBuyHint"));
+            int needed = NeededVotes();
+            Puts("Vote started. Need " + needed.ToString(CultureInfo.InvariantCulture) + " votes.");
 
             _voteTimer = timer.Once(_config.VoteDuration, EndVote);
             BeginVotePanel();
@@ -671,25 +648,15 @@ namespace Oxide.Plugins
                 RememberNight();
                 SaveSkips();
                 if (setMorning) ApplyDay();
-                Say(null, L("VotePassed", null,
-                    ("votes",   votes.ToString(CultureInfo.InvariantCulture)),
-                    ("pop",     pop.ToString(CultureInfo.InvariantCulture)),
-                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString(CultureInfo.InvariantCulture)),
-                    ("daytime", daytime)));
-                if (quiet > 0)
-                    Say(null, L("VotePassedLater", null,
-                        ("daytime", daytime),
-                        ("nights", quiet.ToString(CultureInfo.InvariantCulture))));
+                Puts("Vote passed. " + votes.ToString(CultureInfo.InvariantCulture) + "/" + pop.ToString(CultureInfo.InvariantCulture)
+                    + ". Time set to " + daytime + ". Quiet nights after this one: " + quiet.ToString(CultureInfo.InvariantCulture) + ".");
             }
             else
             {
                 RememberNight();
                 SaveSkips();
-                Say(null, L("VoteFailed", null,
-                    ("votes",   votes.ToString(CultureInfo.InvariantCulture)),
-                    ("pop",     pop.ToString(CultureInfo.InvariantCulture)),
-                    ("percent", Mathf.RoundToInt(ratio * 100f).ToString(CultureInfo.InvariantCulture)),
-                    ("needed",  needed.ToString(CultureInfo.InvariantCulture))));
+                Puts("Vote failed. " + votes.ToString(CultureInfo.InvariantCulture) + "/" + pop.ToString(CultureInfo.InvariantCulture)
+                    + ". Needed " + needed.ToString(CultureInfo.InvariantCulture) + ".");
             }
 
             _votes.Clear();
@@ -715,10 +682,8 @@ namespace Oxide.Plugins
             SaveSkips();
             ApplyDay();
 
-            Say(null, L("BuyDayPurchasedOne", null,
-                ("player",  buyer.displayName),
-                ("cost",    CostLabel()),
-                ("daytime", FormatHour(_config.DayTime))));
+            string who = buyer == null ? "Someone" : buyer.displayName;
+            Puts(who + " bought the day for " + CostLabel() + ". Time set to " + FormatHour(_config.DayTime) + ".");
             BeginResultPanel();
         }
 
@@ -744,32 +709,23 @@ namespace Oxide.Plugins
             {
                 if (_naturalTonight)
                 {
-                    AnnounceNaturalNight(player);
-                    return;
-                }
-                if (_votedThisNight)
-                {
-                    Say(player, L("VoteAlreadyDone", player.UserIDString,
-                        ("time", FormatHour(_config.VoteStartTime))));
-                }
-                else
-                {
-                    float t         = TOD_Sky.Instance?.Cycle.Hour ?? -1f;
-                    int   hoursLeft = t >= 0f ? Mathf.CeilToInt(_config.VoteStartTime - (t < _config.VoteStartTime ? t : t - 24f)) : 0;
-
-                    if (hoursLeft > 0)
-                        Say(player, L("NoVoteYet", player.UserIDString,
-                            ("time",  FormatHour(_config.VoteStartTime)),
-                            ("hours", hoursLeft.ToString(CultureInfo.InvariantCulture))));
+                    if (_nightsWithoutVote > 0)
+                        SetNote(player, Ui("UiQuietLeft", ("left", _nightsWithoutVote.ToString(CultureInfo.InvariantCulture))), "idle");
                     else
-                        Say(player, L("NoVoteAtTime", player.UserIDString));
+                        SetNote(player, Ui("UiQuiet"), "idle");
                 }
+                else if (_votedThisNight)
+                    SetNote(player, Ui("UiDone"), "idle");
+                else
+                    SetNote(player, Ui("UiNotYet"), "idle");
+                Show(player);
                 return;
             }
 
             if (_votes.Contains(player.userID))
             {
-                Say(player, L("AlreadyVoted", player.UserIDString));
+                SetNote(player, Ui("UiAlready"), "ok");
+                Show(player);
                 return;
             }
 
@@ -777,26 +733,15 @@ namespace Oxide.Plugins
             _confirming.Remove(player.userID);
             if (!_config.CursorWhileExpanded) _cursor.Remove(player.userID);
 
-            int pop       = BasePlayer.activePlayerList.Count;
-            int needed    = NeededVotes();
+            int needed = NeededVotes();
             int voteCount = _votes.Count;
-
-            Say(player, L("VoteRegistered", player.UserIDString,
-                ("current", voteCount.ToString(CultureInfo.InvariantCulture)),
-                ("needed",  needed.ToString(CultureInfo.InvariantCulture))));
-
-            int percent = pop > 0 ? Mathf.RoundToInt((float)voteCount / pop * 100f) : 0;
-            Say(null, L("VoteProgress", null,
-                ("current", voteCount.ToString(CultureInfo.InvariantCulture)),
-                ("needed",  needed.ToString(CultureInfo.InvariantCulture)),
-                ("percent", percent.ToString(CultureInfo.InvariantCulture))));
-
             if (voteCount >= needed)
             {
                 _voteTimer?.Destroy();
                 EndVote();
                 return;
             }
+            SetNote(player, Ui("UiCounted"), "ok");
             TickPanel();
             Show(player);
         }
@@ -807,6 +752,7 @@ namespace Oxide.Plugins
             if (!CanBuy(player)) return;
             _confirming.Add(player.userID);
             _cursor.Add(player.userID);
+            ClearNote(player);
             Show(player);
         }
 
@@ -839,33 +785,58 @@ namespace Oxide.Plugins
         {
             RefreshPriceFromDisk();
             float t = TOD_Sky.Instance == null || TOD_Sky.Instance.Cycle == null ? -1f : TOD_Sky.Instance.Cycle.Hour;
-            string uid = player.UserIDString;
             string mode = _config.Currency == null ? string.Empty : _config.Currency.ToLowerInvariant();
             bool isNight = (t >= _config.VoteStartTime) || (t >= 0f && t < 6f);
             if (!isNight)
             {
-                Say(player, L("BuyDayDaytime", uid));
+                SetNote(player, Ui("UiDaytime"), "bad");
+                Show(player);
                 return false;
             }
             if (_votedThisNight && !_voteActive)
             {
-                if (_naturalTonight) AnnounceNaturalNight(player);
-                else Say(player, L("BuyDayClosed", uid));
+                if (_naturalTonight)
+                {
+                    if (_nightsWithoutVote > 0)
+                        SetNote(player, Ui("UiQuietLeft", ("left", _nightsWithoutVote.ToString(CultureInfo.InvariantCulture))), "idle");
+                    else
+                        SetNote(player, Ui("UiQuiet"), "idle");
+                }
+                else SetNote(player, Ui("UiClosed"), "bad");
+                Show(player);
                 return false;
             }
             if (mode == "serverrewards" && ServerRewards == null)
             {
-                Say(player, L("PluginMissingRP", uid));
+                if (!_warnedRewards)
+                {
+                    _warnedRewards = true;
+                    PrintWarning("ServerRewards is not loaded. Buying the day is unavailable.");
+                }
+                SetNote(player, Ui("UiNoRewards"), "bad");
+                Show(player);
                 return false;
             }
             if (mode == "economics" && Economics == null)
             {
-                Say(player, L("PluginMissingEco", uid));
+                if (!_warnedEco)
+                {
+                    _warnedEco = true;
+                    PrintWarning("Economics is not loaded. Buying the day is unavailable.");
+                }
+                SetNote(player, Ui("UiNoEco"), "bad");
+                Show(player);
                 return false;
             }
             if (mode != "serverrewards" && mode != "economics")
             {
-                Say(player, L("CurrencyInvalid", uid));
+                if (!_warnedCurrency)
+                {
+                    _warnedCurrency = true;
+                    PrintWarning("Day buy currency must be ServerRewards or Economics. Current value: " + (string.IsNullOrEmpty(_config.Currency) ? "(empty)" : _config.Currency) + ".");
+                }
+                SetNote(player, Ui("UiCurrency"), "bad");
+                Show(player);
                 return false;
             }
             return true;
@@ -885,9 +856,9 @@ namespace Oxide.Plugins
             int balance = (int)(ServerRewards.Call("CheckPoints", player.userID) ?? 0);
             if (balance < _config.RPCost)
             {
-                Say(player, L("NotEnoughRP", player.UserIDString,
+                SetNote(player, Ui("UiNeedRp",
                     ("need", _config.RPCost.ToString(CultureInfo.InvariantCulture)),
-                    ("have", balance.ToString(CultureInfo.InvariantCulture))));
+                    ("have", balance.ToString(CultureInfo.InvariantCulture))), "bad");
                 return false;
             }
             ServerRewards.Call("TakePoints", player.userID, _config.RPCost);
@@ -899,9 +870,9 @@ namespace Oxide.Plugins
             double balance = (double)(Economics.Call("Balance", player.UserIDString) ?? 0.0);
             if (balance < _config.EcoCost)
             {
-                Say(player, L("NotEnoughEco", player.UserIDString,
+                SetNote(player, Ui("UiNeedEco",
                     ("need", _config.EcoCost.ToString(CultureInfo.InvariantCulture)),
-                    ("have", balance.ToString(CultureInfo.InvariantCulture))));
+                    ("have", balance.ToString(CultureInfo.InvariantCulture))), "bad");
                 return false;
             }
             Economics.Call("Withdraw", player.UserIDString, _config.EcoCost);
@@ -990,6 +961,10 @@ namespace Oxide.Plugins
                 if (_panelOpen) ClosePanel();
                 return;
             }
+            _themeDay = -1;
+            _warnedRewards = false;
+            _warnedEco = false;
+            _warnedCurrency = false;
             Puts("Vote panel config reloaded. Day buy price is " + CostLabel() + ".");
             RebuildAll();
         }
@@ -1000,6 +975,7 @@ namespace Oxide.Plugins
             _holdingResult = false;
             _cursor.Clear();
             _confirming.Clear();
+            _notes.Clear();
             if (_config == null || !_config.ShowPanel)
             {
                 ClosePanel();
@@ -1013,6 +989,7 @@ namespace Oxide.Plugins
         private void BeginResultPanel()
         {
             _holdingResult = true;
+            _notes.Clear();
             if (_config == null || !_config.ShowPanel || _config.ResultHoldSeconds <= 0f)
             {
                 _holdingResult = false;
@@ -1036,6 +1013,7 @@ namespace Oxide.Plugins
             _holdingResult = false;
             _cursor.Clear();
             _confirming.Clear();
+            _notes.Clear();
             if (_holdTimer != null) { _holdTimer.Destroy(); _holdTimer = null; }
             if (_uiTimer != null) { _uiTimer.Destroy(); _uiTimer = null; }
             if (BasePlayer.activePlayerList == null) return;
@@ -1074,6 +1052,13 @@ namespace Oxide.Plugins
             try
             {
                 RefreshPriceFromDisk();
+                Palette previous = _palette;
+                EnsurePalette();
+                if (previous == null || _palette == null || previous.Name != _palette.Name || previous.Accent != _palette.Accent || previous.Background != _palette.Background)
+                {
+                    RebuildAll();
+                    return;
+                }
                 if (_phase != _shownPhase)
                 {
                     RebuildAll();
@@ -1099,23 +1084,24 @@ namespace Oxide.Plugins
                 string headline = NightshadeVoteDayRules.Headline(_phase, seconds, _buyerName);
                 string have = NightshadeVoteDayRules.VotesLabel(votes, needed);
                 float fraction = NightshadeVoteDayRules.VoteFraction(votes, needed);
-                int font = HeadlineFont(headline);
+                int font = _phase == NightshadeVoteDayRules.PhaseVoting ? 15 : HeadlineFont(headline);
                 string countColor = HeadlineColor();
                 string secondText = seconds.ToString(CultureInfo.InvariantCulture);
+                string ink = Hex(P().Text);
                 EachPlayer(delegate(BasePlayer player)
                 {
                     bool collapsed = IsCollapsed(player);
                     var container = new CuiElementContainer();
                     if (secondsChanged)
                     {
-                        if (collapsed) AddTextUpdate(container, CountName, secondText, Hex(_config.TextColor), 12, TextAnchor.MiddleLeft, true);
+                        if (collapsed) AddTextUpdate(container, CountName, secondText, ink, 12, TextAnchor.MiddleLeft, true);
                         else AddTextUpdate(container, CountName, headline, countColor, font, TextAnchor.MiddleCenter, true);
                     }
                     if (!collapsed && votesChanged)
                     {
                         AddFill(container, fraction);
-                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(_config.TextColor), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
-                        AddEdgeText(container, HaveName, TrackName, have, Hex(_config.TextColor), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
+                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
+                        AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
                     }
                     if (container.Count > 0) CuiHelper.AddUi(player, container);
                 });
@@ -1195,35 +1181,41 @@ namespace Oxide.Plugins
         private void BuildExpanded(CuiElementContainer container, BasePlayer player)
         {
             float width = _config.PanelWidth;
-            float height = _config.PanelHeight;
+            bool voting = _phase == NightshadeVoteDayRules.PhaseVoting;
+            float height = voting ? _config.PanelHeight : Math.Min(_config.PanelHeight, -NightshadeVoteDayRules.StatusBottom + 4f);
             NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
             AddRoot(container, box, WantsCursor(player));
-            AddLogo(container, 7f, -6f, 14f);
-            AddSun(container, (width - 18f) * 0.5f, -4f, 18f);
-            AddText(container, "NightshadeVoteDay.Chevron", BgName, "v", Hex(_config.MutedColor), 12, TextAnchor.MiddleCenter, true, width - 20f, -18f, width - 4f, -3f);
-            AddToggle(container, width - 22f, -2f, 20f, 20f);
+            AddRect(container, "NightshadeVoteDay.Head", BgName, Hex(P().Header), null, 0f, NightshadeVoteDayRules.HeaderBottom, width, 0f);
+            AddRect(container, "NightshadeVoteDay.Rule", BgName, Hex(P().Accent), null, 0f, NightshadeVoteDayRules.RuleBottom, width, NightshadeVoteDayRules.HeaderBottom);
+            AddLogo(container, 3f, -2f, 12f);
+            AddSun(container, 17f, -2f, 12f);
             string title = string.IsNullOrWhiteSpace(_config.PanelTitle) ? "Skip Night" : _config.PanelTitle.Trim();
-            AddText(container, TitleName, BgName, title, Hex(_config.TextColor), 12, TextAnchor.MiddleCenter, true, 24f, -38f, width - 24f, -22f);
+            AddText(container, TitleName, BgName, title, Hex(P().Text), 10, TextAnchor.MiddleLeft, true, 32f, NightshadeVoteDayRules.HeaderBottom, width - 16f, -1f);
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "v", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 2f, -1f);
+            AddToggle(container, width - 16f, -1f, 14f, 14f);
             string headline = NightshadeVoteDayRules.Headline(_phase, RemainingSeconds(), _buyerName);
-            AddText(container, CountName, BgName, headline, HeadlineColor(), HeadlineFont(headline), TextAnchor.MiddleCenter, true, 8f, -58f, width - 8f, -38f);
-            AddRect(container, TrackName, BgName, Hex(_config.TrackColor), null, 8f, -73f, width - 8f, -60f);
+            int font = voting ? 15 : HeadlineFont(headline);
+            AddText(container, CountName, BgName, headline, HeadlineColor(), font, TextAnchor.MiddleCenter, true, 4f, NightshadeVoteDayRules.CountBottom, width - 4f, NightshadeVoteDayRules.CountTop);
+            AddRect(container, TrackName, BgName, Hex(P().Card), null, 4f, NightshadeVoteDayRules.TrackBottom, width - 4f, NightshadeVoteDayRules.TrackTop);
             AddFill(container, NightshadeVoteDayRules.VoteFraction(DisplayVotes(), DisplayNeeded()));
-            AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(_config.TextColor), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
-            AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(_config.TextColor), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
-            AddText(container, StatusName, BgName, StatusText(), StatusColor(), 9, TextAnchor.MiddleCenter, false, 6f, -87f, width - 6f, -75f);
-            if (_phase != NightshadeVoteDayRules.PhaseVoting) return;
-            AddText(container, "NightshadeVoteDay.Hint", BgName, ActionHint(player), Hex(_config.MutedColor), 8, TextAnchor.MiddleCenter, false, 6f, -98f, width - 6f, -86f);
+            AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(P().Text), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
+            AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(P().Text), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
+            string status;
+            string kind;
+            PlayerStatus(player, out status, out kind);
+            AddText(container, StatusName, BgName, status, KindColor(kind), 8, TextAnchor.MiddleCenter, false, 4f, NightshadeVoteDayRules.StatusBottom, width - 4f, NightshadeVoteDayRules.StatusTop);
+            if (!voting) return;
             bool voted = player != null && _votes.Contains(player.userID);
-            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(_config.TrackColor) : Hex(_config.AccentColor), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(_config.SuccessColor) : Hex(_config.TextColor), 8f, -116f, width - 8f, -100f);
+            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, NightshadeVoteDayRules.VoteBottom, width - 4f, NightshadeVoteDayRules.VoteTop);
             if (player != null && _confirming.Contains(player.userID))
             {
-                float mid = 8f + (width - 16f) * 0.5f;
-                AddActionButton(container, ConfirmButton, UiCommand + " confirm", Hex(_config.SuccessColor), ConfirmText(), Hex("#102018"), 8f, -132f, mid - 2f, -118f);
-                AddActionButton(container, CancelButton, UiCommand + " cancel", Hex(_config.TrackColor), Ui("UiCancel"), Hex(_config.FailColor), mid + 2f, -132f, width - 8f, -118f);
+                float mid = 4f + (width - 8f) * 0.5f;
+                AddActionButton(container, ConfirmButton, UiCommand + " confirm", Hex(P().Accent), Ui("UiConfirm"), Hex(P().AccentText), 4f, NightshadeVoteDayRules.ActionBottom, mid - 2f, NightshadeVoteDayRules.ActionTop);
+                AddActionButton(container, CancelButton, UiCommand + " cancel", Hex(P().Button), Ui("UiCancel"), Hex(P().Danger), mid + 2f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop);
             }
             else
             {
-                AddActionButton(container, BuyButton, UiCommand + " buy", Hex("#3E2A55"), BuyText(), Hex(_config.AccentColor), 8f, -132f, width - 8f, -118f);
+                AddActionButton(container, BuyButton, UiCommand + " buy", Hex(P().Button), BuyText(), Hex(P().ButtonText), 4f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop);
             }
         }
 
@@ -1233,32 +1225,36 @@ namespace Oxide.Plugins
             float height = _config.CollapsedSize;
             NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
             AddRoot(container, box, false);
-            float sun = Math.Min(16f, Math.Max(12f, height * 0.4f));
-            AddSun(container, 6f, -3f, sun);
-            float mid = -3f - sun;
-            AddText(container, CountName, BgName, RemainingSeconds().ToString(CultureInfo.InvariantCulture), Hex(_config.TextColor), 12, TextAnchor.MiddleLeft, true, 8f + sun, mid, 42f + sun, -3f);
-            AddText(container, PriceName, BgName, CostLabel(), Hex(_config.AccentColor), 9, TextAnchor.MiddleLeft, true, 46f + sun, mid, width - 18f, -3f);
+            float sun = Math.Min(14f, Math.Max(11f, height * 0.35f));
+            AddSun(container, 4f, -2f, sun);
+            float mid = -2f - sun;
+            AddText(container, CountName, BgName, RemainingSeconds().ToString(CultureInfo.InvariantCulture), Hex(P().Text), 12, TextAnchor.MiddleLeft, true, 6f + sun, mid, 40f + sun, -2f);
+            AddText(container, PriceName, BgName, CostLabel(), Hex(P().Accent), 9, TextAnchor.MiddleLeft, true, 42f + sun, mid, width - 16f, -2f);
             bool voted = player != null && _votes.Contains(player.userID);
-            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(_config.TrackColor) : Hex(_config.AccentColor), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(_config.SuccessColor) : Hex(_config.TextColor), 8f, 4f - height, 78f, mid - 2f);
-            AddText(container, "NightshadeVoteDay.Chevron", BgName, "^", Hex(_config.MutedColor), 10, TextAnchor.MiddleCenter, true, width - 16f, -16f, width - 2f, -2f);
-            AddToggle(container, width - 18f, -2f, 16f, 16f);
+            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, 3f - height, 72f, mid - 2f);
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "^", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 1f, -1f);
+            AddToggle(container, width - 16f, -1f, 14f, 14f);
         }
 
+        // Hud is drawn under the inventory blur, so a panel parented there cannot be clicked while inventory is open.
+        // Overlay is the layer NightshadeHud uses for UI that stays up in that menu, and it sits above Hud.Menu.
+        // The inventory cursor is already free, so these buttons take clicks without the cursor key.
         private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool cursor)
         {
+            string layer = _config == null || string.IsNullOrEmpty(_config.PanelLayer) ? NightshadeVoteDayRules.MenuLayer : _config.PanelLayer;
             var root = new CuiElement
             {
                 Name = Root,
-                Parent = string.IsNullOrEmpty(_config.PanelLayer) ? "Hud" : _config.PanelLayer,
+                Parent = layer,
                 DestroyUi = Root
             };
-            root.Components.Add(new CuiImageComponent { Color = Hex(_config.AccentColor, 0.95f) });
+            root.Components.Add(new CuiImageComponent { Color = Hex(P().Accent), BlocksRaycast = true });
             root.Components.Add(new CuiRectTransformComponent { AnchorMin = box.Anchor, AnchorMax = box.Anchor, OffsetMin = box.OffsetMin, OffsetMax = box.OffsetMax });
             if (cursor) root.Components.Add(new CuiNeedsCursorComponent());
             container.Add(root);
             container.Add(new CuiPanel
             {
-                Image = { Color = Hex(_config.PanelColor, _config.PanelOpacity / 100f) },
+                Image = { Color = Hex(P().Background) },
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "1 1", OffsetMax = "-1 -1" },
                 CursorEnabled = false
             }, Root, BgName);
@@ -1292,7 +1288,7 @@ namespace Oxide.Plugins
 
         private void AddSun(CuiElementContainer container, float left, float top, float size)
         {
-            string color = Hex(_config.SunColor);
+            string color = Hex(P().Accent);
             float body = size * 0.46f;
             float inset = (size - body) * 0.5f;
             float bodyLeft = left + inset;
@@ -1356,12 +1352,12 @@ namespace Oxide.Plugins
 
         private void AddFill(CuiElementContainer container, float fraction)
         {
-            float track = Math.Max(0f, _config.PanelWidth - 16f);
+            float track = Math.Max(0f, _config.PanelWidth - 8f);
             float inner = Math.Max(0f, track - 2f);
             float width = inner * (fraction < 0f ? 0f : (fraction > 1f ? 1f : fraction));
             string color = _phase == NightshadeVoteDayRules.PhasePassed || _phase == NightshadeVoteDayRules.PhaseBought
-                ? Hex(_config.SuccessColor)
-                : Hex(_config.AccentColor);
+                ? Hex(P().Success)
+                : Hex(P().Accent);
             float right = width < 0.5f ? 1f : 1f + width;
             float top = width < 0.5f ? 1f : 12f;
             container.Add(new CuiElement
@@ -1465,23 +1461,44 @@ namespace Oxide.Plugins
             };
         }
 
-        private string StatusText()
+        private void PlayerStatus(BasePlayer player, out string text, out string kind)
         {
-            return Ui(NightshadeVoteDayRules.StatusKey(_phase));
+            if (_phase == NightshadeVoteDayRules.PhaseVoting && player != null && _confirming.Contains(player.userID))
+            {
+                text = Ui("UiPay", ("cost", CostLabel()));
+                kind = "idle";
+                return;
+            }
+            Note note;
+            if (player != null && _notes.TryGetValue(player.userID, out note) && note != null && !string.IsNullOrEmpty(note.Text))
+            {
+                text = note.Text;
+                kind = string.IsNullOrEmpty(note.Kind) ? "idle" : note.Kind;
+                return;
+            }
+            if (_phase == NightshadeVoteDayRules.PhaseVoting)
+            {
+                text = ActionHint(player);
+                kind = "idle";
+                return;
+            }
+            int quiet = _phase == NightshadeVoteDayRules.PhasePassed ? _nightsWithoutVote : 0;
+            string key = NightshadeVoteDayRules.ResultStatusKey(_phase, quiet);
+            text = Ui(key, ("nights", quiet.ToString(CultureInfo.InvariantCulture)));
+            kind = NightshadeVoteDayRules.StatusKind(_phase);
         }
 
-        private string StatusColor()
+        private string KindColor(string kind)
         {
-            string kind = NightshadeVoteDayRules.StatusKind(_phase);
-            if (kind == "ok") return Hex(_config.SuccessColor);
-            if (kind == "bad") return Hex(_config.FailColor);
-            return Hex(_config.MutedColor);
+            if (kind == "ok") return Hex(P().Success);
+            if (kind == "bad") return Hex(P().Danger);
+            return Hex(P().SubText);
         }
 
         private string HeadlineColor()
         {
-            if (_phase == NightshadeVoteDayRules.PhaseBought && !string.IsNullOrEmpty(_buyerName)) return Hex(_config.AccentColor);
-            return Hex(_config.TextColor);
+            if (_phase == NightshadeVoteDayRules.PhaseBought && !string.IsNullOrEmpty(_buyerName)) return Hex(P().Accent);
+            return Hex(P().Text);
         }
 
         private static int HeadlineFont(string text)
@@ -1491,10 +1508,15 @@ namespace Oxide.Plugins
             return 13;
         }
 
-        private string Ui(string key)
+        private string Ui(string key, params (string token, string value)[] replacements)
         {
             string msg = lang.GetMessage(key, this, null);
-            if (string.IsNullOrEmpty(msg) || msg == key) return FallbackUi(key);
+            if (string.IsNullOrEmpty(msg) || msg == key) msg = FallbackUi(key);
+            if (replacements != null)
+            {
+                for (int i = 0; i < replacements.Length; i++)
+                    msg = msg.Replace("{" + replacements[i].token + "}", replacements[i].value ?? string.Empty);
+            }
             return msg;
         }
 
@@ -1502,29 +1524,185 @@ namespace Oxide.Plugins
         {
             if (key == "UiVotes") return "Votes required";
             if (key == "UiVoteHint") return "Waiting on votes";
-            if (key == "UiWillSkip") return "The night will be skipped";
+            if (key == "UiWillSkip") return "Night will be skipped";
+            if (key == "UiQuietAfter") return "Skipped. {nights} quiet nights";
             if (key == "UiFailed") return "Not enough votes";
             if (key == "UiPurchased") return "Day purchased";
             if (key == "UiVote") return "Vote";
             if (key == "UiVoted") return "Voted";
             if (key == "UiBuy") return "Buy Day {cost}";
-            if (key == "UiConfirm") return "Confirm {cost}";
+            if (key == "UiConfirm") return "Confirm";
             if (key == "UiCancel") return "Cancel";
-            if (key == "UiHintMiddle") return "Middle-click to use the buttons";
-            if (key == "UiHintUse") return "Press E to use the buttons";
-            if (key == "UiHintReload") return "Press R to use the buttons";
-            if (key == "UiHintReady") return "Click Vote or Buy Day";
+            if (key == "UiPay") return "Pay {cost}?";
+            if (key == "UiHintMiddle") return "Middle-click buttons";
+            if (key == "UiHintUse") return "Press E for buttons";
+            if (key == "UiHintReload") return "Press R for buttons";
+            if (key == "UiHintReady") return "Click Vote or Buy";
+            if (key == "UiCounted") return "Vote counted";
+            if (key == "UiAlready") return "Already voted";
+            if (key == "UiNeedRp") return "Need {need} RP, have {have}";
+            if (key == "UiNeedEco") return "Need {need} coins, have {have}";
+            if (key == "UiClosed") return "Vote is closed";
+            if (key == "UiDaytime") return "Already daytime";
+            if (key == "UiQuiet") return "No vote tonight";
+            if (key == "UiQuietLeft") return "No vote. {left} nights left";
+            if (key == "UiNotYet") return "Vote is not open";
+            if (key == "UiDone") return "Vote already finished";
+            if (key == "UiCurrency") return "Currency is not set up";
+            if (key == "UiNoRewards") return "Rewards plugin missing";
+            if (key == "UiNoEco") return "Economics plugin missing";
             return key;
         }
 
         private string BuyText()
         {
-            return Ui("UiBuy").Replace("{cost}", CostLabel());
+            return Ui("UiBuy", ("cost", CostLabel()));
         }
 
-        private string ConfirmText()
+        private void SetNote(BasePlayer player, string text, string kind)
         {
-            return Ui("UiConfirm").Replace("{cost}", CostLabel());
+            if (player == null) return;
+            _notes[player.userID] = new Note
+            {
+                Text = text ?? string.Empty,
+                Kind = string.IsNullOrEmpty(kind) ? "idle" : kind
+            };
+        }
+
+        private void ClearNote(BasePlayer player)
+        {
+            if (player != null) _notes.Remove(player.userID);
+        }
+
+        private Palette P()
+        {
+            return EnsurePalette();
+        }
+
+        private Palette EnsurePalette()
+        {
+            int today = DateTime.Now.Month * 100 + DateTime.Now.Day;
+            string mode = _config == null || string.IsNullOrWhiteSpace(_config.ThemeMode) ? "Shop" : _config.ThemeMode;
+            DateTime stamp = DateTime.MinValue;
+            string path = ThemePath();
+            try
+            {
+                if (!string.IsNullOrEmpty(path) && File.Exists(path)) stamp = File.GetLastWriteTimeUtc(path);
+            }
+            catch (IOException)
+            {
+                stamp = DateTime.MinValue;
+            }
+            if (_palette != null && _themeDay == today && _themeStamp == stamp && _themeModeSeen == mode)
+                return _palette;
+            _themeDay = today;
+            _themeStamp = stamp;
+            _themeModeSeen = mode;
+            _palette = LoadPalette(path);
+            return _palette;
+        }
+
+        private string ThemePath()
+        {
+            string file = _config == null || string.IsNullOrWhiteSpace(_config.ThemeFile) ? "NightshadeShop.json" : _config.ThemeFile;
+            return Path.Combine(Interface.Oxide.ConfigDirectory, file);
+        }
+
+        private Palette LoadPalette(string path)
+        {
+            Palette fallback = FallbackPalette();
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return fallback;
+                JObject root = JObject.Parse(File.ReadAllText(path));
+                List<NightshadeVoteDayRules.ThemeRow> rows = NightshadeVoteDayRules.ReadThemeRows(root);
+                string mode = _config == null || string.IsNullOrWhiteSpace(_config.ThemeMode) ? "Shop" : _config.ThemeMode.Trim();
+                if (mode.Equals("Shop", StringComparison.OrdinalIgnoreCase))
+                    mode = NightshadeVoteDayRules.ShopMode(root);
+                int today = DateTime.Now.Month * 100 + DateTime.Now.Day;
+                NightshadeVoteDayRules.ThemeRow chosen = NightshadeVoteDayRules.ResolveTheme(mode, rows, today);
+                if (chosen == null) return fallback;
+                _themeWarned = false;
+                return FromRow(chosen);
+            }
+            catch (Exception ex)
+            {
+                if (!_themeWarned)
+                {
+                    _themeWarned = true;
+                    PrintWarning("Shop theme could not be read. Using Nightshade colors. " + ex.Message);
+                }
+                return fallback;
+            }
+        }
+
+        private Palette FallbackPalette()
+        {
+            return new Palette
+            {
+                Name = "Nightshade",
+                Background = FirstColor(_config == null ? null : _config.PanelColor, "#1A1024F2"),
+                Header = "#241634FF",
+                Panel = "#2A1B3AFF",
+                Card = FirstColor(_config == null ? null : _config.TrackColor, "#33224AFF"),
+                Accent = FirstColor(_config == null ? null : _config.AccentColor, "#8B3FBFFF"),
+                AccentText = "#F2E6FFFF",
+                Button = "#3E2A55FF",
+                ButtonText = FirstColor(_config == null ? null : _config.TextColor, "#E6D9F2FF"),
+                Text = FirstColor(_config == null ? null : _config.TextColor, "#F2EAF7FF"),
+                SubText = FirstColor(_config == null ? null : _config.MutedColor, "#A898B8FF"),
+                Danger = FirstColor(_config == null ? null : _config.FailColor, "#A63A3AFF"),
+                DangerText = "#FFD6D6FF",
+                Success = FirstColor(_config == null ? null : _config.SuccessColor, "#3DDC84FF"),
+                Source = "Nightshade"
+            };
+        }
+
+        private static Palette FromRow(NightshadeVoteDayRules.ThemeRow row)
+        {
+            Palette fallback = new Palette();
+            return new Palette
+            {
+                Name = string.IsNullOrEmpty(row.Name) ? fallback.Name : row.Name,
+                Background = FirstColor(row.Background, fallback.Background),
+                Header = FirstColor(row.Header, fallback.Header),
+                Panel = FirstColor(row.Panel, fallback.Panel),
+                Card = FirstColor(row.Card, fallback.Card),
+                Accent = FirstColor(row.Accent, fallback.Accent),
+                AccentText = FirstColor(row.AccentText, fallback.AccentText),
+                Button = FirstColor(row.Button, fallback.Button),
+                ButtonText = FirstColor(row.ButtonText, fallback.ButtonText),
+                Text = FirstColor(row.Text, fallback.Text),
+                SubText = FirstColor(row.SubText, fallback.SubText),
+                Danger = FirstColor(row.Danger, fallback.Danger),
+                DangerText = FirstColor(row.DangerText, fallback.DangerText),
+                Success = fallback.Success,
+                Source = "NightshadeShop.json"
+            };
+        }
+
+        private static string FirstColor(string value, string fallback)
+        {
+            return string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        }
+
+        private class Palette
+        {
+            public string Name = "Nightshade";
+            public string Background = "#1A1024F2";
+            public string Header = "#241634FF";
+            public string Panel = "#2A1B3AFF";
+            public string Card = "#33224AFF";
+            public string Accent = "#8B3FBFFF";
+            public string AccentText = "#F2E6FFFF";
+            public string Button = "#3E2A55FF";
+            public string ButtonText = "#E6D9F2FF";
+            public string Text = "#F2EAF7FF";
+            public string SubText = "#A898B8FF";
+            public string Danger = "#A63A3AFF";
+            public string DangerText = "#FFD6D6FF";
+            public string Success = "#3DDC84FF";
+            public string Source = "Nightshade";
         }
 
         private string ActionHint(BasePlayer player)
@@ -1686,10 +1864,12 @@ namespace Oxide.Plugins
             int r;
             int g;
             int b;
+            int embedded = 255;
             if (!int.TryParse(hex.Substring(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out r)) return "1 1 1 1";
             if (!int.TryParse(hex.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out g)) return "1 1 1 1";
             if (!int.TryParse(hex.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out b)) return "1 1 1 1";
-            float a = alpha >= 0f ? alpha : 1f;
+            if (hex.Length >= 8 && !int.TryParse(hex.Substring(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out embedded)) return "1 1 1 1";
+            float a = alpha >= 0f ? alpha : embedded / 255f;
             if (a < 0f) a = 0f;
             if (a > 1f) a = 1f;
             return (r / 255f).ToString("0.###", CultureInfo.InvariantCulture) + " "
@@ -1708,11 +1888,26 @@ namespace Oxide.Plugins
         internal const string PhasePassed = "passed";
         internal const string PhaseFailed = "failed";
         internal const string PhaseBought = "bought";
+        internal static readonly string MenuLayer = "Overlay";
+        internal const string LayerKey = "Panel layer (Overlay stays above the inventory, Overall is above every menu, Hud sits under it)";
+        internal const string OldLayerKey = "Panel layer (Hud sits with the hotbar, Overlay stays up in menus)";
         internal const float DefaultHotbarLeft = -204f;
         internal const float DefaultGap = 8f;
         internal const float DefaultBottom = 16f;
-        internal const float DefaultWidth = 152f;
-        internal const float DefaultHeight = 136f;
+        internal static readonly float DefaultWidth = 136f;
+        internal static readonly float DefaultHeight = 106f;
+        internal static readonly float HeaderBottom = -16f;
+        internal static readonly float RuleBottom = -18f;
+        internal static readonly float CountTop = -19f;
+        internal static readonly float CountBottom = -36f;
+        internal static readonly float TrackTop = -38f;
+        internal static readonly float TrackBottom = -51f;
+        internal static readonly float StatusTop = -52f;
+        internal static readonly float StatusBottom = -63f;
+        internal static readonly float VoteTop = -65f;
+        internal static readonly float VoteBottom = -83f;
+        internal static readonly float ActionTop = -85f;
+        internal static readonly float ActionBottom = -103f;
 
         internal static string NormalizeCursorKey(string key)
         {
@@ -1877,6 +2072,140 @@ namespace Oxide.Plugins
             if (phase == PhasePassed || phase == PhaseBought) return "ok";
             if (phase == PhaseFailed) return "bad";
             return "idle";
+        }
+
+        internal static string ResultStatusKey(string phase, int quietNights)
+        {
+            if (phase == PhasePassed && quietNights > 0) return "UiQuietAfter";
+            return StatusKey(phase);
+        }
+
+        internal static void MigratePanelSize(NightshadeVoteDay.PluginConfig config)
+        {
+            if (config == null) return;
+            if (Math.Abs(config.PanelWidth - 152f) < 0.01f && Math.Abs(config.PanelHeight - 136f) < 0.01f)
+            {
+                config.PanelWidth = DefaultWidth;
+                config.PanelHeight = DefaultHeight;
+            }
+        }
+
+        internal static bool ExpandedFits(float width, float height)
+        {
+            if (width < 120f || height + 0.01f < DefaultHeight) return false;
+            float vote = VoteTop - VoteBottom;
+            float action = ActionTop - ActionBottom;
+            if (vote < 18f || action < 18f) return false;
+            if (VoteBottom < ActionTop) return false;
+            if (ActionBottom < -(height - 2f)) return false;
+            if (StatusBottom < VoteTop) return false;
+            return true;
+        }
+
+        internal sealed class ThemeRow
+        {
+            public string Name;
+            public string From;
+            public string To;
+            public int Priority;
+            public string Background;
+            public string Header;
+            public string Panel;
+            public string Card;
+            public string Accent;
+            public string AccentText;
+            public string Button;
+            public string ButtonText;
+            public string Text;
+            public string SubText;
+            public string Danger;
+            public string DangerText;
+        }
+
+        internal static List<ThemeRow> ReadThemeRows(JObject root)
+        {
+            var rows = new List<ThemeRow>();
+            if (root == null) return rows;
+            JArray themes = root["Themes"] as JArray;
+            if (themes == null) return rows;
+            for (int i = 0; i < themes.Count; i++)
+            {
+                JObject item = themes[i] as JObject;
+                if (item == null) continue;
+                JObject colors = item["Colors (#RRGGBB or #RRGGBBAA)"] as JObject;
+                rows.Add(new ThemeRow
+                {
+                    Name = item.Value<string>("Name"),
+                    From = item.Value<string>("Active From (MM-DD)"),
+                    To = item.Value<string>("Active To (MM-DD)"),
+                    Priority = item.Value<int?>("Priority (higher wins when dates overlap)") ?? 0,
+                    Background = ColorOf(colors, "Background"),
+                    Header = ColorOf(colors, "Header"),
+                    Panel = ColorOf(colors, "Panel"),
+                    Card = ColorOf(colors, "Card"),
+                    Accent = ColorOf(colors, "Accent"),
+                    AccentText = ColorOf(colors, "AccentText"),
+                    Button = ColorOf(colors, "Button"),
+                    ButtonText = ColorOf(colors, "ButtonText"),
+                    Text = ColorOf(colors, "Text"),
+                    SubText = ColorOf(colors, "SubText"),
+                    Danger = ColorOf(colors, "Danger"),
+                    DangerText = ColorOf(colors, "DangerText")
+                });
+            }
+            return rows;
+        }
+
+        internal static string ShopMode(JObject root)
+        {
+            if (root == null) return "Auto";
+            string mode = root.Value<string>("Theme Mode (Auto or a theme name)");
+            return string.IsNullOrWhiteSpace(mode) ? "Auto" : mode.Trim();
+        }
+
+        internal static ThemeRow ResolveTheme(string mode, IList<ThemeRow> themes, int monthDay)
+        {
+            if (themes == null || themes.Count == 0) return null;
+            if (!string.IsNullOrEmpty(mode) && !mode.Equals("Auto", StringComparison.OrdinalIgnoreCase) && !mode.Equals("Shop", StringComparison.OrdinalIgnoreCase))
+            {
+                for (int i = 0; i < themes.Count; i++)
+                {
+                    ThemeRow named = themes[i];
+                    if (named != null && string.Equals(named.Name, mode, StringComparison.OrdinalIgnoreCase)) return named;
+                }
+            }
+            ThemeRow best = null;
+            for (int i = 0; i < themes.Count; i++)
+            {
+                ThemeRow row = themes[i];
+                if (row == null || !InRange(row.From, row.To, monthDay)) continue;
+                if (best == null || row.Priority > best.Priority) best = row;
+            }
+            return best ?? themes[0];
+        }
+
+        internal static bool InRange(string from, string to, int today)
+        {
+            int start = ParseMd(from, 101);
+            int end = ParseMd(to, 1231);
+            return start <= end ? today >= start && today <= end : today >= start || today <= end;
+        }
+
+        internal static int ParseMd(string text, int fallback)
+        {
+            if (string.IsNullOrEmpty(text)) return fallback;
+            string[] parts = text.Split('-');
+            int month;
+            int day;
+            if (parts.Length == 2 && int.TryParse(parts[0], out month) && int.TryParse(parts[1], out day))
+                return month * 100 + day;
+            return fallback;
+        }
+
+        private static string ColorOf(JObject colors, string key)
+        {
+            if (colors == null) return null;
+            return colors.Value<string>(key);
         }
 
         private static bool TryNumber(JToken token, out double number)

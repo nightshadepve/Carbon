@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using Newtonsoft.Json.Linq;
 using Oxide.Plugins;
 
@@ -16,6 +18,10 @@ public static class Program
         failed += Check("anchor cleanup", Anchor);
         failed += Check("vote counts", Votes);
         failed += Check("status copy", Status);
+        failed += Check("panel is smaller and still clickable", CompactPanel);
+        failed += Check("hud no longer covers the inventory buttons", InventoryLayer);
+        failed += Check("season follows the shop dates", ShopSeason);
+        failed += Check("the shop config picks the same season", ShopFile);
         if (failed > 0)
         {
             Console.Error.WriteLine(failed.ToString(CultureInfo.InvariantCulture) + " failed");
@@ -97,7 +103,7 @@ public static class Program
             return "default panel overlaps the hotbar";
         if (panel.Right > NightshadeVoteDayRules.DefaultHotbarLeft - NightshadeVoteDayRules.DefaultGap)
             return "panel crosses the hotbar's left edge";
-        if (panel.OffsetMin != "-364 16" || panel.OffsetMax != "-212 152")
+        if (panel.OffsetMin != "-348 16" || panel.OffsetMax != "-212 122")
             return panel.OffsetMin + " / " + panel.OffsetMax;
         NightshadeVoteDayRules.ScreenBox chip = NightshadeVoteDayRules.LeftOfHotbar(-204f, 8f, 16f, 48f, 48f, "0.5 0");
         if (NightshadeVoteDayRules.Overlaps(chip, hotbar))
@@ -146,6 +152,99 @@ public static class Program
         if (NightshadeVoteDayRules.NormalizeCursorKey("e") != "use") return "use";
         if (NightshadeVoteDayRules.NormalizeCursorKey("off") != "none") return "none";
         if (NightshadeVoteDayRules.NormalizeCursorKey("nope") != "firethird") return "fallback";
+        if (NightshadeVoteDayRules.ResultStatusKey("passed", 2) != "UiQuietAfter") return "quiet";
+        if (NightshadeVoteDayRules.ResultStatusKey("passed", 0) != "UiWillSkip") return "plain pass";
         return null;
+    }
+
+    private static string CompactPanel()
+    {
+        if (NightshadeVoteDayRules.DefaultWidth >= 152f || NightshadeVoteDayRules.DefaultHeight >= 136f)
+            return "defaults were not reduced";
+        if (!NightshadeVoteDayRules.ExpandedFits(NightshadeVoteDayRules.DefaultWidth, NightshadeVoteDayRules.DefaultHeight))
+            return "buttons do not fit the compact box";
+        var oldSize = new NightshadeVoteDay.PluginConfig { PanelWidth = 152f, PanelHeight = 136f };
+        NightshadeVoteDayRules.MigratePanelSize(oldSize);
+        if (Math.Abs(oldSize.PanelWidth - NightshadeVoteDayRules.DefaultWidth) > 0.01f || Math.Abs(oldSize.PanelHeight - NightshadeVoteDayRules.DefaultHeight) > 0.01f)
+            return "old default size was kept";
+        var custom = new NightshadeVoteDay.PluginConfig { PanelWidth = 180f, PanelHeight = 140f };
+        NightshadeVoteDayRules.MigratePanelSize(custom);
+        if (Math.Abs(custom.PanelWidth - 180f) > 0.01f || Math.Abs(custom.PanelHeight - 140f) > 0.01f)
+            return "custom size was overwritten";
+        float vote = NightshadeVoteDayRules.VoteTop - NightshadeVoteDayRules.VoteBottom;
+        float action = NightshadeVoteDayRules.ActionTop - NightshadeVoteDayRules.ActionBottom;
+        if (vote < 18f || action < 18f) return "buttons are under 18px";
+        return null;
+    }
+
+    private static string InventoryLayer()
+    {
+        if (NightshadeVoteDayRules.MenuLayer != "Overlay") return NightshadeVoteDayRules.MenuLayer;
+        var config = new NightshadeVoteDay.PluginConfig();
+        var raw = new JObject();
+        raw[NightshadeVoteDayRules.OldLayerKey] = "Hud";
+        NightshadeVoteDay.MigrateLayer(raw, config);
+        if (config.PanelLayer != "Overlay") return "old Hud default was kept";
+        config = new NightshadeVoteDay.PluginConfig();
+        raw = new JObject();
+        raw[NightshadeVoteDayRules.OldLayerKey] = "Overall";
+        NightshadeVoteDay.MigrateLayer(raw, config);
+        if (config.PanelLayer != "Overall") return "custom layer was dropped";
+        config = new NightshadeVoteDay.PluginConfig();
+        raw = new JObject();
+        raw[NightshadeVoteDayRules.LayerKey] = "Overlay";
+        raw[NightshadeVoteDayRules.OldLayerKey] = "Overall";
+        NightshadeVoteDay.MigrateLayer(raw, config);
+        if (config.PanelLayer != "Overlay") return "new key lost to the old key";
+        return null;
+    }
+
+    private static string ShopSeason()
+    {
+        var themes = SampleThemes();
+        var november = NightshadeVoteDayRules.ResolveTheme("Auto", themes, 1107);
+        if (november == null || november.Name != "Autumn") return "7 November";
+        var halloween = NightshadeVoteDayRules.ResolveTheme("Shop", themes, 1031);
+        if (halloween == null || halloween.Name != "Halloween") return "31 October";
+        var christmas = NightshadeVoteDayRules.ResolveTheme("Auto", themes, 1225);
+        if (christmas == null || christmas.Name != "Christmas") return "25 December";
+        var winter = NightshadeVoteDayRules.ResolveTheme("Auto", themes, 102);
+        if (winter == null || winter.Name != "Winter") return "2 January";
+        var forced = NightshadeVoteDayRules.ResolveTheme("Summer", themes, 1107);
+        if (forced == null || forced.Name != "Summer") return "forced name";
+        if (NightshadeVoteDayRules.ResolveTheme("Auto", new List<NightshadeVoteDayRules.ThemeRow>(), 1107) != null)
+            return "empty list";
+        if (!NightshadeVoteDayRules.InRange("12-21", "03-19", 102) || NightshadeVoteDayRules.InRange("12-21", "03-19", 701))
+            return "year wrap";
+        return null;
+    }
+
+    private static string ShopFile()
+    {
+        string path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "configs", "NightshadeShop.json"));
+        if (!File.Exists(path)) return "missing " + path;
+        JObject root = JObject.Parse(File.ReadAllText(path));
+        if (NightshadeVoteDayRules.ShopMode(root) != "Auto") return "shop mode";
+        var rows = NightshadeVoteDayRules.ReadThemeRows(root);
+        var november = NightshadeVoteDayRules.ResolveTheme("Auto", rows, 1107);
+        if (november == null || november.Name != "Autumn") return november == null ? "no theme" : november.Name;
+        if (november.Accent != "#C8642DFF") return november.Accent;
+        var halloween = NightshadeVoteDayRules.ResolveTheme(NightshadeVoteDayRules.ShopMode(root), rows, 1031);
+        if (halloween == null || halloween.Name != "Halloween") return "halloween";
+        return null;
+    }
+
+    private static List<NightshadeVoteDayRules.ThemeRow> SampleThemes()
+    {
+        return new List<NightshadeVoteDayRules.ThemeRow>
+        {
+            new NightshadeVoteDayRules.ThemeRow { Name = "Nightshade", From = "01-01", To = "12-31", Priority = -1, Accent = "#8B3FBFFF" },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Spring", From = "03-20", To = "06-20", Priority = 0 },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Summer", From = "06-21", To = "09-21", Priority = 0 },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Autumn", From = "09-22", To = "12-20", Priority = 0, Accent = "#C8642DFF" },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Winter", From = "12-21", To = "03-19", Priority = 0 },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Halloween", From = "10-01", To = "10-31", Priority = 10 },
+            new NightshadeVoteDayRules.ThemeRow { Name = "Christmas", From = "12-01", To = "12-31", Priority = 10 }
+        };
     }
 }
