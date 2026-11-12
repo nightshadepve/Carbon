@@ -1,8 +1,0 @@
-{
-  "Enabled": false,
-  "Config": {
-    "UsePermission": "selectiveeac.use",
-    "UseGroup": "selectiveeac"
-  },
-  "Version": "4139603651"
-}

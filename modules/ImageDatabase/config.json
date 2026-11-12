@@ -1,8 +1,0 @@
-{
-  "Enabled": true,
-  "Config": {
-    "TimeoutPerUrl": 2.0,
-    "LoadDefaultImagesOnStartup": true
-  },
-  "Version": "1400194285"
-}

@@ -1,8 +1,0 @@
-{
-  "Enabled": false,
-  "Config": {
-    "BypassPermission": "whitelist.bypass",
-    "BypassGroup": "whitelisted"
-  },
-  "Version": "781308331"
-}
