@@ -7,6 +7,7 @@
   "Loot Hints": {
     "Enabled (/rb hint)": true,
     "Can bypass restrictions (vanish, noclip, raidablebases.canbypass)": true,
+    "Forfeit Completion Rewards For All Raiders When Hints Are Used": false,
     "Permission Required": "",
     "Required Loot Percentage To See Loot Left": 85.0,
     "Draw Time (Seconds)": 15.0,
@@ -2268,40 +2269,219 @@
   },
   "NPCs": {
     "Enabled": true,
-    "Weapon Accuracy (0 - 100)": {
-      "AK47": 15.0,
-      "AK47 ICE": 15.0,
-      "Bolt Rifle": 15.0,
-      "Compound Bow": 15.0,
-      "Crossbow": 15.0,
-      "Double Barrel Shotgun": 15.0,
-      "Eoka": 15.0,
-      "Glock": 15.0,
-      "HMLMG": 15.0,
-      "L96": 15.0,
-      "LR300": 15.0,
-      "M249": 15.0,
-      "Minigun": 15.0,
-      "M39": 15.0,
-      "M92": 15.0,
-      "MP5": 15.0,
-      "Nailgun": 15.0,
-      "Pump Shotgun": 15.0,
-      "Python": 15.0,
-      "Revolver": 15.0,
-      "Semi Auto Pistol": 15.0,
-      "Semi Auto Rifle": 15.0,
-      "Spas12": 15.0,
-      "Speargun": 15.0,
-      "SMG": 15.0,
-      "Snowball Gun": 15.0,
-      "Thompson": 15.0,
-      "Waterpipe Shotgun": 15.0
-    },
-    "Damage Multipliers": {
-      "Explosive Damage Multiplier": 1.0,
-      "Gun Damage Multiplier": 1.0,
-      "Melee Damage Multiplier": 1.0
+    "Npcs Remain Dormant Without Intruders": false,
+    "Npcs Become Dormant X Seconds After All Intruders Leave": 30.0,
+    "Weapon Settings": {
+      "AK47": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "AK47 ICE": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "Bolt Rifle": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 150.0,
+        "Damage Multiplier": 1.0
+      },
+      "Compound Bow": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Crossbow": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Double Barrel Shotgun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Eoka": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 10.0,
+        "Damage Multiplier": 1.0
+      },
+      "Glock": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "HC Revolver": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "HMLMG": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 380.0,
+        "Damage Multiplier": 1.0
+      },
+      "L96": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 150.0,
+        "Damage Multiplier": 1.0
+      },
+      "LR300": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 380.0,
+        "Damage Multiplier": 1.0
+      },
+      "M249": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "Minigun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "M16A2": {
+        "Accuracy (0 - 100)": 20.0,
+        "Effective Range (m)": 40.0,
+        "Damage Multiplier": 1.0
+      },
+      "M39": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "M92": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 75.0,
+        "Damage Multiplier": 1.0
+      },
+      "MP5": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 75.0,
+        "Damage Multiplier": 1.0
+      },
+      "Nailgun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Pump Shotgun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "M4 Shotgun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 75.0,
+        "Damage Multiplier": 1.0
+      },
+      "Python": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Revolver": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 50.0,
+        "Damage Multiplier": 1.0
+      },
+      "Semi Auto Pistol": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Semi Auto Rifle": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 190.0,
+        "Damage Multiplier": 1.0
+      },
+      "Spas12": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 30.0,
+        "Damage Multiplier": 1.0
+      },
+      "Speargun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Boomerang": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 20.0,
+        "Damage Multiplier": 1.0
+      },
+      "SMG": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 20.0,
+        "Damage Multiplier": 1.0
+      },
+      "T1 SMG": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 20.0,
+        "Damage Multiplier": 1.0
+      },
+      "Snowball Gun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 5.0,
+        "Damage Multiplier": 1.0
+      },
+      "Thompson": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 20.0,
+        "Damage Multiplier": 1.0
+      },
+      "Waterpipe Shotgun": {
+        "Accuracy (0 - 100)": 15.0,
+        "Effective Range (m)": 15.0,
+        "Damage Multiplier": 1.0
+      },
+      "Multiple Grenade Launcher": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 20.0,
+        "Damage Multiplier": 1.0
+      },
+      "Rocket Launcher": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 150.0,
+        "Damage Multiplier": 1.0
+      },
+      "Homing Missile Launcher": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 150.0,
+        "Damage Multiplier": 1.0
+      },
+      "Explosives": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      },
+      "Melee": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      },
+      "Flamethrower": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      },
+      "Military Flamethrower": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      },
+      "Water Gun": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      },
+      "Water Pistol": {
+        "Accuracy (0 - 100)": 100.0,
+        "Effective Range (m)": 0.0,
+        "Damage Multiplier": 1.0
+      }
     },
     "Spawn Inside Bases": {
       "Sleepers": {
@@ -2420,6 +2600,7 @@
     "Random Murderer Names": [],
     "Random Scientist Names": [],
     "Amount That Can Throw Weapons": 1,
+    "Amount That Can Equip Homing Missile Launchers": 2,
     "Amount Of Murderers To Spawn": 1,
     "Minimum Amount Of Murderers To Spawn": 1,
     "Spawn Random Amount Of Murderers": true,

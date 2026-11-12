@@ -1618,5 +1618,15 @@
     "PluginInt": 12,
     "PluginDouble": 1.2,
     "ItemsList": null
+  },
+  "clothing.mod.armorinsert_wool": {
+    "PluginInt": 1,
+    "PluginDouble": 0.1,
+    "ItemsList": null
+  },
+  "minifridge": {
+    "PluginInt": 1,
+    "PluginDouble": 0.1,
+    "ItemsList": null
   }
 }

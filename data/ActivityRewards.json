@@ -1,10 +1,7 @@
 {
   "76561198035665693": {
     "MonumentList": [
-      "crash_train",
-      "sphere_tank",
-      "water_treatment_plant_1",
-      "desert_military_base_d"
+      "excavator_1"
     ]
   },
   "76561198111185372": {
@@ -20,18 +17,31 @@
     "MonumentList": []
   },
   "76561198839853772": {
-    "MonumentList": []
+    "MonumentList": [
+      "cave_small_easy_4",
+      "radtown_1",
+      "launch_site_1",
+      "harbor_2",
+      "CargoShip_8741280",
+      "harbor_1",
+      "excavator_1",
+      "mining_quarry_c"
+    ]
   },
   "76561197996909849": {
     "MonumentList": []
   },
   "76561199069700597": {
     "MonumentList": [
-      "bandit_town",
-      "crash_train",
+      "swamp_b",
       "sphere_tank",
+      "bandit_town",
+      "harbor_2",
+      "CargoShip_9068940",
+      "swamp_c",
+      "airfield_1",
       "water_treatment_plant_1",
-      "desert_military_base_d"
+      "launch_site_1"
     ]
   },
   "76561198210900224": {
@@ -173,7 +183,11 @@
     "MonumentList": []
   },
   "76561198383506301": {
-    "MonumentList": []
+    "MonumentList": [
+      "excavator_1",
+      "launch_site_1",
+      "compound"
+    ]
   },
   "76561199690517861": {
     "MonumentList": []
@@ -215,7 +229,16 @@
     "MonumentList": []
   },
   "76561198375397546": {
-    "MonumentList": []
+    "MonumentList": [
+      "bandit_town",
+      "water_treatment_plant_1",
+      "radtown_small_3",
+      "trainyard_1",
+      "satellite_dish",
+      "gas_station_1_3",
+      "compound",
+      "gas_station_1_2"
+    ]
   },
   "76561198246408028": {
     "MonumentList": []
@@ -338,7 +361,9 @@
     "MonumentList": []
   },
   "76561198017547177": {
-    "MonumentList": []
+    "MonumentList": [
+      "launch_site_1"
+    ]
   },
   "76561199116576538": {
     "MonumentList": []
@@ -884,6 +909,61 @@
     "MonumentList": []
   },
   "76561199225591466": {
+    "MonumentList": []
+  },
+  "76561198981256497": {
+    "MonumentList": []
+  },
+  "76561198101618468": {
+    "MonumentList": []
+  },
+  "76561199445215391": {
+    "MonumentList": []
+  },
+  "76561199146317627": {
+    "MonumentList": [
+      "swamp_c"
+    ]
+  },
+  "76561199588686490": {
+    "MonumentList": []
+  },
+  "76561198753316492": {
+    "MonumentList": []
+  },
+  "76561198321955807": {
+    "MonumentList": []
+  },
+  "76561198345791124": {
+    "MonumentList": []
+  },
+  "76561199235358381": {
+    "MonumentList": []
+  },
+  "76561198267189996": {
+    "MonumentList": []
+  },
+  "76561199649462056": {
+    "MonumentList": [
+      "gas_station_1_2",
+      "power_sub_small_2_9",
+      "trainyard_1",
+      "bandit_town",
+      "warehouse_1",
+      "airfield_1",
+      "swamp_b"
+    ]
+  },
+  "76561199213509672": {
+    "MonumentList": []
+  },
+  "76561198999887494": {
+    "MonumentList": []
+  },
+  "76561199564217592": {
+    "MonumentList": []
+  },
+  "76561199119497727": {
     "MonumentList": []
   }
 }

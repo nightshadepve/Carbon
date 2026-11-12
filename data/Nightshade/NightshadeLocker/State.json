@@ -1,5 +1,58 @@
 {
-  "Players": {},
+  "Players": {
+    "76561198035665693": {
+      "SteamId": "76561198035665693",
+      "Code": "0222",
+      "Guest": "",
+      "Auto": false,
+      "KeyFallback": false,
+      "GuestEnabled": false,
+      "Share": true,
+      "Streamer": false,
+      "FlightSkin": false,
+      "LockOnDismount": false,
+      "AutoClose": false,
+      "CloseDelay": 30,
+      "OwedCode": 0,
+      "OwedKey": 0,
+      "OwedCloser": 0,
+      "Lock": {
+        "doors": true,
+        "windows": true,
+        "boxes": false,
+        "storage": false,
+        "lockers": true,
+        "cupboards": true,
+        "vehicles": true,
+        "naval": true,
+        "medieval": false,
+        "furnaces": false,
+        "vending": false,
+        "composters": false,
+        "mixing": false,
+        "planters": false,
+        "turrets": false,
+        "sam": false,
+        "traps": false,
+        "racks": false,
+        "stashes": false,
+        "neon": false,
+        "signs": false,
+        "other": false,
+        "custom": false
+      },
+      "Close": {
+        "door": false,
+        "double": false,
+        "window": false,
+        "garage": false,
+        "hatch": false,
+        "external": false,
+        "fence": false,
+        "legacy": false
+      }
+    }
+  },
   "Locks": {},
   "Closers": {}
 }

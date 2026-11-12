@@ -1,0 +1,387 @@
+{
+  "76561198017547177": {
+    "fish": {
+      "positionHome": {
+        "x": 1724.33179,
+        "y": 4.83155966,
+        "z": 1132.692,
+        "normalized": {
+          "x": 0.8358011,
+          "y": 0.002341906,
+          "z": 0.5490273,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 2063.08862,
+        "sqrMagnitude": 4256334.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "tower": {
+      "positionHome": {
+        "x": 1022.91742,
+        "y": 152.15123,
+        "z": 580.015869,
+        "normalized": {
+          "x": 0.8626984,
+          "y": 0.12831986,
+          "z": 0.489168257,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 1185.71851,
+        "sqrMagnitude": 1405928.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "junk": {
+      "positionHome": {
+        "x": -1408.71948,
+        "y": 10.8153839,
+        "z": -936.4038,
+        "normalized": {
+          "x": -0.8327808,
+          "y": 0.00639363937,
+          "z": -0.5535659,
+          "normalized": {
+            "x": -0.832780838,
+            "y": 0.00639364,
+            "z": -0.553566,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1691.585,
+        "sqrMagnitude": 2861459.75
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "dome": {
+      "positionHome": {
+        "x": 73.87063,
+        "y": 57.11582,
+        "z": 1462.40149,
+        "normalized": {
+          "x": 0.0504105762,
+          "y": 0.03897681,
+          "z": 0.9979677,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 1465.37952,
+        "sqrMagnitude": 2147337.25
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198839853772": {
+    "karen": {
+      "positionHome": {
+        "x": 1025.72888,
+        "y": 152.149536,
+        "z": 575.1844,
+        "normalized": {
+          "x": 0.865014732,
+          "y": 0.128310308,
+          "z": 0.485062838,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 1185.79358,
+        "sqrMagnitude": 1406106.25
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "home": {
+      "positionHome": {
+        "x": 1566.05286,
+        "y": -29.52071,
+        "z": 1372.71143,
+        "normalized": {
+          "x": 0.7519261,
+          "y": -0.0141741019,
+          "z": 0.659095,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 2082.72168,
+        "sqrMagnitude": 4337729.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "god": {
+      "positionHome": {
+        "x": -1398.01355,
+        "y": 13.9022036,
+        "z": -939.056946,
+        "normalized": {
+          "x": -0.830085456,
+          "y": 0.008254581,
+          "z": -0.557575047,
+          "normalized": {
+            "x": -0.8300855,
+            "y": 0.008254582,
+            "z": -0.5575751,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1684.1803,
+        "sqrMagnitude": 2836463.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "brad": {
+      "positionHome": {
+        "x": 1759.72388,
+        "y": 36.694603,
+        "z": 1192.53809,
+        "normalized": {
+          "x": 0.827693343,
+          "y": 0.0172594562,
+          "z": 0.5609152,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 2126.05786,
+        "sqrMagnitude": 4520121.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561199069700597": {
+    "blue": {
+      "positionHome": {
+        "x": 969.273254,
+        "y": 35.6135941,
+        "z": 199.206589,
+        "normalized": {
+          "x": 0.978893,
+          "y": 0.03596705,
+          "z": 0.201183647,
+          "magnitude": 1.0,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 990.172852,
+        "sqrMagnitude": 980442.25
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "karen": {
+      "positionHome": {
+        "x": 1018.70947,
+        "y": 152.157608,
+        "z": 575.8302,
+        "normalized": {
+          "x": 0.863281667,
+          "y": 0.12894243,
+          "z": 0.487973928,
+          "magnitude": 1.0,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1180.043,
+        "sqrMagnitude": 1392501.38
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "dome": {
+      "positionHome": {
+        "x": -81.5948639,
+        "y": 3.04493332,
+        "z": 1717.63562,
+        "normalized": {
+          "x": -0.04745059,
+          "y": 0.00177074724,
+          "z": 0.998872,
+          "normalized": {
+            "x": -0.0474505946,
+            "y": 0.00177074736,
+            "z": 0.998872042,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.0
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1719.57532,
+        "sqrMagnitude": 2956939.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198383506301": {
+    "home": {
+      "positionHome": {
+        "x": 1245.586,
+        "y": 15.5298977,
+        "z": 129.128662,
+        "normalized": {
+          "x": 0.994592845,
+          "y": 0.0124005275,
+          "z": 0.103108443,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 1252.35779,
+        "sqrMagnitude": 1568400.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "tower": {
+      "positionHome": {
+        "x": 1024.32214,
+        "y": 152.1412,
+        "z": 577.728149,
+        "normalized": {
+          "x": 0.8638142,
+          "y": 0.128301173,
+          "z": 0.4872,
+          "magnitude": 1.0,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1185.81311,
+        "sqrMagnitude": 1406152.63
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198035665693": {
+    "1": {
+      "positionHome": {
+        "x": 677.218933,
+        "y": 17.248806,
+        "z": 39.0454178,
+        "normalized": {
+          "x": 0.998019457,
+          "y": 0.0254196133,
+          "z": 0.05754134,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 678.562866,
+        "sqrMagnitude": 460447.563
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561199866337898": {
+    "base": {
+      "positionHome": {
+        "x": 1141.2738,
+        "y": 28.7672939,
+        "z": 992.6568,
+        "normalized": {
+          "x": 0.7543889,
+          "y": 0.0190153569,
+          "z": 0.6561522,
+          "normalized": {
+            "x": 0.754389,
+            "y": 0.0190153588,
+            "z": 0.656152248,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1512.84534,
+        "sqrMagnitude": 2288701.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198375397546": {
+    "base": {
+      "positionHome": {
+        "x": 947.971741,
+        "y": 100.790688,
+        "z": -186.346222,
+        "normalized": {
+          "x": 0.9759253,
+          "y": 0.103762783,
+          "z": -0.19184117,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 971.3568,
+        "sqrMagnitude": 943534.1
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198345791124": {
+    "b": {
+      "positionHome": {
+        "x": 1126.34668,
+        "y": 21.905344,
+        "z": -456.4398,
+        "normalized": {
+          "x": 0.926642358,
+          "y": 0.0180214662,
+          "z": -0.375511765,
+          "normalized": {
+            "x": 0.9266424,
+            "y": 0.0180214681,
+            "z": -0.3755118,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.0
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1215.51392,
+        "sqrMagnitude": 1477474.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561199235358381": {
+    "b": {
+      "positionHome": {
+        "x": 1124.87952,
+        "y": 21.9081173,
+        "z": -456.400024,
+        "normalized": {
+          "x": 0.9264829,
+          "y": 0.0180441514,
+          "z": -0.3759041,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.00000012
+        },
+        "magnitude": 1214.13953,
+        "sqrMagnitude": 1474134.88
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198267189996": {},
+  "76561199649462056": {},
+  "76561199213509672": {},
+  "76561198999887494": {},
+  "76561199146317627": {},
+  "76561198101618468": {},
+  "76561199564217592": {},
+  "76561199119497727": {}
+}

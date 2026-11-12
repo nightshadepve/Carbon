@@ -1,3 +1,10 @@
 {
-  "MarketData": {}
+  "MarketData": {
+    "7017428": {
+      "PlayerName": "Blue",
+      "OwnerID": 76561199069700597,
+      "Condition": 100.0,
+      "Vending": []
+    }
+  }
 }

@@ -725,6 +725,21 @@
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}
     },
+    "blueprintbook": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
+    "blueprintfragment": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
+    "blueprintpage": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
     "blunderbuss": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
@@ -1216,6 +1231,11 @@
       "Skin Overrides (Skin ID/Override Price)": {}
     },
     "clothing.mod.armorinsert_wood": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
+    "clothing.mod.armorinsert_wool": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}
@@ -3765,6 +3785,11 @@
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}
     },
+    "minifridge": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
     "minigun": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
@@ -4086,6 +4111,11 @@
       "Skin Overrides (Skin ID/Override Price)": {}
     },
     "pie.crocodile": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
+    "pie.crocodile.rich": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}
@@ -4935,6 +4965,11 @@
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}
     },
+    "shears": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
     "sheetmetal": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
@@ -5326,6 +5361,11 @@
       "Skin Overrides (Skin ID/Override Price)": {}
     },
     "smg.thompson": {
+      "Price": 0.0,
+      "Price multiplier for skin variants (excluding overrides)": 1.5,
+      "Skin Overrides (Skin ID/Override Price)": {}
+    },
+    "smg.uzi": {
       "Price": 0.0,
       "Price multiplier for skin variants (excluding overrides)": 1.5,
       "Skin Overrides (Skin ID/Override Price)": {}

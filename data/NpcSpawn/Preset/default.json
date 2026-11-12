@@ -160,5 +160,6 @@
   "MeleeDamageScale": 0.75,
   "BarricadeHealthThreshold": 30.0,
   "BarricadeDistanceThreshold": 12.0,
-  "HealingScale": 1.0
+  "HealingScale": 1.0,
+  "AlwaysUseLights": false
 }

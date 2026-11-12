@@ -1,5 +1,5 @@
 {
-  "Version": "1.7.1",
+  "Version": "1.7.2",
   "CustomWallpapers": {
     "Wall": [
       3490858948,
@@ -51,5 +51,6 @@
       3491842568,
       3505354220
     ]
-  }
+  },
+  "RemovedWallpapers": {}
 }

@@ -2,7 +2,7 @@
   "PlayerData": {
     "76561198035665693": {
       "Enabled": true,
-      "SortByCategory": true
+      "SortByCategory": false
     },
     "76561198320243883": {
       "Enabled": true,
@@ -159,6 +159,14 @@
     "76561199389941588": {
       "Enabled": true,
       "SortByCategory": false
+    },
+    "76561199235358381": {
+      "Enabled": true,
+      "SortByCategory": true
+    },
+    "76561198345791124": {
+      "Enabled": true,
+      "SortByCategory": true
     }
   }
 }

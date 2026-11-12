@@ -12,6 +12,22 @@
       "Tugboat": {
         "entityID": 0,
         "lastDeath": 0.0
+      },
+      "DuneBuggie": {
+        "entityID": 0,
+        "lastDeath": 1794186357.77
+      },
+      "Tumbler": {
+        "entityID": 0,
+        "lastDeath": 1794186508.208
+      },
+      "DuneTruckArmed": {
+        "entityID": 0,
+        "lastDeath": 1794216545.645
+      },
+      "DuneBuggieOffroad": {
+        "entityID": 0,
+        "lastDeath": 1794369017.379
       }
     },
     "76561198839853772": {
@@ -25,11 +41,11 @@
       },
       "Chinook": {
         "entityID": 0,
-        "lastDeath": 0.0
+        "lastDeath": 1794355745.731
       },
       "Tugboat": {
         "entityID": 0,
-        "lastDeath": 0.0
+        "lastDeath": 1794448412.566
       }
     },
     "76561197996909849": {
@@ -88,7 +104,17 @@
     },
     "76561199389941588": {
       "Tugboat": {
-        "entityID": 311834,
+        "entityID": 0,
+        "lastDeath": 0.0
+      }
+    },
+    "76561199069700597": {
+      "TumblerArmed": {
+        "entityID": 0,
+        "lastDeath": 1794330631.394
+      },
+      "Tugboat": {
+        "entityID": 5771912,
         "lastDeath": 0.0
       }
     }

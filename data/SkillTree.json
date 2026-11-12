@@ -1,7 +1,8 @@
 {
-  "wipeTime": "2026-09-03T18:12:42.962722+00:00",
+  "wipeTime": "2026-11-05T19:06:43.830741+00:00",
   "HighestPlayer": 0,
+  "highestPlayerPoints": 0,
   "nextXPCapReset": "0001-01-01T00:00:00",
   "updated": true,
-  "LastProtocolSave": 288
+  "LastProtocolSave": 290
 }

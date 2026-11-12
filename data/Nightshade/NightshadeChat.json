@@ -5,7 +5,7 @@
         "vipx"
       ],
       "NameColor": "__custom",
-      "ChatColor": "aurora",
+      "ChatColor": "blush",
       "ShowBroadcasts": true,
       "CustomNameColors": [
         "#D9B8FF",
@@ -132,6 +132,61 @@
       "CustomNameColors": null
     },
     "76561198121242019": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198839853772": {
+      "Tags": [
+        "vipx"
+      ],
+      "NameColor": "twilight",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": [
+        "#4361EE",
+        "#8B3FBF",
+        "#FF69B4"
+      ]
+    },
+    "76561198101618468": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198138332799": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561199146317627": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198345791124": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561199235358381": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561199649462056": {
       "Tags": [],
       "NameColor": "",
       "ChatColor": "",
