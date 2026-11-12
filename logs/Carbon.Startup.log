@@ -588,3 +588,16 @@
 [2026-10-31 10:01:45]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
 [2026-10-31 10:01:45]  Removed 'Microsoft.CodeAnalysis.dll'
 [2026-10-31 10:01:45]  Removed 'System.Collections.Immutable.dll'
+[2026-11-12 14:15:01]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-12 14:15:01]  Preloaded 0Harmony 2.4.3.0
+[2026-11-12 14:15:01]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-12 14:15:01]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-12 14:15:01]  Preloaded SharpCompress 0.32.2.0
+[2026-11-12 14:15:01]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-12 14:15:01]  Preloaded protobuf-net 3.0.0.0
+[2026-11-12 14:15:01]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-12 14:15:01]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-12 14:15:01]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-12 14:15:01]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-12 14:15:01]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-12 14:15:01]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1

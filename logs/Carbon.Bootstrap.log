@@ -275,3 +275,9 @@
 [2026-10-31 10:01:55] [w] If you'd like to opt-out, disable it in the 'config.json' file.
 [2026-10-31 10:01:55] Applying Harmony patches
 [2026-10-31 10:01:56] Library resolver attached to 'Unity Root Domain'
+[2026-11-12 14:15:17] Carbon.Bootstrap loaded.
+[2026-11-12 14:15:17] [w] We use Google Analytics to collect basic data about Carbon such as Carbon version, platform, branch and plug-in count.
+[2026-11-12 14:15:17] [w] We have no access to any personal identifiable data such as steamids, server name, ip:port, title or description.
+[2026-11-12 14:15:17] [w] If you'd like to opt-out, disable it in the 'config.json' file.
+[2026-11-12 14:15:17] Applying Harmony patches
+[2026-11-12 14:15:18] Library resolver attached to 'Unity Root Domain'
