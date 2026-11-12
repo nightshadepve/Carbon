@@ -13,8 +13,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.5.0")]
-    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel to the left of the hotbar.")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.0")]
+    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel left of the hotbar, and under the clothing column while inventory is open.")]
     public class NightshadeVoteDay : RustPlugin
     {
         // --- Config ---
@@ -39,7 +39,8 @@ namespace Oxide.Plugins
         private const float UiGapSeconds = 0.3f;
         private const string ToggleName = "NightshadeVoteDay.Toggle";
         private const string UiCommand = "nightshadevoteday.ui";
-        private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
+        private const string MenuSuffix = ".Inv";
+        private const string LegacyLogoUrl = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
         private const int SkipStateVersion = 2;
         internal const string ModeKey = "Vote mode (Daily = vote every night, SkipMultiple = a pass sets this night to morning, then the next N nights have no vote and run normally)";
         internal const string QuietNightsKey = "Nights without a vote after a pass (SkipMultiple only, default 2; these nights are not set to morning)";
@@ -83,8 +84,11 @@ namespace Oxide.Plugins
             [JsonProperty("Show vote panel")]
             public bool ShowPanel = true;
 
-            [JsonProperty(NightshadeVoteDayRules.LayerKey)]
-            public string PanelLayer = NightshadeVoteDayRules.MenuLayer;
+            [JsonProperty(NightshadeVoteDayRules.ClosedLayerKey)]
+            public string ClosedLayer = NightshadeVoteDayRules.ClosedLayerName;
+
+            [JsonProperty(NightshadeVoteDayRules.OpenLayerKey)]
+            public string OpenLayer = NightshadeVoteDayRules.OpenLayerName;
 
             [JsonProperty("Theme mode (Shop, Auto, or a theme name)")]
             public string ThemeMode = "Shop";
@@ -112,6 +116,12 @@ namespace Oxide.Plugins
 
             [JsonProperty("Collapsed size (px)")]
             public float CollapsedSize = NightshadeVoteDayRules.DefaultCollapsed;
+
+            [JsonProperty(NightshadeVoteDayRules.OpenRightKey)]
+            public float OpenRight = NightshadeVoteDayRules.DefaultOpenRight;
+
+            [JsonProperty(NightshadeVoteDayRules.OpenBottomKey)]
+            public float OpenBottom = NightshadeVoteDayRules.DefaultOpenBottom;
 
             [JsonProperty("Panel opacity (0-100)")]
             public float PanelOpacity = 94f;
@@ -149,11 +159,14 @@ namespace Oxide.Plugins
             [JsonProperty("Cursor key (firethird, use, reload, none)")]
             public string CursorKey = "firethird";
 
-            [JsonProperty("Panel logo URL (empty hides the logo)")]
-            public string PanelLogoUrl = DefaultLogo;
+            [JsonProperty(NightshadeVoteDayRules.LogoKey)]
+            public string PanelLogoUrl = "";
 
             [JsonProperty("Seconds to keep the panel after the vote ends (0 removes it immediately)")]
             public float ResultHoldSeconds = 6f;
+
+            [JsonProperty(NightshadeVoteDayRules.ConfigVersionKey)]
+            public int ConfigVersion = 0;
         }
 
         internal class SkipState
@@ -210,8 +223,10 @@ namespace Oxide.Plugins
         {
             if (config == null) return;
             config.PanelAnchor = NightshadeVoteDayRules.CleanAnchor(config.PanelAnchor);
-            if (string.IsNullOrWhiteSpace(config.PanelLayer)) config.PanelLayer = NightshadeVoteDayRules.MenuLayer;
-            else config.PanelLayer = config.PanelLayer.Trim();
+            if (string.IsNullOrWhiteSpace(config.ClosedLayer)) config.ClosedLayer = NightshadeVoteDayRules.ClosedLayerName;
+            else config.ClosedLayer = config.ClosedLayer.Trim();
+            if (string.IsNullOrWhiteSpace(config.OpenLayer)) config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+            else config.OpenLayer = config.OpenLayer.Trim();
             if (string.IsNullOrWhiteSpace(config.ThemeMode)) config.ThemeMode = "Shop";
             if (string.IsNullOrWhiteSpace(config.ThemeFile)) config.ThemeFile = "NightshadeShop.json";
             if (string.IsNullOrWhiteSpace(config.PanelTitle)) config.PanelTitle = "Skip Night";
@@ -224,7 +239,8 @@ namespace Oxide.Plugins
             if (string.IsNullOrWhiteSpace(config.FailColor)) config.FailColor = "#D58D7C";
             if (string.IsNullOrWhiteSpace(config.SunColor)) config.SunColor = "#E2B968";
             if (string.IsNullOrWhiteSpace(config.TrackColor)) config.TrackColor = "#120A1C";
-            if (config.PanelLogoUrl == null) config.PanelLogoUrl = DefaultLogo;
+            if (config.PanelLogoUrl == null) config.PanelLogoUrl = "";
+            else config.PanelLogoUrl = config.PanelLogoUrl.Trim();
             NightshadeVoteDayRules.MigratePanelSize(config);
             if (float.IsNaN(config.PanelWidth) || config.PanelWidth < 120f) config.PanelWidth = NightshadeVoteDayRules.DefaultWidth;
             if (config.PanelWidth > 420f) config.PanelWidth = 420f;
@@ -238,6 +254,8 @@ namespace Oxide.Plugins
             if (float.IsNaN(config.ResultHoldSeconds) || config.ResultHoldSeconds < 0f) config.ResultHoldSeconds = 0f;
             if (float.IsNaN(config.HotbarLeft) || float.IsInfinity(config.HotbarLeft)) config.HotbarLeft = NightshadeVoteDayRules.DefaultHotbarLeft;
             if (float.IsNaN(config.PanelBottom) || float.IsInfinity(config.PanelBottom)) config.PanelBottom = NightshadeVoteDayRules.DefaultBottom;
+            if (float.IsNaN(config.OpenRight) || float.IsInfinity(config.OpenRight)) config.OpenRight = NightshadeVoteDayRules.DefaultOpenRight;
+            if (float.IsNaN(config.OpenBottom) || float.IsInfinity(config.OpenBottom)) config.OpenBottom = NightshadeVoteDayRules.DefaultOpenBottom;
         }
 
         protected override void LoadDefaultConfig() => _config = new PluginConfig();
@@ -257,20 +275,66 @@ namespace Oxide.Plugins
                     oldNights = oldValue.ToString(CultureInfo.InvariantCulture);
             }
             ApplyMigratedValues(hasNewMode, oldMode, hasNewNights, oldNights, config);
-            MigrateLayer(raw, config);
+            if (config.ConfigVersion < NightshadeVoteDayRules.CurrentConfigVersion)
+            {
+                MigrateLogo(raw, config);
+                MigratePanelLayers(raw, config);
+                config.ConfigVersion = NightshadeVoteDayRules.CurrentConfigVersion;
+            }
         }
 
-        internal static void MigrateLayer(JObject raw, PluginConfig config)
+        internal static void MigrateLogo(JObject raw, PluginConfig config)
         {
-            if (raw == null || config == null) return;
-            if (raw[NightshadeVoteDayRules.LayerKey] != null && raw[NightshadeVoteDayRules.LayerKey].Type != JTokenType.Null) return;
-            JToken old = raw[NightshadeVoteDayRules.OldLayerKey];
-            if (old == null || old.Type == JTokenType.Null) return;
-            string text = old.Type == JTokenType.String ? (string)old : old.ToString();
-            if (string.IsNullOrWhiteSpace(text)) return;
-            text = text.Trim();
-            if (text.Equals("Hud", StringComparison.OrdinalIgnoreCase)) return;
-            config.PanelLayer = text;
+            if (config == null) return;
+            if (!HasConfigKey(raw, NightshadeVoteDayRules.LogoKey))
+            {
+                config.PanelLogoUrl = "";
+                return;
+            }
+            string url = ConfigText(raw[NightshadeVoteDayRules.LogoKey]);
+            if (url != null && string.Equals(url.Trim(), LegacyLogoUrl, StringComparison.Ordinal))
+                config.PanelLogoUrl = "";
+        }
+
+        internal static void MigratePanelLayers(JObject raw, PluginConfig config)
+        {
+            if (config == null) return;
+            bool hasClosed = HasConfigKey(raw, NightshadeVoteDayRules.ClosedLayerKey);
+            bool hasOpen = HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey);
+            if (hasClosed && hasOpen) return;
+            string legacy = null;
+            if (HasConfigKey(raw, NightshadeVoteDayRules.LayerKey))
+                legacy = ConfigText(raw[NightshadeVoteDayRules.LayerKey]);
+            else if (HasConfigKey(raw, NightshadeVoteDayRules.OldLayerKey))
+                legacy = ConfigText(raw[NightshadeVoteDayRules.OldLayerKey]);
+            if (!hasClosed)
+            {
+                if (string.IsNullOrWhiteSpace(legacy) || IsStockPanelLayer(legacy))
+                    config.ClosedLayer = NightshadeVoteDayRules.ClosedLayerName;
+                else
+                    config.ClosedLayer = legacy.Trim();
+            }
+            if (!hasOpen)
+                config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+        }
+
+        private static bool HasConfigKey(JObject raw, string key)
+        {
+            return raw != null && raw[key] != null && raw[key].Type != JTokenType.Null;
+        }
+
+        private static string ConfigText(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return null;
+            return token.Type == JTokenType.String ? (string)token : token.ToString();
+        }
+
+        private static bool IsStockPanelLayer(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            value = value.Trim();
+            return value.Equals("Overlay", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("Hud", StringComparison.OrdinalIgnoreCase);
         }
 
         internal static void ApplyMigratedValues(bool hasNewMode, string oldMode, bool hasNewNights, string oldNightsText, PluginConfig config)
@@ -429,7 +493,7 @@ namespace Oxide.Plugins
             _confirming.Remove(player.userID);
             _uiNext.Remove(player.userID);
             _notes.Remove(player.userID);
-            CuiHelper.DestroyUi(player, Root);
+            DestroyPanel(player);
         }
 
         private void OnPlayerInput(BasePlayer player, InputState input)
@@ -1019,8 +1083,15 @@ namespace Oxide.Plugins
             if (BasePlayer.activePlayerList == null) return;
             foreach (BasePlayer player in BasePlayer.activePlayerList)
             {
-                if (player != null) CuiHelper.DestroyUi(player, Root);
+                if (player != null) DestroyPanel(player);
             }
+        }
+
+        private static void DestroyPanel(BasePlayer player)
+        {
+            if (player == null) return;
+            CuiHelper.DestroyUi(player, Root);
+            CuiHelper.DestroyUi(player, Root + MenuSuffix);
         }
 
         private void ShowIfOpen(BasePlayer player)
@@ -1094,14 +1165,25 @@ namespace Oxide.Plugins
                     var container = new CuiElementContainer();
                     if (secondsChanged)
                     {
-                        if (collapsed) AddTextUpdate(container, CountName, secondText, ink, 12, TextAnchor.MiddleLeft, true);
-                        else AddTextUpdate(container, CountName, headline, countColor, font, TextAnchor.MiddleCenter, true);
+                        if (collapsed)
+                        {
+                            AddTextUpdate(container, CountName, secondText, ink, 12, TextAnchor.MiddleLeft, true);
+                            AddTextUpdate(container, CountName + MenuSuffix, secondText, ink, 12, TextAnchor.MiddleLeft, true);
+                        }
+                        else
+                        {
+                            AddTextUpdate(container, CountName, headline, countColor, font, TextAnchor.MiddleCenter, true);
+                            AddTextUpdate(container, CountName + MenuSuffix, headline, countColor, font, TextAnchor.MiddleCenter, true);
+                        }
                     }
                     if (!collapsed && votesChanged)
                     {
-                        AddFill(container, fraction);
-                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
-                        AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
+                        AddFill(container, fraction, false);
+                        AddFill(container, fraction, true);
+                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0", false);
+                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0", true);
+                        AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", false);
+                        AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", true);
                     }
                     if (container.Count > 0) CuiHelper.AddUi(player, container);
                 });
@@ -1166,10 +1248,18 @@ namespace Oxide.Plugins
             if (player == null || !player.IsConnected) return;
             try
             {
-                CuiHelper.DestroyUi(player, Root);
+                DestroyPanel(player);
                 var container = new CuiElementContainer();
-                if (IsCollapsed(player)) BuildCollapsed(container, player);
-                else BuildExpanded(container, player);
+                if (IsCollapsed(player))
+                {
+                    BuildCollapsed(container, player, false);
+                    BuildCollapsed(container, player, true);
+                }
+                else
+                {
+                    BuildExpanded(container, player, false);
+                    BuildExpanded(container, player, true);
+                }
                 CuiHelper.AddUi(player, container);
             }
             catch (Exception ex)
@@ -1178,95 +1268,127 @@ namespace Oxide.Plugins
             }
         }
 
-        private void BuildExpanded(CuiElementContainer container, BasePlayer player)
+        private void BuildExpanded(CuiElementContainer container, BasePlayer player, bool menu)
         {
             float width = _config.PanelWidth;
             bool voting = _phase == NightshadeVoteDayRules.PhaseVoting;
             float height = voting ? _config.PanelHeight : Math.Min(_config.PanelHeight, -NightshadeVoteDayRules.StatusBottom + 4f);
-            NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
-            AddRoot(container, box, WantsCursor(player));
-            AddRect(container, "NightshadeVoteDay.Head", BgName, Hex(P().Header), null, 0f, NightshadeVoteDayRules.HeaderBottom, width, 0f);
-            AddRect(container, "NightshadeVoteDay.Rule", BgName, Hex(P().Accent), null, 0f, NightshadeVoteDayRules.RuleBottom, width, NightshadeVoteDayRules.HeaderBottom);
-            AddLogo(container, 3f, -2f, 12f);
-            AddSun(container, 17f, -2f, 12f);
+            NightshadeVoteDayRules.ScreenBox box = PanelBox(menu, width, height);
+            AddRoot(container, box, menu, menu ? false : WantsCursor(player));
+            AddRect(container, "NightshadeVoteDay.Head", BgName, Hex(P().Header), null, 0f, NightshadeVoteDayRules.HeaderBottom, width, 0f, menu);
+            AddRect(container, "NightshadeVoteDay.Rule", BgName, Hex(P().Accent), null, 0f, NightshadeVoteDayRules.RuleBottom, width, NightshadeVoteDayRules.HeaderBottom, menu);
             string title = string.IsNullOrWhiteSpace(_config.PanelTitle) ? "Skip Night" : _config.PanelTitle.Trim();
-            AddText(container, TitleName, BgName, title, Hex(P().Text), 10, TextAnchor.MiddleLeft, true, 32f, NightshadeVoteDayRules.HeaderBottom, width - 16f, -1f);
-            AddText(container, "NightshadeVoteDay.Chevron", BgName, "v", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 2f, -1f);
-            AddToggle(container, width - 16f, -1f, 14f, 14f);
-            string headline = NightshadeVoteDayRules.Headline(_phase, RemainingSeconds(), _buyerName);
-            int font = voting ? 15 : HeadlineFont(headline);
-            AddText(container, CountName, BgName, headline, HeadlineColor(), font, TextAnchor.MiddleCenter, true, 4f, NightshadeVoteDayRules.CountBottom, width - 4f, NightshadeVoteDayRules.CountTop);
-            AddRect(container, TrackName, BgName, Hex(P().Card), null, 4f, NightshadeVoteDayRules.TrackBottom, width - 4f, NightshadeVoteDayRules.TrackTop);
-            AddFill(container, NightshadeVoteDayRules.VoteFraction(DisplayVotes(), DisplayNeeded()));
-            AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(P().Text), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0");
-            AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(P().Text), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0");
-            string status;
-            string kind;
-            PlayerStatus(player, out status, out kind);
-            AddText(container, StatusName, BgName, status, KindColor(kind), 8, TextAnchor.MiddleCenter, false, 4f, NightshadeVoteDayRules.StatusBottom, width - 4f, NightshadeVoteDayRules.StatusTop);
-            if (!voting) return;
-            bool voted = player != null && _votes.Contains(player.userID);
-            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, NightshadeVoteDayRules.VoteBottom, width - 4f, NightshadeVoteDayRules.VoteTop);
-            if (player != null && _confirming.Contains(player.userID))
+            if (HasLogo())
             {
-                float mid = 4f + (width - 8f) * 0.5f;
-                AddActionButton(container, ConfirmButton, UiCommand + " confirm", Hex(P().Accent), Ui("UiConfirm"), Hex(P().AccentText), 4f, NightshadeVoteDayRules.ActionBottom, mid - 2f, NightshadeVoteDayRules.ActionTop);
-                AddActionButton(container, CancelButton, UiCommand + " cancel", Hex(P().Button), Ui("UiCancel"), Hex(P().Danger), mid + 2f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop);
+                AddLogo(container, 3f, -2f, 12f, menu);
+                AddSun(container, 17f, -2f, 12f, menu);
+                AddText(container, TitleName, BgName, title, Hex(P().Text), 10, TextAnchor.MiddleLeft, true, 32f, NightshadeVoteDayRules.HeaderBottom, width - 16f, -1f, menu);
             }
             else
             {
-                AddActionButton(container, BuyButton, UiCommand + " buy", Hex(P().Button), BuyText(), Hex(P().ButtonText), 4f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop);
+                AddSun(container, 2f, -2f, 12f, menu);
+                AddText(container, TitleName, BgName, title, Hex(P().Text), 10, TextAnchor.MiddleCenter, true, 16f, NightshadeVoteDayRules.HeaderBottom, width - 16f, -1f, menu);
+            }
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "v", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 2f, -1f, menu);
+            AddToggle(container, width - 16f, -1f, 14f, 14f, menu);
+            string headline = NightshadeVoteDayRules.Headline(_phase, RemainingSeconds(), _buyerName);
+            int font = voting ? 15 : HeadlineFont(headline);
+            AddText(container, CountName, BgName, headline, HeadlineColor(), font, TextAnchor.MiddleCenter, true, 4f, NightshadeVoteDayRules.CountBottom, width - 4f, NightshadeVoteDayRules.CountTop, menu);
+            AddRect(container, TrackName, BgName, Hex(P().Card), null, 4f, NightshadeVoteDayRules.TrackBottom, width - 4f, NightshadeVoteDayRules.TrackTop, menu);
+            AddFill(container, NightshadeVoteDayRules.VoteFraction(DisplayVotes(), DisplayNeeded()), menu);
+            AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), Hex(P().Text), 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0", menu);
+            AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(P().Text), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", menu);
+            string status;
+            string kind;
+            PlayerStatus(player, out status, out kind);
+            AddText(container, StatusName, BgName, status, KindColor(kind), 8, TextAnchor.MiddleCenter, false, 4f, NightshadeVoteDayRules.StatusBottom, width - 4f, NightshadeVoteDayRules.StatusTop, menu);
+            if (!voting) return;
+            bool voted = player != null && _votes.Contains(player.userID);
+            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, NightshadeVoteDayRules.VoteBottom, width - 4f, NightshadeVoteDayRules.VoteTop, menu);
+            if (player != null && _confirming.Contains(player.userID))
+            {
+                float mid = 4f + (width - 8f) * 0.5f;
+                AddActionButton(container, ConfirmButton, UiCommand + " confirm", Hex(P().Accent), Ui("UiConfirm"), Hex(P().AccentText), 4f, NightshadeVoteDayRules.ActionBottom, mid - 2f, NightshadeVoteDayRules.ActionTop, menu);
+                AddActionButton(container, CancelButton, UiCommand + " cancel", Hex(P().Button), Ui("UiCancel"), Hex(P().Danger), mid + 2f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop, menu);
+            }
+            else
+            {
+                AddActionButton(container, BuyButton, UiCommand + " buy", Hex(P().Button), BuyText(), Hex(P().ButtonText), 4f, NightshadeVoteDayRules.ActionBottom, width - 4f, NightshadeVoteDayRules.ActionTop, menu);
             }
         }
 
-        private void BuildCollapsed(CuiElementContainer container, BasePlayer player)
+        private void BuildCollapsed(CuiElementContainer container, BasePlayer player, bool menu)
         {
             float width = _config.PanelWidth;
             float height = _config.CollapsedSize;
-            NightshadeVoteDayRules.ScreenBox box = NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
-            AddRoot(container, box, false);
+            NightshadeVoteDayRules.ScreenBox box = PanelBox(menu, width, height);
+            AddRoot(container, box, menu, false);
             float sun = Math.Min(14f, Math.Max(11f, height * 0.35f));
-            AddSun(container, 4f, -2f, sun);
+            AddSun(container, 4f, -2f, sun, menu);
             float mid = -2f - sun;
-            AddText(container, CountName, BgName, RemainingSeconds().ToString(CultureInfo.InvariantCulture), Hex(P().Text), 12, TextAnchor.MiddleLeft, true, 6f + sun, mid, 40f + sun, -2f);
-            AddText(container, PriceName, BgName, CostLabel(), Hex(P().Accent), 9, TextAnchor.MiddleLeft, true, 42f + sun, mid, width - 16f, -2f);
+            AddText(container, CountName, BgName, RemainingSeconds().ToString(CultureInfo.InvariantCulture), Hex(P().Text), 12, TextAnchor.MiddleLeft, true, 6f + sun, mid, 40f + sun, -2f, menu);
+            AddText(container, PriceName, BgName, CostLabel(), Hex(P().Accent), 9, TextAnchor.MiddleLeft, true, 42f + sun, mid, width - 16f, -2f, menu);
             bool voted = player != null && _votes.Contains(player.userID);
-            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, 3f - height, 72f, mid - 2f);
-            AddText(container, "NightshadeVoteDay.Chevron", BgName, "^", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 1f, -1f);
-            AddToggle(container, width - 16f, -1f, 14f, 14f);
+            AddActionButton(container, VoteButton, UiCommand + " vote", voted ? Hex(P().Card) : Hex(P().Accent), voted ? Ui("UiVoted") : Ui("UiVote"), voted ? Hex(P().Success) : Hex(P().AccentText), 4f, 3f - height, 72f, mid - 2f, menu);
+            AddText(container, "NightshadeVoteDay.Chevron", BgName, "^", Hex(P().SubText), 10, TextAnchor.MiddleCenter, true, width - 14f, -14f, width - 1f, -1f, menu);
+            AddToggle(container, width - 16f, -1f, 14f, 14f, menu);
         }
 
-        // Hud is drawn under the inventory blur, so a panel parented there cannot be clicked while inventory is open.
-        // Overlay is the layer NightshadeHud uses for UI that stays up in that menu, and it sits above Hud.Menu.
-        // The inventory cursor is already free, so these buttons take clicks without the cursor key.
-        private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool cursor)
+        // The hotbar copy is parented to Hud, which hides while the inventory menu is open.
+        // The attire copy is parented to Hud.Menu, which is shown only in that menu, so the
+        // two positions never appear together. Inventory already frees the cursor.
+        private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool menu, bool cursor)
         {
-            string layer = _config == null || string.IsNullOrEmpty(_config.PanelLayer) ? NightshadeVoteDayRules.MenuLayer : _config.PanelLayer;
-            var root = new CuiElement
+            string root = UiId(Root, menu);
+            string layer = menu ? _config.OpenLayer : _config.ClosedLayer;
+            if (string.IsNullOrEmpty(layer)) layer = menu ? NightshadeVoteDayRules.OpenLayerName : NightshadeVoteDayRules.ClosedLayerName;
+            var element = new CuiElement
             {
-                Name = Root,
+                Name = root,
                 Parent = layer,
-                DestroyUi = Root
+                DestroyUi = root
             };
-            root.Components.Add(new CuiImageComponent { Color = Hex(P().Accent), BlocksRaycast = true });
-            root.Components.Add(new CuiRectTransformComponent { AnchorMin = box.Anchor, AnchorMax = box.Anchor, OffsetMin = box.OffsetMin, OffsetMax = box.OffsetMax });
-            if (cursor) root.Components.Add(new CuiNeedsCursorComponent());
-            container.Add(root);
+            element.Components.Add(new CuiImageComponent { Color = Hex(P().Accent), BlocksRaycast = true });
+            element.Components.Add(new CuiRectTransformComponent { AnchorMin = box.Anchor, AnchorMax = box.Anchor, OffsetMin = box.OffsetMin, OffsetMax = box.OffsetMax });
+            if (cursor) element.Components.Add(new CuiNeedsCursorComponent());
+            container.Add(element);
             container.Add(new CuiPanel
             {
                 Image = { Color = Hex(P().Background) },
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "1 1", OffsetMax = "-1 -1" },
                 CursorEnabled = false
-            }, Root, BgName);
+            }, root, UiId(BgName, menu));
         }
 
-        private void AddLogo(CuiElementContainer container, float left, float top, float size)
+        private NightshadeVoteDayRules.ScreenBox PanelBox(bool menu, float width, float height)
         {
-            if (string.IsNullOrWhiteSpace(_config.PanelLogoUrl)) return;
+            if (menu)
+            {
+                float right = _config.OpenRight;
+                if (float.IsNaN(right) || float.IsInfinity(right)) right = NightshadeVoteDayRules.DefaultOpenRight;
+                return NightshadeVoteDayRules.Place(right - width, _config.OpenBottom, width, height, _config.PanelAnchor);
+            }
+            return NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
+        }
+
+        private bool HasLogo()
+        {
+            return _config != null && !string.IsNullOrWhiteSpace(_config.PanelLogoUrl);
+        }
+
+        private static string UiId(string name, bool menu)
+        {
+            if (!menu || string.IsNullOrEmpty(name)) return name;
+            return name + MenuSuffix;
+        }
+
+        private void AddLogo(CuiElementContainer container, float left, float top, float size, bool menu)
+        {
+            if (!HasLogo()) return;
             container.Add(new CuiElement
             {
-                Name = LogoName,
-                Parent = BgName,
+                Name = UiId(LogoName, menu),
+                Parent = UiId(BgName, menu),
                 Components =
                 {
                     new CuiRawImageComponent
@@ -1286,7 +1408,7 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddSun(CuiElementContainer container, float left, float top, float size)
+        private void AddSun(CuiElementContainer container, float left, float top, float size, bool menu)
         {
             string color = Hex(P().Accent);
             float body = size * 0.46f;
@@ -1294,23 +1416,24 @@ namespace Oxide.Plugins
             float bodyLeft = left + inset;
             float bodyTop = top - inset;
             float bodyBottom = bodyTop - body;
-            AddRect(container, SunName, BgName, color, "assets/icons/circle_closed.png", bodyLeft, bodyBottom, bodyLeft + body, bodyTop);
+            AddRect(container, SunName, BgName, color, "assets/icons/circle_closed.png", bodyLeft, bodyBottom, bodyLeft + body, bodyTop, menu);
             float thick = 1.5f;
             float ray = size * 0.2f;
             float cx = left + size * 0.5f;
             float mid = (bodyTop + bodyBottom) * 0.5f;
-            AddRect(container, SunName + "U", BgName, color, null, cx - thick * 0.5f, bodyTop + 1f, cx + thick * 0.5f, bodyTop + 1f + ray);
-            AddRect(container, SunName + "D", BgName, color, null, cx - thick * 0.5f, bodyBottom - 1f - ray, cx + thick * 0.5f, bodyBottom - 1f);
-            AddRect(container, SunName + "L", BgName, color, null, bodyLeft - 1f - ray, mid - thick * 0.5f, bodyLeft - 1f, mid + thick * 0.5f);
-            AddRect(container, SunName + "R", BgName, color, null, bodyLeft + body + 1f, mid - thick * 0.5f, bodyLeft + body + 1f + ray, mid + thick * 0.5f);
+            AddRect(container, SunName + "U", BgName, color, null, cx - thick * 0.5f, bodyTop + 1f, cx + thick * 0.5f, bodyTop + 1f + ray, menu);
+            AddRect(container, SunName + "D", BgName, color, null, cx - thick * 0.5f, bodyBottom - 1f - ray, cx + thick * 0.5f, bodyBottom - 1f, menu);
+            AddRect(container, SunName + "L", BgName, color, null, bodyLeft - 1f - ray, mid - thick * 0.5f, bodyLeft - 1f, mid + thick * 0.5f, menu);
+            AddRect(container, SunName + "R", BgName, color, null, bodyLeft + body + 1f, mid - thick * 0.5f, bodyLeft + body + 1f + ray, mid + thick * 0.5f, menu);
         }
 
-        private void AddActionButton(CuiElementContainer container, string name, string command, string color, string text, string textColor, float left, float bottom, float right, float top)
+        private void AddActionButton(CuiElementContainer container, string name, string command, string color, string text, string textColor, float left, float bottom, float right, float top, bool menu)
         {
+            name = UiId(name, menu);
             container.Add(new CuiElement
             {
                 Name = name,
-                Parent = BgName,
+                Parent = UiId(BgName, menu),
                 DestroyUi = name,
                 Components =
                 {
@@ -1330,12 +1453,12 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddToggle(CuiElementContainer container, float left, float top, float width, float height)
+        private void AddToggle(CuiElementContainer container, float left, float top, float width, float height, bool menu)
         {
             container.Add(new CuiElement
             {
-                Name = ToggleName,
-                Parent = BgName,
+                Name = UiId(ToggleName, menu),
+                Parent = UiId(BgName, menu),
                 Components =
                 {
                     new CuiButtonComponent { Command = UiCommand + " toggle", Color = "0 0 0 0.02" },
@@ -1350,7 +1473,7 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddFill(CuiElementContainer container, float fraction)
+        private void AddFill(CuiElementContainer container, float fraction, bool menu)
         {
             float track = Math.Max(0f, _config.PanelWidth - 8f);
             float inner = Math.Max(0f, track - 2f);
@@ -1360,11 +1483,12 @@ namespace Oxide.Plugins
                 : Hex(P().Accent);
             float right = width < 0.5f ? 1f : 1f + width;
             float top = width < 0.5f ? 1f : 12f;
+            string fill = UiId(FillName, menu);
             container.Add(new CuiElement
             {
-                Name = FillName,
-                Parent = TrackName,
-                DestroyUi = FillName,
+                Name = fill,
+                Parent = UiId(TrackName, menu),
+                DestroyUi = fill,
                 Components =
                 {
                     new CuiImageComponent { Color = width < 0.5f ? "0 0 0 0" : color },
@@ -1379,14 +1503,14 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddRect(CuiElementContainer container, string name, string parent, string color, string sprite, float left, float bottom, float right, float top)
+        private void AddRect(CuiElementContainer container, string name, string parent, string color, string sprite, float left, float bottom, float right, float top, bool menu)
         {
             var image = new CuiImageComponent { Color = color };
             if (!string.IsNullOrEmpty(sprite)) image.Sprite = sprite;
             container.Add(new CuiElement
             {
-                Name = name,
-                Parent = parent,
+                Name = UiId(name, menu),
+                Parent = UiId(parent, menu),
                 Components =
                 {
                     image,
@@ -1395,12 +1519,12 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, float left, float bottom, float right, float top)
+        private void AddText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, float left, float bottom, float right, float top, bool menu)
         {
             container.Add(new CuiElement
             {
-                Name = name,
-                Parent = parent,
+                Name = UiId(name, menu),
+                Parent = UiId(parent, menu),
                 Components =
                 {
                     TextComponent(text, color, size, align, bold),
@@ -1409,12 +1533,13 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddStretchText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax)
+        private void AddStretchText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax, bool menu)
         {
+            name = UiId(name, menu);
             container.Add(new CuiElement
             {
                 Name = name,
-                Parent = parent,
+                Parent = UiId(parent, menu),
                 DestroyUi = name,
                 Components =
                 {
@@ -1424,12 +1549,13 @@ namespace Oxide.Plugins
             });
         }
 
-        private void AddEdgeText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax)
+        private void AddEdgeText(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, bool bold, string offsetMin, string offsetMax, bool menu)
         {
+            name = UiId(name, menu);
             container.Add(new CuiElement
             {
                 Name = name,
-                Parent = parent,
+                Parent = UiId(parent, menu),
                 DestroyUi = name,
                 Components =
                 {
@@ -1889,11 +2015,27 @@ namespace Oxide.Plugins
         internal const string PhaseFailed = "failed";
         internal const string PhaseBought = "bought";
         internal static readonly string MenuLayer = "Overlay";
+        internal const string ClosedLayerName = "Hud";
+        internal const string OpenLayerName = "Hud.Menu";
         internal const string LayerKey = "Panel layer (Overlay stays above the inventory, Overall is above every menu, Hud sits under it)";
         internal const string OldLayerKey = "Panel layer (Hud sits with the hotbar, Overlay stays up in menus)";
+        internal const string ClosedLayerKey = "Panel layer when the inventory is closed (Hud hides while it is open)";
+        internal const string OpenLayerKey = "Panel layer when the inventory is open (Hud.Menu shows only then)";
+        internal const string OpenRightKey = "Inventory open panel right (px from bottom center)";
+        internal const string OpenBottomKey = "Inventory open panel bottom (px)";
+        internal const string LogoKey = "Panel logo URL (empty hides the logo)";
+        internal const string ConfigVersionKey = "Config version";
+        internal const int CurrentConfigVersion = 2;
         internal const float DefaultHotbarLeft = -204f;
         internal const float DefaultGap = 8f;
         internal const float DefaultBottom = 16f;
+        // The 1.5.0 panel (right edge at the hotbar gap) clips the lower attire slots
+        // while inventory is open. This copy sits 16px further left and 16px lower.
+        // The right edge is what stays clear of that column, so a wider panel grows left.
+        internal const float OpenNudgeLeft = 16f;
+        internal const float OpenNudgeDown = 16f;
+        internal const float DefaultOpenRight = DefaultHotbarLeft - DefaultGap - OpenNudgeLeft;
+        internal const float DefaultOpenBottom = DefaultBottom - OpenNudgeDown;
         internal static readonly float DefaultWidth = 136f;
         internal static readonly float DefaultHeight = 106f;
         internal static readonly float HeaderBottom = -16f;
@@ -1941,6 +2083,27 @@ namespace Oxide.Plugins
             if (float.IsNaN(gap) || gap < 0f) gap = 0f;
             float right = hotbarLeft - gap;
             float left = right - width;
+            float top = bottom + height;
+            string clean = CleanAnchor(anchor);
+            return new ScreenBox
+            {
+                Left = left,
+                Bottom = bottom,
+                Right = right,
+                Top = top,
+                Anchor = clean,
+                OffsetMin = Num(left) + " " + Num(bottom),
+                OffsetMax = Num(right) + " " + Num(top)
+            };
+        }
+
+        internal static ScreenBox Place(float left, float bottom, float width, float height, string anchor)
+        {
+            if (float.IsNaN(left) || float.IsInfinity(left)) left = DefaultOpenRight - DefaultWidth;
+            if (float.IsNaN(bottom) || float.IsInfinity(bottom)) bottom = DefaultOpenBottom;
+            if (float.IsNaN(width) || width < 1f) width = DefaultWidth;
+            if (float.IsNaN(height) || height < 1f) height = DefaultHeight;
+            float right = left + width;
             float top = bottom + height;
             string clean = CleanAnchor(anchor);
             return new ScreenBox
