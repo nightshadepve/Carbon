@@ -11,8 +11,9 @@
   "Theme source config file": "NightshadeShop.json",
   "Logo source config file": "NightshadeInfo.json",
   "Logo URL fallback": "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png",
-  "Window width": 700.0,
+  "Window width": 580.0,
   "Window height": 448.0,
+  "Layout version": 2,
   "Plugins that pause entity control while loaded": [
     "UltimateLocker"
   ],
