@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.1")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.2")]
     [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel left of the hotbar, and under the clothing column while inventory is open.")]
     public class NightshadeVoteDay : RustPlugin
     {
@@ -225,7 +225,8 @@ namespace Oxide.Plugins
             config.PanelAnchor = NightshadeVoteDayRules.CleanAnchor(config.PanelAnchor);
             if (string.IsNullOrWhiteSpace(config.ClosedLayer)) config.ClosedLayer = NightshadeVoteDayRules.ClosedLayerName;
             else config.ClosedLayer = config.ClosedLayer.Trim();
-            if (string.IsNullOrWhiteSpace(config.OpenLayer)) config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+            if (string.IsNullOrWhiteSpace(config.OpenLayer) || NightshadeVoteDayRules.IsBrokenOpenLayer(config.OpenLayer))
+                config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
             else config.OpenLayer = config.OpenLayer.Trim();
             if (string.IsNullOrWhiteSpace(config.ThemeMode)) config.ThemeMode = "Shop";
             if (string.IsNullOrWhiteSpace(config.ThemeFile)) config.ThemeFile = "NightshadeShop.json";
@@ -302,6 +303,7 @@ namespace Oxide.Plugins
             if (config == null) return;
             bool hasClosed = HasConfigKey(raw, NightshadeVoteDayRules.ClosedLayerKey);
             bool hasOpen = HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey)
+                || HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV3)
                 || HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV2);
             if (hasClosed && hasOpen) return;
             string legacy = null;
@@ -320,19 +322,19 @@ namespace Oxide.Plugins
                 config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
         }
 
-        // 1.6.0 stock "Hud.Menu" is under the inventory blur, so that copy never shows.
-        // A custom open layer (Overlay, Overall, or anything else) is left alone.
+        // 1.6.0 stock "Hud.Menu" sits under the inventory blur. 1.6.1 stock "Inventory"
+        // does not draw a plugin panel on this build either. Both become Overlay.
+        // A custom open layer (Overall, or anything else that is not one of those)
+        // is left alone.
         internal static void MigrateOpenLayer(JObject raw, PluginConfig config)
         {
             if (config == null) return;
-            if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey))
-            {
-                if (NightshadeVoteDayRules.IsBrokenOpenLayer(config.OpenLayer))
-                    config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
-                return;
-            }
             string previous = null;
-            if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV2))
+            if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey))
+                previous = ConfigText(raw[NightshadeVoteDayRules.OpenLayerKey]);
+            else if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV3))
+                previous = ConfigText(raw[NightshadeVoteDayRules.OpenLayerKeyV3]);
+            else if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV2))
                 previous = ConfigText(raw[NightshadeVoteDayRules.OpenLayerKeyV2]);
             else if (!string.IsNullOrWhiteSpace(config.OpenLayer))
                 previous = config.OpenLayer;
@@ -1168,8 +1170,7 @@ namespace Oxide.Plugins
                 bool priceChanged = cost != _shownCost;
                 if (!secondsChanged && !votesChanged && !priceChanged)
                 {
-                    // The inventory view can drop foreign children when it rebuilds. Replace that
-                    // copy on its own; the hotbar panel stays where it is.
+                    // Replace the clothing copy on its own. The hotbar card is a separate element.
                     EachPlayer(AddMenuCopy);
                     return;
                 }
@@ -1290,9 +1291,11 @@ namespace Oxide.Plugins
             }
         }
 
-        // Sent on its own. The inventory view is hidden while playing and shown only in that
-        // menu, so this copy does not sit on top of the hotbar panel. Rebuilding it replaces
-        // the root (DestroyUi) without touching the Hud copy.
+        // Clothing copy, own payload, so a rejected parent cannot drop the hotbar card.
+        // Overlay stays visible over the inventory. Hud is under the blur then, so
+        // that menu shows this copy only. While playing, Hud is the hotbar card and
+        // this copy is also up, 16px left and 16px lower. Tab is not a button this
+        // server can see, so the Overlay card cannot be removed until the inventory opens.
         private void AddMenuCopy(BasePlayer player)
         {
             if (player == null || !player.IsConnected || !_panelOpen || _config == null) return;
@@ -1368,17 +1371,13 @@ namespace Oxide.Plugins
             AddToggle(container, width - 16f, -1f, 14f, 14f, menu);
         }
 
-        // Hud sits under the inventory blur, so the hotbar copy disappears while that menu is open.
-        // The attire copy is parented to the Inventory view, which is the menu itself: hidden while
-        // playing, above the blur, and already holding the cursor. Hud.Menu is under that blur,
-        // which is why the 1.6.0 copy never appeared. These are two AddUi calls so a rejected
-        // inventory parent cannot drop the hotbar panel.
+        // Hud is covered by the inventory blur. Hud.Menu is under that blur. The Inventory
+        // view does not draw a plugin panel on this build. Overlay is the layer the
+        // 1.5.0 panel used, and it stays visible and clickable over the inventory.
         private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool menu, bool cursor)
         {
             string root = UiId(Root, menu);
-            string layer = menu ? _config.OpenLayer : _config.ClosedLayer;
-            if (string.IsNullOrEmpty(layer)) layer = menu ? NightshadeVoteDayRules.OpenLayerName : NightshadeVoteDayRules.ClosedLayerName;
-            else if (menu && NightshadeVoteDayRules.IsBrokenOpenLayer(layer)) layer = NightshadeVoteDayRules.OpenLayerName;
+            string layer = LayerFor(menu);
             var element = new CuiElement
             {
                 Name = root,
@@ -1395,6 +1394,13 @@ namespace Oxide.Plugins
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "1 1", OffsetMax = "-1 -1" },
                 CursorEnabled = false
             }, root, UiId(BgName, menu));
+        }
+
+        private string LayerFor(bool menu)
+        {
+            if (menu) return NightshadeVoteDayRules.ResolveOpenLayer(_config == null ? null : _config.OpenLayer);
+            if (_config == null || string.IsNullOrWhiteSpace(_config.ClosedLayer)) return NightshadeVoteDayRules.ClosedLayerName;
+            return _config.ClosedLayer.Trim();
         }
 
         private NightshadeVoteDayRules.ScreenBox PanelBox(bool menu, float width, float height)
@@ -2054,17 +2060,18 @@ namespace Oxide.Plugins
         internal const string PhaseBought = "bought";
         internal static readonly string MenuLayer = "Overlay";
         internal const string ClosedLayerName = "Hud";
-        // The inventory view. Hud.Menu is a lower layer and the blur covers it, so a panel
-        // parented there does not show. Overlay and Overall stay above every menu; they also
-        // stay up while playing, so they are not the default for this copy.
-        internal const string OpenLayerName = "Inventory";
+        // Overlay is visible and clickable over the inventory (this panel, 1.5.0).
+        // Hud.Menu is under the blur. The Inventory view does not draw a plugin panel here.
+        internal const string OpenLayerName = "Overlay";
         internal const string BrokenOpenLayer = "Hud.Menu";
+        internal const string InventoryLayerName = "Inventory";
         internal const string LayerKey = "Panel layer (Overlay stays above the inventory, Overall is above every menu, Hud sits under it)";
         internal const string OldLayerKey = "Panel layer (Hud sits with the hotbar, Overlay stays up in menus)";
         internal const string ClosedLayerKey = "Panel layer when the inventory is closed (Hud hides while it is open)";
         internal const string OpenLayerKeyV2 = "Panel layer when the inventory is open (Hud.Menu shows only then)";
-        internal const string OpenLayerKey = "Panel layer when the inventory is open (Inventory view; Overlay stays above every menu)";
-        internal const int CurrentConfigVersion = 3;
+        internal const string OpenLayerKeyV3 = "Panel layer when the inventory is open (Inventory view; Overlay stays above every menu)";
+        internal const string OpenLayerKey = "Panel layer when the inventory is open (Overlay stays above it, Overall is above every menu)";
+        internal const int CurrentConfigVersion = 4;
         internal const string OpenRightKey = "Inventory open panel right (px from bottom center)";
         internal const string OpenBottomKey = "Inventory open panel bottom (px)";
         internal const string LogoKey = "Panel logo URL (empty hides the logo)";
@@ -2099,7 +2106,14 @@ namespace Oxide.Plugins
             if (string.IsNullOrWhiteSpace(value)) return true;
             value = value.Trim();
             return value.Equals(BrokenOpenLayer, StringComparison.OrdinalIgnoreCase)
-                || value.Equals("Hud.Menus", StringComparison.OrdinalIgnoreCase);
+                || value.Equals("Hud.Menus", StringComparison.OrdinalIgnoreCase)
+                || value.Equals(InventoryLayerName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static string ResolveOpenLayer(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || IsBrokenOpenLayer(value)) return OpenLayerName;
+            return value.Trim();
         }
 
         internal static string NormalizeCursorKey(string key)
