@@ -13,8 +13,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.3")]
-    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from one Overlay panel, 16px clear of the clothing column.")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.4")]
+    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from one Overlay panel left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
         // --- Config ---
@@ -39,8 +39,8 @@ namespace Oxide.Plugins
         private const float UiGapSeconds = 0.3f;
         private const string ToggleName = "NightshadeVoteDay.Toggle";
         private const string UiCommand = "nightshadevoteday.ui";
-        // 1.6.0-1.6.2 created a second tree with this suffix. Destroy it so a
-        // player who still has that card does not keep a dead copy after reload.
+        // 1.6.0-1.6.2 built a second card with this suffix, 16px lower than the
+        // hotbar card. 1.6.3 kept drawing that lower spot, so both boxes showed.
         private const string LegacyMenuSuffix = ".Inv";
         private const string LegacyLogoUrl = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
         private const int SkipStateVersion = 2;
@@ -493,7 +493,7 @@ namespace Oxide.Plugins
             _ready = true;
             int version = _config == null ? 0 : _config.ConfigVersion;
             Puts("Config version " + version.ToString(CultureInfo.InvariantCulture)
-                + ". Skip Night is one Overlay panel. It is created when a vote starts, and removed when that vote ends.");
+                + ". Skip Night is one Overlay panel left of the hotbar. It is created when a vote starts, and removed when that vote ends.");
             timer.Every(10f, CheckGameTime);
             timer.Once(1f, CheckGameTime);
         }
@@ -1129,8 +1129,55 @@ namespace Oxide.Plugins
         private static void DestroyPanel(BasePlayer player)
         {
             if (player == null) return;
-            CuiHelper.DestroyUi(player, Root);
-            CuiHelper.DestroyUi(player, Root + LegacyMenuSuffix);
+            DestroyVoteNames(player, true);
+        }
+
+        // Roots and children from 1.5.0 through 1.6.3. The ".Inv" names are the
+        // lower card. Destroying the root alone leaves that card up when its
+        // pieces are not parented under the name the dict still holds.
+        private static readonly string[] VoteUiNames = new string[]
+        {
+            Root,
+            BgName,
+            LogoName,
+            SunName,
+            SunName + "U",
+            SunName + "D",
+            SunName + "L",
+            SunName + "R",
+            TitleName,
+            CountName,
+            TrackName,
+            FillName,
+            VotesName,
+            HaveName,
+            StatusName,
+            PriceName,
+            VoteButton,
+            VoteButton + ".T",
+            BuyButton,
+            BuyButton + ".T",
+            ConfirmButton,
+            ConfirmButton + ".T",
+            CancelButton,
+            CancelButton + ".T",
+            ToggleName,
+            "NightshadeVoteDay.Head",
+            "NightshadeVoteDay.Rule",
+            "NightshadeVoteDay.Chevron"
+        };
+
+        private static void DestroyVoteNames(BasePlayer player, bool liveCard)
+        {
+            if (player == null) return;
+            for (int i = 0; i < VoteUiNames.Length; i++)
+            {
+                string name = VoteUiNames[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                CuiHelper.DestroyUi(player, name + LegacyMenuSuffix);
+                CuiHelper.DestroyUi(player, name + LegacyMenuSuffix + ".T");
+                if (liveCard) CuiHelper.DestroyUi(player, name);
+            }
         }
 
         private void ShowIfOpen(BasePlayer player)
@@ -1181,8 +1228,8 @@ namespace Oxide.Plugins
                 bool secondsChanged = seconds != _shownSeconds;
                 bool votesChanged = votes != _shownVotes || needed != _shownNeeded;
                 bool priceChanged = cost != _shownCost;
-                // 1.5.0 stopped here. 1.6.1 started sending a second card every second,
-                // which destroys that card and can drop the one the player can see.
+                // Clear the lower 1.6.x card even when the hotbar card does not need a redraw.
+                EachPlayer(delegate(BasePlayer player) { DestroyVoteNames(player, false); });
                 if (!secondsChanged && !votesChanged && !priceChanged) return;
                 if (priceChanged)
                 {
@@ -1280,10 +1327,9 @@ namespace Oxide.Plugins
             if (player == null || !player.IsConnected) return;
             try
             {
-                // One payload, same as 1.5.0. 1.6.x sent a second card on its own
-                // AddUi and rebuilt it every second. That second send is not used.
-                CuiHelper.DestroyUi(player, Root);
-                CuiHelper.DestroyUi(player, Root + LegacyMenuSuffix);
+                // One card only: the hotbar rect. Wipe the live tree and the lower
+                // ".Inv" tree before the single AddUi so a stale second box cannot remain.
+                DestroyVoteNames(player, true);
                 var container = new CuiElementContainer();
                 if (IsCollapsed(player)) BuildCollapsed(container, player, false);
                 else BuildExpanded(container, player, false);
@@ -1298,11 +1344,13 @@ namespace Oxide.Plugins
 
         private string PanelSentMessage()
         {
-            float right = _config == null ? NightshadeVoteDayRules.DefaultOpenRight : _config.OpenRight;
-            float bottom = _config == null ? NightshadeVoteDayRules.DefaultOpenBottom : _config.OpenBottom;
+            float hotbar = _config == null ? NightshadeVoteDayRules.DefaultHotbarLeft : _config.HotbarLeft;
+            float gap = _config == null ? NightshadeVoteDayRules.DefaultGap : _config.PanelGap;
+            float bottom = _config == null ? NightshadeVoteDayRules.DefaultBottom : _config.PanelBottom;
             float width = _config == null ? NightshadeVoteDayRules.DefaultWidth : _config.PanelWidth;
             float height = _config == null ? NightshadeVoteDayRules.DefaultHeight : _config.PanelHeight;
-            return "Skip Night panel sent on Overlay. Right edge "
+            float right = hotbar - (float.IsNaN(gap) || gap < 0f ? 0f : gap);
+            return "Skip Night panel sent on Overlay. One card. Right edge "
                 + right.ToString("0.###", CultureInfo.InvariantCulture)
                 + ", bottom " + bottom.ToString("0.###", CultureInfo.InvariantCulture)
                 + ", size " + width.ToString("0.###", CultureInfo.InvariantCulture)
@@ -1401,23 +1449,21 @@ namespace Oxide.Plugins
             }, root, UiId(BgName, menu));
         }
 
-        // Tab is not a button this server can see, so the card cannot move when the
-        // inventory opens. One rect is used for both states: 16px left and 16px down
-        // from the 1.5.0 hotbar card. The right edge stays put, so a wider card grows left.
+        // One rect: left of the hotbar (bottom 16). The lower card used OpenBottom 0
+        // and the ".Inv" names. menu must not select that rect.
         private NightshadeVoteDayRules.ScreenBox PanelBox(bool menu, float width, float height)
         {
-            // menu used to select a second rect. Both states share one rect.
-            return menu ? PlacedCard(width, height) : PlacedCard(width, height);
+            if (menu) return HotbarCard(width, height);
+            return HotbarCard(width, height);
         }
 
-        private NightshadeVoteDayRules.ScreenBox PlacedCard(float width, float height)
+        private NightshadeVoteDayRules.ScreenBox HotbarCard(float width, float height)
         {
-            float right = _config == null ? NightshadeVoteDayRules.DefaultOpenRight : _config.OpenRight;
-            float bottom = _config == null ? NightshadeVoteDayRules.DefaultOpenBottom : _config.OpenBottom;
-            if (float.IsNaN(right) || float.IsInfinity(right) || right == 0f) right = NightshadeVoteDayRules.DefaultOpenRight;
-            if (float.IsNaN(bottom) || float.IsInfinity(bottom)) bottom = NightshadeVoteDayRules.DefaultOpenBottom;
+            float hotbar = _config == null ? NightshadeVoteDayRules.DefaultHotbarLeft : _config.HotbarLeft;
+            float gap = _config == null ? NightshadeVoteDayRules.DefaultGap : _config.PanelGap;
+            float bottom = _config == null ? NightshadeVoteDayRules.DefaultBottom : _config.PanelBottom;
             string anchor = _config == null ? "0.5 0" : _config.PanelAnchor;
-            return NightshadeVoteDayRules.Place(right - width, bottom, width, height, anchor);
+            return NightshadeVoteDayRules.LeftOfHotbar(hotbar, gap, bottom, width, height, anchor);
         }
 
         private bool HasLogo()
