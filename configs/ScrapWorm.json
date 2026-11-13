@@ -1,0 +1,93 @@
+{
+  "Scale": 1.6,
+  "Speed": 9.0,
+  "Height": 9.0,
+  "Length": 38.0,
+  "Depth": 5.0,
+  "WormHealth": 8000.0,
+  "BodyDamage": 0.3,
+  "CoreDamage": 1.0,
+  "CoreHealth": 500.0,
+  "ScreenShake": true,
+  "Crates": 4,
+  "CrateType": "heli",
+  "HackableCrate": true,
+  "AlphaLootProfile": "",
+  "LootLockSeconds": 0.0,
+  "HealthBar": true,
+  "HealthBarRadius": 150.0,
+  "HealthBarScale": 0.75,
+  "DestroyBuildings": false,
+  "RunOverDamage": 1000.0,
+  "BuildingDamage": 1.0,
+  "HuntNoise": true,
+  "NoiseMemorySeconds": 30.0,
+  "SlamRadius": 6.0,
+  "SlamDamage": 45.0,
+  "BiteRange": 14.0,
+  "BiteDamage": 80.0,
+  "TailRange": 5.0,
+  "TailDamage": 30.0,
+  "HealthPerExtraPlayer": 0.35,
+  "MaxHealthMultiplier": 4.0,
+  "RewardEconomics": [
+    1000.0,
+    500.0,
+    250.0
+  ],
+  "RewardServerRewards": [
+    1000,
+    500,
+    250
+  ],
+  "DiscordWebhook": "",
+  "AutoStart": true,
+  "FirstStartMinutes": 20.0,
+  "IntervalMinutes": 90.0,
+  "MinPlayers": 1,
+  "LifetimeMinutes": 25.0,
+  "IdleMinutes": 5.0,
+  "IdleRadius": 250.0,
+  "AutoTerritories": 3,
+  "TerritoryRadius": 150.0,
+  "Territories": [],
+  "MapMarkers": true,
+  "BuildWarning": true,
+  "AnnounceGlobal": true,
+  "RandomLocationEachEvent": false,
+  "SurfaceMarker": true,
+  "SurfaceMarkerRadius": 60.0,
+  "BreachMessage": true,
+  "UseNCP": false,
+  "NCPType": 0,
+  "UseNotify": false,
+  "NotifyType": 0,
+  "ChatWithNotifications": false,
+  "WinnerCommands": [],
+  "DebrisLoot": [
+    {
+      "ShortName": "metal.refined",
+      "Amount": 7,
+      "MinPieceSize": 0.75,
+      "AmountPerHit": 0
+    },
+    {
+      "ShortName": "scrap",
+      "Amount": 1,
+      "MinPieceSize": 0.75,
+      "AmountPerHit": 0
+    },
+    {
+      "ShortName": "metal.fragments",
+      "Amount": 150,
+      "MinPieceSize": 0.0,
+      "AmountPerHit": 0
+    },
+    {
+      "ShortName": "charcoal",
+      "Amount": 80,
+      "MinPieceSize": 0.0,
+      "AmountPerHit": 0
+    }
+  ]
+}
