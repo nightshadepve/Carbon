@@ -22,7 +22,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeLocker", "Nightshade", "1.1.0")]
+    [Info("NightshadeLocker", "Nightshade", "1.1.1")]
     [Description("Nightshade locks, automatic lock placement, and automatic closing.")]
     public class NightshadeLocker : RustPlugin
     {
@@ -78,6 +78,7 @@ namespace Oxide.Plugins
             [JsonProperty("Logo URL fallback")] public string LogoUrl = DefaultLogo;
             [JsonProperty("Window width")] public float WindowWidth = NightshadeLockerRules.Layout.WindowWidth;
             [JsonProperty("Window height")] public float WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
+            [JsonProperty("Layout version")] public int LayoutVersion = 0;
             [JsonProperty("Plugins that pause entity control while loaded", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> ConflictPlugins = new List<string> { "UltimateLocker" };
             [JsonProperty("Warn if NightshadeLockPickup is loaded")] public bool WarnLockPickup = true;
             [JsonProperty("Legacy preferences file under the data directory")] public string LegacyDataFile = "UltimateLocker.json";
@@ -190,6 +191,11 @@ namespace Oxide.Plugins
             if (config.ConflictPlugins == null) config.ConflictPlugins = new List<string> { "UltimateLocker" };
             if (config.LockSkinBlacklist == null) config.LockSkinBlacklist = new List<ulong>();
             if (config.CloserSkinBlacklist == null) config.CloserSkinBlacklist = new List<ulong>();
+            if (config.LayoutVersion < NightshadeLockerRules.Layout.Version)
+            {
+                config.WindowWidth = NightshadeLockerRules.MigrateWindowWidth(config.WindowWidth);
+                config.LayoutVersion = NightshadeLockerRules.Layout.Version;
+            }
             if (config.WindowWidth < 480f) config.WindowWidth = NightshadeLockerRules.Layout.WindowWidth;
             if (config.WindowHeight < 320f) config.WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
             if (config.MinDelay < 1) config.MinDelay = 1;
@@ -1936,19 +1942,19 @@ namespace Oxide.Plugins
                 Name = CuiHelper.GetGuid(), Parent = header,
                 Components =
                 {
-                    new CuiRawImageComponent { Url = Logo(), Color = "1 1 1 1" },
+                    new CuiRawImageComponent { Url = Logo(), Color = "1 1 1 1", BlocksRaycast = false },
                     new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "14 9", OffsetMax = "42 37" }
                 }
             });
-            Label(c, header, "Nightshade Locker", 16, palette.Text, TextAnchor.MiddleLeft, 50, 16, 420, 40, true);
-            Label(c, header, palette.Tagline, 10, palette.SubText, TextAnchor.MiddleLeft, 50, 4, 420, 18, false);
-            Button(c, header, UiCmd + " close", palette.Danger, w - 36, 11, w - 12, 35, "X", 12, palette.DangerText);
+            float textRight = w - 56f;
+            Label(c, header, "Nightshade Locker", 16, palette.Text, TextAnchor.MiddleLeft, 50, 16, textRight, 40, true);
+            Label(c, header, palette.Tagline, 10, palette.SubText, TextAnchor.MiddleLeft, 50, 4, conflict ? 196f : textRight, 18, false);
+            float tabW = 88f;
+            float tabGap = 8f;
+            float tabStrip = tabW * 4f + tabGap * 3f;
+            float tabX = (w - tabStrip) * 0.5f;
+            if (tabX < 12f) tabX = 12f;
             float tabY = h - NightshadeLockerRules.Layout.Header - 2 - NightshadeLockerRules.Layout.Tab - 8;
-            DrawTab(c, frame, palette, "locks", "Locks", page, 16, tabY);
-            DrawTab(c, frame, palette, "places", "Places", page, 112, tabY);
-            DrawTab(c, frame, palette, "closing", "Closing", page, 214, tabY);
-            DrawTab(c, frame, palette, "code", "Code", page, 322, tabY);
-            if (conflict) Label(c, frame, "Paused while the other locker is loaded.", 11, palette.DangerText, TextAnchor.MiddleRight, 420, tabY, w - 16, tabY + 22, false);
             var rows = page == "places" ? PlaceRows(pref) : page == "closing" ? CloseRows(player, pref) : page == "code" ? CodeRows(pref) : LockRows(player, pref);
             int contentH = 12;
             for (int i = 0; i < rows.Count; i++)
@@ -2016,7 +2022,7 @@ namespace Oxide.Plugins
                         Name = CuiHelper.GetGuid(), Parent = scroll,
                         Components =
                         {
-                            new CuiButtonComponent { Command = row.Command, Color = "0 0 0 0", BlocksRaycast = true },
+                            new CuiButtonComponent { Command = row.Command, Color = "0 0 0 0.02", BlocksRaycast = true },
                             new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = "0 " + (-(top + NightshadeLockerRules.Layout.Row)).ToString(CultureInfo.InvariantCulture), OffsetMax = inner.ToString(CultureInfo.InvariantCulture) + " " + (-top).ToString(CultureInfo.InvariantCulture) }
                         }
                     });
@@ -2026,7 +2032,24 @@ namespace Oxide.Plugins
                 cursor += NightshadeLockerRules.Layout.Row + NightshadeLockerRules.Layout.RowGap;
                 _ = bottom;
             }
+            DrawTab(c, frame, palette, "locks", "Locks", page, tabX, tabY);
+            DrawTab(c, frame, palette, "places", "Places", page, tabX + tabW + tabGap, tabY);
+            DrawTab(c, frame, palette, "closing", "Closing", page, tabX + (tabW + tabGap) * 2f, tabY);
+            DrawTab(c, frame, palette, "code", "Code", page, tabX + (tabW + tabGap) * 3f, tabY);
+            if (conflict)
+                Label(c, header, "Paused while the other locker is loaded.", 10, palette.DangerText, TextAnchor.MiddleRight, 200, 4, textRight, 18, false);
+            float closeSize = 26f;
+            float closeBottom = h - NightshadeLockerRules.Layout.Header + (NightshadeLockerRules.Layout.Header - closeSize) * 0.5f;
+            // Last, and a real button: a transparent child under the X never received the click, and the scroll view is an earlier sibling.
+            Button(c, frame, UiCmd + " dismiss", palette.Danger, w - 12f - closeSize, closeBottom, w - 12f, closeBottom + closeSize, "X", 13, palette.DangerText, true);
             CuiHelper.AddUi(player, c);
+        }
+
+        private void CloseUi(BasePlayer player)
+        {
+            if (player == null) return;
+            CuiHelper.DestroyUi(player, UiRoot);
+            uiPage.Remove(player.userID);
         }
 
         private void DrawTab(CuiElementContainer c, string parent, Palette palette, string id, string title, string current, float x, float y)
@@ -2134,10 +2157,9 @@ namespace Oxide.Plugins
             string page;
             if (!uiPage.TryGetValue(player.userID, out page)) page = "locks";
             string verb = args[0].ToLowerInvariant();
-            if (verb == "close")
+            if (verb == "dismiss" || (verb == "close" && args.Length < 2))
             {
-                CuiHelper.DestroyUi(player, UiRoot);
-                uiPage.Remove(player.userID);
+                CloseUi(player);
                 return;
             }
             if (verb == "page" && args.Length > 1)
@@ -2272,23 +2294,25 @@ namespace Oxide.Plugins
                 Parent = parent,
                 Components =
                 {
-                    new CuiTextComponent { Text = text ?? string.Empty, FontSize = size, Color = Hex(color), Align = align, Font = bold ? FontBold : FontReg },
+                    new CuiTextComponent { Text = text ?? string.Empty, FontSize = size, Color = Hex(color), Align = align, Font = bold ? FontBold : FontReg, BlocksRaycast = false },
                     new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = x1.ToString(CultureInfo.InvariantCulture) + " " + y1.ToString(CultureInfo.InvariantCulture), OffsetMax = x2.ToString(CultureInfo.InvariantCulture) + " " + y2.ToString(CultureInfo.InvariantCulture) }
                 }
             });
         }
 
-        private static void Button(CuiElementContainer c, string parent, string command, string color, float x1, float y1, float x2, float y2, string text, int size, string textColor)
+        private static void Button(CuiElementContainer c, string parent, string command, string color, float x1, float y1, float x2, float y2, string text, int size, string textColor, bool dismiss = false)
         {
-            string name = Box(c, parent, color, x1, y1, x2, y2);
+            string name = CuiHelper.GetGuid();
+            var button = new CuiButtonComponent { Command = command ?? string.Empty, Color = Hex(color), BlocksRaycast = true };
+            if (dismiss) button.Close = UiRoot;
             c.Add(new CuiElement
             {
-                Name = CuiHelper.GetGuid(),
-                Parent = name,
+                Name = name,
+                Parent = parent,
                 Components =
                 {
-                    new CuiButtonComponent { Command = command, Color = "0 0 0 0", BlocksRaycast = true },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                    button,
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = x1.ToString(CultureInfo.InvariantCulture) + " " + y1.ToString(CultureInfo.InvariantCulture), OffsetMax = x2.ToString(CultureInfo.InvariantCulture) + " " + y2.ToString(CultureInfo.InvariantCulture) }
                 }
             });
             Label(c, name, text, size, textColor, TextAnchor.MiddleCenter, 0, 0, x2 - x1, y2 - y1, true);
@@ -2675,13 +2699,21 @@ namespace Oxide.Plugins
 
         public static class Layout
         {
-            public const float WindowWidth = 700f;
+            public const int Version = 2;
+            public const float WindowWidth = 580f;
             public const float WindowHeight = 448f;
+            public const float WidthBeforeNarrow = 700f;
             public const int Header = 46;
             public const int Tab = 26;
             public const int Row = 26;
             public const int RowGap = 3;
             public const int Section = 18;
+        }
+
+        public static float MigrateWindowWidth(float width)
+        {
+            if (Math.Abs(width - Layout.WidthBeforeNarrow) < 0.51f) return Layout.WindowWidth;
+            return width;
         }
 
         public static string SectionFor(string key)
