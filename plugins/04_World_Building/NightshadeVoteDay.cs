@@ -13,8 +13,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.2")]
-    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel left of the hotbar, and under the clothing column while inventory is open.")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.4")]
+    [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from one Overlay panel left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
         // --- Config ---
@@ -39,7 +39,9 @@ namespace Oxide.Plugins
         private const float UiGapSeconds = 0.3f;
         private const string ToggleName = "NightshadeVoteDay.Toggle";
         private const string UiCommand = "nightshadevoteday.ui";
-        private const string MenuSuffix = ".Inv";
+        // 1.6.0-1.6.2 built a second card with this suffix, 16px lower than the
+        // hotbar card. 1.6.3 kept drawing that lower spot, so both boxes showed.
+        private const string LegacyMenuSuffix = ".Inv";
         private const string LegacyLogoUrl = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
         private const int SkipStateVersion = 2;
         internal const string ModeKey = "Vote mode (Daily = vote every night, SkipMultiple = a pass sets this night to morning, then the next N nights have no vote and run normally)";
@@ -223,11 +225,12 @@ namespace Oxide.Plugins
         {
             if (config == null) return;
             config.PanelAnchor = NightshadeVoteDayRules.CleanAnchor(config.PanelAnchor);
-            if (string.IsNullOrWhiteSpace(config.ClosedLayer)) config.ClosedLayer = NightshadeVoteDayRules.ClosedLayerName;
-            else config.ClosedLayer = config.ClosedLayer.Trim();
-            if (string.IsNullOrWhiteSpace(config.OpenLayer) || NightshadeVoteDayRules.IsBrokenOpenLayer(config.OpenLayer))
-                config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
-            else config.OpenLayer = config.OpenLayer.Trim();
+            // Hud is under the inventory blur. Hud.Menu and Inventory do not draw a
+            // plugin panel on this build. 1.5.0 was visible because it used Overlay.
+            config.ClosedLayer = NightshadeVoteDayRules.OpenLayerName;
+            config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+            if (config.OpenRight == 0f || float.IsNaN(config.OpenRight) || float.IsInfinity(config.OpenRight))
+                config.OpenRight = NightshadeVoteDayRules.DefaultOpenRight;
             if (string.IsNullOrWhiteSpace(config.ThemeMode)) config.ThemeMode = "Shop";
             if (string.IsNullOrWhiteSpace(config.ThemeFile)) config.ThemeFile = "NightshadeShop.json";
             if (string.IsNullOrWhiteSpace(config.PanelTitle)) config.PanelTitle = "Skip Night";
@@ -281,6 +284,11 @@ namespace Oxide.Plugins
                 MigrateLogo(raw, config);
                 MigratePanelLayers(raw, config);
                 MigrateOpenLayer(raw, config);
+                // 1.6.x stored Hud / Hud.Menu / Inventory here. None of those draw
+                // this card the way Overlay did in 1.5.0. One layer from here on.
+                config.ClosedLayer = NightshadeVoteDayRules.OpenLayerName;
+                config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+                if (config.OpenRight == 0f) config.OpenRight = NightshadeVoteDayRules.DefaultOpenRight;
                 config.ConfigVersion = NightshadeVoteDayRules.CurrentConfigVersion;
             }
         }
@@ -483,7 +491,11 @@ namespace Oxide.Plugins
             LoadSkips();
             LoadPanel();
             _ready = true;
+            int version = _config == null ? 0 : _config.ConfigVersion;
+            Puts("Config version " + version.ToString(CultureInfo.InvariantCulture)
+                + ". Skip Night is one Overlay panel left of the hotbar. It is created when a vote starts, and removed when that vote ends.");
             timer.Every(10f, CheckGameTime);
+            timer.Once(1f, CheckGameTime);
         }
 
         void Unload()
@@ -1074,6 +1086,7 @@ namespace Oxide.Plugins
             _panelOpen = true;
             if (_uiTimer == null) _uiTimer = timer.Every(1f, TickPanel);
             RebuildAll();
+            Puts(PanelSentMessage());
         }
 
         private void BeginResultPanel()
@@ -1116,8 +1129,55 @@ namespace Oxide.Plugins
         private static void DestroyPanel(BasePlayer player)
         {
             if (player == null) return;
-            CuiHelper.DestroyUi(player, Root);
-            CuiHelper.DestroyUi(player, Root + MenuSuffix);
+            DestroyVoteNames(player, true);
+        }
+
+        // Roots and children from 1.5.0 through 1.6.3. The ".Inv" names are the
+        // lower card. Destroying the root alone leaves that card up when its
+        // pieces are not parented under the name the dict still holds.
+        private static readonly string[] VoteUiNames = new string[]
+        {
+            Root,
+            BgName,
+            LogoName,
+            SunName,
+            SunName + "U",
+            SunName + "D",
+            SunName + "L",
+            SunName + "R",
+            TitleName,
+            CountName,
+            TrackName,
+            FillName,
+            VotesName,
+            HaveName,
+            StatusName,
+            PriceName,
+            VoteButton,
+            VoteButton + ".T",
+            BuyButton,
+            BuyButton + ".T",
+            ConfirmButton,
+            ConfirmButton + ".T",
+            CancelButton,
+            CancelButton + ".T",
+            ToggleName,
+            "NightshadeVoteDay.Head",
+            "NightshadeVoteDay.Rule",
+            "NightshadeVoteDay.Chevron"
+        };
+
+        private static void DestroyVoteNames(BasePlayer player, bool liveCard)
+        {
+            if (player == null) return;
+            for (int i = 0; i < VoteUiNames.Length; i++)
+            {
+                string name = VoteUiNames[i];
+                if (string.IsNullOrEmpty(name)) continue;
+                CuiHelper.DestroyUi(player, name + LegacyMenuSuffix);
+                CuiHelper.DestroyUi(player, name + LegacyMenuSuffix + ".T");
+                if (liveCard) CuiHelper.DestroyUi(player, name);
+            }
         }
 
         private void ShowIfOpen(BasePlayer player)
@@ -1168,12 +1228,9 @@ namespace Oxide.Plugins
                 bool secondsChanged = seconds != _shownSeconds;
                 bool votesChanged = votes != _shownVotes || needed != _shownNeeded;
                 bool priceChanged = cost != _shownCost;
-                if (!secondsChanged && !votesChanged && !priceChanged)
-                {
-                    // Replace the clothing copy on its own. The hotbar card is a separate element.
-                    EachPlayer(AddMenuCopy);
-                    return;
-                }
+                // Clear the lower 1.6.x card even when the hotbar card does not need a redraw.
+                EachPlayer(delegate(BasePlayer player) { DestroyVoteNames(player, false); });
+                if (!secondsChanged && !votesChanged && !priceChanged) return;
                 if (priceChanged)
                 {
                     _shownSeconds = seconds;
@@ -1208,7 +1265,6 @@ namespace Oxide.Plugins
                         AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", false);
                     }
                     if (container.Count > 0) CuiHelper.AddUi(player, container);
-                    AddMenuCopy(player);
                 });
                 _shownSeconds = seconds;
                 _shownVotes = votes;
@@ -1271,38 +1327,35 @@ namespace Oxide.Plugins
             if (player == null || !player.IsConnected) return;
             try
             {
-                CuiHelper.DestroyUi(player, Root);
+                // One card only: the hotbar rect. Wipe the live tree and the lower
+                // ".Inv" tree before the single AddUi so a stale second box cannot remain.
+                DestroyVoteNames(player, true);
                 var container = new CuiElementContainer();
                 if (IsCollapsed(player)) BuildCollapsed(container, player, false);
                 else BuildExpanded(container, player, false);
                 if (container.Count > 0) CuiHelper.AddUi(player, container);
+                else PrintWarning("Vote panel was empty and was not sent.");
             }
             catch (Exception ex)
             {
                 PrintWarning("Vote panel could not be shown: " + ex.Message);
             }
-            try
-            {
-                AddMenuCopy(player);
-            }
-            catch (Exception ex)
-            {
-                PrintWarning("Inventory vote panel could not be shown: " + ex.Message);
-            }
         }
 
-        // Clothing copy, own payload, so a rejected parent cannot drop the hotbar card.
-        // Overlay stays visible over the inventory. Hud is under the blur then, so
-        // that menu shows this copy only. While playing, Hud is the hotbar card and
-        // this copy is also up, 16px left and 16px lower. Tab is not a button this
-        // server can see, so the Overlay card cannot be removed until the inventory opens.
-        private void AddMenuCopy(BasePlayer player)
+        private string PanelSentMessage()
         {
-            if (player == null || !player.IsConnected || !_panelOpen || _config == null) return;
-            var container = new CuiElementContainer();
-            if (IsCollapsed(player)) BuildCollapsed(container, player, true);
-            else BuildExpanded(container, player, true);
-            if (container.Count > 0) CuiHelper.AddUi(player, container);
+            float hotbar = _config == null ? NightshadeVoteDayRules.DefaultHotbarLeft : _config.HotbarLeft;
+            float gap = _config == null ? NightshadeVoteDayRules.DefaultGap : _config.PanelGap;
+            float bottom = _config == null ? NightshadeVoteDayRules.DefaultBottom : _config.PanelBottom;
+            float width = _config == null ? NightshadeVoteDayRules.DefaultWidth : _config.PanelWidth;
+            float height = _config == null ? NightshadeVoteDayRules.DefaultHeight : _config.PanelHeight;
+            float right = hotbar - (float.IsNaN(gap) || gap < 0f ? 0f : gap);
+            return "Skip Night panel sent on Overlay. One card. Right edge "
+                + right.ToString("0.###", CultureInfo.InvariantCulture)
+                + ", bottom " + bottom.ToString("0.###", CultureInfo.InvariantCulture)
+                + ", size " + width.ToString("0.###", CultureInfo.InvariantCulture)
+                + "x" + height.ToString("0.###", CultureInfo.InvariantCulture)
+                + ". It stays up for this vote only.";
         }
 
         private void BuildExpanded(CuiElementContainer container, BasePlayer player, bool menu)
@@ -1371,13 +1424,13 @@ namespace Oxide.Plugins
             AddToggle(container, width - 16f, -1f, 14f, 14f, menu);
         }
 
-        // Hud is covered by the inventory blur. Hud.Menu is under that blur. The Inventory
-        // view does not draw a plugin panel on this build. Overlay is the layer the
-        // 1.5.0 panel used, and it stays visible and clickable over the inventory.
+        // Overlay is the layer the 1.5.0 panel used. It stays visible and clickable
+        // over the inventory. Hud is covered by the inventory blur. Hud.Menu is under
+        // that blur. The Inventory view does not draw a plugin panel on this build.
         private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool menu, bool cursor)
         {
             string root = UiId(Root, menu);
-            string layer = LayerFor(menu);
+            string layer = NightshadeVoteDayRules.OpenLayerName;
             var element = new CuiElement
             {
                 Name = root,
@@ -1396,22 +1449,21 @@ namespace Oxide.Plugins
             }, root, UiId(BgName, menu));
         }
 
-        private string LayerFor(bool menu)
-        {
-            if (menu) return NightshadeVoteDayRules.ResolveOpenLayer(_config == null ? null : _config.OpenLayer);
-            if (_config == null || string.IsNullOrWhiteSpace(_config.ClosedLayer)) return NightshadeVoteDayRules.ClosedLayerName;
-            return _config.ClosedLayer.Trim();
-        }
-
+        // One rect: left of the hotbar (bottom 16). The lower card used OpenBottom 0
+        // and the ".Inv" names. menu must not select that rect.
         private NightshadeVoteDayRules.ScreenBox PanelBox(bool menu, float width, float height)
         {
-            if (menu)
-            {
-                float right = _config.OpenRight;
-                if (float.IsNaN(right) || float.IsInfinity(right)) right = NightshadeVoteDayRules.DefaultOpenRight;
-                return NightshadeVoteDayRules.Place(right - width, _config.OpenBottom, width, height, _config.PanelAnchor);
-            }
-            return NightshadeVoteDayRules.LeftOfHotbar(_config.HotbarLeft, _config.PanelGap, _config.PanelBottom, width, height, _config.PanelAnchor);
+            if (menu) return HotbarCard(width, height);
+            return HotbarCard(width, height);
+        }
+
+        private NightshadeVoteDayRules.ScreenBox HotbarCard(float width, float height)
+        {
+            float hotbar = _config == null ? NightshadeVoteDayRules.DefaultHotbarLeft : _config.HotbarLeft;
+            float gap = _config == null ? NightshadeVoteDayRules.DefaultGap : _config.PanelGap;
+            float bottom = _config == null ? NightshadeVoteDayRules.DefaultBottom : _config.PanelBottom;
+            string anchor = _config == null ? "0.5 0" : _config.PanelAnchor;
+            return NightshadeVoteDayRules.LeftOfHotbar(hotbar, gap, bottom, width, height, anchor);
         }
 
         private bool HasLogo()
@@ -1421,8 +1473,9 @@ namespace Oxide.Plugins
 
         private static string UiId(string name, bool menu)
         {
-            if (!menu || string.IsNullOrEmpty(name)) return name;
-            return name + MenuSuffix;
+            // One tree. menu true used to append ".Inv". Both flags now share the 1.5.0 names.
+            if (string.IsNullOrEmpty(name)) return name;
+            return menu ? name : name;
         }
 
         private void AddLogo(CuiElementContainer container, float left, float top, float size, bool menu)
@@ -2059,7 +2112,8 @@ namespace Oxide.Plugins
         internal const string PhaseFailed = "failed";
         internal const string PhaseBought = "bought";
         internal static readonly string MenuLayer = "Overlay";
-        internal const string ClosedLayerName = "Hud";
+        // 1.5.0 drew on Overlay and was visible. 1.6.x moved the closed card to Hud.
+        internal const string ClosedLayerName = "Overlay";
         // Overlay is visible and clickable over the inventory (this panel, 1.5.0).
         // Hud.Menu is under the blur. The Inventory view does not draw a plugin panel here.
         internal const string OpenLayerName = "Overlay";
@@ -2071,7 +2125,7 @@ namespace Oxide.Plugins
         internal const string OpenLayerKeyV2 = "Panel layer when the inventory is open (Hud.Menu shows only then)";
         internal const string OpenLayerKeyV3 = "Panel layer when the inventory is open (Inventory view; Overlay stays above every menu)";
         internal const string OpenLayerKey = "Panel layer when the inventory is open (Overlay stays above it, Overall is above every menu)";
-        internal const int CurrentConfigVersion = 4;
+        internal const int CurrentConfigVersion = 5;
         internal const string OpenRightKey = "Inventory open panel right (px from bottom center)";
         internal const string OpenBottomKey = "Inventory open panel bottom (px)";
         internal const string LogoKey = "Panel logo URL (empty hides the logo)";
