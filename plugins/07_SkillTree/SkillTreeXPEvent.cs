@@ -17,6 +17,18 @@ using Rust.Ai.Gen2;
  * - Add a scoreboard
  */
 
+/* 1.0.16
+ * "Send a discord notification when an event starts?" is now used. Setting it to false stops the Discord message.
+ * Catfish now count towards fish events when SkillTree reports them as CatchCatfish.
+ * The hud hint settings are now used. "Hud hint style" and "Show the hud hint over open menus?" replace the duration and colour settings, which a hud hint cannot use.
+ * startxpevent now refuses a source name that is not in the config instead of starting a random event. Running it with no name still starts a random event.
+ * The Discord message is now sent as properly escaped JSON.
+ * Wood piles now have their own event (CollectWoodNodes). It was in the source list but had no config entry or name, so it could never start.
+ * An event that runs out on its own now sends the "The XP event has ended." notification, as stopxpevent already did. The end notification now uses the hud hint, UINotify and chat settings, the same as the start notification.
+ * "All Wild Collectables" events now include roses, orchids, sunflowers, wheat, HQM and the Halloween collectables, HQM pickups also count for "Collectable nodes", and "Kill Any Animal" events now include sharks and horses.
+ * Fixed the next plugin on the server missing its startup when this plugin unloads itself during server boot. The unload now waits one tick.
+ */
+
 /* 1.0.15
  * End commands run when an event is stopped or the plugin unloads.
  * HUD commands are admin-only.
@@ -24,7 +36,7 @@ using Rust.Ai.Gen2;
 
 namespace Oxide.Plugins
 {
-	[Info("SkillTreeXPEvent", "imthenewguy", "1.0.15")]
+	[Info("SkillTreeXPEvent", "imthenewguy", "1.0.16")]
 	[Description("Creates random events that temporarily boost the xp gain of a randomly selected skill.")]
 	class SkillTreeXPEvent : RustPlugin
 	{
@@ -53,11 +65,12 @@ namespace Oxide.Plugins
                     [JsonProperty("Send event notifications via hud hint?")]
                     public bool sendHint = true;
 
-                    [JsonProperty("Hud hint duration [seconds]")]
-                    public float hintLength = 10f;
+                    [JsonProperty("Hud hint style [Blue_Normal, Red_Normal, Blue_Long, Blue_Short, Server_Event, Error]")]
+                    [JsonConverter(typeof(StringEnumConverter))]
+                    public GameTip.Styles hintStyle = GameTip.Styles.Blue_Normal;
 
-                    [JsonProperty("Hex colour code for the hud hint")]
-                    public string hintCol = "62d507";
+                    [JsonProperty("Show the hud hint over open menus?")]
+                    public bool hintOverlay = true;
                 }
 
                 [JsonProperty("UINotify settings")]
@@ -143,6 +156,7 @@ namespace Oxide.Plugins
                     [Source.CollectWildCorn] = new XPSources(0, 0.8f, 1.2f, 300, 1200, 50, 1367190888),
                     [Source.CollectMushrooms] = new XPSources(2668914545, 0.8f, 1.2f, 300, 1200, 50),
                     [Source.CollectOreNodes] = new XPSources(3099600356, 0.8f, 1.2f, 300, 1200, 50),
+                    [Source.CollectWoodNodes] = new XPSources(0, 0.8f, 1.2f, 300, 1200, 50, -151838493),
                     [Source.CollectGrownEntities] = new XPSources(2668906806, 0.8f, 1.2f, 300, 1200, 25),
                     [Source.CollectGrownBerries] = new XPSources(0, 0.8f, 1.2f, 300, 1200, 10, 1272194103),
                     [Source.CollectGrownHemp] = new XPSources(0, 0.8f, 1.2f, 300, 1200, 10, -858312878),
@@ -248,6 +262,7 @@ namespace Oxide.Plugins
                 ["CollectWildCorn"] = "Wild Corn",
                 ["CollectMushrooms"] = "Wild Mushrooms",
                 ["CollectOreNodes"] = "Collectable nodes",
+                ["CollectWoodNodes"] = "Wood Piles",
 
                 ["CollectGrownEntities"] = "All Growables",
                 ["CollectGrownBerries"] = "Growable Berries",
@@ -298,7 +313,7 @@ namespace Oxide.Plugins
                 ["All"] = "All Sources",
                 ["EventStartedNotification"] = "A new XP event has started!",
                 ["EventEndedNotification"] = "The XP event has ended.",
-                ["DiscordMessageEventStarted"] = ":globe_with_meridians: **A new XP event has started!** \\n>>> Duration: {0}\\nResource: {1}\\nBonus: +{2}%",
+                ["DiscordMessageEventStarted"] = ":globe_with_meridians: **A new XP event has started!** \n>>> Duration: {0}\nResource: {1}\nBonus: +{2}%",
             }, this);
         }
 
@@ -522,6 +537,7 @@ namespace Oxide.Plugins
                         case "sulfur-collectable":
                         case "metal-collectable":
                         case "stone-collectable":
+                        case "hqm-collectable":
                             return source == Source.CollectOreNodes || source == Source.CollectWildEntities;
 
                         case "wood-collectable":
@@ -530,7 +546,7 @@ namespace Oxide.Plugins
                         case "diesel_collectable":
                             return source == Source.CollectWildEntities;
 
-                        default: return false;
+                        default: return source == Source.CollectWildEntities;
                     }
                 }
 
@@ -584,6 +600,8 @@ namespace Oxide.Plugins
                         default: return false;
                     }
                 }
+
+                if (entity is SimpleShark || entity is RidableHorse) return source == Source.KillAnyAnimal;
 
                 if ((entity is BaseNPC2 && !(entity is ScientistNPC2)) || entity is WildlifeHazard)
                 {
@@ -735,6 +753,7 @@ namespace Oxide.Plugins
                     return source == Source.SkinHitFinal || source == Source.SkinHit;
 
                 case "FishCaught":
+                case "CatchCatfish":
                 case "CatchOrangeRoughy":
                 case "CatchSalmon":
                 case "CatchSmallShark":
@@ -885,7 +904,7 @@ namespace Oxide.Plugins
             if (SkillTree == null || !SkillTree.IsLoaded)
             {
                 Puts("This plugin requires SkillTree to run. Unloading...");
-                Interface.Oxide.UnloadPlugin(Name);
+                NextTick(() => Interface.Oxide.UnloadPlugin(Name));
                 return;
             }
 
@@ -991,6 +1010,7 @@ namespace Oxide.Plugins
                 DestroyUI();
                 StartNextEventCountdown();
                 RunEndCommands(source);
+                SendEventEndedNotification();
             }));
 
             foreach (var player in BasePlayer.activePlayerList)
@@ -1009,8 +1029,11 @@ namespace Oxide.Plugins
             foreach (var command in config.sources[source].commands_on_start)
                 rust.RunServerCommand(command);
 
-            var time = TimeSpan.FromSeconds(duration);
-            SendDiscordMsg(string.Format(lang.GetMessage("DiscordMessageEventStarted", this), duration >= 3600 ? $"{time.Hours}h {time.Minutes}m {time.Seconds}s" : duration >= 60 ? $"{time.Minutes}m {time.Seconds}s" : $"{time.Seconds}s", lang.GetMessage(source.ToString(), this), multipler * 100));
+            if (config.discordSettings.send_on_event)
+            {
+                var time = TimeSpan.FromSeconds(duration);
+                SendDiscordMsg(string.Format(lang.GetMessage("DiscordMessageEventStarted", this), duration >= 3600 ? $"{time.Hours}h {time.Minutes}m {time.Seconds}s" : duration >= 60 ? $"{time.Minutes}m {time.Seconds}s" : $"{time.Seconds}s", lang.GetMessage(source.ToString(), this), multipler * 100));
+            }
         }
 
         void RunEndCommands(Source source)
@@ -1463,8 +1486,7 @@ namespace Oxide.Plugins
             DestroyUI(); 
             StartNextEventCountdown();
 
-            foreach (var p in BasePlayer.activePlayerList)
-                PrintToChat(p, lang.GetMessage("EventEndedNotification", this, p.UserIDString));
+            SendEventEndedNotification();
         }
 
         [ConsoleCommand("startxpevent")]
@@ -1481,18 +1503,26 @@ namespace Oxide.Plugins
 
             var task = !arg.Args.IsNullOrEmpty() ? string.Join("", arg.Args) : null;
 
-            var source = task == null ? GetRandomSource() : ConvertToSource(task);
+            KeyValuePair<Source, XPSources> source;
+            if (task == null) source = GetRandomSource();
+            else if (!ConvertToSource(task, out source))
+            {
+                arg.ReplyWith($"{task} is not a valid xp event source. Valid sources: {string.Join(", ", config.sources.Keys)}");
+                return;
+            }
             SetupMultiplier(Mathf.Round(UnityEngine.Random.Range(source.Value.multiplier_min, source.Value.multiplier_max) * 10.0f) * 0.1f, UnityEngine.Random.RandomRange(source.Value.duration_min, source.Value.duration_max + 1), source.Key, source.Value.icon, source.Value.itemid);
             StartNextEventCountdown();
-            arg.ReplyWith($"Starting {(arg.Args.IsNullOrEmpty() ? "random" : task)} xp event");
+            arg.ReplyWith($"Starting {(task == null ? "random" : source.Key.ToString())} xp event");
         }
 
-        KeyValuePair<Source, XPSources> ConvertToSource(string task)
+        bool ConvertToSource(string task, out KeyValuePair<Source, XPSources> result)
         {
+            result = default(KeyValuePair<Source, XPSources>);
             Source source;
-            if (!SourceDef.TryGetValue(task, out source) || !config.sources.TryGetValue(source, out var data)) return GetRandomSource();
+            if (!SourceDef.TryGetValue(task, out source) || !config.sources.TryGetValue(source, out var data)) return false;
 
-            return new KeyValuePair<Source, XPSources>(source, data);
+            result = new KeyValuePair<Source, XPSources>(source, data);
+            return true;
         }
 
         #endregion       
@@ -1502,7 +1532,9 @@ namespace Oxide.Plugins
 
         private void CreateGameTip(string text, BasePlayer player)
         {
-            player.ShowToast(GameTip.Styles.Blue_Normal, text, true);            
+            var settings = config.notificationSettings.hintNotificationSettings;
+            if (!settings.sendHint) return;
+            player.ShowToast(settings.hintStyle, text, settings.hintOverlay);
         }
 
         void SendNotify(BasePlayer player, string message, int type)
@@ -1518,6 +1550,17 @@ namespace Oxide.Plugins
             PrintToChat(player, message);
         }
 
+        void SendEventEndedNotification()
+        {
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                var message = lang.GetMessage("EventEndedNotification", this, player.UserIDString);
+                CreateGameTip(message, player);
+                SendNotify(player, message, config.notificationSettings.uiNotifySettings.notifyType);
+                SendChatMessage(player, message);
+            }
+        }
+
         #endregion
 
         #region Discord
@@ -1529,7 +1572,7 @@ namespace Oxide.Plugins
             {
                 Dictionary<string, string> headers = new Dictionary<string, string>();
                 headers.Add("Content-Type", "application/json");
-                string payload = "{\"content\": \"" + message + "\"}";
+                string payload = JsonConvert.SerializeObject(new { content = message.Replace("\\n", "\n") });
                 webrequest.Enqueue(config.discordSettings.webhook, payload, (code, response) =>
                 {
                     if (code != 200 && code != 204)

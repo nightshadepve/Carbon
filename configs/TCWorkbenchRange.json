@@ -1,0 +1,8 @@
+{
+  "PlayerCheckSeconds": 0.25,
+  "WorkbenchRefreshSeconds": 10.0,
+  "RequireRangeUpgrade": true,
+  "RequireTCAuthorization": true,
+  "RequirePermission": false,
+  "DebugLogging": false
+}

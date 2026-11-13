@@ -14,7 +14,7 @@ using UnityEngine.Networking;
 
 namespace Oxide.Plugins
 {
-    [Info("Image Library", "Absolut & k1lly0u", "2.0.69")]
+    [Info("Image Library", "Absolut & k1lly0u", "2.0.68")]
     [Description("Plugin API for downloading and managing images")]
     class ImageLibrary : RustPlugin
     {
@@ -34,16 +34,10 @@ namespace Oxide.Plugins
         private bool orderPending;
         private bool isInitialized;
 
-        // Images that GetImage has queued to load. They leave the set when their load order ends
-        private readonly HashSet<string> pendingImageLoads = new HashSet<string>();
-
         private JsonSerializerSettings errorHandling = new JsonSerializerSettings { Error = (se, ev) => { ev.ErrorContext.Handled = true; } };
 
         private const string STEAM_API_URL = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/";
         private const string STEAM_AVATAR_URL = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={0}&steamids={1}";
-
-        private const string NONE_IMAGE_URL = "http://i.imgur.com/sZepiWv.png";
-        private const string LOADING_IMAGE_URL = "http://i.imgur.com/lydxb0u.png";
 
         #endregion Fields
 
@@ -154,8 +148,8 @@ namespace Oxide.Plugins
             imageIdentifiers.imageIds.Clear();
             imageIdentifiers.lastCEID = CommunityEntity.ServerInstance.net.ID.Value;
 
-            AddImage(NONE_IMAGE_URL, "NONE", 0);
-            AddImage(LOADING_IMAGE_URL, "LOADING", 0);
+            AddImage("http://i.imgur.com/sZepiWv.png", "NONE", 0);
+            AddImage("http://i.imgur.com/lydxb0u.png", "LOADING", 0);
             foreach (KeyValuePair<string, string> image in configData.UserImages)
             {
                 if (!string.IsNullOrEmpty(image.Value))
@@ -191,7 +185,6 @@ namespace Oxide.Plugins
 
                     imageIdentifiers.lastCEID = CommunityEntity.ServerInstance.net.ID.Value;
                     SaveData();
-                    EnsurePlaceholderImages();
                 }
                 else
                 {
@@ -199,7 +192,6 @@ namespace Oxide.Plugins
                     RestoreLoadedImages();
                 }
             }
-            else EnsurePlaceholderImages();
         }
 
         private void RestoreLoadedImages()
@@ -415,37 +407,20 @@ namespace Oxide.Plugins
         {
             string identifier = $"{imageName}_{imageId}";
 
-            if (TryGetStoredImage(identifier, out string value))
+            if (imageIdentifiers.imageIds.TryGetValue(identifier, out string value))
                 return value;
-
+            
             if (imageUrls.URLs.TryGetValue(identifier, out value))
             {
-                if (pendingImageLoads.Add(identifier))
-                    AddImage(value, imageName, imageId, () => pendingImageLoads.Remove(identifier));
+                AddImage(value, imageName, imageId);
 
                 if (returnUrl)
                     return value;
-
-                return GetPlaceholderImage("LOADING_0");
+                
+                return imageIdentifiers.imageIds["LOADING_0"];
             }
 
-            return GetPlaceholderImage("NONE_0");
-        }
-
-        private bool TryGetStoredImage(string identifier, out string value)
-        {
-            return imageIdentifiers.imageIds.TryGetValue(identifier, out value) && uint.TryParse(value, out uint crc) && IsInStorage(crc);
-        }
-
-        private string GetPlaceholderImage(string identifier) => TryGetStoredImage(identifier, out string value) ? value : "0";
-
-        private void EnsurePlaceholderImages()
-        {
-            if (!HasImage("NONE", 0))
-                AddImage(NONE_IMAGE_URL, "NONE", 0);
-
-            if (!HasImage("LOADING", 0))
-                AddImage(LOADING_IMAGE_URL, "LOADING", 0);
+            return imageIdentifiers.imageIds["NONE_0"];
         }
 
         [HookMethod("GetImageList")]

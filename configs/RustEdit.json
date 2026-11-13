@@ -1,7 +1,4 @@
 {
-  "Automatic Updates": {
-    "Enabled": true
-  },
   "RustEdit 1 Maps": {
     "Spawn Handlers": {
       "Enable loot container spawn handlers": true,
@@ -68,6 +65,14 @@
       "Traps/Barricades (Respawn/Re-Arm)": {
         "Minimum (minutes)": 25,
         "Maximum (minutes)": 40
+      },
+      "Desk keycard": {
+        "Minimum (minutes)": 15,
+        "Maximum (minutes)": 20
+      },
+      "Diesel Collectable": {
+        "Minimum (minutes)": 30,
+        "Maximum (minutes)": 45
       }
     },
     "Map Reports": {
@@ -81,6 +86,6 @@
   "Version": {
     "Major": 2,
     "Minor": 0,
-    "Patch": 3
+    "Patch": 6
   }
 }

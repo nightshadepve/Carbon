@@ -6,6 +6,7 @@
   "Advanced Status display method(SeparateBars, SingleBar, Cumulative)": "SeparateBars",
   "Enabled reward categories(Gather, Kill, Research, LootOpen, Pickup, Planting, Fishing, Monuments, Misc, All)": "All",
   "A prefix or suffix required in the player's nickname to receive the permission reward. An empty string disables the reward": "",
+  "Patrol Helicopter reward method(LastHit, MostDamageDealt)": "MostDamageDealt",
   "List of permissions granted when the player's nickname contains the required prefix or suffix": [
     "kits.loyalty"
   ],
@@ -169,10 +170,10 @@
       }
     }
   },
-  "LastClearDay": 5,
+  "LastClearDay": 13,
   "Version": {
     "Major": 0,
     "Minor": 1,
-    "Patch": 9
+    "Patch": 10
   }
 }

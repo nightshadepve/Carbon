@@ -1,0 +1,22 @@
+{
+  "CentrlockLockingUnlockToast": "Passenger seats unlocked",
+  "CentrlockLockingLockedToast": "Passenger seats locked",
+  "OnEngineOnToast": "Engine On",
+  "PowerSwitchOnToast": "Power On",
+  "PowerSwitchOffToast": "Power Off",
+  "NoAmmoToast": "You are out of ammo!",
+  "LandingGearOnToast": "Landing Gear Engaged",
+  "LandingGearOffToast": "Landing Gear Disengaged",
+  "LandingGearWarningToast": "Toggle Landing Gear Switch to disable VTOL",
+  "LandingGearVTOLWarningToast": "Disengage Landing Gear for better performance",
+  "VtolOnEngineOnToast": "Hold Crouch for VTOL mode",
+  "TowAnchorTooFar": "You are too far! The vehicle must be {Distance}m closer",
+  "TowAnchorNotValid": "No vehicle found at the anchor point",
+  "TowAnchorNotVisible": "Anchor is not in the line of sight",
+  "TowAnchorNotVehicle": "Not attached to a vehicle",
+  "TowAnchorConnectToSelf": "Cannot attach to the same vehicle",
+  "LinkedComputerStationSeatPrompt": "Press [Duck] and [Use] keys to switch to the computer",
+  "LinkedComputerStationSeatRearViewPrompt": "Press [Duck] and [Use] keys to access the rear camera",
+  "TowAutoConnectSwitchOn": "Auto Connect Engaged",
+  "TowAutoConnectSwitchOff": "Auto Connect Disengaged"
+}

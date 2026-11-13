@@ -27,7 +27,7 @@ using Time = UnityEngine.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Backpacks", "WhiteThunder", "3.17.10")]
+    [Info("Backpacks", "WhiteThunder", "3.17.9")]
     [Description("Allows players to have a Backpack which provides them extra inventory space.")]
     public class Backpacks : CovalencePlugin
     {
@@ -2782,6 +2782,7 @@ namespace Oxide.Plugins
                 CustomPool.Reset<ItemContainerAdapter>(empty ? 0 : 2 * BackpackPoolSize);
                 CustomPool.Reset<DisposableList<Item>>(empty ? 0 : 4);
                 CustomPool.Reset<DisposableList<ItemData>>(empty ? 0 : 4);
+                CustomPool.Reset<ContainerAdapterEnumerator>(empty ? 0 : 4);
             }
         }
 
@@ -5879,15 +5880,37 @@ namespace Oxide.Plugins
             }
         }
 
-        private struct ContainerAdapterEnumerator
+        private class ContainerAdapterEnumerator : IEnumerator<IContainerAdapter>, CustomPool.IPooled
         {
-            private readonly ContainerAdapterCollection _adapterCollection;
-            private int _position;
+            private ContainerAdapterCollection _adapterCollection;
+            private int _position = -1;
 
-            public ContainerAdapterEnumerator(ContainerAdapterCollection adapterCollection)
+            public ContainerAdapterEnumerator Setup(ContainerAdapterCollection adapterCollection)
             {
+                #if DEBUG_POOLING
+                LogDebug("ContainerAdapterEnumerator::Setup");
+                #endif
+
                 _adapterCollection = adapterCollection;
                 _position = -1;
+                return this;
+            }
+
+            public void EnterPool()
+            {
+                #if DEBUG_POOLING
+                LogDebug($"ContainerAdapterEnumerator::EnterPool | {CustomPool.GetStats<ContainerAdapterEnumerator>()}");
+                #endif
+
+                _adapterCollection = null;
+                _position = -1;
+            }
+
+            public void LeavePool()
+            {
+                #if DEBUG_POOLING
+                LogDebug($"ContainerAdapterEnumerator::LeavePool | {CustomPool.GetStats<ContainerAdapterEnumerator>()}");
+                #endif
             }
 
             public bool MoveNext()
@@ -5901,7 +5924,20 @@ namespace Oxide.Plugins
                 return false;
             }
 
+            public void Reset()
+            {
+                throw new NotImplementedException();
+            }
+
             public IContainerAdapter Current => _adapterCollection[_position];
+
+            object IEnumerator.Current => Current;
+
+            public void Dispose()
+            {
+                var self = this;
+                CustomPool.Free(ref self);
+            }
         }
 
         /// <summary>
@@ -5911,7 +5947,7 @@ namespace Oxide.Plugins
         ///
         /// When enumerating via foreach, null entries are skipped, and enumeration stops at Count.
         /// </summary>
-        private class ContainerAdapterCollection
+        private class ContainerAdapterCollection : IEnumerable<IContainerAdapter>
         {
             public int Count { get; private set; }
             private IContainerAdapter[] _containerAdapters;
@@ -5944,9 +5980,14 @@ namespace Oxide.Plugins
                 }
             }
 
-            public ContainerAdapterEnumerator GetEnumerator()
+            public IEnumerator<IContainerAdapter> GetEnumerator()
             {
-                return new ContainerAdapterEnumerator(this);
+                return CustomPool.Get<ContainerAdapterEnumerator>().Setup(this);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return GetEnumerator();
             }
 
             public void Resize(int newSize)

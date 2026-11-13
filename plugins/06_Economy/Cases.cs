@@ -1,8 +1,10 @@
 ﻿// #define TESTING
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using Facepunch;
@@ -14,8 +16,10 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.UI;
 using Debug = UnityEngine.Debug;
+using Global = Rust.Global;
 using Random = UnityEngine.Random;
 using Time = UnityEngine.Time;
 
@@ -30,7 +34,7 @@ using Carbon.Modules;
 
 namespace Oxide.Plugins;
 
-[Info("Cases", "Mevent", "2.0.1")]
+[Info("Cases", "Mevent", "2.0.14")]
 public class Cases : RustPlugin
 {
     #region Fields
@@ -40,7 +44,8 @@ public class Cases : RustPlugin
         PlaytimeTracker = null,
         UINotify = null,
         Notify = null,
-        ServerPanel = null;
+        ServerPanel = null,
+        CollectionLog = null;
 
     private const string
         PERM_EDIT = "Cases.edit",
@@ -52,11 +57,12 @@ public class Cases : RustPlugin
         private (bool spStatus, int categoryID)
             _serverPanelCategory = (false, -1); // key - use serverPanel, value - category id
 
+        private PatternServerMenu _activePattern = PatternServerMenu.Fullscreen;
+
 #if CARBON
         private ImageDatabaseModule imageDatabase;
 #endif
 
-    private bool _enabledImageLibrary;
 
     private const bool LangRu = false;
 
@@ -95,26 +101,25 @@ public class Cases : RustPlugin
 
     private class Configuration
     {
-        [JsonProperty(PropertyName = LangRu ? "Шаблон" : "Template")]
-        public PatternServerMenu Pattern = PatternServerMenu.Fullscreen;
+        [JsonName("Шаблон", "Template")]
+        public PatternServerMenu Pattern = PatternServerMenu.Auto;
 
-        [JsonProperty(PropertyName = LangRu ? "Включить прокрутку предметов?" : "Enable item scrolling?")]
+        [JsonName("Включить прокрутку предметов?", "Enable item scrolling?")]
         public bool Scrolling = true;
 
-        [JsonProperty(PropertyName = LangRu ? "Работать с Notify?" : "Work with Notify?")]
+        [JsonName("Работать с Notify?", "Work with Notify?")]
         public bool UseNotify = true;
 
-        [JsonProperty(PropertyName = LangRu ? "Разрешение (например: cases.use)" : "Permission (ex: cases.use)")]
+        [JsonName("Разрешение (например: cases.use)", "Permission (ex: cases.use)")]
         public string Permission = string.Empty;
 
-        [JsonProperty(PropertyName = LangRu ? "Количество предметов в рулетке" : "Amount of items in the roulette")]
+        [JsonName("Количество предметов в рулетке", "Amount of items in the roulette")]
         public int AmountItems = 26;
 
-        [JsonProperty(PropertyName = LangRu ? "Команды" : "Commands",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Команды", "Commands"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public string[] Commands = {"cases", "opencase"};
 
-        [JsonProperty(PropertyName = LangRu ? "Экономика" : "Economy")]
+        [JsonName("Экономика", "Economy")]
         public EconomyConf Economy = new()
         {
             Type = EconomyType.Plugin,
@@ -128,8 +133,7 @@ public class Cases : RustPlugin
             Show = true
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Цвета редкости (шанс - цвет)" : "Rarity Colors (chance - color)",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Цвета редкости (шанс - цвет)", "Rarity Colors (chance - color)"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<float, IColor> Rarity = new()
         {
             [70] = new IColor("#AFAFAF", 75),
@@ -147,7 +151,7 @@ public class Cases : RustPlugin
             [5] = new IColor("#EB4B4B", 75)
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Настройки трекера времени игры" : "Playtime Tracker Settings")]
+        [JsonName("Настройки трекера времени игры", "Playtime Tracker Settings")]
         public PlaytimeTrackerSettings PlaytimeTrackerConf = new()
         {
             Enabled = true,
@@ -160,7 +164,7 @@ public class Cases : RustPlugin
             }
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Настройки кейсов по времени" : "Cases for time settings")]
+        [JsonName("Настройки кейсов по времени", "Cases for time settings")]
         public TimeCasesSettings TimeCasesSettings = new()
         {
             Enable = false,
@@ -175,13 +179,13 @@ public class Cases : RustPlugin
             }
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Бонусный кейс" : "Bonus Case")]
+        [JsonName("Бонусный кейс", "Bonus Case")]
         public BonusCaseEntry BonusCase = new()
         {
             Enabled = true,
             ID = -1,
             Title = "Bonus Case",
-            Image = "https://i.ibb.co/JCWHDmF/n4I3vI0.png",
+            Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/bonus-case.png",
             Permission = string.Empty,
             CooldownTime = 86400,
             Cost = 0,
@@ -343,15 +347,14 @@ public class Cases : RustPlugin
             }
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Кейсы" : "Cases",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Кейсы", "Cases"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<CaseEntry> Cases = new()
         {
             new CaseEntry
             {
                 ID = 1,
                 Title = "ALTAIR",
-                Image = "https://i.ibb.co/2cWDKYL/0p9qwot.png",
+                Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/altair-case.png",
                 Permission = string.Empty,
                 Cost = 100,
                 CustomCurrency = new CustomCurrency
@@ -529,7 +532,7 @@ public class Cases : RustPlugin
             {
                 ID = 2,
                 Title = "SCHEDAR",
-                Image = "https://i.ibb.co/17QPX15/rADqKVZ.png",
+                Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/schedar-case.png",
                 Permission = string.Empty,
                 Cost = 150,
                 CustomCurrency = new CustomCurrency
@@ -707,7 +710,7 @@ public class Cases : RustPlugin
             {
                 ID = 3,
                 Title = "COR CAROLI",
-                Image = "https://i.ibb.co/Y7NmQcC/ojg7Sn5.png",
+                Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/cor-caroli-case.png",
                 Permission = string.Empty,
                 Cost = 200,
                 CustomCurrency = new CustomCurrency
@@ -871,7 +874,7 @@ public class Cases : RustPlugin
             {
                 ID = 4,
                 Title = "PROCYON",
-                Image = "https://i.ibb.co/gg72RjJ/1ZttHs8.png",
+                Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/procyon-case.png",
                 Permission = string.Empty,
                 Cost = 200,
                 CustomCurrency = new CustomCurrency
@@ -1049,7 +1052,7 @@ public class Cases : RustPlugin
             {
                 ID = 5,
                 Title = "SADAMELIK",
-                Image = "https://i.ibb.co/VNP4ntb/wIPGCGM.png",
+                Image = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/sadamelik-case.png",
                 Permission = string.Empty,
                 Cost = 500,
                 CustomCurrency = new CustomCurrency
@@ -1183,14 +1186,14 @@ public class Cases : RustPlugin
             }
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Настройки очистки" : "Wipe Settings")]
+        [JsonName("Настройки очистки", "Wipe Settings")]
         public WipeSettings Wipe = new()
         {
             Players = false,
             Cooldowns = true
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Настройки интерфейса" : "UI Settings")]
+        [JsonName("Настройки интерфейса", "UI Settings")]
         public InterfaceSettings UI = new()
         {
             Colors = new InterfaceSettings.ColorsSettings
@@ -1203,8 +1206,8 @@ public class Cases : RustPlugin
                 Color6 = new IColor("#4B68FF", 33),
                 Color7 = new IColor("##324192", 100),
                 Color8 = new IColor("#FFFFFF", 50),
-                Color9 = new IColor("#161617", 99),
-                Color10 = new IColor("#161617", 85),
+                Color9 = new IColor("#161617", 80),
+                Color10 = new IColor("#161617", 80),
                 Color11 = new IColor("#FF4B4B", 100),
                 Color12 = new IColor("#CD3838", 100),
                 Color13 = new IColor("#50965F", 100),
@@ -1213,11 +1216,13 @@ public class Cases : RustPlugin
                 Color16 = new IColor("#404040", 100),
                 Color17 = new IColor("#D74933", 100),
                 Color18 = new IColor("#5D7238", 100),
-                Color19 = new IColor("#2F2F2F", 100)
+                Color19 = new IColor("#2F2F2F", 100),
+                Color20 = new IColor("#FFFFFF", 100),
+                Color21 = new IColor("#5D7238", 100)
             }
         };
 
-        [JsonProperty(PropertyName = LangRu ? "Настройки логов" : "Logs Settings")]
+        [JsonName("Настройки логов", "Logs Settings")]
         public LogSettings Logs = new()
         {
             Console = false,
@@ -1230,6 +1235,9 @@ public class Cases : RustPlugin
             }
         };
 
+        [JsonName("Включить режим оффлайн изображений", "Enable Offline Image Mode")]
+        public bool EnableOfflineImageMode = false;
+
         public VersionNumber Version;
     }
 
@@ -1238,19 +1246,21 @@ public class Cases : RustPlugin
     {
         V1,
         V2,
+        V4,
         Fullscreen,
-        FS
+        FS,
+        Auto
     }
 
     private class LogSettings
     {
-        [JsonProperty(PropertyName = LangRu ? "Включить логирование в консоль?" : "Enable logging to the console?")]
+        [JsonName("Включить логирование в консоль?", "Enable logging to the console?")]
         public bool Console;
 
-        [JsonProperty(PropertyName = LangRu ? "Включить логирование в файл?" : "Enable logging to the file?")]
+        [JsonName("Включить логирование в файл?", "Enable logging to the file?")]
         public bool File;
 
-        [JsonProperty(PropertyName = LangRu ? "Логирование в Discord" : "Discord Logging")]
+        [JsonName("Логирование в Discord", "Discord Logging")]
         public DiscordLogs Discord;
 
         public void Log(string msg)
@@ -1285,7 +1295,7 @@ public class Cases : RustPlugin
 
         public class DiscordLogs
         {
-            [JsonProperty(PropertyName = LangRu ? "Включено?" : "Enabled?")]
+            [JsonName("Включено?", "Enabled?")]
             public bool Enabled;
 
             [JsonProperty(PropertyName = "Webhook URL")]
@@ -1295,99 +1305,103 @@ public class Cases : RustPlugin
 
     private class InterfaceSettings
     {
-        [JsonProperty(PropertyName = LangRu ? "Цвета" : "Colors")]
+        [JsonName("Цвета", "Colors")]
         public ColorsSettings Colors;
 
         public class ColorsSettings
         {
-            [JsonProperty(PropertyName = LangRu ? "Цвет 1" : "Color 1")]
+            [JsonName("Цвет 1", "Color 1")]
             public IColor Color1;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 2" : "Color 2")]
+            [JsonName("Цвет 2", "Color 2")]
             public IColor Color2;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 3" : "Color 3")]
+            [JsonName("Цвет 3", "Color 3")]
             public IColor Color3;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 4" : "Color 4")]
+            [JsonName("Цвет 4", "Color 4")]
             public IColor Color4;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 5" : "Color 5")]
+            [JsonName("Цвет 5", "Color 5")]
             public IColor Color5;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 6" : "Color 6")]
+            [JsonName("Цвет 6", "Color 6")]
             public IColor Color6;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 7" : "Color 7")]
+            [JsonName("Цвет 7", "Color 7")]
             public IColor Color7;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 8" : "Color 8")]
+            [JsonName("Цвет 8", "Color 8")]
             public IColor Color8;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 9" : "Color 9")]
+            [JsonName("Цвет 9", "Color 9")]
             public IColor Color9;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 10" : "Color 10")]
+            [JsonName("Цвет 10", "Color 10")]
             public IColor Color10;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 11" : "Color 11")]
+            [JsonName("Цвет 11", "Color 11")]
             public IColor Color11;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 12" : "Color 12")]
+            [JsonName("Цвет 12", "Color 12")]
             public IColor Color12;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 13" : "Color 13")]
+            [JsonName("Цвет 13", "Color 13")]
             public IColor Color13;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 14 (Фон панелей)" : "Color 14 (Panel Background)")]
+            [JsonName("Цвет 14 (Фон панелей)", "Color 14 (Panel Background)")]
             public IColor Color14;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 15 (Текст)" : "Color 15 (Text)")]
+            [JsonName("Цвет 15 (Текст)", "Color 15 (Text)")]
             public IColor Color15;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 16 (Кнопки)" : "Color 16 (Buttons)")]
+            [JsonName("Цвет 16 (Кнопки)", "Color 16 (Buttons)")]
             public IColor Color16;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 17 (Активные кнопки)" : "Color 17 (Active Buttons)")]
+            [JsonName("Цвет 17 (Активные кнопки)", "Color 17 (Active Buttons)")]
             public IColor Color17;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 18 (Доступный статус)" : "Color 18 (Available Status)")]
+            [JsonName("Цвет 18 (Доступный статус)", "Color 18 (Available Status)")]
             public IColor Color18;
 
-            [JsonProperty(PropertyName = LangRu ? "Цвет 19 (Неактивные кнопки)" : "Color 19 (Inactive Buttons)")]
+            [JsonName("Цвет 19 (Неактивные кнопки)", "Color 19 (Inactive Buttons)")]
             public IColor Color19;
+
+            [JsonName("Цвет 20 (Текст V4)", "Color 20 (V4 Text)")]
+            public IColor Color20;
+
+            [JsonName("Цвет 21 (Активные кнопки V4)", "Color 21 (V4 Active Buttons)")]
+            public IColor Color21;
         }
     }
 
     private class WipeSettings
     {
-        [JsonProperty(PropertyName = LangRu ? "Очистить игроков?" : "Wipe Players?")]
+        [JsonName("Очистить игроков?", "Wipe Players?")]
         public bool Players;
 
-        [JsonProperty(PropertyName = LangRu ? "Очистить таймауты?" : "Wipe Cooldowns?")]
+        [JsonName("Очистить таймауты?", "Wipe Cooldowns?")]
         public bool Cooldowns;
     }
 
     private class TimeCasesSettings
     {
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enable;
 
-        [JsonProperty(PropertyName = LangRu ? "Таймаут (секунды)" : "Cooldown (seconds)")]
+        [JsonName("Таймаут (секунды)", "Cooldown (seconds)")]
         public float Cooldown;
 
-        [JsonProperty(PropertyName = LangRu ? "Кейсы (ID)" : "Cases (IDs)",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Кейсы (ID)", "Cases (IDs)"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<int> Cases = new();
     }
 
     private class PlaytimeTrackerSettings
     {
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enabled;
 
-        [JsonProperty(PropertyName = LangRu ? "Время игры (секунды) - ID кейса" : "Playtime (seconds) - CaseID",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Время игры (секунды) - ID кейса", "Playtime (seconds) - CaseID"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public Dictionary<int, int> Cases = new();
     }
 
@@ -1395,7 +1409,7 @@ public class Cases : RustPlugin
     {
         [JsonProperty(PropertyName = "HEX")] public string HEX;
 
-        [JsonProperty(PropertyName = LangRu ? "Непрозрачность (0 - 100)" : "Opacity (0 - 100)")]
+        [JsonName("Непрозрачность (0 - 100)", "Opacity (0 - 100)")]
         public float Alpha;
 
         public string Get()
@@ -1426,30 +1440,29 @@ public class Cases : RustPlugin
 
     private abstract class EconomyTemplate
     {
-        [JsonProperty(PropertyName = LangRu ? "Тип (Plugin/Item)" : "Type (Plugin/Item)")]
+        [JsonName("Тип (Plugin/Item)", "Type (Plugin/Item)")]
         [JsonConverter(typeof(StringEnumConverter))]
         public EconomyType Type;
 
-        [JsonProperty(PropertyName = LangRu ? "Название плагина" : "Plugin name")]
+        [JsonName("Название плагина", "Plugin name")]
         public string Plug;
 
-        [JsonProperty(PropertyName = LangRu ? "Функция пополнения баланса" : "Balance add hook")]
+        [JsonName("Функция пополнения баланса", "Balance add hook")]
         public string AddHook;
 
-        [JsonProperty(PropertyName = LangRu ? "Функция снятия баланса" : "Balance remove hook")]
+        [JsonName("Функция снятия баланса", "Balance remove hook")]
         public string RemoveHook;
 
-        [JsonProperty(PropertyName = LangRu ? "Функция показа баланса" : "Balance show hook")]
+        [JsonName("Функция показа баланса", "Balance show hook")]
         public string BalanceHook;
 
-        [JsonProperty(PropertyName = LangRu ? "Краткое имя предмета" : "ShortName")]
+        [JsonName("Краткое имя предмета", "ShortName")]
         public string ShortName;
 
-        [JsonProperty(PropertyName =
-            LangRu ? "Отображаемое имя (пусто - по умолчанию)" : "Display Name (empty - default)")]
+        [JsonName("Отображаемое имя (пусто - по умолчанию)", "Display Name (empty - default)")]
         public string DisplayName;
 
-        [JsonProperty(PropertyName = LangRu ? "Скин" : "Skin")]
+        [JsonName("Скин", "Skin")]
         public ulong Skin;
 
         public double ShowBalance(BasePlayer player)
@@ -1570,16 +1583,16 @@ public class Cases : RustPlugin
 
     private class EconomyConf : EconomyTemplate
     {
-        [JsonProperty(PropertyName = LangRu ? "Показывать баланс" : "Show Balance")]
+        [JsonName("Показывать баланс", "Show Balance")]
         public bool Show;
     }
 
     private class CustomCurrency : EconomyTemplate
     {
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enabled;
 
-        [JsonProperty(PropertyName = LangRu ? "Формат стоимости" : "Cost Format")]
+        [JsonName("Формат стоимости", "Cost Format")]
         public string CostFormat;
     }
 
@@ -1587,20 +1600,19 @@ public class Cases : RustPlugin
     {
         [JsonProperty(PropertyName = "ID")] public int ID;
 
-        [JsonProperty(PropertyName = LangRu ? "Название" : "Title")]
+        [JsonName("Название", "Title")]
         public string Title;
 
-        [JsonProperty(PropertyName = LangRu ? "Изображение" : "Image")]
+        [JsonName("Изображение", "Image")]
         public string Image;
 
-        [JsonProperty(PropertyName = LangRu ? "Разрешение" : "Permission")]
+        [JsonName("Разрешение", "Permission")]
         public string Permission;
 
-        [JsonProperty(PropertyName = LangRu ? "Таймаут" : "Cooldown")]
+        [JsonName("Таймаут", "Cooldown")]
         public float CooldownTime;
 
-        [JsonProperty(PropertyName = LangRu ? "Предметы" : "Items",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Предметы", "Items"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<ItemInfo> Items;
 
         public bool HasCase(BasePlayer player)
@@ -1631,7 +1643,7 @@ public class Cases : RustPlugin
 
     private class BonusCaseEntry : CaseEntry
     {
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enabled;
     }
 
@@ -1639,10 +1651,10 @@ public class Cases : RustPlugin
     {
         #region Fields
 
-        [JsonProperty(PropertyName = LangRu ? "Стоимость" : "Cost")]
+        [JsonName("Стоимость", "Cost")]
         public int Cost;
 
-        [JsonProperty(PropertyName = LangRu ? "Пользовательская валюта" : "Custom Currency")]
+        [JsonName("Пользовательская валюта", "Custom Currency")]
         public CustomCurrency CustomCurrency;
 
         #endregion
@@ -1669,43 +1681,42 @@ public class Cases : RustPlugin
     {
         #region Fields
 
-        [JsonProperty(PropertyName = LangRu ? "Тип" : "Type")] [JsonConverter(typeof(StringEnumConverter))]
+        [JsonName("Тип", "Type")] [JsonConverter(typeof(StringEnumConverter))]
         public ItemType Type;
 
         [JsonProperty(PropertyName = "ID")] public int ID;
 
-        [JsonProperty(PropertyName = LangRu ? "Изображение" : "Image")]
+        [JsonName("Изображение", "Image")]
         public string Image;
 
-        [JsonProperty(PropertyName = LangRu ? "Название" : "Title")]
+        [JsonName("Название", "Title")]
         public string Title;
 
-        [JsonProperty(PropertyName = LangRu ? "Команда (%steamid%)" : "Command (%steamid%)")]
+        [JsonName("Команда (%steamid%)", "Command (%steamid%)")]
         public string Command;
 
-        [JsonProperty(PropertyName = LangRu ? "Плагин" : "Plugin")]
+        [JsonName("Плагин", "Plugin")]
         public PluginItem Plugin;
 
-        [JsonProperty(PropertyName =
-            LangRu ? "Отображаемое имя (пусто - по умолчанию)" : "Display Name (empty - default)")]
+        [JsonName("Отображаемое имя (пусто - по умолчанию)", "Display Name (empty - default)")]
         public string DisplayName;
 
-        [JsonProperty(PropertyName = LangRu ? "Краткое имя" : "ShortName")]
+        [JsonName("Краткое имя", "ShortName")]
         public string ShortName;
 
-        [JsonProperty(PropertyName = LangRu ? "Скин" : "Skin")]
+        [JsonName("Скин", "Skin")]
         public ulong Skin;
 
-        [JsonProperty(PropertyName = LangRu ? "Количество" : "Amount")]
+        [JsonName("Количество", "Amount")]
         public int Amount;
 
-        [JsonProperty(PropertyName = LangRu ? "Шанс" : "Chance")]
+        [JsonName("Шанс", "Chance")]
         public float Chance;
 
-        [JsonProperty(PropertyName = LangRu ? "Содержимое" : "Content")]
+        [JsonName("Содержимое", "Content")]
         public ItemContent Content;
 
-        [JsonProperty(PropertyName = LangRu ? "Оружие" : "Weapon")]
+        [JsonName("Оружие", "Weapon")]
         public ItemWeapon Weapon;
 
         #endregion
@@ -1791,6 +1802,8 @@ public class Cases : RustPlugin
                 if (Content != null && Content.Enabled)
                     Content.Build(newItem);
 
+                Instance.CollectionLog?.Call("CollectFromPlugin", player, newItem, "Plugin");
+
                 player.GiveItem(newItem, BaseEntity.GiveItemReason.PickedUp);
             });
         }
@@ -1841,11 +1854,10 @@ public class Cases : RustPlugin
     {
         #region Fields
 
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enabled;
 
-        [JsonProperty(PropertyName = LangRu ? "Содержимое" : "Contents",
-            ObjectCreationHandling = ObjectCreationHandling.Replace)]
+        [JsonName("Содержимое", "Contents"), JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<ContentInfo> Contents = new();
 
         #endregion
@@ -1863,16 +1875,16 @@ public class Cases : RustPlugin
 
         public class ContentInfo
         {
-            [JsonProperty(PropertyName = LangRu ? "Краткое имя" : "ShortName")]
+            [JsonName("Краткое имя", "ShortName")]
             public string ShortName;
 
-            [JsonProperty(PropertyName = LangRu ? "Состояние" : "Condition")]
+            [JsonName("Состояние", "Condition")]
             public float Condition;
 
-            [JsonProperty(PropertyName = LangRu ? "Количество" : "Amount")]
+            [JsonName("Количество", "Amount")]
             public int Amount;
 
-            [JsonProperty(PropertyName = LangRu ? "Позиция" : "Position")]
+            [JsonName("Позиция", "Position")]
             public int Position = -1;
 
             #region Utils
@@ -1895,13 +1907,13 @@ public class Cases : RustPlugin
     {
         #region Fields
 
-        [JsonProperty(PropertyName = LangRu ? "Включено" : "Enabled")]
+        [JsonName("Включено", "Enabled")]
         public bool Enabled;
 
-        [JsonProperty(PropertyName = LangRu ? "Тип патронов" : "Ammo Type")]
+        [JsonName("Тип патронов", "Ammo Type")]
         public string AmmoType;
 
-        [JsonProperty(PropertyName = LangRu ? "Количество патронов" : "Ammo Amount")]
+        [JsonName("Количество патронов", "Ammo Amount")]
         public int AmmoAmount;
 
         #endregion
@@ -1932,13 +1944,13 @@ public class Cases : RustPlugin
 
     private class PluginItem
     {
-        [JsonProperty(PropertyName = LangRu ? "Хук" : "Hook")]
+        [JsonName("Хук", "Hook")]
         public string Hook;
 
-        [JsonProperty(PropertyName = LangRu ? "Название плагина" : "Plugin name")]
+        [JsonName("Название плагина", "Plugin name")]
         public string Plugin;
 
-        [JsonProperty(PropertyName = LangRu ? "Количество" : "Amount")]
+        [JsonName("Количество", "Amount")]
         public int Amount;
 
         public void Get(BasePlayer player, int count = 1)
@@ -1966,9 +1978,70 @@ public class Cases : RustPlugin
         }
     }
 
+    #region Lang Aliases
+
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+    private sealed class JsonNameAttribute : Attribute
+    {
+        public readonly string Ru;
+        public readonly string En;
+
+        public JsonNameAttribute(string ru, string en)
+        {
+            Ru = ru;
+            En = en;
+        }
+    }
+
+    private sealed class LangContractResolver : Newtonsoft.Json.Serialization.DefaultContractResolver
+    {
+        public static readonly LangContractResolver Instance = new();
+
+        public static bool AliasHit;
+
+        protected override Newtonsoft.Json.Serialization.JsonProperty CreateProperty(
+            System.Reflection.MemberInfo member, MemberSerialization memberSerialization)
+        {
+            var property = base.CreateProperty(member, memberSerialization);
+            if (Attribute.GetCustomAttribute(member, typeof(JsonNameAttribute)) is JsonNameAttribute name)
+                property.PropertyName = LangRu ? name.Ru : name.En;
+            return property;
+        }
+
+        protected override IList<Newtonsoft.Json.Serialization.JsonProperty> CreateProperties(Type type,
+            MemberSerialization memberSerialization)
+        {
+            var properties = base.CreateProperties(type, memberSerialization);
+            var members = GetSerializableMembers(type);
+            for (var i = 0; i < members.Count; i++)
+            {
+                if (Attribute.GetCustomAttribute(members[i], typeof(JsonNameAttribute)) is not JsonNameAttribute name ||
+                    name.Ru == name.En) continue;
+
+                var alias = CreateProperty(members[i], memberSerialization);
+                alias.PropertyName = LangRu ? name.En : name.Ru;
+                alias.Readable = false;
+                alias.ShouldDeserialize = static _ => AliasHit = true;
+                properties.Add(alias);
+            }
+
+            return properties;
+        }
+    }
+
+    private static Oxide.Core.Configuration.DynamicConfigFile GetLangFile(string name)
+    {
+        var file = Interface.Oxide.DataFileSystem.GetFile(name);
+        file.Settings.ContractResolver = LangContractResolver.Instance;
+        return file;
+    }
+
+    #endregion
+
     protected override void LoadConfig()
     {
         base.LoadConfig();
+        Config.Settings.ContractResolver = LangContractResolver.Instance;
         try
         {
             _config = Config.ReadObject<Configuration>();
@@ -1988,6 +2061,7 @@ public class Cases : RustPlugin
 
     protected override void SaveConfig()
     {
+        Config.Settings.ContractResolver = LangContractResolver.Instance;
         Config.WriteObject(_config);
     }
 
@@ -2112,6 +2186,44 @@ public class Cases : RustPlugin
                 _config.UI.Colors.Color19 = new IColor("#2F2F2F", 100);
         }
 
+        if (_config.Version < new VersionNumber(2, 0, 2))
+            _config.Pattern = PatternServerMenu.Auto;
+
+        if (_config.Version < new VersionNumber(2, 0, 9))
+        {
+            if (_config.UI.Colors.Color9 is {HEX: "#161617", Alpha: 99})
+                _config.UI.Colors.Color9.Alpha = 80;
+
+            if (_config.UI.Colors.Color10 is {HEX: "#161617", Alpha: 85})
+                _config.UI.Colors.Color10.Alpha = 80;
+        }
+
+        if (_config.Version < new VersionNumber(2, 0, 10))
+        {
+            var storage = "https://gitlab.com/TheMevent/PluginsStorage/raw/main/Images/Cases/";
+            var legacyImages = new Dictionary<string, string>
+            {
+                ["https://i.ibb.co/JCWHDmF/n4I3vI0.png"] = storage + "bonus-case.png",
+                ["https://i.ibb.co/2cWDKYL/0p9qwot.png"] = storage + "altair-case.png",
+                ["https://i.ibb.co/17QPX15/rADqKVZ.png"] = storage + "schedar-case.png",
+                ["https://i.ibb.co/Y7NmQcC/ojg7Sn5.png"] = storage + "cor-caroli-case.png",
+                ["https://i.ibb.co/gg72RjJ/1ZttHs8.png"] = storage + "procyon-case.png",
+                ["https://i.ibb.co/VNP4ntb/wIPGCGM.png"] = storage + "sadamelik-case.png"
+            };
+
+            _config.BonusCase.Image = MigrateImage(_config.BonusCase.Image);
+            _config.Cases.ForEach(caseEntry => caseEntry.Image = MigrateImage(caseEntry.Image));
+
+            string MigrateImage(string image) =>
+                image != null && legacyImages.TryGetValue(image, out var newImage) ? newImage : image;
+        }
+
+        if (_config.Version < new VersionNumber(2, 0, 13))
+        {
+            _config.UI.Colors.Color20 ??= new IColor("#FFFFFF", 100);
+            _config.UI.Colors.Color21 ??= new IColor("#5D7238", 100);
+        }
+
         _config.Version = Version;
         PrintWarning("Config update completed!");
     }
@@ -2222,6 +2334,9 @@ public class Cases : RustPlugin
 
     private void Init()
     {
+        Unsubscribe(nameof(OnPluginLoaded));
+        Unsubscribe(nameof(OnPluginUnloaded));
+
         Instance = this;
 
         LoadData();
@@ -2238,7 +2353,7 @@ public class Cases : RustPlugin
     {
         LoadItems();
 
-        LoadImages();
+        LoadTemplate();
 
         CheckOnDuplicates();
 
@@ -2258,6 +2373,9 @@ public class Cases : RustPlugin
         }
 
         NextTick(() => { LoadServerPanel(); });
+
+        Subscribe(nameof(OnPluginLoaded));
+        Subscribe(nameof(OnPluginUnloaded));
     }
 
     private void OnServerSave()
@@ -2295,6 +2413,11 @@ public class Cases : RustPlugin
         if (player == null) return;
 
         TimePlayers[player] = Time.time;
+    }
+
+    private void OnServerPanelClosed(BasePlayer player)
+    {
+        CuiHelper.DestroyUi(player, ModalLayer);
     }
 
     #region Wipe
@@ -2347,11 +2470,10 @@ public class Cases : RustPlugin
         {
             switch (plugin.Name)
             {
-                case nameof(ImageLibrary):
-                    _enabledImageLibrary = false;
-                    break;
                 case nameof(ServerPanel):
                     _serverPanelCategory.spStatus = false;
+                    _serverPanelCategory.categoryID = -1;
+
                     UpdateTemplateRenderer();
                     break;
             }
@@ -2367,14 +2489,6 @@ public class Cases : RustPlugin
     {
         var player = cov?.Object as BasePlayer;
         if (player == null) return;
-
-        if (!_enabledImageLibrary)
-        {
-            SendNotify(player, NoILError, 1);
-
-            BroadcastILNotInstalled();
-            return;
-        }
 
         if (!string.IsNullOrEmpty(_config.Permission) &&
             !permission.UserHasPermission(player.UserIDString, _config.Permission))
@@ -2567,6 +2681,9 @@ public class Cases : RustPlugin
                 {
                     field.SetValue(editData.CaseEntry, resultValue);
 
+                    if (field.Name == nameof(CaseEntry.Image))
+                        AddImage(newValue, newValue);
+
                     EditCaseUI(player);
                 }
 
@@ -2675,6 +2792,14 @@ public class Cases : RustPlugin
 
                     if (field.Name == "ShortName")
                         item.UpdateDefinition();
+
+                    if (field.Name == nameof(ItemInfo.Image))
+                        AddImage(newValue, newValue, () =>
+                        {
+                            if (_editByPlayer.TryGetValue(player.userID, out var current) && current == editData &&
+                                current.EditableItem == item)
+                                EditItemUi(player);
+                        });
 
                     EditItemUi(player);
                 }
@@ -4363,7 +4488,7 @@ public class Cases : RustPlugin
 
         public const float
             CaseItemSize = 164f,
-            Margin = 20f;
+            Margin = 12f;
 
         public void RenderBackground(BasePlayer player, ref CuiElementContainer container) { }
 
@@ -4720,7 +4845,7 @@ public class Cases : RustPlugin
                 if ((i + 1) % CasesOnString == 0)
                 {
                     ySwitch = ySwitch - CaseItemSize - 10f;
-                    xSwitch = -(CasesOnString * CaseItemSize + (CasesOnString - 1) * Margin) / 2f;
+                    xSwitch = 20f;
                 }
                 else
                 {
@@ -5815,7 +5940,7 @@ public class Cases : RustPlugin
                 if ((i + 1) % CasesOnString == 0)
                 {
                     ySwitch = ySwitch - CaseItemSize - 10f;
-                    xSwitch = -(CasesOnString * CaseItemSize + (CasesOnString - 1) * Margin) / 2f;
+                    xSwitch = 20f;
                 }
                 else
                 {
@@ -6561,6 +6686,1121 @@ public class Cases : RustPlugin
         }
     }
 
+    private class TemplateV4 : ICasesTemplate
+    {
+        public const int CasesOnPage = 14, CasesOnString = 7;
+
+        public const float
+            CaseItemSize = 164f,
+            Margin = 12f;
+
+        public void RenderBackground(BasePlayer player, ref CuiElementContainer container) { }
+
+        public void RenderHeader(BasePlayer player, ref CuiElementContainer container)
+        {
+
+            #region Title
+
+            container.Add(new CuiLabel
+            {
+                RectTransform =
+                {
+                    AnchorMin = "0 1", AnchorMax = "1 1",
+                    OffsetMin = "0 -48", OffsetMax = "-240 0"
+                },
+                Text =
+                {
+                    Text = Msg(player, TitleMenu),
+                    Font = "robotocondensed-bold.ttf", FontSize = 40, Align = TextAnchor.MiddleLeft,
+                    Color = _config.UI.Colors.Color20.Get()
+                }
+            }, Layer + ".Main", Layer + ".Main.Title", Layer + ".Main.Title");
+
+            #endregion Title
+            #region Balance
+
+            if (_config.Economy.Show)
+            {
+            container.Add(new CuiElement
+  {
+    Name = Layer + ".Balance",
+    DestroyUi = Layer + ".Balance",
+      Parent = Layer + ".Main",
+      Components = {
+          new CuiImageComponent { Color = _config.UI.Colors.Color14.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "1 1",
+              AnchorMax = "1 1",
+              OffsetMin = "-227 -40",
+              OffsetMax = "0 -8"
+          }
+      }
+  });
+
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Balance",
+      Components = {
+          new CuiTextComponent { Text = "BALANCE", Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "10 -32",
+              OffsetMax = "113 0"
+          }
+      }
+  });
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Balance",
+      Components = {
+          new CuiTextComponent { Text = Msg(player, BalanceTitle, _config.Economy.ShowBalance(player)), Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "117 -32",
+              OffsetMax = "217 0"
+          }
+      }
+  });
+
+            }
+
+            #endregion Balance
+
+            #region Add Case
+
+            if (CanEditCase(player))
+            {container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "1 1",
+              AnchorMax = "1 1",
+              OffsetMin = "-227 -82",
+              OffsetMax = "0 -50"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, AddCaseTitle),
+                        Font = "robotocondensed-bold.ttf", FontSize = 12, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Command = "UI_Cases edit -2",
+                        Color = _config.UI.Colors.Color16.Get()
+                    }
+                }, Layer + ".Main", Layer + ".Main.AddCase", Layer + ".Main.AddCase");
+            }
+
+            #endregion Add Case
+        }
+
+        public void RenderContent(BasePlayer player, ref CuiElementContainer container, int page = 0)
+        {
+            #region Fields
+
+            var constYSwitch = _config.BonusCase.Enabled ? -200f : -64f;
+
+            var cases = _config.Cases
+                .FindAll(x => x.HasPermission(player));
+
+            var casesCount = cases.Count;
+
+            var array = cases
+                .Skip(CasesOnPage * page)
+                .Take(CasesOnPage)
+                .ToList();
+
+            #endregion
+            
+            container.Add(new CuiPanel
+            {
+                RectTransform =
+                {
+                    AnchorMin = "0 0", 
+                    AnchorMax = "1 1",
+                    OffsetMin = "30 0",
+                    OffsetMax = "-30 0"
+                },
+                Image =
+                {
+                    Color = "0 0 0 0"
+                }
+            }, Layer, Layer + ".Main", Layer + ".Main");
+
+            RenderHeader(player, ref container);
+
+            RenderBonusCase(player, ref container);
+
+            RenderCases(player, ref container, constYSwitch, array, page);
+
+            RenderPages(player, ref container, page, casesCount);
+        }
+
+        public void RenderBonusCase(BasePlayer player, ref CuiElementContainer container)
+        {
+            if (!_config.BonusCase.Enabled) return;
+
+                container.Add(new CuiPanel
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "0 -184",
+              OffsetMax = "663 -64"
+                    },
+                    Image = {Color = _config.UI.Colors.Color14.Get(), Sprite = "assets/content/ui/UI.Background.Transparent.LinearLTR.tga", }
+                }, Layer + ".Main", Layer + ".Bonus.Case");
+
+                container.Add(new CuiElement
+                {
+                    Parent = Layer + ".Bonus.Case",
+                    Components =
+                    {
+                        new CuiRawImageComponent
+                            {Png = Instance.GetImage(_config.BonusCase.Image)},
+                        new CuiRectTransformComponent
+                        {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "20 -120",
+              OffsetMax = "140 0"
+                        }
+                    }
+                });
+
+                container.Add(new CuiLabel
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -42",
+              OffsetMax = "512 -10"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, _config.BonusCase.Title),
+                            Font = "robotocondensed-bold.ttf", FontSize = 24, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get()
+                    }
+                }, Layer + ".Bonus.Case");
+
+                var cd = Instance.GetCooldownTime(player.userID, _config.BonusCase);
+                if (cd > 0)
+                {
+                    
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Bonus.Case",
+      Components = {
+          new CuiTextComponent { Text = Msg(player, DelayAvailable), Font = "robotocondensed-bold.ttf", FontSize = 12, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -70",
+              OffsetMax = "380 -46"
+          }
+      }
+  });
+
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Bonus.Case",
+      Components = {
+          new CuiTextComponent { Text = $"{Instance.FormatShortTime(player, TimeSpan.FromSeconds(cd))}", Font = "robotocondensed-bold.ttf", FontSize = 14, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -70",
+              OffsetMax = "380 -46"
+          }
+      }
+  });
+                }
+                else
+                {
+                    container.Add(new CuiLabel
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -70",
+              OffsetMax = "380 -46"
+                        },
+                        Text =
+                        {
+                            Text = Msg(player, Availabe),
+                            Font = "robotocondensed-bold.ttf", FontSize = 14, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color18.Get()
+                        }
+                    }, Layer + ".Bonus.Case");
+                }
+
+                if (_config.BonusCase.Cost > 0)
+                {
+                    var custom = _config.BonusCase.CustomCurrency?.Enabled == true;
+
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Bonus.Case",
+      Components = {
+          new CuiTextComponent { Text = Msg(player, CaseCost), Font = "robotocondensed-bold.ttf", FontSize = 14, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "410 -75",
+              OffsetMax = "530 -51"
+          }
+      }
+  });
+                    container.Add(new CuiButton
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -112",
+              OffsetMax = "530 -80"
+                        },
+                        Text =
+                        {
+                            Text =
+                                custom
+                                    ? string.Format(_config.BonusCase.CustomCurrency.CostFormat, _config.BonusCase.Cost)
+                                    : Msg(player, CaseCurrency, _config.BonusCase.Cost),
+                            Align = TextAnchor.MiddleCenter,
+                            Font = "robotocondensed-bold.ttf",
+                            FontSize = 12,
+                            Color = _config.UI.Colors.Color20.Get(),
+                        },
+                        Button =
+                        {
+                            Color = _config.UI.Colors.Color21.Get(),
+                            Command = cd <= 0 ? "UI_Cases showcase -1" : ""
+                        }
+                    }, Layer + ".Bonus.Case");
+                }
+                else
+                {
+                    container.Add(new CuiButton
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "160 -112",
+              OffsetMax = "380 -80"
+                        },
+                        Text =
+                        {
+                            Text = Msg(player, Open),
+                            Align = TextAnchor.MiddleCenter,
+                            Font = "robotocondensed-regular.ttf",
+                            FontSize = 12,
+                            Color = _config.UI.Colors.Color20.Get()
+                        },
+                        Button =
+                        {
+                            Color = cd <= 0 ? _config.UI.Colors.Color21.Get() : _config.UI.Colors.Color19.Get(),
+                            Command = cd <= 0 ? "UI_Cases showcase -1" : ""
+                        }
+                    }, Layer + ".Bonus.Case");
+                }
+        }
+
+        public void RenderCases(BasePlayer player, ref CuiElementContainer container, float constYSwitch, List<CaseEntry> array, int page = 0)
+        {
+            var xSwitch = 0f;
+            var ySwitch = constYSwitch;
+
+            for (var i = 0; i < array.Count; i++)
+            {
+                var caseData = array[i];
+
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+                            AnchorMin = "0 1", AnchorMax = "0 1",
+                            OffsetMin = $"{xSwitch} {ySwitch - CaseItemSize}",
+                            OffsetMax = $"{xSwitch + CaseItemSize} {ySwitch}"
+                        },
+                        Image =
+                        {
+                            Color = _config.UI.Colors.Color2.Get()
+                        }
+                    }, Layer + ".Main", Layer + $".Cases.Background.{caseData.ID}");
+
+                container.Add(new CuiElement
+                {
+                    Parent = Layer + $".Cases.Background.{caseData.ID}",
+                    Components =
+                    {
+                        new CuiRawImageComponent
+                        {
+                            Png = Instance.GetImage(caseData.Image)
+                        },
+                        new CuiRectTransformComponent
+                        {
+              AnchorMin = "0.5 1",
+              AnchorMax = "0.5 1",
+              OffsetMin = "-60 -132",
+              OffsetMax = "60 -12"
+                        }
+                    }
+                });
+
+#if TESTING
+				Puts(
+					$"[MainUI]. Case {caseData?.ID ?? -1}: calling RefCaseUI with player: {player}, caseData: {caseData}");
+#endif
+
+                RenderCasePanel(player, ref container, caseData);
+
+                if ((i + 1) % CasesOnString == 0)
+                {
+                    ySwitch = ySwitch - CaseItemSize - 10f;
+                    xSwitch = 0f;
+                }
+                else
+                {
+                    xSwitch += CaseItemSize + Margin;
+                }
+            }
+        }
+
+        public void RenderPages(BasePlayer player, ref CuiElementContainer container, int page, double casesCount) 
+        {
+            var pages = Math.Ceiling(casesCount / CasesOnPage);
+            if (pages > 1)
+            {
+                container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-210 12",
+              OffsetMax = "-50 44"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, BackButton),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Color = _config.UI.Colors.Color16.Get(),
+                        Command = page != 0 ? $"UI_Cases cpage {page - 1}" : ""
+                    }
+                }, Layer + ".Main");
+
+                container.Add(new CuiLabel
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-50 12",
+              OffsetMax = "4 44"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, PagesFormat, page + 1, pages),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    }
+                }, Layer + ".Main");
+
+                container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "4 12",
+              OffsetMax = "164 44"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, NextButton),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Color = _config.UI.Colors.Color21.Get(),
+                        Command = casesCount > (page + 1) * CasesOnPage ? $"UI_Cases cpage {page + 1}" : ""
+                    }
+                }, Layer + ".Main");
+            }
+        }
+
+        public void RenderCasePanel(BasePlayer player, ref CuiElementContainer container, CaseEntry caseEntryData)
+        {
+            if (caseEntryData == null) return;
+
+            container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+                        AnchorMin = "0 0", AnchorMax = "1 1"
+                    },
+                    Text = {Text = string.Empty},
+                    Button =
+                    {
+                        Color = "0 0 0 0",
+                        Command = $"UI_Cases showcase {caseEntryData.ID}"
+                    }
+                }, Layer + $".Cases.Background.{caseEntryData.ID}", Layer + $".Cases.{caseEntryData.ID}",
+                Layer + $".Cases.{caseEntryData.ID}");
+
+            if (CanEditCase(player))
+                container.Add(new CuiButton
+                    {
+                        RectTransform =
+                        {
+                            AnchorMin = "0.5 1", AnchorMax = "0.5 1",
+                            OffsetMin = "-70 -150", OffsetMax = "70 -10"
+                        },
+                        Text = {Text = string.Empty},
+                        Button =
+                        {
+                            Color = "0 0 0 0",
+                            Command = $"UI_Cases edit {caseEntryData.ID}"
+                        }
+                    }, Layer + $".Cases.{caseEntryData.ID}");
+
+            var cd = Instance.GetCooldownTime(player.userID, caseEntryData);
+            if (cd > 0)
+            {
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-70 8",
+              OffsetMax = "70 24"
+                        },
+                        Image =
+                        {
+                            Color = "0 0 0 0"
+                        }
+                    }, Layer + $".Cases.{caseEntryData.ID}", Layer + $".Cases.{caseEntryData.ID}.Cooldown");
+
+                container.Add(new CuiElement
+                {
+                    Parent = Layer + $".Cases.{caseEntryData.ID}.Cooldown",
+                    Name = Layer + $".Cases.{caseEntryData.ID}.Cooldown.Value",
+                    Components =
+                    {
+                        new CuiTextComponent
+                        {
+                            Text = "%TIME_LEFT%",
+                            Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                        },
+                        new CuiRectTransformComponent {AnchorMin = "0 0", AnchorMax = "1 1"},
+                        new CuiCountdownComponent
+                        {
+                            EndTime = 0,
+                            StartTime = cd,
+                            Step = 1,
+                            TimerFormat = TimerFormat.HoursMinutesSeconds,
+                            DestroyIfDone = true,
+                            Command = $"UI_Cases update_case {caseEntryData.ID}"
+                        }
+                    }
+                });
+            }
+            else
+            {
+                var hasCase = caseEntryData.HasCase(player);
+                if (!hasCase && caseEntryData.Cost > 0)
+                {
+                    var custom = caseEntryData.CustomCurrency?.Enabled == true;
+
+                    container.Add(new CuiLabel
+                        {
+                            RectTransform =
+                            {
+              AnchorMin = "0 0",
+              AnchorMax = "0 0",
+              OffsetMin = "12 8",
+              OffsetMax = "92 24"
+                            },
+                            Text =
+                            {
+                                Text = Msg(player, CaseCost),
+                                Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get()
+                            }
+                        }, Layer + $".Cases.{caseEntryData.ID}");
+
+                    container.Add(new CuiLabel
+                        {
+                            RectTransform =
+                            {
+              AnchorMin = "0 0",
+              AnchorMax = "0 0",
+              OffsetMin = "104 8",
+              OffsetMax = "152 24"
+                            },
+                            Text =
+                            {
+                                Text =
+                                    custom
+                                        ? string.Format(caseEntryData.CustomCurrency.CostFormat, caseEntryData.Cost)
+                                        : Msg(player, CaseCurrency, caseEntryData.Cost),
+                                Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get()
+                            }
+                        }, Layer + $".Cases.{caseEntryData.ID}");
+                }
+                else
+                {
+                    if (hasCase)
+                    {
+                        
+                        container.Add(new CuiElement
+  {
+      Parent = Layer + $".Cases.{caseEntryData.ID}",
+      Components = {
+        // TODO: to localize
+          new CuiTextComponent { Text = "YOU HAVE", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 0",
+              AnchorMax = "0 0",
+              OffsetMin = "12 8",
+              OffsetMax = "92 24"
+          }
+      }
+  });
+                        container.Add(new CuiLabel
+                            {
+                                RectTransform =
+                                {
+              AnchorMin = "0 0",
+              AnchorMax = "0 0",
+              OffsetMin = "104 8",
+              OffsetMax = "152 24"
+                                },
+                                Text =
+                                {
+                                    Text = $"{caseEntryData.CaseAmount(player)}",
+                                    Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get()
+                                }
+                            }, Layer + $".Cases.{caseEntryData.ID}");
+                    }
+                }
+            }
+        }
+
+        public void RenderRouletteButton(BasePlayer player, ref CuiElementContainer container, int caseId, bool started)
+        {
+            container.Add(new CuiButton
+            {
+                RectTransform =
+                {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-176 -32",
+              OffsetMax = "176 0"
+                },
+                Text =
+                {
+                    Text = Msg(player, started ? WaitButton : OpenButton),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                },
+                Button =
+                {
+                    Color = started ? _config.UI.Colors.Color19.Get() : _config.UI.Colors.Color21.Get(),
+                    Command = started ? "" : $"UI_Cases tryopencase {caseId}"
+                }
+            }, Layer + ".Roulette", Layer + ".Roulette.Button", Layer + ".Roulette.Button");
+        }
+
+        public void RenderCaseInfo(BasePlayer player, ref CuiElementContainer container, int caseId, int page = 0)
+        {
+            var caseInfo = Instance?.FindCaseById(caseId);
+            if (caseInfo == null) return;
+
+            if (page == 0)
+                if (!Instance._playersItems.ContainsKey(player.userID) ||
+                    Instance._playersItems[player.userID].CaseId != caseId)
+                    Instance._playersItems[player.userID] = new PlayerItemsData(caseId, GetItems(caseInfo));
+
+            var ItemSize = 100f;
+            var ItemsOnString = 8;
+            var Lines = 2;
+            var ItemsOnPage = ItemsOnString * Lines;
+
+            #region Main
+
+            container.Add(new CuiPanel
+            {
+                RectTransform =
+                {
+                    AnchorMin = "0 0", 
+                    AnchorMax = "1 1",
+                    OffsetMin = "30 0",
+                    OffsetMax = "-30 0"
+                },
+                Image =
+                {
+                    Color = "0 0 0 0"
+                }
+            }, Layer, Layer + ".Main", Layer + ".Main");
+
+            #region Header
+
+            
+            #region Balance
+
+            if (_config.Economy.Show)
+            {
+            container.Add(new CuiElement
+  {
+    Name = Layer + ".Balance",
+    DestroyUi = Layer + ".Balance",
+      Parent = Layer + ".Main",
+      Components = {
+          new CuiImageComponent { Color = _config.UI.Colors.Color14.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "1 1",
+              AnchorMax = "1 1",
+              OffsetMin = "-227 -40",
+              OffsetMax = "0 -8"
+          }
+      }
+  });
+
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Balance",
+      Components = {
+          new CuiTextComponent { Text = "BALANCE", Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleLeft, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "10 -32",
+              OffsetMax = "113 0"
+          }
+      }
+  });
+  container.Add(new CuiElement
+  {
+      Parent = Layer + ".Balance",
+      Components = {
+          new CuiTextComponent { Text = Msg(player, BalanceTitle, _config.Economy.ShowBalance(player)), Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleRight, Color = _config.UI.Colors.Color20.Get() },
+          new CuiRectTransformComponent 
+          {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "117 -32",
+              OffsetMax = "217 0"
+          }
+      }
+  });
+
+            }
+
+            #endregion Balance
+
+            #region Edit Case
+
+            if (CanEditCase(player))
+            {container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "1 1",
+              AnchorMax = "1 1",
+              OffsetMin = "-357 -40",
+              OffsetMax = "-237 -8"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, EditCaseTitle),
+                        Font = "robotocondensed-bold.ttf", FontSize = 12, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Command = $"UI_Cases edit {caseInfo.ID}",
+                        Color = _config.UI.Colors.Color16.Get()
+                    }
+                }, Layer + ".Main", Layer + ".Main.AddCase", Layer + ".Main.AddCase");
+            }
+
+            #endregion Edit Case
+
+            container.Add(new CuiButton
+            {
+                RectTransform =
+                {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "0 -48",
+              OffsetMax = "140 -20"
+                },
+                Text =
+                {
+                    Text = Msg(player, GoBack),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                },
+                Button =
+                {
+                    Color = _config.UI.Colors.Color16.Get(),
+                    Command = "UI_Cases main"
+                }
+            }, Layer + ".Main");
+
+            #endregion Header
+
+            #region Roulette
+
+            container.Add(new CuiPanel
+            {
+                RectTransform =
+                {
+              AnchorMin = "0.5 1",
+              AnchorMax = "0.5 1",
+              OffsetMin = "-610 -192",
+              OffsetMax = "610 -52"
+                },
+                Image = {Color = _config.UI.Colors.Color14.Get()}
+            }, Layer + ".Main", Layer + ".Roulette");
+
+            RenderRoulette(player, ref container, Instance._playersItems[player.userID].Items);
+
+            RenderRouletteButton(player, ref container, caseId, false);
+
+            #endregion
+
+            #region Items
+
+            var margin = 14f;
+
+            var xSwitch = 0f;
+            var ySwitch = -244f;
+
+            var i = 1;
+            foreach (var item in caseInfo.Items.Skip(page * ItemsOnPage).Take(ItemsOnPage))
+            {
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+                            AnchorMin = "0 1", AnchorMax = "0 1",
+                            OffsetMin = $"{xSwitch} {ySwitch - ItemSize}",
+                            OffsetMax = $"{xSwitch + ItemSize} {ySwitch}"
+                        },
+                        Image = {Color = _config.UI.Colors.Color14.Get() }
+                    }, Layer + ".Main", Layer + $".Item.{i}");
+
+                if (string.IsNullOrEmpty(item.Image))
+                    container.Add(new CuiPanel
+                        {
+                            RectTransform =
+                            {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-34 0",
+              OffsetMax = "35 69"
+                            },
+                            Image =
+                            {
+                                ItemId = item.ItemDefinition != null ? item.ItemDefinition.itemid : 0,
+                                SkinId = item.Skin
+                            }
+                        }, Layer + $".Item.{i}");
+                else
+                    container.Add(new CuiElement
+                    {
+                        Parent = Layer + $".Item.{i}",
+                        Components =
+                        {
+                            new CuiRawImageComponent
+                            {
+                                Png = Instance.GetImage(item.Image)
+                            },
+                            new CuiRectTransformComponent
+                            {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-34 0",
+              OffsetMax = "35 69"
+                            }
+                        }
+                    });
+
+                container.Add(new CuiLabel
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "0 1",
+              AnchorMax = "0 1",
+              OffsetMin = "4 -34",
+              OffsetMax = "96 -2"
+                        },
+                        Text =
+                        {
+                            Text = $"{item.GetName()}",
+                            Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.UpperLeft, Color = _config.UI.Colors.Color20.Get()
+                        }
+                    }, Layer + $".Item.{i}");
+
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+              AnchorMin = "1 1",
+              AnchorMax = "1 1",
+              OffsetMin = "-34 -96",
+              OffsetMax = "0 -84"
+                        },
+                        Image = {Color = _config.UI.Colors.Color21.Get()}
+                    }, Layer + $".Item.{i}", Layer + $".Item.{i}.Amount");
+
+                container.Add(new CuiLabel
+                    {
+                        RectTransform = {AnchorMin = "0 0", AnchorMax = "1 1"},
+                        Text =
+                        {
+                            Text = $"{item.Amount}",
+                            Align = TextAnchor.MiddleCenter,
+                            Font = "robotocondensed-bold.ttf", FontSize = 8, Color = _config.UI.Colors.Color20.Get()
+                        }
+                    }, Layer + $".Item.{i}.Amount");
+
+                if (_config.Rarity.TryGetValue(item.Chance, out var color))
+                    container.Add(new CuiPanel
+                        {
+                            RectTransform =
+                            {
+              AnchorMin = "0 1",
+              AnchorMax = "1 1",
+              OffsetMin = "0 -2",
+              OffsetMax = "0 0"
+                            },
+                            Image =
+                            {
+                                Color = color.Get()
+                            }
+                        }, Layer + $".Item.{i}");
+
+                if (i % ItemsOnString == 0)
+                {
+                    ySwitch = ySwitch - ItemSize - margin;
+                    xSwitch = 0f;
+                }
+                else
+                {
+                    xSwitch += ItemSize + margin;
+                }
+
+                i++;
+            }
+
+            #endregion
+
+            #region Pages
+
+            var pages = Math.Ceiling((double) caseInfo.Items.Count / ItemsOnPage);
+            if (pages > 1)
+            {
+                container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-210 20",
+              OffsetMax = "-50 52"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, BackButton),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Color = _config.UI.Colors.Color16.Get(),
+                        Command = page != 0 ? $"UI_Cases showcase {caseId} {page - 1}" : ""
+                    }
+                }, Layer + ".Main");
+
+                container.Add(new CuiLabel
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "-50 20",
+              OffsetMax = "4 52"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, PagesFormat, page + 1, pages),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    }
+                }, Layer + ".Main");
+
+                container.Add(new CuiButton
+                {
+                    RectTransform =
+                    {
+              AnchorMin = "0.5 0",
+              AnchorMax = "0.5 0",
+              OffsetMin = "4 20",
+              OffsetMax = "164 52"
+                    },
+                    Text =
+                    {
+                        Text = Msg(player, NextButton),
+                            Font = "robotocondensed-bold.ttf", FontSize = 16, Align = TextAnchor.MiddleCenter, Color = _config.UI.Colors.Color20.Get()
+                    },
+                    Button =
+                    {
+                        Color = _config.UI.Colors.Color21.Get(),
+                        Command = caseInfo.Items.Count > (page + 1) * ItemsOnPage
+                            ? $"UI_Cases showcase {caseId} {page + 1}"
+                            : ""
+                    }
+                }, Layer + ".Main");
+            }
+
+            #endregion
+
+            #endregion
+        }
+
+        public void RenderRoulette(BasePlayer player, ref CuiElementContainer container, List<ItemInfo> items)
+        {
+            #region Items
+
+            var ItemSize = 100f;
+            var amountOnString = 5;
+            var margin = 48f;
+
+            var xSwitch = -(amountOnString * ItemSize + (amountOnString - 1) * margin) / 2f;
+
+            var i = 0;
+            foreach (var item in items.Take(amountOnString))
+            {
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+                            AnchorMin = "0.5 1", AnchorMax = "0.5 1",
+                            OffsetMin = $"{xSwitch} {-20 - ItemSize}",
+                            OffsetMax = $"{xSwitch + ItemSize} -20"
+                        },
+                        Image = {Color = _config.UI.Colors.Color1.Get()}
+                    }, Layer + ".Roulette", Layer + $".Roulette.Case.{i}", Layer + $".Roulette.Case.{i}");
+
+                if (string.IsNullOrEmpty(item.Image))
+                    container.Add(new CuiPanel
+                        {
+                            RectTransform =
+                            {
+                                AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5",
+                                OffsetMin = "-35 -35", OffsetMax = "35 35"
+                            },
+                            Image =
+                            {
+                                ItemId = item.ItemDefinition != null ? item.ItemDefinition.itemid : 0,
+                                SkinId = item.Skin
+                            }
+                        }, Layer + $".Roulette.Case.{i}");
+                else
+                    container.Add(new CuiElement
+                    {
+                        Parent = Layer + $".Roulette.Case.{i}",
+                        Components =
+                        {
+                            new CuiRawImageComponent
+                            {
+                                Png = Instance.GetImage(item.Image)
+                            },
+                            new CuiRectTransformComponent
+                            {
+                                AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5",
+                                OffsetMin = "-35 -35", OffsetMax = "35 35"
+                            }
+                        }
+                    });
+
+                container.Add(new CuiPanel
+                    {
+                        RectTransform =
+                        {
+                            AnchorMin = "1 0", AnchorMax = "1 0",
+                            OffsetMin = "-20 5",
+                            OffsetMax = "5 17"
+                        },
+                        Image = {Color = _config.UI.Colors.Color21.Get()}
+                    }, Layer + $".Roulette.Case.{i}", Layer + $".Roulette.Case.{i}.Amount");
+
+                container.Add(new CuiLabel
+                    {
+                        RectTransform = {AnchorMin = "0 0", AnchorMax = "1 1"},
+                        Text =
+                        {
+                            Text = $"{item.Amount}",
+                            Align = TextAnchor.MiddleCenter,
+                            Font = "robotocondensed-bold.ttf", FontSize = 8, Color = _config.UI.Colors.Color20.Get()
+                        }
+                    }, Layer + $".Roulette.Case.{i}.Amount");
+
+                IColor chance;
+                if (_config.Rarity.TryGetValue(item.Chance, out chance))
+                    container.Add(new CuiPanel
+                        {
+                            RectTransform =
+                            {
+                                AnchorMin = "0 1", AnchorMax = "1 1",
+                                OffsetMin = "0 -2.5", OffsetMax = "0 0"
+                            },
+                            Image =
+                            {
+                                Color = chance.Get()
+                            }
+                        }, Layer + $".Roulette.Case.{i}");
+
+                xSwitch += ItemSize + margin;
+                i++;
+            }
+
+            #endregion
+
+            #region Arrow
+
+            container.Add(new CuiPanel
+            {
+                RectTransform =
+                {
+                    AnchorMin = "0.5 1", AnchorMax = "0.5 1",
+                    OffsetMin = "-2 -25",
+                    OffsetMax = "2 0"
+                },
+                Image =
+                {
+                    Color = _config.UI.Colors.Color4.Get()
+                }
+            }, Layer + ".Roulette", Layer + ".Roulette.Arrow", Layer + ".Roulette.Arrow");
+
+            #endregion
+        }
+    }
+
     #endregion Templates
 
     private void CaseAcceptUi(BasePlayer player, int caseId)
@@ -6574,9 +7814,10 @@ public class Cases : RustPlugin
             Button =
             {
                 Color = _config.UI.Colors.Color9.Get(),
+                Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat",
                 Close = Layer + ".Modal"
             }
-        }, "Overlay", Layer + ".Modal", Layer + ".Modal");
+        }, "Overall", Layer + ".Modal", Layer + ".Modal");
 
         container.Add(new CuiButton
         {
@@ -6635,8 +7876,12 @@ public class Cases : RustPlugin
         container.Add(new CuiPanel
         {
             RectTransform = {AnchorMin = "0 0", AnchorMax = "1 1"},
-            Image = {Color = _config.UI.Colors.Color10.Get()}
-        }, "Overlay", Layer + ".Modal", Layer + ".Modal");
+            Image =
+            {
+                Color = _config.UI.Colors.Color10.Get(),
+                Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
+            }
+        }, "Overall", Layer + ".Modal", Layer + ".Modal");
 
         container.Add(new CuiPanel
         {
@@ -6718,8 +7963,12 @@ public class Cases : RustPlugin
         container.Add(new CuiPanel
         {
             RectTransform = {AnchorMin = "0 0", AnchorMax = "1 1"},
-            Image = {Color = _config.UI.Colors.Color10.Get()}
-        }, "Overlay", Layer + ".Modal", Layer + ".Modal");
+            Image =
+            {
+                Color = _config.UI.Colors.Color10.Get(),
+                Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
+            }
+        }, "Overall", Layer + ".Modal", Layer + ".Modal");
 
         container.Add(new CuiPanel
         {
@@ -6953,10 +8202,11 @@ public class Cases : RustPlugin
                     RectTransform = {AnchorMin = "0 0", AnchorMax = "1 1"},
                     Image =
                     {
-                        Color = _config.UI.Colors.Color9.Get()
+                        Color = _config.UI.Colors.Color9.Get(),
+                        Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
                     }
                 },
-                Layer, ModalLayer, ModalLayer
+                "Overall", ModalLayer, ModalLayer
             }
         };
 
@@ -7763,6 +9013,14 @@ public class Cases : RustPlugin
 
     #region Components
 
+    private static string GetFieldTitle(FieldInfo field)
+    {
+        if (field.GetCustomAttribute<JsonNameAttribute>() is { } name)
+            return LangRu ? name.Ru : name.En;
+
+        return field.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? "UKNOWN";
+    }
+
     private void EditTextField(ref CuiElementContainer container,
         object objectInfi,
         FieldInfo field,
@@ -7802,7 +9060,7 @@ public class Cases : RustPlugin
             },
             Text =
             {
-                Text = $"{field.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? "UKNOWN"}",
+                Text = GetFieldTitle(field),
                 Align = TextAnchor.MiddleLeft,
                 Font = "robotocondensed-regular.ttf",
                 FontSize = 10,
@@ -7877,7 +9135,7 @@ public class Cases : RustPlugin
             },
             Text =
             {
-                Text = $"{field.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? "UKNOWN"}",
+                Text = GetFieldTitle(field),
                 Align = TextAnchor.MiddleLeft,
                 Font = "robotocondensed-regular.ttf",
                 FontSize = 12,
@@ -8124,7 +9382,7 @@ public class Cases : RustPlugin
             },
             Text =
             {
-                Text = $"{field.GetCustomAttribute<JsonPropertyAttribute>()?.PropertyName ?? "UKNOWN"}",
+                Text = GetFieldTitle(field),
                 Align = TextAnchor.MiddleLeft,
                 Font = "robotocondensed-regular.ttf",
                 FontSize = 12,
@@ -8210,59 +9468,96 @@ public class Cases : RustPlugin
             _serverPanelCategory.spStatus = ServerPanel is {IsLoaded: true};
             _serverPanelCategory.categoryID = -1;
 
-            if (_serverPanelCategory.spStatus)
+            if (!_serverPanelCategory.spStatus)
             {
-                var categoryInfo = ServerPanel?.Call("API_OnServerPanelGetCategoryInfo", Name);
-                if (categoryInfo == null)
-                    PrintWarning("You are using an old version of ServerPanel. Please update to the latest version.");
+                UpdateTemplateRenderer();
+                return;
+            }
 
-                if (categoryInfo != null && categoryInfo is (int categoryID, string template))
-                {
-                    _serverPanelCategory.categoryID = categoryID;
+            ServerPanel?.Call("API_OnServerPanelProcessCategory", Name);
 
-                    UpdateTemplateRenderer(template);
-                }
-                else
-                {
-                    UpdateTemplateRenderer();
-                }
+            LoadCategoryInfo();
+        }
+
+        private void LoadCategoryInfo()
+        {
+            var categoryInfo = ServerPanel?.Call("API_OnServerPanelGetCategoryInfo", Name);
+            if (categoryInfo == null)
+            {
+                PrintWarning("You are using an old version of ServerPanel. Please update to the latest version.");
+
+                UpdateTemplateRenderer();
+                return;
+            }
+
+            if (categoryInfo is (int categoryID, string template) && categoryID != 0)
+            {
+                _serverPanelCategory.categoryID = categoryID;
+
+                UpdateTemplateRenderer(template);
             }
             else
             {
+                _serverPanelCategory.categoryID = -1;
+
                 UpdateTemplateRenderer();
             }
         }
 
+        private void OnReceiveCategoryInfo(int categoryID)
+        {
+            _serverPanelCategory.spStatus = ServerPanel is {IsLoaded: true};
+            _serverPanelCategory.categoryID = categoryID;
+
+            LoadCategoryInfo();
+        }
+
         private void UpdateTemplateRenderer(string serverPanelTemplate = null)
         {
-            var oldPattern = _config.Pattern;
+            var oldPattern = _activePattern;
 
-            if (_serverPanelCategory.spStatus && _serverPanelCategory.categoryID != -1)
+            if (_config.Pattern != PatternServerMenu.Auto)
+            {
+                _activePattern = _config.Pattern;
+            }
+            else if (_serverPanelCategory.spStatus && _serverPanelCategory.categoryID != -1)
             {
                 serverPanelTemplate ??= string.Empty;
 
-                _config.Pattern = serverPanelTemplate switch
+                var matched = serverPanelTemplate switch
                 {
-                    "t1" or "t1_1" => PatternServerMenu.V1,
-                    "t2" => PatternServerMenu.V2,
-                    _ => PatternServerMenu.Fullscreen
+                    "t1" or "t1_1" => (PatternServerMenu?) PatternServerMenu.V1,
+                    "t2" or "t3" => PatternServerMenu.V2,
+                    "t4" => PatternServerMenu.V4,
+                    _ => null
                 };
+
+                if (matched == null)
+                    PrintWarning($"Unknown ServerPanel template '{serverPanelTemplate}', falling back to V2");
+
+                _activePattern = matched ?? PatternServerMenu.V2;
             }
             else
             {
-                _config.Pattern = PatternServerMenu.Fullscreen;
+                _activePattern = PatternServerMenu.Fullscreen;
             }
 
-            if (oldPattern != _config.Pattern)
-                // SaveConfig();
-                LoadImages();
+            if (oldPattern != _activePattern)
+                LoadTemplate();
+        }
 
-            // Load Template
-            switch (_config.Pattern)
+        private void LoadTemplate()
+        {
+            switch (_activePattern)
             {
                 case PatternServerMenu.V1:
                 {
                     _template = new TemplateV1();
+                    break;
+                }
+                case PatternServerMenu.V4:
+                {
+                    _template = new TemplateV4();
                     break;
                 }
                 case PatternServerMenu.V2:
@@ -8276,6 +9571,8 @@ public class Cases : RustPlugin
                     break;
                 }
             }
+
+            LoadImages();
         }
 
     private void RegisterCommands()
@@ -8737,24 +10034,131 @@ public class Cases : RustPlugin
         });
     }
 
-    #region Images
-
-    private void AddImage(string url, string fileName, ulong imageId = 0)
+    private void LoadImages()
     {
 #if CARBON
-			imageDatabase.Queue(true, new Dictionary<string, string>
-			{
-				[fileName] = url
-			});
+        imageDatabase = BaseModule.GetModule<ImageDatabaseModule>();
+#endif
+        var imagesList = new Dictionary<string, string>();
+
+        foreach (var caseEntry in AllCases)
+        {
+            CaseInit(caseEntry);
+
+            TryLoadImage(caseEntry.Image, caseEntry.Image);
+
+            caseEntry.Items.ForEach(item => TryLoadImage(item.Image, item.Image));
+        }
+
+        ImportImages(imagesList);
+
+        void TryLoadImage(string name, string image)
+        {
+            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(image))
+                imagesList.TryAdd(name, image);
+        }
+    }
+
+    #region Working with Images
+
+    private const string
+        PluginsStorageUrl = "https://gitlab.com/TheMevent/PluginsStorage/raw/main",
+        PluginsStorageCdnUrl = "https://cdn.staticdelivr.com/gl/TheMevent/PluginsStorage/main";
+
+    private readonly Dictionary<string, string> _loadedImages = new();
+
+    private string ToImageSource(string url)
+    {
+        if (!url.StartsWith(PluginsStorageUrl)) return url;
+
+        var path = url.Substring(PluginsStorageUrl.Length).Replace("?raw=true", string.Empty);
+        return _config.EnableOfflineImageMode ? "TheMevent" + path : PluginsStorageCdnUrl + path;
+    }
+
+    private void ImportImages(Dictionary<string, string> images, Action callback = null)
+    {
+        var localImages = new Dictionary<string, string>();
+        var remoteImages = new Dictionary<string, string>();
+
+        foreach (var (name, url) in images)
+        {
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(url)) continue;
+
+            var source = ToImageSource(url);
+            if (source.StartsWith("TheMevent/"))
+                localImages[name] = source;
+            else if (source.StartsWith("http"))
+                remoteImages[name] = source;
+        }
+
+        var pending = localImages.Count + 1;
+        var onLoaded = new Action(() =>
+        {
+            if (--pending == 0 && IsLoaded) callback?.Invoke();
+        });
+
+        foreach (var (name, path) in localImages)
+            Global.Runner.StartCoroutine(LoadImageFromFS(name, path, onLoaded));
+
+        if (remoteImages.Count == 0)
+        {
+            onLoaded();
+            return;
+        }
+
+#if CARBON
+        imageDatabase.Queue(false, _ => onLoaded(), remoteImages);
 #else
-        ImageLibrary?.Call("AddImage", url, fileName, imageId);
+        timer.In(1f, () =>
+        {
+            if (ImageLibrary is not {IsLoaded: true})
+            {
+                BroadcastILNotInstalled();
+                onLoaded();
+                return;
+            }
+
+            ImageLibrary.Call("ImportImageList", Title, remoteImages, 0UL, true, onLoaded);
+        });
+#endif
+    }
+
+    private void AddImage(string url, string name, Action callback = null)
+    {
+        if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(name)) return;
+
+        var onLoaded = callback == null ? null : new Action(() =>
+        {
+            if (IsLoaded) callback();
+        });
+
+        var source = ToImageSource(url);
+        if (source.StartsWith("TheMevent/"))
+        {
+            Global.Runner.StartCoroutine(LoadImageFromFS(name, source, onLoaded));
+            return;
+        }
+
+        if (!source.StartsWith("http")) return;
+
+#if CARBON
+        imageDatabase.Queue(false, _ => onLoaded?.Invoke(), new Dictionary<string, string>
+        {
+            [name] = source
+        });
+#else
+        ImageLibrary?.Call("AddImage", source, name, 0UL, onLoaded);
 #endif
     }
 
     private string GetImage(string name)
     {
+        if (string.IsNullOrEmpty(name)) return string.Empty;
+
+        if (_loadedImages.TryGetValue(name, out var imageId)) return imageId;
+
 #if CARBON
-			return imageDatabase.GetImageString(name);
+        return imageDatabase.GetImageString(name);
 #else
         return Convert.ToString(ImageLibrary?.Call("GetImage", name));
 #endif
@@ -8762,57 +10166,14 @@ public class Cases : RustPlugin
 
     private bool HasImage(string name)
     {
+        if (string.IsNullOrEmpty(name)) return false;
+
+        if (_loadedImages.ContainsKey(name)) return true;
+
 #if CARBON
-			return Convert.ToBoolean(imageDatabase?.HasImage(name));
+        return Convert.ToBoolean(imageDatabase?.HasImage(name));
 #else
         return Convert.ToBoolean(ImageLibrary?.Call("HasImage", name));
-#endif
-    }
-
-    private void LoadImages()
-    {
-#if CARBON
-			imageDatabase = BaseModule.GetModule<ImageDatabaseModule>();
-#endif
-        _enabledImageLibrary = true;
-
-        var imagesList = new Dictionary<string, string>();
-
-        var itemIcons = new List<KeyValuePair<string, ulong>>();
-
-        foreach (var caseEntry in AllCases)
-        {
-            CaseInit(caseEntry);
-
-            if (!string.IsNullOrEmpty(caseEntry.Image))
-                imagesList.TryAdd(caseEntry.Image, caseEntry.Image);
-
-            caseEntry.Items.ForEach(item =>
-            {
-                if (!string.IsNullOrEmpty(item.Image))
-                    imagesList.TryAdd(item.Image, item.Image);
-
-                itemIcons.Add(new KeyValuePair<string, ulong>(item.ShortName, item.Skin));
-            });
-        }
-
-#if CARBON
-            imageDatabase.Queue(false, imagesList);
-#else
-        timer.In(1f, () =>
-        {
-            if (ImageLibrary is not {IsLoaded: true})
-            {
-                _enabledImageLibrary = false;
-
-                BroadcastILNotInstalled();
-                return;
-            }
-
-            if (itemIcons.Count > 0) ImageLibrary?.Call("LoadImageList", Title, itemIcons, null);
-
-            ImageLibrary?.Call("ImportImageList", Title, imagesList, 0UL, true);
-        });
 #endif
     }
 
@@ -8821,7 +10182,35 @@ public class Cases : RustPlugin
         for (var i = 0; i < 5; i++) PrintError("IMAGE LIBRARY IS NOT INSTALLED.");
     }
 
-    #endregion Images
+    private IEnumerator LoadImageFromFS(string name, string path, Action callback)
+    {
+        using var www = UnityWebRequestTexture.GetTexture("file://" + Interface.Oxide.DataDirectory +
+                                                          Path.DirectorySeparatorChar + path);
+
+        yield return www.SendWebRequest();
+
+        if (www.result != UnityWebRequest.Result.Success)
+        {
+            PrintError($"Image not found: {path}");
+        }
+        else
+        {
+            var texture = DownloadHandlerTexture.GetContent(www);
+            try
+            {
+                _loadedImages[name] = FileStorage.server.StoreByCrc(CommunityEntity.ServerInstance.net.ID,
+                    FileStorage.Type.png, texture.EncodeToPNG()).ToString();
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+
+        callback?.Invoke();
+    }
+
+    #endregion
 
     public static int PlayerItemsCount(BasePlayer player, string shortname, ulong skin)
     {
@@ -9126,7 +10515,6 @@ public class Cases : RustPlugin
 
     private const string
         CaseNotFound = "CaseNotFound",
-        NoILError = "NoILError",
         RemoveEditCase = "RemoveEditCase",
         LogItem = "LogItem",
         LogOpenedCase = "LogOpenedCase",
@@ -9217,7 +10605,6 @@ public class Cases : RustPlugin
                 "Player \"{username}\" ({steamid}) opened case \"{casename}\" and received from there: {item}",
             [LogItem] = "{name} ({amount} pcs)",
             [RemoveEditCase] = "REMOVE",
-            [NoILError] = "The plugin does not work correctly, contact the administrator!",
             [CaseNotFound] = "You don't have this case!"
         }, this);
 
@@ -9266,7 +10653,6 @@ public class Cases : RustPlugin
                 "Игрок \"{username}\" ({steamid}) открыл кейс \"{casename}\" и получил из него: {item}",
             [LogItem] = "{name} ({amount} шт)",
             [RemoveEditCase] = "УДАЛИТЬ",
-            [NoILError] = "Плагин работает некорректно, свяжитесь с администратором!",
             [CaseNotFound] = "У вас нет этого кейса!"
         }, this, "ru");
     }

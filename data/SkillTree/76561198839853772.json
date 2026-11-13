@@ -1,28 +1,36 @@
 {
   "name": "RowdyTexan",
-  "xp": 552967.85443934833,
+  "xp": 616376.85443934833,
   "prestige_level": 0,
-  "current_level": 52,
-  "achieved_level": 52,
+  "current_level": 54,
+  "achieved_level": 54,
   "available_points": 3,
   "non_level_related_points_given": 0,
   "buff_values": {
+    "Amature Miner": 5,
+    "Adept Miner": 5,
+    "Expert Miner": 5,
+    "Stroke of luck": 5,
+    "Efficient Miner": 1,
+    "Instant Mining": 5,
+    "Refiner": 5,
+    "Stone Sense": 1,
     "Maintenance": 5,
     "Defence Research": 5,
     "Scientific Breakthrough": 5,
     "Tank Buster": 5,
     "Skybane": 5,
-    "Supersonic Thrust": 5,
+    "Supersonic Thrust": 1,
     "Revitalization": 5,
     "Accident Evasion": 5,
     "Perfect Balance": 5,
-    "Exposed Radiation": 5,
     "Lead Lined": 5,
     "Amature Tinkerer": 5,
     "Adept Tinkerer": 5,
     "Expert Tinkerer": 5,
     "Thrifty Tinkerer": 5,
     "Thrifty Duplicator": 5,
+    "Quality Crafter": 3,
     "Mine Sweeper": 5,
     "Blast Suit": 5,
     "Demolition": 5,
@@ -30,16 +38,13 @@
     "Trap Evader": 5,
     "Rain hellfire": 1,
     "Gilled": 1,
-    "Tea Party": 5,
-    "Glutton": 5,
-    "Fry Cook": 5,
-    "Fruggal Rationer": 5,
-    "Easily satisfied": 5,
-    "Burst Of Energy": 1,
-    "Ricochet": 5,
-    "Lucky Shot": 5,
-    "Assassin": 5,
-    "Guarded": 5
+    "Amature Woodcutter": 5,
+    "Adept Woodcutter": 5,
+    "Expert Woodcutter": 5,
+    "Chimney": 5,
+    "Efficient Lumberjack": 1,
+    "Woodcutting Luck": 2,
+    "Tea Party": 3
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -51,22 +56,22 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T01:59:24.263305+00:00",
+  "logged_off": "2026-11-13T02:06:31.023483+00:00",
   "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
-    "Raiding_Ultimate": {
+    "Mining_Ultimate": {
       "enabled": true
     },
-    "Cooking_Ultimate": {
+    "Raiding_Ultimate": {
       "enabled": true
     }
   },
   "plant_genes": "gggggg",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
-  "cooking_ultimate_used_time": "0001-01-01T00:00:00",
+  "cooking_ultimate_used_time": "2026-11-12T22:24:58.280729+00:00",
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
@@ -81,5 +86,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 156
+  "GetTotalSkillPoints": 162
 }

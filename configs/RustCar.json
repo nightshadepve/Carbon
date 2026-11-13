@@ -1,0 +1,13 @@
+{
+  "PlayerHitMarkerFx": "assets/bundled/prefabs/fx/hit_notify.prefab",
+  "ForceUnlimitedAmmo": false,
+  "ForceSaving": null,
+  "GlobalDisableCounterUpdates": false,
+  "ForceOutsideDecayMinutes": null,
+  "ForceInsideDecayMinutes": null,
+  "ForceTimeAfterEngineOffToStartDecay": null,
+  "ForceServerOcclusion": null,
+  "DisableDecay": false,
+  "DefaultRadioFrequency": -1,
+  "IgnoreTrainTrackColliders": true
+}

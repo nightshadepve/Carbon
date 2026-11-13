@@ -38,5 +38,6 @@
   "PurchasesEnabled": "Purchases are now enabled.",
   "PurchasesDisabled": "Purchases are now disabled.",
   "NoTierPermission": "You do not have permission for the {0} dungeon. Required: {1}.",
-  "EntranceCombatBlocked": "You cannot deal damage from the protected entrance. Move forward to fight."
+  "EntranceCombatBlocked": "You cannot deal damage from the protected entrance. Move forward to fight.",
+  "BuyButtonFreeWithName": "{0} (Free)"
 }

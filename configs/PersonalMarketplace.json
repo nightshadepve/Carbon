@@ -11,9 +11,9 @@
   "Deploy Settings": {
     "Building privilege required to deploy": true,
     "Permission required to deploy": true,
-    "Force deploy on foundation": false,
+    "Force deploy on foundation": true,
     "Players can deploy multiple marketplaces": false,
-    "Add vending machines to Marketplaces": true,
+    "Add vending machines to Marketplaces": false,
     "Building privilege required to access vending loot": false,
     "Block all damage to vending machines": true,
     "Vending machine drops loot if destroyed": true,

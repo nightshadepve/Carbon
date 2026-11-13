@@ -56,7 +56,7 @@ using static Oxide.Plugins.RaidableBasesExtensions.Methods;
 
 namespace Oxide.Plugins
 {
-    [Info("Raidable Bases", "nivex", "3.2.4")]
+    [Info("Raidable Bases", "nivex", "3.2.3")]
     [Description("Create fully automated raidable bases with npcs.")]
     public class RaidableBases : RustPlugin
     {
@@ -22813,7 +22813,6 @@ namespace Oxide.Plugins
         {
             try { data = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name); } catch (Exception ex) { Puts(ex); }
             data ??= new();
-            data.RustNavigationBuilds ??= new();
             data.Players ??= new();
             data.BuyableCooldowns ??= new();
             data.RustNavigationBuilds ??= new();
@@ -31216,12 +31215,6 @@ namespace Oxide.Plugins
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
-                if (reader.TokenType == JsonToken.StartObject)
-                {
-                    JObject obj = JObject.Load(reader);
-                    return new Vector3(obj.Value<float>("x"), obj.Value<float>("y"), obj.Value<float>("z"));
-                }
-
                 if (reader.TokenType != JsonToken.String) return Vector3.zero;
 
                 string[] values = reader.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);

@@ -38,5 +38,6 @@
   "PurchasesEnabled": "Compras agora estão habilitadas.",
   "PurchasesDisabled": "Compras agora estão desabilitadas.",
   "NoTierPermission": "Você não tem permissão para a masmorra {0}. Necessário: {1}.",
-  "EntranceCombatBlocked": "Você não pode causar dano da entrada protegida. Avance para lutar."
+  "EntranceCombatBlocked": "Você não pode causar dano da entrada protegida. Avance para lutar.",
+  "BuyButtonFreeWithName": "{0} (Grátis)"
 }

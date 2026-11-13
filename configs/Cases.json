@@ -1,5 +1,5 @@
 {
-  "Template": "Fullscreen",
+  "Template": "Auto",
   "Enable item scrolling?": true,
   "Work with Notify?": true,
   "Permission (ex: cases.use)": "",
@@ -2373,6 +2373,14 @@
       "Color 19 (Inactive Buttons)": {
         "HEX": "#2A2A3A",
         "Opacity (0 - 100)": 100.0
+      },
+      "Color 20 (V4 Text)": {
+        "HEX": "#FFFFFF",
+        "Opacity (0 - 100)": 100.0
+      },
+      "Color 21 (V4 Active Buttons)": {
+        "HEX": "#5D7238",
+        "Opacity (0 - 100)": 100.0
       }
     }
   },
@@ -2384,9 +2392,10 @@
       "Webhook URL": "Insert webhook here (tutorial: https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks)"
     }
   },
+  "Enable Offline Image Mode": false,
   "Version": {
     "Major": 2,
     "Minor": 0,
-    "Patch": 1
+    "Patch": 14
   }
 }

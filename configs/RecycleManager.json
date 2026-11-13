@@ -1,0 +1,50 @@
+{
+  "Edit UI": {
+    "Enabled": true
+  },
+  "Custom recycle speed": {
+    "Enabled": true,
+    "Yellow recycler time (seconds)": 8.0,
+    "Green recycler time without grid power (seconds)": 5.0,
+    "Green recycler time with grid power (seconds)": 4.5,
+    "Red recycler time (seconds)": 4.0,
+    "Recycle time multiplier by item short name (item: multiplier)": {},
+    "Recycle time multiplier by permission": [
+      {
+        "Permission suffix": "fast",
+        "Recycle time multiplier": 0.2
+      },
+      {
+        "Permission suffix": "instant",
+        "Recycle time multiplier": 0.0
+      }
+    ]
+  },
+  "Custom recycle efficiency": {
+    "Enabled": false,
+    "Yellow recycler efficiency": 0.4,
+    "Green recycler efficiency without grid power": 0.5,
+    "Green recycler efficiency with grid power": 0.6,
+    "Red recycler efficiency": 0.75
+  },
+  "Restricted input items": {
+    "Item short names": [],
+    "Item skin IDs": [],
+    "Item display names (custom items)": []
+  },
+  "Max items in stack per recycle (% of max stack size)": {
+    "Default percent": 10.0,
+    "Percent by input item short name": {},
+    "Percent by input item skin ID": {},
+    "Percent by input item display name (custom items)": {}
+  },
+  "Output multipliers": {
+    "Default multiplier": 1.0,
+    "Multiplier by output item short name": {}
+  },
+  "Override output": {
+    "Override output by input item short name": {},
+    "Override output by input item skin ID": {},
+    "Override output by input item display name (custom items)": {}
+  }
+}

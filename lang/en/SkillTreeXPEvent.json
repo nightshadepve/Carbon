@@ -59,5 +59,6 @@
   "All": "All Sources",
   "EventStartedNotification": "A new XP event has started!",
   "EventEndedNotification": "The XP event has ended.",
-  "DiscordMessageEventStarted": ":globe_with_meridians: **A new XP event has started!** \\n>>> Duration: {0}\\nResource: {1}\\nBonus: +{2}%"
+  "DiscordMessageEventStarted": ":globe_with_meridians: **A new XP event has started!** \\n>>> Duration: {0}\\nResource: {1}\\nBonus: +{2}%",
+  "CollectWoodNodes": "Wood Piles"
 }

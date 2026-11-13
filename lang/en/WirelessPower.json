@@ -58,5 +58,6 @@
   "UI.WaterAmount": "{0}ml",
   "UI.NoSourcesFound": "No power sources found.\nPlace generators, solar panels, or batteries!",
   "UI.NoConsumersFound": "No consumers found.\nPlace turrets, lights, or other electrical items!",
-  "UI.NoCategoryFound": "No {0} found."
+  "UI.NoCategoryFound": "No {0} found.",
+  "UI.Page": "Page {0} / {1}"
 }

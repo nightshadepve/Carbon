@@ -1,0 +1,1111 @@
+[2026.11.06 10:06:30] [WARN] Carbon Analytics are ON. They're entirely anonymous and help us to further improve.
+[2026.11.06 10:06:30] [INFO] Carbon 2.0.264.0 [2026.11.05.0] 7cd15a2 on Linux 
+[2026.11.06 10:06:30] [INFO]        raul on production (2026-11-05 19:31:50 +0100)
+[2026.11.06 10:06:30] [INFO] Rust   137/2636.290.1 on release (04/11/2026 11:57:33) 170220
+[2026.11.06 10:06:30] [INFO] Oxide assembly conversion for 'Oxide.Ext.Chaos.dll' took 350ms
+[2026.11.06 10:06:30] [INFO] Oxide assembly conversion for 'Oxide.Ext.ChaosNPC.dll' took 41ms
+[2026.11.06 10:06:31] [INFO] Oxide assembly conversion for 'Oxide.Ext.Discord.dll' took 380ms
+[2026.11.06 10:06:31] [INFO] Oxide assembly conversion for 'Oxide.Ext.RustEdit.dll' took 166ms
+[2026.11.06 10:06:38] [INFO] Preloaded plugin Chaos Commands v1.0.66 by k1lly0u
+[2026.11.06 10:06:38] [INFO] Preloaded plugin Chaos Plugin Interface v1.0.66 by k1lly0u
+[2026.11.06 10:06:38] [INFO] Preloaded plugin ChaosNPC v3.0.46 by k1lly0u
+[2026.11.06 10:06:39] [INFO] Preloaded plugin ChaosNPC Commands v3.0.46 by k1lly0u
+[2026.11.06 10:06:39] [INFO] [DiscordExtension] [Info]: Using Discord Extension Version: 3.1.7
+[2026.11.06 10:06:39] [INFO] Preloaded plugin Discord Extension v3.1.7 by PsychoTea & DylanSMR & Tricky & Kirollos & MJSU
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Automatic Updater v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit 2 Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Deployable Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit IO Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Vending Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Loot Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Diesel Collectable Spawner v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Desk Keycard Spawner v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Resource Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit JunkPile Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Spawn Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Ocean Path v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit APC Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Vehicle Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit NPC Core v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Excavator Rotation Correction v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Custom Topology Layers v1.0.1 by Chaos
+[2026.11.06 10:06:39] [INFO] Preloaded plugin RustEdit Shop Keepers v1.0.1 by Chaos
+[2026.11.06 10:06:41] [INFO] Loaded plugin PhysgunRGT v1.0.0 by Physgun [701ms]
+[2026.11.06 10:07:00] [INFO] Loaded plugin Image Library v2.0.68 by Absolut & k1lly0u [409ms]
+[2026.11.06 10:07:00] [INFO] Loaded plugin Monument Finder v3.1.5 by WhiteThunder [184ms]
+[2026.11.06 10:07:00] [INFO] Loaded plugin Player DLC API v1.6.2 by k1lly0u [51ms]
+[2026.11.06 10:07:01] [INFO] Loaded plugin Discord Status (Webhook) v6.1.0 by AhmadAkal [34ms]
+[2026.11.06 10:07:01] [INFO] Loaded plugin MedioReports v2.2.1 by MediocratyItself [42ms]
+[2026.11.06 10:07:01] [INFO] [NightshadeConsoleFilter] Loaded. Active filters: 1253. Suppressing selected Unity/Rust log spam after plugin load.
+[2026.11.06 10:07:01] [INFO] Loaded plugin NightshadeConsoleFilter v1.0.1 by Nightshade [34ms]
+[2026.11.06 10:07:01] [INFO] Loaded plugin PopControl v1.7.0 by Papa [132ms]
+[2026.11.06 10:07:02] [INFO] Loaded plugin Queue Holder v1.0.2 by Tryhard [33ms]
+[2026.11.06 10:07:03] [INFO] Loaded plugin Monuments Watcher v0.1.12 by IIIaKa [272ms]
+[2026.11.06 10:07:04] [INFO] Loaded plugin TruePVE v2.4.4 by nivex [588ms]
+[2026.11.06 10:07:05] [INFO] Loaded plugin ZoneDomes v2.0.2 by k1lly0u [49ms]
+[2026.11.06 10:07:06] [INFO] Loaded plugin Zone Manager v3.1.14 by k1lly0u [324ms]
+[2026.11.06 10:07:07] [INFO] Loaded plugin Zone Manager Auto Zones v1.4.5 by FastBurst [273ms]
+[2026.11.06 10:07:12] [INFO] Loaded plugin Nightshade Purge Status v1.1.2 by Nightshade [99ms]
+[2026.11.06 10:07:12] [INFO] Loaded plugin NightshadeRaidProtection v1.1.3 by Nightshade [183ms]
+[2026.11.06 10:07:13] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Loaded share data: 0 entries. Known players: 140.
+[2026.11.06 10:07:13] [INFO] Loaded plugin UnifiedLootProtection v1.1.1 by Nightshade [127ms]
+[2026.11.06 10:07:13] [INFO] Loaded plugin BetterTC v1.7.1 by ninco90 [389ms]
+[2026.11.06 10:07:13] [INFO] Loaded plugin Chest Stacks v1.4.7 by supreme [146ms]
+[2026.11.06 10:07:14] [INFO] Loaded plugin NightshadeCrateEjector v1.0.0 by Nightshade [68ms]
+[2026.11.06 10:07:14] [INFO] Loaded plugin NightshadeVoteDay v1.2.0 by Nightshade [43ms]
+[2026.11.06 10:07:14] [INFO] Loaded plugin Remover Tool v4.3.48 by Reneb/Fuji/Arainrr/Tryhard [266ms]
+[2026.11.06 10:07:15] [INFO] Loaded plugin aQuarry v2.0.6 by AvG Лаймон [180ms]
+[2026.11.06 10:07:17] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.OnStorageItemTransferEnd_Patch1' (IndustrialStorageOnStorageItemTransferEnd) method [AfterPluginInit].
+[2026.11.06 10:07:17] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.get_Container_Patch1' (IndustrialStorageAdaptorPatch) method [AfterPluginInit].
+[2026.11.06 10:07:17] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.InputSlotRange_Patch1' (IndustrialStorageAdaptor_InputSlotRange) method [AfterPluginInit].
+[2026.11.06 10:07:17] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.OutputSlotRange_Patch1' (IndustrialStorageAdaptor_OutputSlotRange) method [AfterPluginInit].
+[2026.11.06 10:07:17] [INFO] Loaded plugin extendedindustrial v1.2.6 by bmgjet [90ms]
+[2026.11.06 10:07:18] [INFO] Loaded plugin Sign Artist v1.4.7 by Whispers88 [159ms]
+[2026.11.06 10:07:19] [INFO] Loaded plugin Skinner v3.2.1 by Whispers88 [316ms]
+[2026.11.06 10:07:20] [INFO] Loaded plugin UltimateLocker v2.1.5 by Scalbox [899ms]
+[2026.11.06 10:07:20] [INFO] Loaded plugin Activity Rewards v0.1.10 by IIIaKa [167ms]
+[2026.11.06 10:07:21] [INFO] Loaded plugin Cases v2.0.14 by Mevent [326ms]
+[2026.11.06 10:07:22] [INFO] Loaded plugin NightshadeRecycler v3.2.1 by Nightshade [89ms]
+[2026.11.06 10:07:22] [INFO] Loaded plugin NightshadeShop v1.5.0 by Nightshade [448ms]
+[2026.11.06 10:07:23] [INFO] Loaded plugin Personal Marketplace v1.4.1 by ZEODE [146ms]
+[2026.11.06 10:07:23] [INFO] Loaded plugin Server Rewards v2.0.8 by k1lly0u [375ms]
+[2026.11.06 10:07:24] [INFO] Loaded plugin Server Rewards Wipe v2.0.2 by ZEODE [61ms]
+[2026.11.06 10:07:25] [INFO] Loaded plugin Backpacks v3.17.9 by WhiteThunder [568ms]
+[2026.11.06 10:07:49] [INFO] Loaded plugin CustomC4RocketTiers v1.1.0 by Blackmatic [306ms]
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Shield.ServerSideAttack_Patch1' (Shield_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'ChickenCoop.SubmitEggForHatching_Patch1' (ChickenCoop_SubmitEggForHatching_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'FarmableAnimal.ServerPetChicken_Patch1' (FarmableAnimal_ServerPetChicken_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.OnPlayerSensed_Patch1' (LivestockAnimal_OnPlayerSensed_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.AddFamiliarity_Patch1' (LivestockAnimal_AddFamiliarity_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.HandlingCreditFor_Patch1' (LivestockAnimal_HandlingCreditFor_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Cow.TryMilk_Patch1' (Cow_TryMilk_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.GiveShearItems_Patch1' (Sheep_GiveShearItems_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.Shear_Patch1' (Sheep_Shear_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectAnimal_Patch1' (LivestockVendor_Server_SelectAnimal_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectWool_Patch1' (LivestockVendor_Server_SelectWool_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch1' (LivestockVendor_RollOffers_AddOffers_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch2' (LivestockVendor_RollOffers_ScaleOffers_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'FishLookup.GetFish_Patch1' (FishLookup_GetFish_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'MetalDetectorSource.CreateFlag_Patch1' (Item_SplitItem_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'BaseFishingRod.Server_RequestCast_Patch1' (FishingRod_Cast_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.StopRecycling_Patch1' (StopRecycling_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.GetRecyclerStats_Patch2' (Recycler_GetRecyclerStats_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'BasePlayer.RadiationProtection_Patch1' (RadiationProtection_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] [SkillTree] Automatically Harmony patched 'ItemModContainerArmorSlot.CreateForPlayer_Patch1' (ItemModContainerArmorSlot_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:51] [INFO] Loaded plugin Skill Tree v1.8.1 by imthenewguy [1792ms]
+[2026.11.06 10:07:51] [INFO] Loaded plugin SkillTreeXPEvent v1.0.16 by imthenewguy [173ms]
+[2026.11.06 10:07:52] [INFO] Loaded plugin Craft Car Chassis v1.2.5 by WhiteThunder [109ms]
+[2026.11.06 10:07:52] [INFO] Loaded plugin Nightshade MLRS Truck v1.0.8 by Nightshade [168ms]
+[2026.11.06 10:07:54] [INFO] Loaded plugin ArmoredTrain v2.0.9 by Adem [502ms]
+[2026.11.06 10:07:55] [INFO] Loaded plugin Bradley Drops v1.4.1 by ZEODE [684ms]
+[2026.11.06 10:07:57] [INFO] Loaded plugin Convoy v3.0.7 by Adem [585ms]
+[2026.11.06 10:07:57] [INFO] [DungeonEvents] Automatically Harmony patched 'ScientistNPC.get_displayName_Patch1' (ScientistNPC_DisplayName_Patch) method [AfterPluginInit].
+[2026.11.06 10:07:57] [INFO] Loaded plugin Dungeon Events v3.13.1 by Martian [1025ms]
+[2026.11.06 10:07:57] [ERRO] Failed compiling 'EventsManager.cs':
+[2026.11.06 10:07:57] [ERRO]   1. 'EventSchedule' does not contain a definition for 'maxmumHoursBetween' and no accessible extension method 'maxmumHoursBetween' accepting a first argument of type 'EventSchedule' could be found (are you missing a using directive or an assembly reference?) [CS1061]
+     (EventsManager 65 line 7894)
+[2026.11.06 10:07:57] [ERRO]   2. No overload for method 'Store' takes 3 arguments [CS1501]
+     (EventsManager 40 line 8797)
+[2026.11.06 10:07:59] [INFO] Loaded plugin EventsManagerNotifier v1.0.11 by Mevent & M&B-Studios [79ms]
+[2026.11.06 10:07:59] [INFO] Loaded plugin Heli Signals v1.4.1 by ZEODE [572ms]
+[2026.11.06 10:07:59] [INFO] Loaded plugin HideAndSeek v1.1.0 by Nightshade [122ms]
+[2026.11.06 10:08:00] [INFO] [IslandStorm] IslandStorm loaded. Use /storm start (requires islandstorm.admin permission).
+[2026.11.06 10:08:00] [INFO] Loaded plugin IslandStorm v1.1.0 by Grok [103ms]
+[2026.11.06 10:08:01] [INFO] Loaded plugin Copy Paste v4.3.1 by misticos [474ms]
+[2026.11.06 10:08:01] [INFO] Loaded plugin DefendableHomes v1.2.4 by KpucTaJl [318ms]
+[2026.11.06 10:08:14] [INFO] Loaded plugin NightshadeRaidbase v1.0.16 by Nightshade [220ms]
+[2026.11.06 10:08:15] [INFO] Loaded plugin Raidable Bases v3.2.3 by nivex [1919ms]
+[2026.11.06 10:08:15] [INFO] Loaded plugin NpcSpawn v3.4.9 by KpucTaJl [1111ms]
+[2026.11.06 10:08:16] [INFO] Loaded plugin Spawns v2.0.36 by Reneb / k1lly0u [87ms]
+[2026.11.06 10:08:16] [INFO] Loaded plugin Advanced Status v0.1.27 by IIIaKa [179ms]
+[2026.11.06 10:08:16] [INFO] Loaded plugin NPC Health Bar v1.0.10 by Chris [147ms]
+[2026.11.06 10:08:17] [INFO] Loaded plugin NightshadeAnnouncer v1.3.1 by Nightshade [123ms]
+[2026.11.06 10:08:17] [INFO] Loaded plugin NightshadeChat v1.0.0 by Rustonauts & Nightshade [405ms]
+[2026.11.06 10:08:18] [INFO] Loaded plugin NightshadeHud v1.1.0 by Nightshade [194ms]
+[2026.11.06 10:08:18] [INFO] Loaded plugin NightshadeInfo v1.2.1 by Nightshade [147ms]
+[2026.11.06 10:08:18] [INFO] Loaded plugin Restart Status v0.1.1 by IIIaKa [109ms]
+[2026.11.06 10:08:18] [INFO] Loaded plugin Sort Button v2.7.0 by WhiteThunder, MON@H [113ms]
+[2026.11.06 10:08:19] [INFO] Loaded plugin Teleport Status v0.1.2 by IIIaKa [123ms]
+[2026.11.06 10:08:23] [INFO] Loaded plugin XFastButtons v1.1.0 by Monster [171ms]
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BasePlayer.Server_RequestMarkers_Patch1' (MapOpenedPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BasePlayer.IsGod_Patch1' (IsGodPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BaseEntity.SignalBroadcast_Patch1' (VanishSignalPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BaseNetworkable.GetConnectionsWithin_Patch1' (VanishHearingPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'Effect+server.ImpactEffect_Patch1' (VanishImpactPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'EffectNetwork.Send_Patch2' (VanishEffectPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin] Automatically Harmony patched 'AntiHack.ShouldIgnore_Patch1' (NoclipAntiHackPatch) method [AfterPluginInit].
+[2026.11.06 10:08:23] [INFO] Loaded plugin PowerfulAdmin v1.3.1 by codeboy [2255ms]
+[2026.11.06 10:08:23] [INFO] [PowerfulAdmin Discord] Discord bot is disabled in PowerfulAdmin settings - bot idle.
+[2026.11.06 10:08:23] [INFO] Loaded plugin PowerfulAdmin Discord v1.1.0 by codeboy [129ms]
+[2026.11.06 10:08:24] [INFO] Loaded plugin Restore Upon Death v0.6.5 by k1lly0u [85ms]
+[2026.11.06 10:08:26] [INFO] Loaded plugin VIPPerks v1.2.1 by Nightshade [95ms]
+[2026.11.06 10:08:27] [INFO] Loaded plugin Vehicle Licence v1.9.2 by Mabel [1182ms]
+[2026.11.06 10:08:27] [INFO] Loaded plugin WirelessPower v1.2.9 by RickySpanish [255ms]
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No IO data found in map file
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No vending data found in map file
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No loot data found in map file
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No APC path data found in map file
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No vehicle data found in map file
+[2026.11.06 10:08:30] [WARN] [RustEdit] - No NPC data found in map file
+[2026.11.06 10:08:56] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] A portal tears open at sea… Deep Sea has spawned (North).
+[2026.11.06 10:08:56] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: Deep Sea portal fired at (0.00, 0.00, 3000.00) (North)
+[2026.11.06 10:09:12] [INFO] Unloaded plugin PhysgunRGT v1.0.0 by Physgun
+[2026.11.06 10:09:12] [WARN] Requested 'PhysgunRGT' for compilation
+[2026.11.06 10:09:12] [INFO] [Admin] Loaded Codefling plugin metadata cache from file.
+[2026.11.06 10:09:12] [INFO] [Admin] Loaded uMod plugin metadata cache from file.
+[2026.11.06 10:09:12] [INFO] [Discord Status (Webhook)] The plugin will attempt to edit the message with ID: 1512407393131171985
+[2026.11.06 10:09:12] [INFO] [PopControl] [LWPop] Captured original maxplayers value: 100
+[2026.11.06 10:09:12] [INFO] [PopControl] [LWPop] maxplayers -> 50 (online=0, joining=0, queued=0, offset=1, bounds=50-100)
+[2026.11.06 10:09:13] [WARN]  Zone Manager Auto Zones v1.4.5 by FastBurst hook 'OnServerInitialized' took longer than 100ms [157ms]
+[2026.11.06 10:09:13] [INFO] [NightshadeRaidProtection] Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM.
+[2026.11.06 10:09:13] [INFO] [BetterTC] Harmony Patched: RPC_PickupWallpaperStart_Patch
+[2026.11.06 10:09:13] [INFO] [BetterTC] Harmony Patched: HasClothForPlacement_Patch
+[2026.11.06 10:09:13] [INFO] [BetterTC] Harmony Patched: CheckWallpaper_Patch
+[2026.11.06 10:09:13] [INFO] [BetterTC] Harmony Patched (Force both sides wallpapers: true)
+[2026.11.06 10:09:13] [WARN]  Remover Tool v4.3.48 by Reneb/Fuji/Arainrr/Tryhard hook 'OnServerInitialized' took longer than 100ms [139ms]
+[2026.11.06 10:09:13] [WARN] [Sign Artist] Waiting for Steamworks to update item definitions....
+[2026.11.06 10:09:13] [INFO] [Skinner] Waiting for Steamworks to update skin item definitions
+[2026.11.06 10:09:13] [INFO] [Skinner] Loading skins from 2 collections...
+[2026.11.06 10:09:13] [INFO] [UltimateLocker] Waiting for Steam Workshop to update item definitions....
+[2026.11.06 10:09:13] [INFO] [UltimateLocker] Skinner Patch applied successfully.
+[2026.11.06 10:09:13] [WARN]  UltimateLocker v2.1.5 by Scalbox hook 'OnServerInitialized' took longer than 100ms [176ms]
+[2026.11.06 10:09:13] [WARN] [Activity Rewards] MonumentsWatcher plugin not found! MonumentsWatcher is required to work with monuments!
+* https://codefling.com/plugins/monuments-watcher
+[2026.11.06 10:09:13] [WARN] [Activity Rewards] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.06 10:09:13] [ERRO] [Cases] Items with the same ID found 11
+[2026.11.06 10:09:13] [ERRO] [Cases] Items with the same ID found 12
+[2026.11.06 10:09:13] [INFO] [NightshadeShop] NightshadeShop v1.5.0 loaded: 14 categories, 116 listings, 10 Admin Shop categories, 65 trades.
+[2026.11.06 10:09:13] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_Server_CanAcceptOrder_Patch
+[2026.11.06 10:09:13] [INFO] [Personal Marketplace] INFO: Harmony patch applied: MarketTerminal_Server_SetMarketplaceHasPower_Patch
+[2026.11.06 10:09:13] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_ChargeFraction_Patch
+[2026.11.06 10:09:13] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_Server_RefreshChargeState_Patch
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Blueprint count: 668
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Spawned: workbench1.deployed
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Spawned: workbench2.deployed
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Spawned: workbench3.deployed
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Loading 9 images into ImageLibrary
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Loaded all images for SkillTree.
+[2026.11.06 10:09:13] [INFO] [Skill Tree] Tracking 2 required nodes.
+[2026.11.06 10:09:13] [INFO] [Convoy] Route caching has started!
+[2026.11.06 10:09:13] [INFO] [IslandStorm] IslandStorm ready. Grant permission with: oxide.grant user <steamid> islandstorm.admin
+[2026.11.06 10:09:13] [INFO] [RaidableBases] Allowed spawn points in 0 zones.
+[2026.11.06 10:09:13] [INFO] [RaidableBases] Blocked spawn points in 37 zones.
+[2026.11.06 10:09:14] [INFO] [NpcSpawn] Loading custom navigation mesh files...
+[2026.11.06 10:09:14] [INFO] [NpcSpawn] All custom navigation mesh files have loaded successfully!
+[2026.11.06 10:09:14] [INFO] [NpcSpawn] List of road positions: ExtraWide = 1644, Standard = 1932, ExtraNarrow = 1901
+[2026.11.06 10:09:14] [INFO] [NpcSpawn] 3107 railway positions found
+[2026.11.06 10:09:14] [WARN]  NpcSpawn v3.4.9 by KpucTaJl hook 'OnServerInitialized' took longer than 100ms [583ms]
+[2026.11.06 10:09:14] [WARN] [Restart Status] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.06 10:09:14] [WARN] [Teleport Status] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.06 10:09:14] [WARN] [XFastButtons] 
+-----------------------------
+     Author - Monster
+     VK - vk.com/idannopol
+     Discord - Monster#4837
+-----------------------------
+[2026.11.06 10:09:14] [INFO] [RustEdit] - Checking for updates...
+[2026.11.06 10:09:14] [INFO] [RustEdit] - Rust patches: 12 ok
+[2026.11.06 10:09:14] [INFO]  Batch completed! OSI on 94 plugins.
+[2026.11.06 10:09:24] [INFO] [BetterTC] CheckUpdate: No new items found in remote data.
+[2026.11.06 10:09:24] [INFO] [WirelessPower] Initialized 0 power grids
+[2026.11.06 10:09:24] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: DeepSeaManager component cached successfully.
+[2026.11.06 10:09:24] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: Deep Sea portal found on init scan (cached position).
+[2026.11.06 10:09:24] [INFO] [Skinner] Found - 22 in 2 collections.
+[2026.11.06 10:09:24] [INFO] [Skinner] Finished processing workshop skin imports. Total processed: 0/0
+[2026.11.06 10:09:24] [INFO] [Skinner] Saved Workshop Skins
+[2026.11.06 10:09:24] [INFO] [Skinner] Saved Workshop Skins
+[2026.11.06 10:09:24] [INFO] [Skinner] Finished Updating Custom Skins
+[2026.11.06 10:09:24] [INFO] [RustEdit] - The RustEdit extension is up to date!
+[2026.11.06 10:09:24] [INFO] [DefendableHomes] Image Tab_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [NpcSpawn] Image Preset_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [DefendableHomes] Image Clock_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [NpcSpawn] Image Find_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [DefendableHomes] Image Npc_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [NpcSpawn] Image Delete_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [DefendableHomes] Image Foundation_KpucTaJl download is complete
+[2026.11.06 10:09:24] [INFO] [NpcSpawn] Image Indicator_KpucTaJl download is complete
+[2026.11.06 10:09:31] [INFO] [NpcSpawn] Image Back_KpucTaJl download is complete
+[2026.11.06 10:09:34] [INFO] [NpcSpawn] Image Copy_KpucTaJl download is complete
+[2026.11.06 10:09:34] [INFO] [RustEdit] - No custom vending machines found in map
+[2026.11.06 10:09:34] [INFO] [RustEdit] - 0 loot containers processed!
+[2026.11.06 10:09:34] [INFO] [RustEdit] - 0 resource entities processed!
+[2026.11.06 10:09:34] [INFO] [RustEdit] - 0 junkpiles processed!
+[2026.11.06 10:09:34] [INFO] [RustEdit] - Connected 15 shopkeepers to vending machines
+[2026.11.06 10:09:34] [INFO] [NpcSpawn] Image coconut-underwear download is complete
+[2026.11.06 10:09:35] [INFO] [NpcSpawn] Image femaleunderwear_mummywraps.icon download is complete
+[2026.11.06 10:09:35] [INFO] [NpcSpawn] Image maleunderwear_mummywraps.icon download is complete
+[2026.11.06 10:09:35] [INFO] [NpcSpawn] Image pink_bikini download is complete
+[2026.11.06 10:09:35] [INFO] Loaded plugin PhysgunRGT v1.0.0 by Physgun [104ms]
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image rapido_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_gradient_female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_gradient_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_palmleaves_female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_palmleaves_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_scribble_female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image swimwear_scribble_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image twitchunderwear_female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image twitchunderwear_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image underwear_default_female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image underwear_default_male download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image grassskirt-underwear-female download is complete
+[2026.11.06 10:09:36] [INFO] [NpcSpawn] Image grassskirt-underwear-male download is complete
+[2026.11.06 10:09:40] [INFO] -
+Loaded 170 items from RaidableBases/Base_Loot/Easy Bases
+Loaded 182 items from RaidableBases/Base_Loot/Medium Bases
+Loaded 180 items from RaidableBases/Base_Loot/Hard Bases
+Loaded 171 items from RaidableBases/Base_Loot/Expert Bases
+Loaded 164 items from RaidableBases/Base_Loot/Nightmare Bases
+
+[2026.11.06 10:09:40] [WARN] [Convoy] Route caching has ended! The number of routes: 5
+[2026.11.06 10:09:47] [INFO] [Skinner] Steamworks Updated, Updating Skins
+[2026.11.06 10:09:48] [INFO] [Skinner] Configuration changes saved to Skinner.json
+[2026.11.06 10:09:48] [INFO] [Skinner] 7963 Workshop skins were indexed.. Checking for imported skins and collections
+[2026.11.06 10:09:48] [INFO] [Skinner] Saved Workshop Skins
+[2026.11.06 10:09:48] [INFO] [UltimateLocker] Processing Steam Workshop definitions...
+[2026.11.06 10:09:48] [INFO] [Copy Paste] Skin detection initialized: 6743 official skins, 384 DLC items. Processing 0 queued paste(s).
+[2026.11.06 10:10:02] [INFO] [RaidableBases] 25% loaded (448 potential points)
+[2026.11.06 10:10:04] [INFO] [NpcSpawn] List of biome positions: Arid = 1295, Temperate = 1099, Tundra = 558, Arctic = 726, Jungle = 740
+[2026.11.06 10:10:22] [INFO] [RaidableBases] 50% loaded (598 potential points)
+[2026.11.06 10:10:42] [INFO] [RaidableBases] 75% loaded (756 potential points)
+[2026.11.06 10:11:02] [INFO] [RaidableBases] 100% loaded (1291 potential points)
+[2026.11.06 10:11:02] [INFO] [RaidableBases] Grid initialization completed in 84 seconds and 665 milliseconds on a 4500 size map with 1291 potential points.
+[2026.11.06 10:21:00] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 10:21:00] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 10:21:00] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 10:36:00] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 10:36:00] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 10:36:00] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 10:51:00] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 10:51:00] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 10:51:00] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 11:06:01] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 11:06:01] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 11:06:01] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 11:21:01] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 11:21:01] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 11:21:01] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 11:36:01] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 11:36:01] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 11:36:01] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 11:51:02] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 11:51:02] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 11:51:02] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 12:06:02] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 12:06:02] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 12:06:02] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 12:21:03] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 12:21:03] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 12:21:03] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 12:36:03] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 12:36:03] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 12:36:03] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 12:51:03] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 12:51:03] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 12:51:03] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 13:06:04] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 13:06:04] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 13:06:04] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 13:21:04] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 13:21:04] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 13:21:04] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 13:36:05] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 13:36:05] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 13:36:05] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 13:51:05] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 13:51:05] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 13:51:05] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 14:06:06] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 14:06:06] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 14:06:06] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 14:21:06] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 14:21:06] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 14:21:06] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 14:36:06] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 14:36:06] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.06 14:36:06] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 14:38:40] [INFO] You've successfully pasted the structure: Boom-Nightmare-Souffle
+[2026.11.06 14:39:07] [INFO] [RaidableBases] Boom-Nightmare-Souffle @ D22 (-1,749.59 -1,150.63) : 125 items
+[2026.11.06 14:51:07] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 14:51:07] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 14:51:07] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 15:06:08] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 15:06:08] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 15:06:08] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 15:21:08] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 15:21:08] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 15:21:08] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 15:36:09] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 15:36:09] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 15:36:09] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 15:51:09] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 15:51:09] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 15:51:09] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 16:06:10] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 16:06:10] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 16:06:10] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 16:21:10] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 16:21:10] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 16:21:10] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 16:36:11] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 2 expired ownership records. Active: 0
+[2026.11.06 16:36:11] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 16:36:11] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 16:51:11] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 16:51:11] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 16:51:11] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 17:06:12] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 17:06:12] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 17:06:12] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 17:21:12] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 17:21:12] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.06 17:21:12] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 17:36:13] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 9 expired ownership records. Active: 0
+[2026.11.06 17:36:13] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.06 17:36:13] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 17:51:14] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 17:51:14] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 17:51:14] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 18:06:15] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 8
+[2026.11.06 18:06:15] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 18:06:15] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 18:21:15] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 3 expired ownership records. Active: 0
+[2026.11.06 18:21:15] [INFO] [Skill Tree] Saving player data for 5 players.
+[2026.11.06 18:21:15] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 18:36:16] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 18:36:16] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 18:36:16] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 18:51:17] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 18:51:17] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 18:51:17] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 19:06:17] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 19:06:17] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 19:06:17] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 19:16:12] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by RKFISHHH
+[2026.11.06 19:21:18] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 19:21:18] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 19:21:18] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 19:27:41] [INFO] [VIPPerks] [VIPPerks] Kit refused for DuskyGopher: needs 15 slots, free=14 (main cap=24, items=11; belt cap=6, items=5)
+[2026.11.06 19:36:19] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 19:36:19] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 19:36:19] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 19:51:19] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 19:51:19] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.06 19:51:19] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 20:06:20] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 5 expired ownership records. Active: 6
+[2026.11.06 20:06:20] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.06 20:06:20] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 20:19:43] [INFO] [VIPPerks] [VIPPerks] Kit refused for Mr.Tootsies: needs 9 slots, free=6 (main cap=24, items=18; belt cap=6, items=6)
+[2026.11.06 20:21:21] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 2
+[2026.11.06 20:21:21] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 20:21:21] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 20:36:22] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 2 expired ownership records. Active: 5
+[2026.11.06 20:36:22] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 20:36:22] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 20:48:46] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by Mr.Tootsies
+[2026.11.06 20:51:23] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 5 expired ownership records. Active: 0
+[2026.11.06 20:51:23] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 20:51:23] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 21:06:23] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 4
+[2026.11.06 21:06:23] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 21:06:23] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 21:21:24] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 3
+[2026.11.06 21:21:24] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 21:21:24] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 21:36:25] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 21:36:25] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 21:36:25] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 21:51:26] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 21:51:26] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 21:51:26] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 22:06:26] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 22:06:26] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 22:06:26] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 22:21:27] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 1
+[2026.11.06 22:21:27] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 22:21:27] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 22:36:28] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 8 expired ownership records. Active: 1
+[2026.11.06 22:36:28] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.06 22:36:28] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 22:51:28] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 1 expired ownership records. Active: 0
+[2026.11.06 22:51:28] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 22:51:28] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 23:06:29] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 6 expired ownership records. Active: 0
+[2026.11.06 23:06:29] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 23:06:29] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 23:15:31] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by RowdyTexan
+[2026.11.06 23:15:35] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by RowdyTexan
+[2026.11.06 23:15:38] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by RowdyTexan
+[2026.11.06 23:21:30] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 1
+[2026.11.06 23:21:30] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 23:21:30] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 23:36:31] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.06 23:36:31] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 23:36:31] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.06 23:51:32] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 3 expired ownership records. Active: 0
+[2026.11.06 23:51:32] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.06 23:51:32] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 00:00:08] [INFO] You've successfully pasted the structure: fullwipedexp4
+[2026.11.07 00:00:41] [INFO] [RaidableBases] fullwipedexp4 @ G26 (-1,324.75 -1,775.14) : 110 items
+[2026.11.07 00:01:50] [INFO] You've successfully pasted the structure: fullwipedhard49
+[2026.11.07 00:02:23] [INFO] [RaidableBases] fullwipedhard49 @ AA16 (1,762.70 -299.92) : 105 items
+[2026.11.07 00:06:32] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 00:06:32] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 00:06:32] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 00:07:46] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by DuskyGopher
+[2026.11.07 00:21:33] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 00:21:33] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 00:21:33] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 00:36:34] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 2
+[2026.11.07 00:36:34] [INFO] [Skill Tree] Saving player data for 5 players.
+[2026.11.07 00:36:34] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 00:51:35] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 1 expired ownership records. Active: 0
+[2026.11.07 00:51:35] [INFO] [Skill Tree] Saving player data for 5 players.
+[2026.11.07 00:51:35] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 00:53:07] [INFO] [NightshadeRaidProtection] Redeemed weekend for TC 145522 by 76561198383506301
+[2026.11.07 00:55:20] [INFO] [NightshadeInfo] NightshadeInfo status: PvP from NightshadeRaidProtection.Call. Purge from built-in schedule (not in window). Mode PVE.
+[2026.11.07 00:57:44] [INFO] [NightshadeRaidbase] Raid turret interference max restored to 12.
+[2026.11.07 00:57:44] [INFO] Unloaded plugin NightshadeRaidbase v1.0.16 by Nightshade
+[2026.11.07 00:57:57] [INFO] [NightshadeRaidProtection] Redeemed weekend for TC 151547 by 76561198839853772
+[2026.11.07 00:58:22] [INFO] [NightshadeRaidProtection] Redeemed 24H for TC 152520 by 76561199866337898
+[2026.11.07 01:00:00] [INFO] Active ruleset is now 'nightshade_pvp_weekend'.
+[2026.11.07 01:00:00] [INFO] [NightshadeRaidProtection] Set TruePVE ruleset to nightshade_pvp_weekend.
+[2026.11.07 01:00:00] [INFO] [NightshadeRaidProtection] PvP window opened. Fri Nov 6 8:00 PM ET -> Mon Nov 9 3:00 AM ET
+[2026.11.07 01:06:35] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 01:06:35] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 01:06:35] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 01:21:36] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 01:21:36] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 01:21:36] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 01:36:37] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 01:36:37] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 01:36:37] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 01:50:19] [INFO] Unloaded plugin Skill Tree v1.8.1 by imthenewguy
+[2026.11.07 01:51:37] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 02:06:37] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 02:21:38] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 02:36:39] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 02:51:40] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 03:06:40] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 03:21:41] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 03:36:41] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 03:39:54] [WARN] Requested 'SkillTree' for compilation
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Shield.ServerSideAttack_Patch3' (Shield_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'ChickenCoop.SubmitEggForHatching_Patch5' (ChickenCoop_SubmitEggForHatching_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'FarmableAnimal.ServerPetChicken_Patch5' (FarmableAnimal_ServerPetChicken_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.OnPlayerSensed_Patch4' (LivestockAnimal_OnPlayerSensed_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.AddFamiliarity_Patch3' (LivestockAnimal_AddFamiliarity_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.HandlingCreditFor_Patch3' (LivestockAnimal_HandlingCreditFor_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Cow.TryMilk_Patch4' (Cow_TryMilk_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.GiveShearItems_Patch3' (Sheep_GiveShearItems_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.Shear_Patch3' (Sheep_Shear_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectAnimal_Patch4' (LivestockVendor_Server_SelectAnimal_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectWool_Patch4' (LivestockVendor_Server_SelectWool_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch5' (LivestockVendor_RollOffers_AddOffers_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch6' (LivestockVendor_RollOffers_ScaleOffers_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'FishLookup.GetFish_Patch4' (FishLookup_GetFish_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'MetalDetectorSource.CreateFlag_Patch3' (Item_SplitItem_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'BaseFishingRod.Server_RequestCast_Patch4' (FishingRod_Cast_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.StopRecycling_Patch3' (StopRecycling_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.GetRecyclerStats_Patch4' (Recycler_GetRecyclerStats_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'BasePlayer.RadiationProtection_Patch3' (RadiationProtection_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] [SkillTree] Automatically Harmony patched 'ItemModContainerArmorSlot.CreateForPlayer_Patch3' (ItemModContainerArmorSlot_Patch) method [AfterPluginInit].
+[2026.11.07 03:40:20] [INFO] Loaded plugin Skill Tree v1.8.1 by imthenewguy [1934ms]
+[2026.11.07 03:40:20] [INFO] [Skill Tree] Blueprint count: 668
+[2026.11.07 03:40:20] [WARN]  Skill Tree v1.8.1 by imthenewguy hook 'OnEntitySpawned' took longer than 100ms [133ms]
+[2026.11.07 03:40:20] [INFO] [Skill Tree] Spawned: workbench1.deployed
+[2026.11.07 03:40:20] [INFO] [Skill Tree] Spawned: workbench2.deployed
+[2026.11.07 03:40:20] [INFO] [Skill Tree] Spawned: workbench3.deployed
+[2026.11.07 03:40:21] [INFO] [Skill Tree] Loading 9 images into ImageLibrary
+[2026.11.07 03:40:21] [INFO] [Skill Tree] Loaded all images for SkillTree.
+[2026.11.07 03:40:21] [INFO] [Skill Tree] Tracking 2 required nodes.
+[2026.11.07 03:51:42] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 03:51:42] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.07 03:51:42] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:06:43] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 04:06:43] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 04:06:43] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:19:35] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 04:19:35] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:21:44] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 04:21:44] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 04:21:44] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:36:44] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 04:36:44] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 04:36:44] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:51:45] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 04:51:45] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 04:51:45] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 04:56:08] [INFO] Unloaded plugin NightshadeVoteDay v1.2.0 by Nightshade
+[2026.11.07 04:56:13] [INFO] Loaded plugin NightshadeVoteDay v1.2.1 by Nightshade [70ms]
+[2026.11.07 04:59:29] [INFO] [NightshadeRaidProtection] Redeemed weekend for TC 1863387 by 76561198035665693
+[2026.11.07 05:06:46] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 05:06:46] [INFO] [Skill Tree] Saving player data for 4 players.
+[2026.11.07 05:06:46] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 05:13:13] [ERRO] Failed executing 'PATCH' webrequest [response] (https://discord.com/api/webhooks/1512406693978443857/ktAb41JBWdVtjhHYF9k1LhCJblTd4FclJucYZP8QWypjr3DDlJ88wWLTCJFBbeZsp0lE/messages/1512407393131171985) (Unable to read data from the transport connection: Connection reset by peer.)
+   at async void System.Net.HttpWebRequest+<RunWithTimeoutWorker>d__244<System.Net.HttpWebResponse>.MoveNext()
+   at WebResponse System.Net.HttpWebRequest.EndGetResponse(IAsyncResult asyncResult)
+   at WebResponse System.Net.WebClient.GetWebResponse(WebRequest request, IAsyncResult result)
+   at WebResponse Oxide.Core.Libraries.WebRequests+WebRequest+Client.GetWebResponse(WebRequest request, IAsyncResult result) in /home/runner/work/Carbon/Carbon/src/Carbon.Components/Carbon.Common/src/Oxide/Libraries/WebRequest.cs:line 445
+   at async Task<WebResponse> System.Net.WebClient.GetWebResponseTaskAsync(WebRequest request)
+   at async void System.Net.WebClient.DownloadBitsAsync(WebRequest request, Stream writeStream, AsyncOperation asyncOp, Action<byte[], Exception, AsyncOperation> completionDelegate)
+  Inner exception:
+  System.IO.IOException: Unable to read data from the transport connection: Connection reset by peer. ---> System.Net.Sockets.SocketException: Connection reset by peer
+   --- End of inner exception stack trace ---
+   at void System.Net.Sockets.Socket+AwaitableSocketAsyncEventArgs.ThrowException(SocketError error)
+   at int System.Net.Sockets.Socket+AwaitableSocketAsyncEventArgs.GetResult(short token)
+   at static System.Threading.Tasks.ValueTask<TResult>+ValueTaskSourceAsTask()+(object state) => { }
+   at async Task<int> Mono.Net.Security.MobileAuthenticatedStream.InnerRead(bool sync, int requestedSize, CancellationToken cancellationToken)
+   at async Task<int?> Mono.Net.Security.AsyncProtocolRequest.InnerRead(CancellationToken cancellationToken)
+   at async Task Mono.Net.Security.AsyncProtocolRequest.ProcessOperation(CancellationToken cancellationToken)
+   at async Task<AsyncProtocolResult> Mono.Net.Security.AsyncProtocolRequest.StartOperation(CancellationToken cancellationToken)
+   at async Task<int> Mono.Net.Security.MobileAuthenticatedStream.StartOperation(OperationType type, AsyncProtocolRequest asyncRequest, CancellationToken cancellationToken)
+   at async Task System.Net.WebResponseStream.InitReadAsync(CancellationToken cancellationToken)
+   at async void System.Net.WebOperation.Run()
+   at async void System.Net.WebCompletionSource<System.Net.WebResponseStream>+<WaitForCompletion>d__15.MoveNext()
+   at async Task<HttpWebResponse> System.Net.HttpWebRequest.MyGetResponseAsync(CancellationToken cancellationToken)
+  Inner exception:
+  System.Net.Sockets.SocketException (0x80004005): Connection reset by peer
+[2026.11.07 05:13:13] [ERRO] [Discord Status (Webhook)] Failed to edit message. Check if the 'Discord Message ID' in your config is correct. Code: 0
+[2026.11.07 05:21:47] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 05:21:47] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.07 05:21:47] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 05:36:47] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 05:36:47] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.07 05:36:47] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 05:51:48] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 05:51:48] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.07 05:51:48] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 06:06:49] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 06:06:49] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.07 06:06:49] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 06:08:36] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by Blue
+[2026.11.07 06:08:39] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] Supply signal thrown by Blue
+[2026.11.07 06:21:49] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 06:21:49] [INFO] [Skill Tree] Saving player data for 3 players.
+[2026.11.07 06:21:49] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 06:36:50] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 06:36:50] [INFO] [Skill Tree] Saving player data for 2 players.
+[2026.11.07 06:36:50] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 06:51:50] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 06:51:50] [INFO] [Skill Tree] Saving player data for 1 players.
+[2026.11.07 06:51:50] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 07:04:17] [INFO] [NightshadeRaidProtection] Redeemed 24h for TC 1375628 by 76561199069700597
+[2026.11.07 07:06:51] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 07:06:51] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 07:06:51] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 07:21:51] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 07:21:51] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 07:21:51] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 07:36:52] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 07:36:52] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 07:36:52] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 07:51:52] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 07:51:52] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 07:51:52] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 08:06:53] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 08:06:53] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 08:06:53] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 08:21:53] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 08:21:53] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 08:21:53] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 08:36:54] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 08:36:54] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 08:36:54] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 08:51:54] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 08:51:54] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 08:51:54] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 09:06:55] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 09:06:55] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 09:06:55] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 09:21:55] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 09:21:55] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 09:21:55] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 09:36:56] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 09:36:56] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 09:36:56] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 09:51:56] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 09:51:56] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 09:51:56] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 10:02:07] [INFO] Saving plugin configuration and data..
+[2026.11.07 10:02:07] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 10:02:07] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 10:02:07] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 10:02:07] [INFO] Shutting down Carbon..
+[2026.11.07 10:02:07] [INFO] Unloaded plugin Image Library v2.0.68 by Absolut & k1lly0u
+[2026.11.07 10:02:08] [INFO] Unloaded plugin Monument Finder v3.1.5 by WhiteThunder
+[2026.11.07 10:02:08] [INFO] Unloaded plugin Player DLC API v1.6.2 by k1lly0u
+[2026.11.07 10:02:08] [INFO] Unloaded plugin Discord Status (Webhook) v6.1.0 by AhmadAkal
+[2026.11.07 10:02:08] [INFO] Unloaded plugin MedioReports v2.2.1 by MediocratyItself
+[2026.11.07 10:02:08] [INFO] Unloaded plugin NightshadeConsoleFilter v1.0.1 by Nightshade
+[2026.11.07 10:02:09] [INFO] [PopControl] [LWPop] Restored maxplayers to original value: 100
+[2026.11.07 10:02:09] [INFO] Unloaded plugin PopControl v1.7.0 by Papa
+[2026.11.07 10:02:09] [INFO] Unloaded plugin Queue Holder v1.0.2 by Tryhard
+[2026.11.07 10:02:09] [INFO] Unloaded plugin Monuments Watcher v0.1.12 by IIIaKa
+[2026.11.07 10:02:09] [INFO] Unloaded plugin TruePVE v2.4.4 by nivex
+[2026.11.07 10:02:09] [INFO] Unloaded plugin ZoneDomes v2.0.2 by k1lly0u
+[2026.11.07 10:02:09] [INFO] Unloaded plugin Zone Manager v3.1.14 by k1lly0u
+[2026.11.07 10:02:09] [INFO] Unloaded plugin Zone Manager Auto Zones v1.4.5 by FastBurst
+[2026.11.07 10:02:09] [INFO] Unloaded plugin Nightshade Purge Status v1.1.2 by Nightshade
+[2026.11.07 10:02:10] [INFO] Unloaded plugin NightshadeRaidProtection v1.1.3 by Nightshade
+[2026.11.07 10:02:10] [INFO] Unloaded plugin UnifiedLootProtection v1.1.1 by Nightshade
+[2026.11.07 10:02:10] [INFO] Unloaded plugin BetterTC v1.7.1 by ninco90
+[2026.11.07 10:02:10] [INFO] Unloaded plugin Chest Stacks v1.4.7 by supreme
+[2026.11.07 10:02:10] [INFO] Unloaded plugin NightshadeCrateEjector v1.0.0 by Nightshade
+[2026.11.07 10:02:10] [INFO] Unloaded plugin Remover Tool v4.3.48 by Reneb/Fuji/Arainrr/Tryhard
+[2026.11.07 10:02:10] [INFO] Unloaded plugin aQuarry v2.0.6 by AvG Лаймон
+[2026.11.07 10:02:11] [INFO] Unloaded plugin extendedindustrial v1.2.6 by bmgjet
+[2026.11.07 10:02:11] [INFO] Unloaded plugin Sign Artist v1.4.7 by Whispers88
+[2026.11.07 10:02:11] [INFO] [Skinner] DataSaved
+[2026.11.07 10:02:11] [INFO] Unloaded plugin Skinner v3.2.1 by Whispers88
+[2026.11.07 10:02:11] [WARN]  UltimateLocker v2.1.5 by Scalbox hook 'Unload' took longer than 100ms [655ms] [GC]
+[2026.11.07 10:02:11] [INFO] Unloaded plugin UltimateLocker v2.1.5 by Scalbox
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Activity Rewards v0.1.10 by IIIaKa
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Cases v2.0.14 by Mevent
+[2026.11.07 10:02:12] [INFO] Unloaded plugin NightshadeRecycler v3.2.1 by Nightshade
+[2026.11.07 10:02:12] [INFO] Unloaded plugin NightshadeShop v1.5.0 by Nightshade
+[2026.11.07 10:02:12] [WARN]  Personal Marketplace v1.4.1 by ZEODE hook 'Unload' took longer than 100ms [181ms]
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Personal Marketplace v1.4.1 by ZEODE
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Server Rewards v2.0.8 by k1lly0u
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Server Rewards Wipe v2.0.2 by ZEODE
+[2026.11.07 10:02:12] [INFO] Unloaded plugin Backpacks v3.17.9 by WhiteThunder
+[2026.11.07 10:02:13] [INFO] Unloaded plugin CustomC4RocketTiers v1.1.0 by Blackmatic
+[2026.11.07 10:02:13] [INFO] Unloaded plugin SkillTreeXPEvent v1.0.16 by imthenewguy
+[2026.11.07 10:02:13] [INFO] Unloaded plugin Craft Car Chassis v1.2.5 by WhiteThunder
+[2026.11.07 10:02:13] [INFO] Unloaded plugin Nightshade MLRS Truck v1.0.8 by Nightshade
+[2026.11.07 10:02:13] [INFO] Unloaded plugin ArmoredTrain v2.0.9 by Adem
+[2026.11.07 10:02:13] [WARN] [Bradley Drops] WARN: INFO: Harmony patches removed and cache cleared successfully!
+[2026.11.07 10:02:13] [INFO] Unloaded plugin Bradley Drops v1.4.1 by ZEODE
+[2026.11.07 10:02:14] [INFO] Unloaded plugin Convoy v3.0.7 by Adem
+[2026.11.07 10:02:14] [INFO] Unloaded plugin Dungeon Events v3.13.1 by Martian
+[2026.11.07 10:02:14] [INFO] Unloaded plugin EventsManagerNotifier v1.0.11 by Mevent & M&B-Studios
+[2026.11.07 10:02:14] [INFO] [Heli Signals] INFO: Harmony patches removed and cache cleared successfully!
+[2026.11.07 10:02:14] [INFO] Unloaded plugin Heli Signals v1.4.1 by ZEODE
+[2026.11.07 10:02:14] [INFO] Unloaded plugin HideAndSeek v1.1.0 by Nightshade
+[2026.11.07 10:02:14] [INFO] Unloaded plugin IslandStorm v1.1.0 by Grok
+[2026.11.07 10:02:14] [INFO] Unloaded plugin Copy Paste v4.3.1 by misticos
+[2026.11.07 10:02:14] [INFO] Unloaded plugin DefendableHomes v1.2.4 by KpucTaJl
+[2026.11.07 10:02:15] [INFO] Unloaded plugin Raidable Bases v3.2.3 by nivex
+[2026.11.07 10:02:15] [INFO] Unloaded plugin NpcSpawn v3.4.9 by KpucTaJl
+[2026.11.07 10:02:15] [INFO] Unloaded plugin Spawns v2.0.36 by Reneb / k1lly0u
+[2026.11.07 10:02:15] [WARN]  Advanced Status v0.1.27 by IIIaKa hook 'Unload' took longer than 100ms [110ms]
+[2026.11.07 10:02:15] [INFO] Unloaded plugin Advanced Status v0.1.27 by IIIaKa
+[2026.11.07 10:02:15] [INFO] Unloaded plugin NPC Health Bar v1.0.10 by Chris
+[2026.11.07 10:02:15] [INFO] Unloaded plugin NightshadeAnnouncer v1.3.1 by Nightshade
+[2026.11.07 10:02:15] [INFO] Unloaded plugin NightshadeChat v1.0.0 by Rustonauts & Nightshade
+[2026.11.07 10:02:15] [INFO] Unloaded plugin NightshadeHud v1.1.0 by Nightshade
+[2026.11.07 10:02:16] [INFO] Unloaded plugin NightshadeInfo v1.2.1 by Nightshade
+[2026.11.07 10:02:16] [INFO] Unloaded plugin Restart Status v0.1.1 by IIIaKa
+[2026.11.07 10:02:16] [INFO] Unloaded plugin Sort Button v2.7.0 by WhiteThunder, MON@H
+[2026.11.07 10:02:16] [INFO] Unloaded plugin Teleport Status v0.1.2 by IIIaKa
+[2026.11.07 10:02:16] [INFO] Unloaded plugin XFastButtons v1.1.0 by Monster
+[2026.11.07 10:02:17] [INFO] Unloaded plugin PowerfulAdmin v1.3.1 by codeboy
+[2026.11.07 10:02:17] [INFO] Unloaded plugin PowerfulAdmin Discord v1.1.0 by codeboy
+[2026.11.07 10:02:17] [INFO] Unloaded plugin Restore Upon Death v0.6.5 by k1lly0u
+[2026.11.07 10:02:17] [INFO] Unloaded plugin VIPPerks v1.2.1 by Nightshade
+[2026.11.07 10:02:17] [INFO] Unloaded plugin Vehicle Licence v1.9.2 by Mabel
+[2026.11.07 10:02:17] [INFO] Unloaded plugin WirelessPower v1.2.9 by RickySpanish
+[2026.11.07 10:02:17] [INFO] Unloaded plugin PhysgunRGT v1.0.0 by Physgun
+[2026.11.07 10:02:17] [INFO] Unloaded plugin Skill Tree v1.8.1 by imthenewguy
+[2026.11.07 10:02:17] [INFO] Unloaded plugin NightshadeVoteDay v1.2.1 by Nightshade
+[2026.11.07 10:02:18] [INFO] Unloaded plugin Chaos Commands v1.0.66 by k1lly0u
+[2026.11.07 10:02:18] [INFO] Unloaded plugin Chaos Plugin Interface v1.0.66 by k1lly0u
+[2026.11.07 10:02:18] [INFO] Unloaded plugin ChaosNPC v3.0.46 by k1lly0u
+[2026.11.07 10:02:18] [INFO] Unloaded plugin ChaosNPC Commands v3.0.46 by k1lly0u
+[2026.11.07 10:02:19] [INFO] Unloaded plugin Discord Extension v3.1.7 by PsychoTea & DylanSMR & Tricky & Kirollos & MJSU
+[2026.11.07 10:02:19] [INFO] Unloaded plugin RustEdit Automatic Updater v1.0.1 by Chaos
+[2026.11.07 10:02:19] [INFO] Unloaded plugin RustEdit Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit 2 Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Deployable Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit IO Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Vending Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Loot Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Diesel Collectable Spawner v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Desk Keycard Spawner v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Resource Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit JunkPile Core v1.0.1 by Chaos
+[2026.11.07 10:02:20] [INFO] Unloaded plugin RustEdit Spawn Core v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit Ocean Path v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit APC Core v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit Vehicle Core v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit NPC Core v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit Excavator Rotation Correction v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit Custom Topology Layers v1.0.1 by Chaos
+[2026.11.07 10:02:21] [INFO] Unloaded plugin RustEdit Shop Keepers v1.0.1 by Chaos
+[2026.11.07 10:03:51] [WARN] Carbon Analytics are ON. They're entirely anonymous and help us to further improve.
+[2026.11.07 10:03:51] [INFO] Carbon 2.0.264.0 [2026.11.05.0] 7cd15a2 on Linux 
+[2026.11.07 10:03:51] [INFO]        raul on production (2026-11-05 19:31:50 +0100)
+[2026.11.07 10:03:51] [INFO] Rust   139/2636.290.1 on release (07/11/2026 00:23:42) 170545
+[2026.11.07 10:03:51] [ERRO] Unobserved task exception [GC] [Finalizer|2] (Value cannot be null.
+Parameter name: source)
+   at IEnumerable<ItemDefinition> System.Linq.Enumerable.Select<ItemDefinition, ItemDefinition>(IEnumerable<ItemDefinition> source, Func<ItemDefinition, ItemDefinition> selector)
+   at new Physgun.Rust.Events.AllItems()
+   at BaseEvent Physgun.Rust.Actions.GetAllItems.BackgroundExecute(Rust ctx)
+   at BaseEvent Physgun.Rust.Actions.BackgroundAction.Execute(Rust ctx)+() => { }
+   at void System.Threading.Tasks.Task.Execute()
+[2026.11.07 10:03:52] [INFO] Oxide assembly conversion for 'Oxide.Ext.Chaos.dll' took 339ms
+[2026.11.07 10:03:52] [INFO] Oxide assembly conversion for 'Oxide.Ext.ChaosNPC.dll' took 39ms
+[2026.11.07 10:03:52] [INFO] Oxide assembly conversion for 'Oxide.Ext.Discord.dll' took 271ms
+[2026.11.07 10:03:52] [INFO] Oxide assembly conversion for 'Oxide.Ext.RustEdit.dll' took 219ms
+[2026.11.07 10:04:00] [INFO] Preloaded plugin Chaos Commands v1.0.66 by k1lly0u
+[2026.11.07 10:04:00] [INFO] Preloaded plugin Chaos Plugin Interface v1.0.66 by k1lly0u
+[2026.11.07 10:04:00] [INFO] Preloaded plugin ChaosNPC v3.0.46 by k1lly0u
+[2026.11.07 10:04:00] [INFO] Preloaded plugin ChaosNPC Commands v3.0.46 by k1lly0u
+[2026.11.07 10:04:00] [INFO] [DiscordExtension] [Info]: Using Discord Extension Version: 3.1.7
+[2026.11.07 10:04:00] [INFO] Preloaded plugin Discord Extension v3.1.7 by PsychoTea & DylanSMR & Tricky & Kirollos & MJSU
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Automatic Updater v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit 2 Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Deployable Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit IO Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Vending Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Loot Core v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Diesel Collectable Spawner v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Desk Keycard Spawner v1.0.1 by Chaos
+[2026.11.07 10:04:00] [INFO] Preloaded plugin RustEdit Resource Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit JunkPile Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Spawn Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Ocean Path v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit APC Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Vehicle Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit NPC Core v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Excavator Rotation Correction v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Custom Topology Layers v1.0.1 by Chaos
+[2026.11.07 10:04:01] [INFO] Preloaded plugin RustEdit Shop Keepers v1.0.1 by Chaos
+[2026.11.07 10:04:11] [INFO] Loaded plugin PhysgunRGT v1.0.0 by Physgun [701ms]
+[2026.11.07 10:04:11] [INFO] Loaded plugin Image Library v2.0.68 by Absolut & k1lly0u [440ms]
+[2026.11.07 10:04:22] [INFO] Loaded plugin Monument Finder v3.1.5 by WhiteThunder [190ms]
+[2026.11.07 10:04:22] [INFO] Loaded plugin Player DLC API v1.6.2 by k1lly0u [52ms]
+[2026.11.07 10:04:23] [INFO] Loaded plugin Discord Status (Webhook) v6.1.0 by AhmadAkal [37ms]
+[2026.11.07 10:04:23] [INFO] Loaded plugin MedioReports v2.2.1 by MediocratyItself [43ms]
+[2026.11.07 10:04:23] [INFO] [NightshadeConsoleFilter] Loaded. Active filters: 1261. Suppressing selected Unity/Rust log spam after plugin load.
+[2026.11.07 10:04:23] [INFO] Loaded plugin NightshadeConsoleFilter v1.0.1 by Nightshade [36ms]
+[2026.11.07 10:04:23] [INFO] Loaded plugin PopControl v1.7.0 by Papa [107ms]
+[2026.11.07 10:04:24] [INFO] Loaded plugin Queue Holder v1.0.2 by Tryhard [33ms]
+[2026.11.07 10:04:25] [INFO] Loaded plugin Monuments Watcher v0.1.12 by IIIaKa [275ms]
+[2026.11.07 10:04:26] [INFO] Loaded plugin TruePVE v2.4.4 by nivex [626ms]
+[2026.11.07 10:04:27] [INFO] Loaded plugin ZoneDomes v2.0.2 by k1lly0u [48ms]
+[2026.11.07 10:04:28] [INFO] Loaded plugin Zone Manager v3.1.14 by k1lly0u [321ms]
+[2026.11.07 10:04:30] [INFO] Loaded plugin Zone Manager Auto Zones v1.4.5 by FastBurst [294ms]
+[2026.11.07 10:04:34] [INFO] Loaded plugin Nightshade Purge Status v1.1.2 by Nightshade [102ms]
+[2026.11.07 10:04:35] [INFO] Loaded plugin NightshadeRaidProtection v1.1.3 by Nightshade [115ms]
+[2026.11.07 10:04:35] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Loaded share data: 0 entries. Known players: 142.
+[2026.11.07 10:04:35] [INFO] Loaded plugin UnifiedLootProtection v1.1.1 by Nightshade [145ms]
+[2026.11.07 10:04:36] [INFO] Loaded plugin BetterTC v1.7.1 by ninco90 [456ms]
+[2026.11.07 10:04:36] [INFO] Loaded plugin Chest Stacks v1.4.7 by supreme [147ms]
+[2026.11.07 10:04:36] [INFO] Loaded plugin NightshadeCrateEjector v1.0.0 by Nightshade [68ms]
+[2026.11.07 10:04:36] [INFO] Loaded plugin NightshadeVoteDay v1.2.1 by Nightshade [47ms]
+[2026.11.07 10:04:37] [INFO] Loaded plugin Remover Tool v4.3.48 by Reneb/Fuji/Arainrr/Tryhard [253ms]
+[2026.11.07 10:04:37] [INFO] Loaded plugin aQuarry v2.0.6 by AvG Лаймон [276ms]
+[2026.11.07 10:04:40] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.OnStorageItemTransferEnd_Patch1' (IndustrialStorageOnStorageItemTransferEnd) method [AfterPluginInit].
+[2026.11.07 10:04:40] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.get_Container_Patch1' (IndustrialStorageAdaptorPatch) method [AfterPluginInit].
+[2026.11.07 10:04:40] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.InputSlotRange_Patch1' (IndustrialStorageAdaptor_InputSlotRange) method [AfterPluginInit].
+[2026.11.07 10:04:40] [INFO] [extendedindustrial] Automatically Harmony patched 'IndustrialStorageAdaptor.OutputSlotRange_Patch1' (IndustrialStorageAdaptor_OutputSlotRange) method [AfterPluginInit].
+[2026.11.07 10:04:40] [INFO] Loaded plugin extendedindustrial v1.2.6 by bmgjet [92ms]
+[2026.11.07 10:04:40] [INFO] Loaded plugin Sign Artist v1.4.7 by Whispers88 [195ms]
+[2026.11.07 10:04:42] [INFO] Loaded plugin Skinner v3.2.1 by Whispers88 [331ms]
+[2026.11.07 10:04:42] [INFO] Loaded plugin UltimateLocker v2.1.5 by Scalbox [1046ms]
+[2026.11.07 10:04:43] [INFO] Loaded plugin Activity Rewards v0.1.10 by IIIaKa [179ms]
+[2026.11.07 10:04:44] [INFO] Loaded plugin Cases v2.0.14 by Mevent [341ms]
+[2026.11.07 10:04:44] [INFO] Loaded plugin NightshadeRecycler v3.2.1 by Nightshade [121ms]
+[2026.11.07 10:04:45] [INFO] Loaded plugin NightshadeShop v1.5.0 by Nightshade [321ms]
+[2026.11.07 10:04:46] [INFO] Loaded plugin Personal Marketplace v1.4.1 by ZEODE [146ms]
+[2026.11.07 10:04:46] [INFO] Loaded plugin Server Rewards v2.0.8 by k1lly0u [541ms]
+[2026.11.07 10:04:47] [INFO] Loaded plugin Server Rewards Wipe v2.0.2 by ZEODE [43ms]
+[2026.11.07 10:04:47] [INFO] Loaded plugin Backpacks v3.17.9 by WhiteThunder [422ms]
+[2026.11.07 10:05:12] [INFO] Loaded plugin CustomC4RocketTiers v1.1.0 by Blackmatic [466ms]
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Shield.ServerSideAttack_Patch1' (Shield_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'ChickenCoop.SubmitEggForHatching_Patch1' (ChickenCoop_SubmitEggForHatching_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'FarmableAnimal.ServerPetChicken_Patch1' (FarmableAnimal_ServerPetChicken_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.OnPlayerSensed_Patch1' (LivestockAnimal_OnPlayerSensed_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.AddFamiliarity_Patch1' (LivestockAnimal_AddFamiliarity_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.LivestockAnimal.HandlingCreditFor_Patch1' (LivestockAnimal_HandlingCreditFor_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Cow.TryMilk_Patch1' (Cow_TryMilk_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.GiveShearItems_Patch1' (Sheep_GiveShearItems_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Rust.Ai.Gen2.Sheep.Shear_Patch1' (Sheep_Shear_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectAnimal_Patch1' (LivestockVendor_Server_SelectAnimal_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.Server_SelectWool_Patch1' (LivestockVendor_Server_SelectWool_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch1' (LivestockVendor_RollOffers_AddOffers_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'LivestockVendor.RollOffers_Patch2' (LivestockVendor_RollOffers_ScaleOffers_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'FishLookup.GetFish_Patch1' (FishLookup_GetFish_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'MetalDetectorSource.CreateFlag_Patch1' (Item_SplitItem_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'BaseFishingRod.Server_RequestCast_Patch1' (FishingRod_Cast_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.StopRecycling_Patch1' (StopRecycling_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'Recycler.GetRecyclerStats_Patch2' (Recycler_GetRecyclerStats_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'BasePlayer.RadiationProtection_Patch1' (RadiationProtection_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] [SkillTree] Automatically Harmony patched 'ItemModContainerArmorSlot.CreateForPlayer_Patch1' (ItemModContainerArmorSlot_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:14] [INFO] Loaded plugin Skill Tree v1.8.1 by imthenewguy [1807ms]
+[2026.11.07 10:05:14] [INFO] Loaded plugin SkillTreeXPEvent v1.0.16 by imthenewguy [152ms]
+[2026.11.07 10:05:15] [INFO] Loaded plugin Craft Car Chassis v1.2.5 by WhiteThunder [89ms]
+[2026.11.07 10:05:16] [INFO] Loaded plugin Nightshade MLRS Truck v1.0.8 by Nightshade [93ms]
+[2026.11.07 10:05:17] [INFO] Loaded plugin ArmoredTrain v2.0.9 by Adem [655ms]
+[2026.11.07 10:05:18] [INFO] Loaded plugin Bradley Drops v1.4.1 by ZEODE [408ms]
+[2026.11.07 10:05:20] [INFO] Loaded plugin Convoy v3.0.7 by Adem [706ms]
+[2026.11.07 10:05:21] [INFO] [DungeonEvents] Automatically Harmony patched 'ScientistNPC.get_displayName_Patch1' (ScientistNPC_DisplayName_Patch) method [AfterPluginInit].
+[2026.11.07 10:05:21] [INFO] Loaded plugin Dungeon Events v3.13.1 by Martian [1233ms]
+[2026.11.07 10:05:21] [ERRO] Failed compiling 'EventsManager.cs':
+[2026.11.07 10:05:21] [ERRO]   1. 'EventSchedule' does not contain a definition for 'maxmumHoursBetween' and no accessible extension method 'maxmumHoursBetween' accepting a first argument of type 'EventSchedule' could be found (are you missing a using directive or an assembly reference?) [CS1061]
+     (EventsManager 65 line 7894)
+[2026.11.07 10:05:21] [ERRO]   2. No overload for method 'Store' takes 3 arguments [CS1501]
+     (EventsManager 40 line 8797)
+[2026.11.07 10:05:22] [INFO] Loaded plugin EventsManagerNotifier v1.0.11 by Mevent & M&B-Studios [36ms]
+[2026.11.07 10:05:22] [INFO] Loaded plugin Heli Signals v1.4.1 by ZEODE [505ms]
+[2026.11.07 10:05:22] [INFO] Loaded plugin HideAndSeek v1.1.0 by Nightshade [113ms]
+[2026.11.07 10:05:23] [INFO] [IslandStorm] IslandStorm loaded. Use /storm start (requires islandstorm.admin permission).
+[2026.11.07 10:05:23] [INFO] Loaded plugin IslandStorm v1.1.0 by Grok [115ms]
+[2026.11.07 10:05:24] [INFO] Loaded plugin Copy Paste v4.3.1 by misticos [644ms]
+[2026.11.07 10:05:24] [INFO] Loaded plugin DefendableHomes v1.2.4 by KpucTaJl [323ms]
+[2026.11.07 10:05:37] [INFO] Loaded plugin NightshadeRaidbase v1.0.16 by Nightshade [221ms]
+[2026.11.07 10:05:39] [INFO] Loaded plugin Raidable Bases v3.2.3 by nivex [1886ms]
+[2026.11.07 10:05:39] [INFO] Loaded plugin NpcSpawn v3.4.9 by KpucTaJl [1178ms]
+[2026.11.07 10:05:40] [INFO] Loaded plugin Spawns v2.0.36 by Reneb / k1lly0u [87ms]
+[2026.11.07 10:05:40] [INFO] Loaded plugin Advanced Status v0.1.27 by IIIaKa [193ms]
+[2026.11.07 10:05:40] [INFO] Loaded plugin NPC Health Bar v1.0.10 by Chris [154ms]
+[2026.11.07 10:05:41] [INFO] Loaded plugin NightshadeAnnouncer v1.3.1 by Nightshade [94ms]
+[2026.11.07 10:05:41] [INFO] Loaded plugin NightshadeChat v1.0.0 by Rustonauts & Nightshade [267ms]
+[2026.11.07 10:05:42] [INFO] Loaded plugin NightshadeHud v1.1.0 by Nightshade [306ms]
+[2026.11.07 10:05:42] [INFO] Loaded plugin NightshadeInfo v1.2.1 by Nightshade [155ms]
+[2026.11.07 10:05:42] [INFO] Loaded plugin Restart Status v0.1.1 by IIIaKa [104ms]
+[2026.11.07 10:05:42] [INFO] Loaded plugin Sort Button v2.7.0 by WhiteThunder, MON@H [119ms]
+[2026.11.07 10:05:43] [INFO] Loaded plugin Teleport Status v0.1.2 by IIIaKa [126ms]
+[2026.11.07 10:05:47] [INFO] Loaded plugin XFastButtons v1.1.0 by Monster [155ms]
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BasePlayer.Server_RequestMarkers_Patch1' (MapOpenedPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BasePlayer.IsGod_Patch1' (IsGodPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BaseEntity.SignalBroadcast_Patch1' (VanishSignalPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'BaseNetworkable.GetConnectionsWithin_Patch1' (VanishHearingPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'Effect+server.ImpactEffect_Patch1' (VanishImpactPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'EffectNetwork.Send_Patch2' (VanishEffectPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin] Automatically Harmony patched 'AntiHack.ShouldIgnore_Patch1' (NoclipAntiHackPatch) method [AfterPluginInit].
+[2026.11.07 10:05:47] [INFO] Loaded plugin PowerfulAdmin v1.3.1 by codeboy [2464ms]
+[2026.11.07 10:05:47] [INFO] [PowerfulAdmin Discord] Discord bot is disabled in PowerfulAdmin settings - bot idle.
+[2026.11.07 10:05:47] [INFO] Loaded plugin PowerfulAdmin Discord v1.1.0 by codeboy [128ms]
+[2026.11.07 10:05:48] [INFO] Loaded plugin Restore Upon Death v0.6.5 by k1lly0u [83ms]
+[2026.11.07 10:05:50] [INFO] Loaded plugin VIPPerks v1.2.1 by Nightshade [95ms]
+[2026.11.07 10:05:50] [INFO] Loaded plugin Vehicle Licence v1.9.2 by Mabel [892ms]
+[2026.11.07 10:05:51] [INFO] Loaded plugin WirelessPower v1.2.9 by RickySpanish [454ms]
+[2026.11.07 10:05:53] [WARN] [RustEdit] - No IO data found in map file
+[2026.11.07 10:05:53] [WARN] [RustEdit] - No vending data found in map file
+[2026.11.07 10:05:54] [WARN] [RustEdit] - No loot data found in map file
+[2026.11.07 10:05:54] [WARN] [RustEdit] - No APC path data found in map file
+[2026.11.07 10:05:54] [WARN] [RustEdit] - No vehicle data found in map file
+[2026.11.07 10:05:54] [WARN] [RustEdit] - No NPC data found in map file
+[2026.11.07 10:06:20] [INFO] [NightshadeAnnouncer] Announcement sent: [Nightshade] A portal tears open at sea… Deep Sea has spawned (North).
+[2026.11.07 10:06:20] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: Deep Sea portal fired at (0.00, 0.00, 3000.00) (North)
+[2026.11.07 10:06:36] [INFO] Unloaded plugin PhysgunRGT v1.0.0 by Physgun
+[2026.11.07 10:06:36] [WARN] Requested 'PhysgunRGT' for compilation
+[2026.11.07 10:06:36] [INFO] [Admin] Invalidated Codefling database. Fetching...
+[2026.11.07 10:06:36] [INFO] [Admin] Invalidated uMod database. Fetching...
+[2026.11.07 10:06:36] [INFO] [uMod] Caching plugin metadata for displaying plugins in the Admin module -> Plugins tab. This might take a while..
+[2026.11.07 10:06:37] [WARN]  Image Library v2.0.68 by Absolut & k1lly0u hook 'OnServerInitialized' took longer than 100ms [589ms] [GC]
+[2026.11.07 10:06:37] [INFO] [Discord Status (Webhook)] The plugin will attempt to edit the message with ID: 1512407393131171985
+[2026.11.07 10:06:37] [INFO] [PopControl] [LWPop] Captured original maxplayers value: 100
+[2026.11.07 10:06:37] [INFO] [PopControl] [LWPop] maxplayers -> 50 (online=0, joining=0, queued=0, offset=1, bounds=50-100)
+[2026.11.07 10:06:37] [WARN]  Zone Manager Auto Zones v1.4.5 by FastBurst hook 'OnServerInitialized' took longer than 100ms [169ms]
+[2026.11.07 10:06:37] [INFO] Active ruleset is now 'nightshade_pvp_weekend'.
+[2026.11.07 10:06:37] [INFO] [NightshadeRaidProtection] Set TruePVE ruleset to nightshade_pvp_weekend.
+[2026.11.07 10:06:37] [INFO] [NightshadeRaidProtection] Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM.
+[2026.11.07 10:06:37] [INFO] [BetterTC] Harmony Patched: RPC_PickupWallpaperStart_Patch
+[2026.11.07 10:06:37] [INFO] [BetterTC] Harmony Patched: HasClothForPlacement_Patch
+[2026.11.07 10:06:37] [INFO] [BetterTC] Harmony Patched: CheckWallpaper_Patch
+[2026.11.07 10:06:37] [INFO] [BetterTC] Harmony Patched (Force both sides wallpapers: true)
+[2026.11.07 10:06:37] [WARN] [Sign Artist] Waiting for Steamworks to update item definitions....
+[2026.11.07 10:06:37] [INFO] [Skinner] Waiting for Steamworks to update skin item definitions
+[2026.11.07 10:06:37] [INFO] [Skinner] Loading skins from 2 collections...
+[2026.11.07 10:06:37] [INFO] [UltimateLocker] Waiting for Steam Workshop to update item definitions....
+[2026.11.07 10:06:37] [INFO] [UltimateLocker] Skinner Patch applied successfully.
+[2026.11.07 10:06:37] [WARN] [Activity Rewards] MonumentsWatcher plugin not found! MonumentsWatcher is required to work with monuments!
+* https://codefling.com/plugins/monuments-watcher
+[2026.11.07 10:06:37] [WARN] [Activity Rewards] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.07 10:06:37] [ERRO] [Cases] Items with the same ID found 11
+[2026.11.07 10:06:37] [ERRO] [Cases] Items with the same ID found 12
+[2026.11.07 10:06:38] [INFO] [NightshadeShop] NightshadeShop v1.5.0 loaded: 14 categories, 116 listings, 10 Admin Shop categories, 65 trades.
+[2026.11.07 10:06:38] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_Server_CanAcceptOrder_Patch
+[2026.11.07 10:06:38] [INFO] [Personal Marketplace] INFO: Harmony patch applied: MarketTerminal_Server_SetMarketplaceHasPower_Patch
+[2026.11.07 10:06:38] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_ChargeFraction_Patch
+[2026.11.07 10:06:38] [INFO] [Personal Marketplace] INFO: Harmony patch applied: Marketplace_Server_RefreshChargeState_Patch
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Blueprint count: 668
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Spawned: workbench1.deployed
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Spawned: workbench2.deployed
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Spawned: workbench3.deployed
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Loading 9 images into ImageLibrary
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Loaded all images for SkillTree.
+[2026.11.07 10:06:38] [INFO] [Skill Tree] Tracking 2 required nodes.
+[2026.11.07 10:06:38] [INFO] [Convoy] Route caching has started!
+[2026.11.07 10:06:38] [INFO] [IslandStorm] IslandStorm ready. Grant permission with: oxide.grant user <steamid> islandstorm.admin
+[2026.11.07 10:06:38] [INFO] [RaidableBases] Allowed spawn points in 0 zones.
+[2026.11.07 10:06:38] [INFO] [RaidableBases] Blocked spawn points in 37 zones.
+[2026.11.07 10:06:38] [INFO] [NpcSpawn] Loading custom navigation mesh files...
+[2026.11.07 10:06:38] [INFO] [NpcSpawn] All custom navigation mesh files have loaded successfully!
+[2026.11.07 10:06:38] [INFO] [NpcSpawn] List of road positions: ExtraWide = 1644, Standard = 1932, ExtraNarrow = 1901
+[2026.11.07 10:06:38] [INFO] [NpcSpawn] 3107 railway positions found
+[2026.11.07 10:06:38] [WARN]  NpcSpawn v3.4.9 by KpucTaJl hook 'OnServerInitialized' took longer than 100ms [603ms]
+[2026.11.07 10:06:38] [WARN] [Restart Status] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.07 10:06:38] [WARN] [Teleport Status] AdvancedStatus plugin found, but not ready yet. Waiting for it to load...
+[2026.11.07 10:06:38] [WARN] [XFastButtons] 
+-----------------------------
+     Author - Monster
+     VK - vk.com/idannopol
+     Discord - Monster#4837
+-----------------------------
+[2026.11.07 10:06:38] [INFO] [RustEdit] - Checking for updates...
+[2026.11.07 10:06:38] [INFO] [RustEdit] - Rust patches: 12 ok
+[2026.11.07 10:06:39] [INFO]  Batch completed! OSI on 94 plugins.
+[2026.11.07 10:06:49] [INFO] [Codefling Vendor Tab] Fetched latest plugin information.
+[2026.11.07 10:06:49] [INFO] [Admin] Stored Codefling to file: /home/container/carbon/data/vendordata_cf.db
+[2026.11.07 10:06:49] [INFO] [BetterTC] CheckUpdate: No new items found in remote data.
+[2026.11.07 10:06:49] [INFO] [WirelessPower] Initialized 0 power grids
+[2026.11.07 10:06:49] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: DeepSeaManager component cached successfully.
+[2026.11.07 10:06:49] [INFO] [NightshadeAnnouncer] NightshadeAnnouncer: Deep Sea portal found on init scan (cached position).
+[2026.11.07 10:06:49] [INFO] [Skinner] Found - 22 in 2 collections.
+[2026.11.07 10:06:49] [INFO] [Skinner] Finished processing workshop skin imports. Total processed: 0/0
+[2026.11.07 10:06:49] [INFO] [Skinner] Saved Workshop Skins
+[2026.11.07 10:06:49] [INFO] [Skinner] Saved Workshop Skins
+[2026.11.07 10:06:49] [INFO] [Skinner] Finished Updating Custom Skins
+[2026.11.07 10:06:49] [INFO] [DefendableHomes] Image Tab_KpucTaJl download is complete
+[2026.11.07 10:06:49] [INFO] [NpcSpawn] Image Preset_KpucTaJl download is complete
+[2026.11.07 10:06:56] [INFO] Caching plugin metadata page 0 out of 157
+[2026.11.07 10:06:56] [INFO] [DefendableHomes] Image Clock_KpucTaJl download is complete
+[2026.11.07 10:06:56] [ERRO] [RustEdit] - Successfully downloaded latest release (v.2.0.6). Restarting Server in 5 seconds!
+[2026.11.07 10:06:56] [INFO] [NpcSpawn] Image Find_KpucTaJl download is complete
+[2026.11.07 10:06:56] [INFO] [DefendableHomes] Image Npc_KpucTaJl download is complete
+[2026.11.07 10:06:56] [INFO] [NpcSpawn] Image Delete_KpucTaJl download is complete
+[2026.11.07 10:06:56] [INFO] [DefendableHomes] Image Foundation_KpucTaJl download is complete
+[2026.11.07 10:06:56] [INFO] [NpcSpawn] Image Indicator_KpucTaJl download is complete
+[2026.11.07 10:06:58] [INFO] [NpcSpawn] Image Back_KpucTaJl download is complete
+[2026.11.07 10:06:59] [INFO] [RustEdit] - No custom vending machines found in map
+[2026.11.07 10:06:59] [INFO] [RustEdit] - 0 loot containers processed!
+[2026.11.07 10:06:59] [INFO] [RustEdit] - 0 resource entities processed!
+[2026.11.07 10:06:59] [INFO] [RustEdit] - 0 junkpiles processed!
+[2026.11.07 10:06:59] [INFO] [RustEdit] - Connected 15 shopkeepers to vending machines
+[2026.11.07 10:06:59] [INFO] [NpcSpawn] Image Copy_KpucTaJl download is complete
+[2026.11.07 10:06:59] [INFO] [NpcSpawn] Image coconut-underwear download is complete
+[2026.11.07 10:06:59] [INFO] [NpcSpawn] Image femaleunderwear_mummywraps.icon download is complete
+[2026.11.07 10:06:59] [INFO] [NpcSpawn] Image maleunderwear_mummywraps.icon download is complete
+[2026.11.07 10:07:00] [INFO] Loaded plugin PhysgunRGT v1.0.0 by Physgun [90ms]
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image pink_bikini download is complete
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image rapido_male download is complete
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image swimwear_gradient_female download is complete
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image swimwear_gradient_male download is complete
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image swimwear_palmleaves_female download is complete
+[2026.11.07 10:07:00] [INFO] [NpcSpawn] Image swimwear_palmleaves_male download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image swimwear_scribble_female download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image swimwear_scribble_male download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image twitchunderwear_female download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image twitchunderwear_male download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image underwear_default_female download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image underwear_default_male download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image grassskirt-underwear-female download is complete
+[2026.11.07 10:07:01] [INFO] [NpcSpawn] Image grassskirt-underwear-male download is complete
+[2026.11.07 10:07:04] [INFO] -
+Loaded 170 items from RaidableBases/Base_Loot/Easy Bases
+Loaded 182 items from RaidableBases/Base_Loot/Medium Bases
+Loaded 180 items from RaidableBases/Base_Loot/Hard Bases
+Loaded 171 items from RaidableBases/Base_Loot/Expert Bases
+Loaded 164 items from RaidableBases/Base_Loot/Nightmare Bases
+
+[2026.11.07 10:07:05] [WARN] [Convoy] Route caching has ended! The number of routes: 5
+[2026.11.07 10:07:07] [INFO] Saving plugin configuration and data..
+[2026.11.07 10:07:08] [INFO] [UnifiedLootProtection] [UnifiedLootProtection] Cleaned 0 expired ownership records. Active: 0
+[2026.11.07 10:07:08] [INFO] [Skill Tree] Saving player data for 0 players.
+[2026.11.07 10:07:08] [INFO] [Skill Tree] Finished saving player data.
+[2026.11.07 10:07:08] [INFO] Shutting down Carbon..
+[2026.11.07 10:07:08] [INFO] Unloaded plugin Image Library v2.0.68 by Absolut & k1lly0u
+[2026.11.07 10:07:08] [INFO] Unloaded plugin Monument Finder v3.1.5 by WhiteThunder
+[2026.11.07 10:07:08] [INFO] Unloaded plugin Player DLC API v1.6.2 by k1lly0u
+[2026.11.07 10:07:08] [INFO] Unloaded plugin Discord Status (Webhook) v6.1.0 by AhmadAkal
+[2026.11.07 10:07:08] [INFO] Unloaded plugin MedioReports v2.2.1 by MediocratyItself
+[2026.11.07 10:07:08] [INFO] Unloaded plugin NightshadeConsoleFilter v1.0.1 by Nightshade
+[2026.11.07 10:07:08] [INFO] [PopControl] [LWPop] Restored maxplayers to original value: 100
+[2026.11.07 10:07:08] [INFO] Unloaded plugin PopControl v1.7.0 by Papa
+[2026.11.07 10:07:09] [INFO] Unloaded plugin Queue Holder v1.0.2 by Tryhard
+[2026.11.07 10:07:09] [INFO] Unloaded plugin Monuments Watcher v0.1.12 by IIIaKa
+[2026.11.07 10:07:09] [INFO] Unloaded plugin TruePVE v2.4.4 by nivex
+[2026.11.07 10:07:09] [INFO] Unloaded plugin ZoneDomes v2.0.2 by k1lly0u
+[2026.11.07 10:07:09] [INFO] Unloaded plugin Zone Manager v3.1.14 by k1lly0u
+[2026.11.07 10:07:09] [INFO] Unloaded plugin Zone Manager Auto Zones v1.4.5 by FastBurst
+[2026.11.07 10:07:09] [INFO] Unloaded plugin Nightshade Purge Status v1.1.2 by Nightshade
+[2026.11.07 10:07:09] [INFO] Unloaded plugin NightshadeRaidProtection v1.1.3 by Nightshade
+[2026.11.07 10:07:10] [INFO] Unloaded plugin UnifiedLootProtection v1.1.1 by Nightshade
+[2026.11.07 10:07:10] [INFO] Unloaded plugin BetterTC v1.7.1 by ninco90
+[2026.11.07 10:07:10] [INFO] Unloaded plugin Chest Stacks v1.4.7 by supreme
+[2026.11.07 10:07:10] [INFO] Unloaded plugin NightshadeCrateEjector v1.0.0 by Nightshade
+[2026.11.07 10:07:10] [INFO] Unloaded plugin NightshadeVoteDay v1.2.1 by Nightshade
+[2026.11.07 10:07:10] [INFO] Unloaded plugin Remover Tool v4.3.48 by Reneb/Fuji/Arainrr/Tryhard
+[2026.11.07 10:07:10] [INFO] Unloaded plugin aQuarry v2.0.6 by AvG Лаймон
+[2026.11.07 10:07:10] [INFO] Unloaded plugin extendedindustrial v1.2.6 by bmgjet
+[2026.11.07 10:07:11] [INFO] Unloaded plugin Sign Artist v1.4.7 by Whispers88
+[2026.11.07 10:07:11] [INFO] [Skinner] DataSaved
+[2026.11.07 10:07:11] [INFO] Unloaded plugin Skinner v3.2.1 by Whispers88
+[2026.11.07 10:07:11] [WARN]  UltimateLocker v2.1.5 by Scalbox hook 'Unload' took longer than 100ms [274ms]
+[2026.11.07 10:07:11] [INFO] Unloaded plugin UltimateLocker v2.1.5 by Scalbox
+[2026.11.07 10:07:11] [INFO] Unloaded plugin Activity Rewards v0.1.10 by IIIaKa
+[2026.11.07 10:07:11] [INFO] Unloaded plugin Cases v2.0.14 by Mevent
+[2026.11.07 10:07:12] [INFO] Unloaded plugin NightshadeRecycler v3.2.1 by Nightshade
+[2026.11.07 10:07:12] [INFO] Unloaded plugin NightshadeShop v1.5.0 by Nightshade
+[2026.11.07 10:07:12] [WARN]  Personal Marketplace v1.4.1 by ZEODE hook 'Unload' took longer than 100ms [171ms]
+[2026.11.07 10:07:12] [INFO] Unloaded plugin Personal Marketplace v1.4.1 by ZEODE
+[2026.11.07 10:07:12] [INFO] Unloaded plugin Server Rewards v2.0.8 by k1lly0u
+[2026.11.07 10:07:12] [INFO] Unloaded plugin Server Rewards Wipe v2.0.2 by ZEODE
+[2026.11.07 10:07:12] [INFO] Unloaded plugin Backpacks v3.17.9 by WhiteThunder
+[2026.11.07 10:07:12] [INFO] Unloaded plugin CustomC4RocketTiers v1.1.0 by Blackmatic
+[2026.11.07 10:07:13] [INFO] Unloaded plugin Skill Tree v1.8.1 by imthenewguy
+[2026.11.07 10:07:13] [INFO] Unloaded plugin SkillTreeXPEvent v1.0.16 by imthenewguy
+[2026.11.07 10:07:13] [INFO] Unloaded plugin Craft Car Chassis v1.2.5 by WhiteThunder
+[2026.11.07 10:07:13] [INFO] Unloaded plugin Nightshade MLRS Truck v1.0.8 by Nightshade
+[2026.11.07 10:07:13] [INFO] Unloaded plugin ArmoredTrain v2.0.9 by Adem
+[2026.11.07 10:07:13] [WARN] [Bradley Drops] WARN: INFO: Harmony patches removed and cache cleared successfully!
+[2026.11.07 10:07:13] [INFO] Unloaded plugin Bradley Drops v1.4.1 by ZEODE
+[2026.11.07 10:07:13] [INFO] Unloaded plugin Convoy v3.0.7 by Adem
+[2026.11.07 10:07:14] [INFO] Unloaded plugin Dungeon Events v3.13.1 by Martian
+[2026.11.07 10:07:14] [INFO] Unloaded plugin EventsManagerNotifier v1.0.11 by Mevent & M&B-Studios
+[2026.11.07 10:07:14] [INFO] [Heli Signals] INFO: Harmony patches removed and cache cleared successfully!
+[2026.11.07 10:07:14] [INFO] Unloaded plugin Heli Signals v1.4.1 by ZEODE
+[2026.11.07 10:07:14] [INFO] Unloaded plugin HideAndSeek v1.1.0 by Nightshade
+[2026.11.07 10:07:14] [INFO] Unloaded plugin IslandStorm v1.1.0 by Grok
+[2026.11.07 10:07:14] [INFO] Unloaded plugin Copy Paste v4.3.1 by misticos
+[2026.11.07 10:07:14] [INFO] Unloaded plugin DefendableHomes v1.2.4 by KpucTaJl
+[2026.11.07 10:07:14] [INFO] [NightshadeRaidbase] Raid turret interference max restored to 12.
+[2026.11.07 10:07:14] [INFO] Unloaded plugin NightshadeRaidbase v1.0.16 by Nightshade
+[2026.11.07 10:07:15] [INFO] Unloaded plugin Raidable Bases v3.2.3 by nivex
+[2026.11.07 10:07:15] [INFO] Unloaded plugin NpcSpawn v3.4.9 by KpucTaJl
+[2026.11.07 10:07:15] [INFO] Unloaded plugin Spawns v2.0.36 by Reneb / k1lly0u
+[2026.11.07 10:07:15] [INFO] Unloaded plugin Advanced Status v0.1.27 by IIIaKa
+[2026.11.07 10:07:15] [INFO] Unloaded plugin NPC Health Bar v1.0.10 by Chris
+[2026.11.07 10:07:15] [INFO] Unloaded plugin NightshadeAnnouncer v1.3.1 by Nightshade
+[2026.11.07 10:07:15] [INFO] Unloaded plugin NightshadeChat v1.0.0 by Rustonauts & Nightshade
+[2026.11.07 10:07:15] [INFO] Unloaded plugin NightshadeHud v1.1.0 by Nightshade
+[2026.11.07 10:07:16] [INFO] Unloaded plugin NightshadeInfo v1.2.1 by Nightshade
+[2026.11.07 10:07:16] [INFO] Unloaded plugin Restart Status v0.1.1 by IIIaKa
+[2026.11.07 10:07:16] [INFO] Unloaded plugin Sort Button v2.7.0 by WhiteThunder, MON@H
+[2026.11.07 10:07:16] [INFO] Unloaded plugin Teleport Status v0.1.2 by IIIaKa
+[2026.11.07 10:07:16] [INFO] Unloaded plugin XFastButtons v1.1.0 by Monster
+[2026.11.07 10:07:16] [INFO] Unloaded plugin PowerfulAdmin v1.3.1 by codeboy
+[2026.11.07 10:07:16] [INFO] Unloaded plugin PowerfulAdmin Discord v1.1.0 by codeboy
+[2026.11.07 10:07:16] [INFO] Unloaded plugin Restore Upon Death v0.6.5 by k1lly0u
+[2026.11.07 10:07:17] [INFO] Unloaded plugin VIPPerks v1.2.1 by Nightshade
+[2026.11.07 10:07:17] [INFO] Unloaded plugin Vehicle Licence v1.9.2 by Mabel
+[2026.11.07 10:07:17] [INFO] Unloaded plugin WirelessPower v1.2.9 by RickySpanish
+[2026.11.07 10:07:17] [INFO] Unloaded plugin PhysgunRGT v1.0.0 by Physgun
+[2026.11.07 10:07:17] [INFO] Unloaded plugin Chaos Commands v1.0.66 by k1lly0u
+[2026.11.07 10:07:17] [INFO] Unloaded plugin Chaos Plugin Interface v1.0.66 by k1lly0u
+[2026.11.07 10:07:17] [INFO] Unloaded plugin ChaosNPC v3.0.46 by k1lly0u
+[2026.11.07 10:07:17] [INFO] Unloaded plugin ChaosNPC Commands v3.0.46 by k1lly0u
+[2026.11.07 10:07:17] [INFO] Unloaded plugin Discord Extension v3.1.7 by PsychoTea & DylanSMR & Tricky & Kirollos & MJSU
+[2026.11.07 10:07:17] [INFO] Unloaded plugin RustEdit Automatic Updater v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit 2 Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Deployable Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit IO Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Vending Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Loot Core v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Diesel Collectable Spawner v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Desk Keycard Spawner v1.0.1 by Chaos
+[2026.11.07 10:07:18] [INFO] Unloaded plugin RustEdit Resource Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit JunkPile Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Spawn Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Ocean Path v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit APC Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Vehicle Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit NPC Core v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Excavator Rotation Correction v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Custom Topology Layers v1.0.1 by Chaos
+[2026.11.07 10:07:19] [INFO] Unloaded plugin RustEdit Shop Keepers v1.0.1 by Chaos

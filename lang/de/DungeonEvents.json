@@ -38,5 +38,6 @@
   "PurchasesEnabled": "Käufe sind jetzt aktiviert.",
   "PurchasesDisabled": "Käufe sind jetzt deaktiviert.",
   "NoTierPermission": "Du hast keine Berechtigung für das Verlies {0}. Benötigt: {1}.",
-  "EntranceCombatBlocked": "Vom geschützten Eingang aus kannst du keinen Schaden verursachen. Geh weiter, um zu kämpfen."
+  "EntranceCombatBlocked": "Vom geschützten Eingang aus kannst du keinen Schaden verursachen. Geh weiter, um zu kämpfen.",
+  "BuyButtonFreeWithName": "{0} (Kostenlos)"
 }

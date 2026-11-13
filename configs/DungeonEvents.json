@@ -9,6 +9,10 @@
   "Enable Toast Messages": false,
   "Enable Dungeon Lights": true,
   "Reset NPCs And Animals When The Last Player Dies Or Leaves The Dungeon": true,
+  "Place Entrance Room Doors And Frames": true,
+  "Place Dungeon Doors And Frames (Except Entrance Room)": true,
+  "Close Entrance Room Doors When No Players Remain Inside (Left Or Died)": true,
+  "Close Dungeon Doors (Except Entrance Room) When No Players Remain Inside (Left Or Died)": false,
   "Dungeon Light Spacing": 30.0,
   "Prevent Drop Backpack": true,
   "Teleport Player To Outside On Death": true,
@@ -31,7 +35,7 @@
   "Place Sphere on Dungeon Portal": true,
   "Minimum Distance Between Portals": 50.0,
   "Enable Portal Protection Bubble": true,
-  "Portal Protection Bubble Radius": 10.0,
+  "Portal Protection Bubble Radius": 5.0,
   "Allow Owner And Allies To Build In Portal Protection Bubble": true,
   "Allow Owner And Allies To Deploy In Portal Protection Bubble": true,
   "Block Damage From Outside To Owner And Allies Inside Portal Protection Bubble": true,
@@ -46,7 +50,7 @@
   "Economics Display Name": "RP",
   "ServerRewards Display Name": "RP",
   "Enable SkillTree XP Team Sharing": true,
-  "SkillTree XP Share Mode (0 = Split total between players, 1 = Give full amount to each player)": 0,
+  "SkillTree XP Share Mode (0 = Split total between players, 1 = Give full amount to each player)": 1,
   "Allow team members": true,
   "Allow friends": true,
   "Performance Settings": {
@@ -97,7 +101,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 3,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 9,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 9,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 3,
       "Garage Door Skin ID": 3501204453,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -302,9 +306,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 300,
+        "Boss Economics Reward": 300,
+        "Animal Economics Reward": 300,
         "Turret Economics Reward": 200,
         "Box Economics Reward": 100,
         "NPC ServerRewards Points": 300,
+        "Boss ServerRewards Points": 300,
+        "Animal ServerRewards Points": 300,
         "Turret ServerRewards Points": 200,
         "Box ServerRewards Points": 100,
         "Dungeon Clear Economics Reward": 500,
@@ -322,7 +330,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 2,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 2,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 2,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 0,
       "Garage Door Skin ID": 3639558387,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -389,7 +397,7 @@
       "Boss NPC Config": {
         "NPC Name": "Normal Dungeon Boss",
         "NPC Health": 1500,
-        "Damage Scale": 1.1,
+        "Damage Scale": 0.75,
         "Wear Items": {
           "Items": [
             {
@@ -432,7 +440,7 @@
       "Animal Config": {
         "Enabled": true,
         "Damage": 12.0,
-        "Move Speed": 4.0,
+        "Move Speed": 3.0,
         "Sense Range": 30.0,
         "Max Distance From Spawn Point": 30.0,
         "Animals": [
@@ -533,9 +541,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 375,
+        "Boss Economics Reward": 375,
+        "Animal Economics Reward": 375,
         "Turret Economics Reward": 250,
         "Box Economics Reward": 125,
         "NPC ServerRewards Points": 375,
+        "Boss ServerRewards Points": 375,
+        "Animal ServerRewards Points": 375,
         "Turret ServerRewards Points": 250,
         "Box ServerRewards Points": 125,
         "Dungeon Clear Economics Reward": 750,
@@ -553,7 +565,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 2,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 6,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 6,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 0,
       "Garage Door Skin ID": 2427605919,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -562,7 +574,7 @@
       "Buy Cost": 0,
       "Per-Tier Buy Cooldown (seconds, 0 = use global)": 0,
       "Max Unentered Lifetime (in seconds)": 1800,
-      "Max Time (in seconds) to Keep Dungeon Alive": 2100,
+      "Max Time (in seconds) to Keep Dungeon Alive": 2700,
       "Entity Spawn Limits": {
         "NPC Count": 22,
         "Boss Count": 4,
@@ -626,7 +638,7 @@
       "Boss NPC Config": {
         "NPC Name": "Medium Dungeon Boss",
         "NPC Health": 2000,
-        "Damage Scale": 1.15,
+        "Damage Scale": 0.75,
         "Wear Items": {
           "Items": [
             {
@@ -770,9 +782,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 450,
+        "Boss Economics Reward": 450,
+        "Animal Economics Reward": 450,
         "Turret Economics Reward": 300,
         "Box Economics Reward": 150,
         "NPC ServerRewards Points": 450,
+        "Boss ServerRewards Points": 450,
+        "Animal ServerRewards Points": 450,
         "Turret ServerRewards Points": 300,
         "Box ServerRewards Points": 150,
         "Dungeon Clear Economics Reward": 1000,
@@ -790,7 +806,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 2,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 8,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 8,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 5,
       "Garage Door Skin ID": 2427605919,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -1011,9 +1027,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 600,
+        "Boss Economics Reward": 600,
+        "Animal Economics Reward": 600,
         "Turret Economics Reward": 400,
         "Box Economics Reward": 200,
         "NPC ServerRewards Points": 600,
+        "Boss ServerRewards Points": 600,
+        "Animal ServerRewards Points": 600,
         "Turret ServerRewards Points": 400,
         "Box ServerRewards Points": 200,
         "Dungeon Clear Economics Reward": 1500,
@@ -1031,7 +1051,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 2,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 10,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 10,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 0,
       "Garage Door Skin ID": 2427605919,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -1252,9 +1272,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 750,
+        "Boss Economics Reward": 750,
+        "Animal Economics Reward": 750,
         "Turret Economics Reward": 500,
         "Box Economics Reward": 250,
         "NPC ServerRewards Points": 750,
+        "Boss ServerRewards Points": 750,
+        "Animal ServerRewards Points": 750,
         "Turret ServerRewards Points": 500,
         "Box ServerRewards Points": 250,
         "Dungeon Clear Economics Reward": 2500,
@@ -1272,7 +1296,7 @@
       "Minutes After Wipe To Activate": 0,
       "Max Auto Spawn (0 to Unlimited)": 2,
       "Max Buy (0 to Unlimited)": 2,
-      "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)": 10,
+      "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic": 10,
       "Container Color - 1(Light Blue) 2(Light Green) 3(Purple) 4(Dark Red) 5(Orange) 6(White) 7(Black) 8(Brown) 9(Dark Blue) 10(Dark Green) 11(Red) 12(Light Orange) 13(Yellow) 14(Dark Gray) 15(Cyan) 16(Light Gray)": 4,
       "Garage Door Skin ID": 2427605919,
       "Dungeon Time of Day Override(-1 for no override)": 0,
@@ -1489,9 +1513,13 @@
       },
       "Reward Config": {
         "NPC Economics Reward": 900,
+        "Boss Economics Reward": 900,
+        "Animal Economics Reward": 900,
         "Turret Economics Reward": 600,
         "Box Economics Reward": 300,
         "NPC ServerRewards Points": 900,
+        "Boss ServerRewards Points": 900,
+        "Animal ServerRewards Points": 900,
         "Turret ServerRewards Points": 600,
         "Box ServerRewards Points": 300,
         "Dungeon Clear Economics Reward": 4000,
@@ -1525,7 +1553,7 @@
   },
   "Version": {
     "Major": 3,
-    "Minor": 11,
-    "Patch": 1
+    "Minor": 13,
+    "Patch": 2
   }
 }

@@ -1,10 +1,10 @@
 {
   "name": "Gone Fishin",
-  "xp": 43362.937810011506,
+  "xp": 57235.833832946315,
   "prestige_level": 0,
-  "current_level": 14,
-  "achieved_level": 14,
-  "available_points": 2,
+  "current_level": 16,
+  "achieved_level": 16,
+  "available_points": 19,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Barrel Smasher": 1,
@@ -16,7 +16,7 @@
     "Revitalization": 5,
     "Looter": 4,
     "Lucky Looter": 1,
-    "Exposed Radiation": 2,
+    "Exposed Radiation": 5,
     "Adept Miner": 2,
     "Maintenance": 1
   },
@@ -30,8 +30,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T14:27:28.350776+00:00",
-  "xp_bonus_pool": 5675.0374809265159,
+  "logged_off": "2026-11-13T03:39:18.524754+00:00",
+  "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -42,7 +42,7 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-12T15:17:04.401403+00:00",
+  "last_xp_loss": "2026-11-12T17:52:20.900496+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -53,5 +53,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 28
+  "GetTotalSkillPoints": 48
 }

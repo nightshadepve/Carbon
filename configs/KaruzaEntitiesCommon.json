@@ -1,0 +1,9 @@
+{
+  "SubscribeToCargoSpawn": true,
+  "DefaultForeignLanguages": true,
+  "SpawnMeshColliderVehicles": true,
+  "EnableRadio": false,
+  "APIPath": "https://server-api.karuza.dev/api/server/entities/",
+  "APIId": "04b1c85d-882d-4a51-9291-c221a9c677fc",
+  "APISecret": "5CEGBwr45ieAccZgZGU7H7Bf1zBgJ/KYhd1kfrsl4FY="
+}

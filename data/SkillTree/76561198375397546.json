@@ -1,22 +1,28 @@
 {
   "name": "Swift",
-  "xp": 81018.664728165764,
+  "xp": 91625.714728166,
   "prestige_level": 0,
-  "current_level": 19,
-  "achieved_level": 19,
-  "available_points": 2,
+  "current_level": 21,
+  "achieved_level": 21,
+  "available_points": 3,
   "non_level_related_points_given": 0,
   "buff_values": {
-    "Yachtman": 5,
-    "Economical Pilot": 3,
     "Maintenance": 5,
-    "Revitalization": 5,
-    "Accident Evasion": 4,
+    "Defence Research": 5,
+    "Supersonic Thrust": 1,
+    "Sixth Sense": 5,
     "Amature Tinkerer": 5,
-    "Bandage Expert": 1,
-    "Perfect Balance": 3,
+    "Adept Tinkerer": 5,
     "MacGyver": 1,
-    "Adept Tinkerer": 4
+    "Yachtman": 1,
+    "Economical Captain": 4,
+    "Economical Pilot": 5,
+    "Jet Engine": 5,
+    "Bandage Expert": 1,
+    "Revitalization": 5,
+    "Accident Evasion": 5,
+    "Perfect Balance": 5,
+    "Ricochet": 2
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -28,8 +34,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T06:10:13.808177+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-13T09:20:18.062282+00:00",
+  "xp_bonus_pool": 9392.9500000000717,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -51,5 +57,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 38
+  "GetTotalSkillPoints": 63
 }

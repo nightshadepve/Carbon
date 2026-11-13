@@ -100,5 +100,23 @@
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
     "firstConnection": "2026-11-11T07:41:37.589614+00:00"
+  },
+  "76561198994220790": {
+    "useTeleportationHomeFromFriends": true,
+    "autoAcceptTeleportationFriends": false,
+    "useTeleportGMap": true,
+    "firstConnection": "2026-11-12T17:09:16.668311+00:00"
+  },
+  "76561198138332799": {
+    "useTeleportationHomeFromFriends": true,
+    "autoAcceptTeleportationFriends": false,
+    "useTeleportGMap": true,
+    "firstConnection": "2026-11-13T01:49:37.429865+00:00"
+  },
+  "76561199152759612": {
+    "useTeleportationHomeFromFriends": true,
+    "autoAcceptTeleportationFriends": false,
+    "useTeleportGMap": true,
+    "firstConnection": "2026-11-13T11:57:22.210755+00:00"
   }
 }

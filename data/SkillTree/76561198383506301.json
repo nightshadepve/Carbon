@@ -1,32 +1,36 @@
 {
   "name": "Mr.Tootsies",
-  "xp": 239422.71450871238,
+  "xp": 297344.83963745844,
   "prestige_level": 0,
-  "current_level": 34,
-  "achieved_level": 34,
+  "current_level": 38,
+  "achieved_level": 38,
   "available_points": 6,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Tinkerer": 5,
     "Adept Tinkerer": 5,
     "Expert Tinkerer": 5,
-    "Thrifty Tinkerer": 5,
     "Thrifty Duplicator": 5,
-    "Revitalization": 5,
+    "Thrifty Tinkerer": 5,
     "Maintenance": 5,
-    "Tank Buster": 5,
-    "Supersonic Thrust": 5,
-    "Drum Mag": 5,
-    "Skybane": 5,
-    "Vampiric Tendencies": 1,
-    "Scientific Breakthrough": 5,
     "Resourceful": 5,
-    "Mine Sweeper": 5,
+    "Supersonic Thrust": 5,
+    "Tank Buster": 5,
+    "Skybane": 5,
+    "Drum Mag": 5,
+    "Scientific Breakthrough": 5,
+    "Vampiric Tendencies": 1,
     "Trap Evader": 5,
+    "Mine Sweeper": 5,
+    "Blast Suit": 5,
     "Demolition": 5,
     "Pressed Explosive": 5,
+    "Rain hellfire": 1,
     "Defence Research": 5,
-    "Ricochet": 5
+    "Ricochet": 5,
+    "Revitalization": 5,
+    "Bandage Expert": 1,
+    "Scavenger's Instinct": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -38,21 +42,24 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T10:16:30.113616+00:00",
+  "logged_off": "2026-11-13T13:10:37.800654+00:00",
   "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
     "Combat_Ultimate": {
       "enabled": true
+    },
+    "Raiding_Ultimate": {
+      "enabled": true
     }
   },
   "plant_genes": "gggyyy",
   "respec_multiplier": 0.0,
-  "raiding_ultimate_used_time": "0001-01-01T00:00:00",
+  "raiding_ultimate_used_time": "2026-11-13T11:03:42.268148+00:00",
   "cooking_ultimate_used_time": "0001-01-01T00:00:00",
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.828028+00:00",
-  "Loot_Spotter_used_time": "2026-11-05T19:06:43.828028+00:00",
+  "Loot_Spotter_used_time": "2026-11-13T11:27:56.360972+00:00",
   "xp_debt": 0.0,
   "last_xp_loss": "2026-11-12T09:59:45.295539+00:00",
   "pending_xp_with_bonus": 0.0,
@@ -65,5 +72,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 102
+  "GetTotalSkillPoints": 114
 }

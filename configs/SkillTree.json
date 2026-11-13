@@ -83,12 +83,14 @@
       "Wheat": 1.0,
       "Sunflower": 1.0,
       "Orchid": 1.0,
-      "Rose": 1.0
+      "Rose": 1.0,
+      "Honeycomb": 1.0
     }
   },
   "Buff settings": {
     "Should we remove permissions from permission buffs when the player disconnects from the server or the plugin unloads? [Recommended]": true,
     "Should yield bonus skills be additive [if true, yields will modify the item.amount value, rather than giving additional items]": true,
+    "Should the Shears wool multiplier also apply to the bonus wool from rancher skills?": false,
     "Minimum components for the component perk": 1,
     "Maximum components for the component perk": 1,
     "Minimum electrical components for the electrical component perk": 1,
@@ -310,7 +312,6 @@
         "Only allow this buff to work with raidable base?": false,
         "Damage the player receives when they fail an attempt": 0.0,
         "Show the pick lock timer when activating the ability": true,
-        "How often should the timer update": 1,
         "Set the lock to unlocked when successfully picking a lock? [false will open the entity but keep it locked]": false
       },
       "Settings for Dudless_Explosive": {
@@ -396,9 +397,7 @@
       "Position in the map where the workbenches spawn [default 0,0,0]": {
         "x": 0.0,
         "y": 0.0,
-        "z": 0.0,
-        "magnitude": 0.0,
-        "sqrMagnitude": 0.0
+        "z": 0.0
       }
     },
     "Tea Share settings": {
@@ -430,6 +429,14 @@
       "Blacklist of item shortnames that will not show up": []
     },
     "SharkSkinner blacklist [item shortname]": [],
+    "DeepSeaLooter blacklist [item shortname]": [
+      "command.block",
+      "electric.generator.small",
+      "glue",
+      "bleach",
+      "ducttape",
+      "sticks"
+    ],
     "ShieldReflect Settings": {
       "Maximum distance the buff will work from [-1 = no max]": -1.0,
       "Bullet damage reflection modifier [1 = 100%]": 1.0,
@@ -747,6 +754,7 @@
       "offsetMin": "185.4 25.4",
       "offsetMax": "227.4 67.4"
     },
+    "Layer that the extra pockets button is drawn on [Overall, Overlay, Hud, Hud.Menu, Under]. Hud.Menu will only show the button while the player has their inventory open": "Overlay",
     "A black list of items that will not be refunded when using the thrifty tinkerer buff": [],
     "A black list of items that will not be duplicated while using the thirfty duplicator buff": [],
     "Woodcutting tools - Tools that meet whitelist requirements and work with the reduced durability ability": [],
@@ -1073,7 +1081,7 @@
       },
       "Wolf perk: what health scale bonus should the player receive per team member near by [1.0 is 100%]?": 0.25,
       "Wolf perk: How close do teammates need to be in order to contribute to the perk [radius]?": 30.0,
-      "Bear perk: Maximum health of the overshield": 50.0,
+      "PolarBear perk: Maximum health of the overshield": 50.0,
       "Stag perk: Maximum distance that the perk can detect dangerous entities from [radius]": 30.0,
       "Stag perk: Time between procs [seconds]": 10.0,
       "Stag perk: Draw the enemy location?": true,
@@ -3242,6 +3250,24 @@
           "icon_url": "https://www.dropbox.com/s/xib7ax3gwo6gg97/Shredder.png?dl=1",
           "skin": 2873052624,
           "permissions": null
+        },
+        "Hacker": {
+          "Permission required to show this node": null,
+          "Minimum prestige required to unlock this node": 0,
+          "Minimum player level required to unlock this node": 0,
+          "Skill required to unlock node [Requires max level]": null,
+          "Skill that if unlocked, will prevent this node from unlocking": null,
+          "enabled": true,
+          "max_level": 5,
+          "tier": 3,
+          "value_per_buff": 0.05,
+          "buff_info": {
+            "Key": "Crate_Hack_Speed",
+            "Value": "Percentage"
+          },
+          "icon_url": "https://www.dropbox.com/scl/fi/k7nwyp3a5bq5aaqckgdx6/hackerman.png?rlkey=ly3ijbnqjyczsneenv056oolh&st=yur6qy1u&dl=1",
+          "skin": 3824349480,
+          "permissions": null
         }
       }
     },
@@ -4569,6 +4595,7 @@
       "Send a message when Free Upgrade procs?": true,
       "Send a message when Research Refund procs?": true,
       "Send a message when Recycler Efficiency procs?": true,
+      "Send a message when Crate Hack Speed procs?": true,
       "Send notifications to players when the tea share skill procs?": true,
       "Send notifications to players when the metabolism share skill procs?": true,
       "Send notifications to players when the metal_detector_luck skill procs?": true

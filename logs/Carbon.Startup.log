@@ -588,16 +588,328 @@
 [2026-10-31 10:01:45]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
 [2026-10-31 10:01:45]  Removed 'Microsoft.CodeAnalysis.dll'
 [2026-10-31 10:01:45]  Removed 'System.Collections.Immutable.dll'
-[2026-11-12 14:15:01]  Initialized Carbon.Startup 2.0.264.0
-[2026-11-12 14:15:01]  Preloaded 0Harmony 2.4.3.0
-[2026-11-12 14:15:01]  Preloaded Ben.Demystifier 0.4.0.0
-[2026-11-12 14:15:01]  Preloaded ZstdSharp 0.8.0.0
-[2026-11-12 14:15:01]  Preloaded SharpCompress 0.32.2.0
-[2026-11-12 14:15:01]  Preloaded Carbon.Compat 2.0.264.0
-[2026-11-12 14:15:01]  Preloaded protobuf-net 3.0.0.0
-[2026-11-12 14:15:01]  Preloaded protobuf-net.Core 3.0.0.0
-[2026-11-12 14:15:01]  Preloaded System.Collections.Immutable 9.0.0.0
-[2026-11-12 14:15:01]  Preloaded System.Reflection.Metadata 9.0.0.0
-[2026-11-12 14:15:01]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
-[2026-11-12 14:15:01]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
-[2026-11-12 14:15:01]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-01 10:00:41]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-01 10:00:41]  Preloaded 0Harmony 2.4.2.0
+[2026-11-01 10:00:41]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-01 10:00:41]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-01 10:00:41]  Preloaded SharpCompress 0.32.2.0
+[2026-11-01 10:00:41]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-01 10:00:41]  Preloaded protobuf-net 3.0.0.0
+[2026-11-01 10:00:41]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-01 10:00:41]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-01 10:00:41]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-01 10:00:43]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-01 10:00:43]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-01 10:00:43]  Removed 'System.Collections.Immutable.dll'
+[2026-11-02 10:01:14]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-02 10:01:14]  Preloaded 0Harmony 2.4.2.0
+[2026-11-02 10:01:14]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-02 10:01:14]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-02 10:01:14]  Preloaded SharpCompress 0.32.2.0
+[2026-11-02 10:01:14]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-02 10:01:14]  Preloaded protobuf-net 3.0.0.0
+[2026-11-02 10:01:14]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-02 10:01:14]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-02 10:01:14]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-02 10:01:16]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-02 10:01:16]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-02 10:01:16]  Removed 'System.Collections.Immutable.dll'
+[2026-11-03 10:00:46]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-03 10:00:46]  Preloaded 0Harmony 2.4.2.0
+[2026-11-03 10:00:46]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-03 10:00:46]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-03 10:00:46]  Preloaded SharpCompress 0.32.2.0
+[2026-11-03 10:00:46]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-03 10:00:46]  Preloaded protobuf-net 3.0.0.0
+[2026-11-03 10:00:46]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-03 10:00:46]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-03 10:00:46]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-03 10:00:48]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-03 10:00:48]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-03 10:00:48]  Removed 'System.Collections.Immutable.dll'
+[2026-11-04 08:08:11]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-04 08:08:11]  Preloaded 0Harmony 2.4.2.0
+[2026-11-04 08:08:11]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-04 08:08:11]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-04 08:08:11]  Preloaded SharpCompress 0.32.2.0
+[2026-11-04 08:08:11]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-04 08:08:11]  Preloaded protobuf-net 3.0.0.0
+[2026-11-04 08:08:11]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-04 08:08:11]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-04 08:08:11]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-04 08:08:14]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-04 08:08:14]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-04 08:08:14]  Removed 'System.Collections.Immutable.dll'
+[2026-11-04 08:16:15]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-04 08:16:15]  Preloaded 0Harmony 2.4.2.0
+[2026-11-04 08:16:15]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-04 08:16:15]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-04 08:16:15]  Preloaded SharpCompress 0.32.2.0
+[2026-11-04 08:16:15]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-04 08:16:15]  Preloaded protobuf-net 3.0.0.0
+[2026-11-04 08:16:15]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-04 08:16:15]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-04 08:16:15]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-04 08:16:17]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-04 08:16:17]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-04 08:16:17]  Removed 'System.Collections.Immutable.dll'
+[2026-11-04 09:37:33]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-04 09:37:33]  Preloaded 0Harmony 2.4.2.0
+[2026-11-04 09:37:33]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-04 09:37:33]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-04 09:37:33]  Preloaded SharpCompress 0.32.2.0
+[2026-11-04 09:37:33]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-04 09:37:33]  Preloaded protobuf-net 3.0.0.0
+[2026-11-04 09:37:33]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-04 09:37:33]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-04 09:37:33]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-04 09:37:36]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-04 09:37:36]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-04 09:37:36]  Removed 'System.Collections.Immutable.dll'
+[2026-11-04 10:00:34]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-04 10:00:34]  Preloaded 0Harmony 2.4.2.0
+[2026-11-04 10:00:34]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-04 10:00:34]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-04 10:00:34]  Preloaded SharpCompress 0.32.2.0
+[2026-11-04 10:00:34]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-04 10:00:34]  Preloaded protobuf-net 3.0.0.0
+[2026-11-04 10:00:34]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-04 10:00:34]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-04 10:00:34]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-04 10:00:36]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-04 10:00:36]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-04 10:00:36]  Removed 'System.Collections.Immutable.dll'
+[2026-11-05 10:00:34]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-05 10:00:34]  Preloaded 0Harmony 2.4.2.0
+[2026-11-05 10:00:34]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 10:00:34]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 10:00:34]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 10:00:34]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-05 10:00:34]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 10:00:34]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 10:00:34]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 10:00:34]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-05 10:00:36]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-05 10:00:36]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-05 10:00:36]  Removed 'System.Collections.Immutable.dll'
+[2026-11-05 17:28:05]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-05 17:28:05]  Preloaded 0Harmony 2.4.2.0
+[2026-11-05 17:28:05]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 17:28:05]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 17:28:05]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 17:28:05]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-05 17:28:05]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 17:28:05]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 17:28:05]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 17:28:05]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-05 17:28:07]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-05 17:28:07]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-05 17:28:07]  Removed 'System.Collections.Immutable.dll'
+[2026-11-05 17:35:43]  Initialized Carbon.Startup 2.0.262.0
+[2026-11-05 17:35:43]  Preloaded 0Harmony 2.4.2.0
+[2026-11-05 17:35:43]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 17:35:43]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 17:35:43]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 17:35:43]  Preloaded Carbon.Compat 2.0.262.0
+[2026-11-05 17:35:43]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 17:35:43]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 17:35:43]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 17:35:43]  Preloaded System.Diagnostics.DiagnosticSource 7.0.0.2
+[2026-11-05 17:35:45]  Removed 'Microsoft.CodeAnalysis.CSharp.dll'
+[2026-11-05 17:35:45]  Removed 'Microsoft.CodeAnalysis.dll'
+[2026-11-05 17:35:45]  Removed 'System.Collections.Immutable.dll'
+[2026-11-05 18:38:18]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-05 18:38:18]  Preloaded 0Harmony 2.4.3.0
+[2026-11-05 18:38:18]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 18:38:18]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 18:38:18]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 18:38:18]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-05 18:38:18]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 18:38:18]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 18:38:18]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 18:38:18]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-05 18:38:18]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-05 18:38:18]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-05 18:38:18]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-05 18:56:30]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-05 18:56:30]  Preloaded 0Harmony 2.4.3.0
+[2026-11-05 18:56:30]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 18:56:30]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 18:56:30]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 18:56:30]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-05 18:56:30]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 18:56:30]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 18:56:30]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 18:56:30]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-05 18:56:30]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-05 18:56:30]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-05 18:56:30]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-05 19:00:37]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-05 19:00:37]  Preloaded 0Harmony 2.4.3.0
+[2026-11-05 19:00:37]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-05 19:00:37]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-05 19:00:37]  Preloaded SharpCompress 0.32.2.0
+[2026-11-05 19:00:37]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-05 19:00:37]  Preloaded protobuf-net 3.0.0.0
+[2026-11-05 19:00:37]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-05 19:00:37]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-05 19:00:37]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-05 19:00:37]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-05 19:00:37]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-05 19:00:37]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-06 10:00:46]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-06 10:00:46]  Preloaded 0Harmony 2.4.3.0
+[2026-11-06 10:00:46]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-06 10:00:46]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-06 10:00:46]  Preloaded SharpCompress 0.32.2.0
+[2026-11-06 10:00:46]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-06 10:00:46]  Preloaded protobuf-net 3.0.0.0
+[2026-11-06 10:00:46]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-06 10:00:46]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-06 10:00:46]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-06 10:00:46]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-06 10:00:46]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-06 10:00:46]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-06 10:05:57]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-06 10:05:57]  Preloaded 0Harmony 2.4.3.0
+[2026-11-06 10:05:57]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-06 10:05:57]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-06 10:05:57]  Preloaded SharpCompress 0.32.2.0
+[2026-11-06 10:05:57]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-06 10:05:57]  Preloaded protobuf-net 3.0.0.0
+[2026-11-06 10:05:57]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-06 10:05:57]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-06 10:05:57]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-06 10:05:57]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-06 10:05:57]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-06 10:05:57]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-07 10:02:36]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-07 10:02:36]  Preloaded 0Harmony 2.4.3.0
+[2026-11-07 10:02:36]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-07 10:02:36]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-07 10:02:36]  Preloaded SharpCompress 0.32.2.0
+[2026-11-07 10:02:36]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-07 10:02:36]  Preloaded protobuf-net 3.0.0.0
+[2026-11-07 10:02:36]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-07 10:02:36]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-07 10:02:36]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-07 10:02:36]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-07 10:02:36]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-07 10:02:36]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-07 10:07:28]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-07 10:07:28]  Preloaded 0Harmony 2.4.3.0
+[2026-11-07 10:07:28]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-07 10:07:28]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-07 10:07:28]  Preloaded SharpCompress 0.32.2.0
+[2026-11-07 10:07:28]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-07 10:07:28]  Preloaded protobuf-net 3.0.0.0
+[2026-11-07 10:07:28]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-07 10:07:28]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-07 10:07:28]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-07 10:07:28]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-07 10:07:28]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-07 10:07:28]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-08 10:01:20]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-08 10:01:20]  Preloaded 0Harmony 2.4.3.0
+[2026-11-08 10:01:20]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-08 10:01:20]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-08 10:01:20]  Preloaded SharpCompress 0.32.2.0
+[2026-11-08 10:01:20]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-08 10:01:20]  Preloaded protobuf-net 3.0.0.0
+[2026-11-08 10:01:20]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-08 10:01:20]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-08 10:01:20]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-08 10:01:20]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-08 10:01:20]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-08 10:01:20]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-09 00:52:31]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-09 00:52:31]  Preloaded 0Harmony 2.4.3.0
+[2026-11-09 00:52:31]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-09 00:52:31]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-09 00:52:31]  Preloaded SharpCompress 0.32.2.0
+[2026-11-09 00:52:31]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-09 00:52:31]  Preloaded protobuf-net 3.0.0.0
+[2026-11-09 00:52:31]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-09 00:52:31]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-09 00:52:31]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-09 00:52:31]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-09 00:52:31]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-09 00:52:31]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-09 10:01:02]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-09 10:01:02]  Preloaded 0Harmony 2.4.3.0
+[2026-11-09 10:01:02]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-09 10:01:02]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-09 10:01:02]  Preloaded SharpCompress 0.32.2.0
+[2026-11-09 10:01:02]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-09 10:01:02]  Preloaded protobuf-net 3.0.0.0
+[2026-11-09 10:01:02]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-09 10:01:02]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-09 10:01:02]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-09 10:01:02]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-09 10:01:02]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-09 10:01:02]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-10 03:38:02]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-10 03:38:02]  Preloaded 0Harmony 2.4.3.0
+[2026-11-10 03:38:02]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-10 03:38:02]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-10 03:38:02]  Preloaded SharpCompress 0.32.2.0
+[2026-11-10 03:38:02]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-10 03:38:02]  Preloaded protobuf-net 3.0.0.0
+[2026-11-10 03:38:02]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-10 03:38:02]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-10 03:38:02]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-10 03:38:02]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-10 03:38:02]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-10 03:38:02]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-10 10:00:45]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-10 10:00:45]  Preloaded 0Harmony 2.4.3.0
+[2026-11-10 10:00:45]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-10 10:00:45]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-10 10:00:45]  Preloaded SharpCompress 0.32.2.0
+[2026-11-10 10:00:45]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-10 10:00:45]  Preloaded protobuf-net 3.0.0.0
+[2026-11-10 10:00:45]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-10 10:00:45]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-10 10:00:45]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-10 10:00:45]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-10 10:00:45]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-10 10:00:45]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-11 10:00:36]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-11 10:00:36]  Preloaded 0Harmony 2.4.3.0
+[2026-11-11 10:00:36]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-11 10:00:36]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-11 10:00:36]  Preloaded SharpCompress 0.32.2.0
+[2026-11-11 10:00:36]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-11 10:00:36]  Preloaded protobuf-net 3.0.0.0
+[2026-11-11 10:00:36]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-11 10:00:36]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-11 10:00:36]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-11 10:00:36]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-11 10:00:36]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-11 10:00:36]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-12 10:00:37]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-12 10:00:37]  Preloaded 0Harmony 2.4.3.0
+[2026-11-12 10:00:37]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-12 10:00:37]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-12 10:00:37]  Preloaded SharpCompress 0.32.2.0
+[2026-11-12 10:00:37]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-12 10:00:37]  Preloaded protobuf-net 3.0.0.0
+[2026-11-12 10:00:37]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-12 10:00:37]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-12 10:00:37]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-12 10:00:37]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-12 10:00:37]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-12 10:00:37]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1
+[2026-11-13 10:01:10]  Initialized Carbon.Startup 2.0.264.0
+[2026-11-13 10:01:10]  Preloaded 0Harmony 2.4.3.0
+[2026-11-13 10:01:10]  Preloaded Ben.Demystifier 0.4.0.0
+[2026-11-13 10:01:10]  Preloaded ZstdSharp 0.8.0.0
+[2026-11-13 10:01:10]  Preloaded SharpCompress 0.32.2.0
+[2026-11-13 10:01:10]  Preloaded Carbon.Compat 2.0.264.0
+[2026-11-13 10:01:10]  Preloaded protobuf-net 3.0.0.0
+[2026-11-13 10:01:10]  Preloaded protobuf-net.Core 3.0.0.0
+[2026-11-13 10:01:10]  Preloaded System.Collections.Immutable 9.0.0.0
+[2026-11-13 10:01:10]  Preloaded System.Reflection.Metadata 9.0.0.0
+[2026-11-13 10:01:10]  Preloaded Microsoft.CodeAnalysis 4.14.0.0
+[2026-11-13 10:01:10]  Preloaded Microsoft.CodeAnalysis.CSharp 4.14.0.0
+[2026-11-13 10:01:10]  Preloaded System.Diagnostics.DiagnosticSource 8.0.0.1

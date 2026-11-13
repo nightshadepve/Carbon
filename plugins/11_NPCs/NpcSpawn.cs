@@ -24,7 +24,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NpcSpawn", "KpucTaJl", "3.5.0")]
+    [Info("NpcSpawn", "KpucTaJl", "3.4.9")]
     internal class NpcSpawn : RustPlugin
     {
         #region Config
@@ -147,8 +147,7 @@ namespace Oxide.Plugins
                         ["blowpipe"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
                         ["pistol.eoka"] = new DefaultSettings { EffectiveRange = 10f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
                         ["snowballgun"] = new DefaultSettings { EffectiveRange = 5f, AttackLengthMin = 2f, AttackLengthMax = 2f, NpcDamageScale = 0.2f },
-                        ["crossbowbowless"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f },
-                        ["smg.uzi"] = new DefaultSettings { EffectiveRange = 20f, AttackLengthMin = 0.4f, AttackLengthMax = 0.4f, NpcDamageScale = 0.25f },
+                        ["crossbowbowless"] = new DefaultSettings { EffectiveRange = 15f, AttackLengthMin = -1f, AttackLengthMax = -1f, NpcDamageScale = 0.25f }
                     },
                     Weapons = new Dictionary<int, HashSet<string>>
                     {
@@ -236,8 +235,7 @@ namespace Oxide.Plugins
                             "rifle.sks",
                             "revolver.hc",
                             "t1_smg",
-                            "paintballgun",
-                            "smg.uzi"
+                            "paintballgun"
                         },
                         [3] = new HashSet<string>
                         {
@@ -8100,12 +8098,6 @@ namespace Oxide.Plugins
                 "ammo.rifle.hv",
                 "ammo.rifle.incendiary",
                 "ammo.rifle.explosive"
-            },
-            ["smg.uzi"] = new HashSet<string>
-            {
-                "ammo.pistol",
-                "ammo.pistol.hv",
-                "ammo.pistol.fire"
             }
         };
         private HashSet<string> GetAmmo(NpcBelt belt)
@@ -9070,39 +9062,6 @@ namespace Oxide.Plugins
                 new HashSet<string>
                 {
                     "weapon.mod.targetingattachment"
-                }
-            },
-            ["smg.uzi"] = new HashSet<HashSet<string>>
-            {
-                new HashSet<string>
-                {
-                    "weapon.mod.holosight",
-                    "weapon.mod.simplesight"
-                },
-                new HashSet<string>
-                {
-                    "weapon.mod.lasersight",
-                    "weapon.mod.flashlight"
-                },
-                new HashSet<string>
-                {
-                    "weapon.mod.muzzleboost",
-                    "weapon.mod.muzzlebrake",
-                    "weapon.mod.silencer",
-                    "weapon.mod.oilfiltersilencer",
-                    "weapon.mod.sodacansilencer"
-                },
-                new HashSet<string>
-                {
-                    "weapon.mod.extendedmags"
-                },
-                new HashSet<string>
-                {
-                    "weapon.mod.targetingattachment"
-                },
-                new HashSet<string>
-                {
-                    "weapon.mod.gascompressionovedrive"
                 }
             }
         };

@@ -1,8 +1,6 @@
 {
   "76561198035665693": {
-    "MonumentList": [
-      "excavator_1"
-    ]
+    "MonumentList": []
   },
   "76561198111185372": {
     "MonumentList": []
@@ -19,13 +17,7 @@
   "76561198839853772": {
     "MonumentList": [
       "cave_small_easy_4",
-      "radtown_1",
-      "launch_site_1",
-      "harbor_2",
-      "CargoShip_8741280",
-      "harbor_1",
-      "excavator_1",
-      "mining_quarry_c"
+      "compound"
     ]
   },
   "76561197996909849": {
@@ -34,14 +26,10 @@
   "76561199069700597": {
     "MonumentList": [
       "swamp_b",
-      "sphere_tank",
-      "bandit_town",
-      "harbor_2",
-      "CargoShip_9068940",
-      "swamp_c",
+      "gas_station_1_2",
+      "radtown_1",
       "airfield_1",
-      "water_treatment_plant_1",
-      "launch_site_1"
+      "water_treatment_plant_1"
     ]
   },
   "76561198210900224": {
@@ -162,7 +150,9 @@
     "MonumentList": []
   },
   "76561199866337898": {
-    "MonumentList": []
+    "MonumentList": [
+      "nuclear_missile_silo"
+    ]
   },
   "76561198774721870": {
     "MonumentList": []
@@ -183,11 +173,7 @@
     "MonumentList": []
   },
   "76561198383506301": {
-    "MonumentList": [
-      "excavator_1",
-      "launch_site_1",
-      "compound"
-    ]
+    "MonumentList": []
   },
   "76561199690517861": {
     "MonumentList": []
@@ -230,14 +216,14 @@
   },
   "76561198375397546": {
     "MonumentList": [
+      "gas_station_1_2",
       "bandit_town",
-      "water_treatment_plant_1",
-      "radtown_small_3",
-      "trainyard_1",
-      "satellite_dish",
-      "gas_station_1_3",
+      "airfield_1",
+      "harbor_2",
+      "CargoShip_10405208",
+      "fishing_village_c",
       "compound",
-      "gas_station_1_2"
+      "water_treatment_plant_1"
     ]
   },
   "76561198246408028": {
@@ -362,7 +348,11 @@
   },
   "76561198017547177": {
     "MonumentList": [
-      "launch_site_1"
+      "satellite_dish",
+      "ferry_terminal_1",
+      "sphere_tank",
+      "ue_jungle_swamp_a",
+      "trainyard_1"
     ]
   },
   "76561199116576538": {
@@ -922,7 +912,11 @@
   },
   "76561199146317627": {
     "MonumentList": [
-      "swamp_c"
+      "swamp_c",
+      "harbor_2",
+      "jungle_ruins_a",
+      "water_well_b_6",
+      "bandit_town"
     ]
   },
   "76561199588686490": {
@@ -945,13 +939,11 @@
   },
   "76561199649462056": {
     "MonumentList": [
-      "gas_station_1_2",
-      "power_sub_small_2_9",
+      "water_treatment_plant_1",
+      "power_sub_big_2_37",
       "trainyard_1",
-      "bandit_town",
-      "warehouse_1",
-      "airfield_1",
-      "swamp_b"
+      "gas_station_1_2",
+      "radtown_1"
     ]
   },
   "76561199213509672": {
@@ -965,5 +957,28 @@
   },
   "76561199119497727": {
     "MonumentList": []
+  },
+  "76561198994220790": {
+    "MonumentList": []
+  },
+  "76561199152759612": {
+    "MonumentList": [
+      "harbor_2",
+      "swamp_c",
+      "stables_a",
+      "bandit_town",
+      "trainyard_1",
+      "station-sn-3_trainyard_1",
+      "water_well_d_9",
+      "water_well_a_1",
+      "supermarket_1_1",
+      "jungle_ruins_a",
+      "power_sub_big_1_26",
+      "power_sub_big_2_35",
+      "power_sub_small_1_4",
+      "apartments_complex_1",
+      "harbor_1",
+      "CargoShip_11286456"
+    ]
   }
 }

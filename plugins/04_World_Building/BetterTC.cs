@@ -1,4 +1,4 @@
-﻿#if CARBON
+#if CARBON
 using Carbon.Modules;
 using Carbon.Extensions;
 using Carbon;
@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("BetterTC", "ninco90", "1.7.1")]
+    [Info("BetterTC", "ninco90", "1.7.2")]
     internal class BetterTC : RustPlugin
     {
     	#if CARBON
@@ -94,6 +94,8 @@ namespace Oxide.Plugins
         private const int BuildingWallpaperItemSize = 80;
         private const int BuildingWallpaperItemSpacing = 10;
         private const int BuildingWallpaperGridStartX = -364;
+        private readonly Dictionary<ulong, float> manualExteriorCooldowns = new Dictionary<ulong, float>();
+        private const float ManualExteriorReach = 3f;
 
         private static readonly FieldInfo WallpaperWallSkinField = AccessTools.Field(typeof(global::WallpaperPlanner), "wallSkinID");
         private static readonly FieldInfo WallpaperFloorSkinField = AccessTools.Field(typeof(global::WallpaperPlanner), "flooringSkinID");
@@ -300,6 +302,7 @@ namespace Oxide.Plugins
             }
 
             authListRequestCooldowns.Clear();
+            manualExteriorCooldowns.Clear();
 
             foreach (var cup in BuildingCupboard){
                 if (cup.Value.workupgrade != null) ServerMgr.Instance.StopCoroutine(cup.Value.workupgrade);
@@ -382,8 +385,110 @@ namespace Oxide.Plugins
         }
 
         private void OnPlayerInput(BasePlayer player, InputState input){
-            if (player == null || input == null || !input.WasJustPressed(wallpaperToolMenuButton)) return;
-            if (TryOpenManualWallpaperMenu(player, false)) input.current.buttons &= ~(int)wallpaperToolMenuButton;
+            if (player == null || input == null) return;
+            if (input.WasJustPressed(wallpaperToolMenuButton) && TryOpenManualWallpaperMenu(player, false)){
+                input.current.buttons &= ~(int)wallpaperToolMenuButton;
+                return;
+            }
+            if (ManualExteriorEnabled && input.WasJustPressed(BUTTON.FIRE_PRIMARY)){
+                var planner = player.GetHeldEntity() as global::WallpaperPlanner;
+                if (planner != null) TryPlaceManualExterior(player, planner);
+            }
+        }
+
+        private void OnPlayerDisconnected(BasePlayer player, string reason){
+            if (player != null) manualExteriorCooldowns.Remove(player.userID);
+        }
+
+        private bool ManualExteriorEnabled => config != null && config.manualExteriorWallpaper;
+
+        private bool IsManualExteriorTarget(BuildingBlock block, int side){
+            if (!ManualExteriorEnabled || block == null || side != 1) return false;
+            var category = global::WallpaperPlanner.Settings.GetCategory(block, side);
+            return category == WallpaperSettings.Category.Wall || category == WallpaperSettings.Category.Floor;
+        }
+
+        private bool TryGetManualExteriorTarget(BasePlayer player, out BuildingBlock block){
+            block = null;
+            if (!Physics.Raycast(player.eyes.HeadRay(), out var hit, ManualExteriorReach,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
+            var candidate = hit.GetEntity() as BuildingBlock;
+            if (!IsManualExteriorTarget(candidate, 1) || candidate.IsDestroyed) return false;
+            if (candidate.grade < BuildingGrade.Enum.Wood || candidate.grade > BuildingGrade.Enum.TopTier) return false;
+
+            Socket_Base inside = null, outside = null;
+            foreach (var socket in PrefabAttribute.server.FindAll<Socket_Base>(candidate.prefabID)){
+                if (socket.socketName == null || !socket.socketName.Contains("wallpaper")) continue;
+                if (socket.socketName.EndsWith("1")) inside = socket;
+                if (socket.socketName.EndsWith("2")) outside = socket;
+            }
+            if (inside == null || outside == null) return false;
+            var category = global::WallpaperPlanner.Settings.GetCategory(candidate, 1);
+            Vector3 outward = candidate.transform.TransformDirection(category == WallpaperSettings.Category.Floor
+                ? Vector3.up : outside.localRotation * Vector3.left);
+            Vector3 middle = candidate.transform.TransformPoint(outside.localPosition);
+            if (Vector3.Dot(player.eyes.position - middle, outward) <= 0f) return false;
+            var construction = global::WallpaperPlanner.Settings.GetConstruction(candidate, 1);
+            if (construction == null || hit.distance > construction.maxplaceDistance) return false;
+            if (!candidate.CanSeeWallpaperSocket(player, 1)) return false;
+            block = candidate;
+            return true;
+        }
+
+        private void TryPlaceManualExterior(BasePlayer player, global::WallpaperPlanner planner, BuildingBlock requestedBlock = null){
+            if (!ManualExteriorEnabled || player == null || planner == null || !player.IsConnected || !player.CanInteract() || player.IsDead() || player.IsSleeping() || player.GetHeldEntity() != planner || player.inventory.loot.IsLooting()) return;
+            float now = Time.realtimeSinceStartup;
+            if (manualExteriorCooldowns.TryGetValue(player.userID, out var nextAllowed) && now < nextAllowed) return;
+            if (!TryGetManualExteriorTarget(player, out var block) || (requestedBlock != null && requestedBlock != block)) return;
+            var category = global::WallpaperPlanner.Settings.GetCategory(block, 1);
+            if (GetWallpaperPlannerCategory(planner) != category) return;
+            manualExteriorCooldowns[player.userID] = now + 0.3f;
+            if (!HasPermission(player.UserIDString, permwallpaper)){
+                player.ShowToast(GameTip.Styles.Error, Lan("ManualExteriorNoPermission", player.UserIDString));
+                return;
+            }
+            var privilege = block.GetBuildingPrivilege();
+            if (!player.CanBuild() || !player.CanBuild(block.transform.position, block.transform.rotation, block.bounds, false) || (privilege != null && !privilege.IsAuthed(player))){
+                player.ShowToast(GameTip.Styles.Error, Lan("ManualExteriorBuildingBlocked", player.UserIDString));
+                return;
+            }
+            if ((config.useNoEscape && NoEscape != null && NoEscape.Call<bool>("IsRaidBlocked", player.UserIDString)) || (config.useRaidBlock && RaidBlock != null && RaidBlock.Call<bool>("IsRaidBlocked", player.UserIDString))){
+                player.ShowToast(GameTip.Styles.Error, Lan("RaidBlocked", player.UserIDString));
+                return;
+            }
+            ulong skinId = GetWallpaperPlannerSkin(planner, category);
+            var (itemId, availableSkins) = GetWallpaperItems(player, category.ToString());
+            if (!availableSkins.Any(id => id != 1UL && ResolveWallpaperSkin(itemId, id) == skinId)){
+                player.ShowToast(GameTip.Styles.Error, Lan("ManualWallpaperUnavailable", player.UserIDString));
+                return;
+            }
+            bool existing = block.HasWallpaper(1);
+            if (existing && block.GetWallpaperSkin(1) == skinId) return;
+            int cost = existing || HasPermission(player.UserIDString, permwallpapernocost) || (player.IsInCreativeMode && ConVar.Creative.freeBuild) ? 0 : Math.Max(0, config.wallresource);
+            const int clothId = -858312878;
+            int available = player.inventory.GetAmount(clothId);
+            if (available < cost){
+                player.ShowToast(GameTip.Styles.Error, Lan("NoResourcesWallpaperBoatDetail", player.UserIDString, cost, available));
+                return;
+            }
+
+            int paid = 0;
+            bool applied = false;
+            try {
+                if (cost > 0){
+                    paid = player.inventory.Take(null, clothId, cost);
+                    if (paid != cost) return;
+                }
+                float rotation = existing ? block.GetWallpaperRotation(1) : 0f;
+                block.SetWallpaper(skinId, 1, rotation);
+                applied = !block.IsDestroyed && block.HasWallpaper(1) && block.GetWallpaperSkin(1) == skinId;
+                if (!applied) return;
+                if (paid > 0) player.Command("note.inv", clothId, -paid);
+                if (config.playfx) Effect.server.Run(fxcloth, block.transform.position);
+            }
+            finally {
+                if (!applied && paid > 0) player.GiveItem(ItemManager.CreateByItemID(clothId, paid));
+            }
         }
 
         private object OnPayForPlacement(BasePlayer player, global::WallpaperPlanner planner, Construction component){
@@ -1384,6 +1489,12 @@ namespace Oxide.Plugins
 		private bool IsSkinAllowed(BasePlayer player, int skinId){
             return skinId <= 0 || config.allowAllSkins || whitelistedSkins.Contains((ulong)skinId) || player.blueprints.steamInventory.HasItem(skinId);
         }
+
+        private bool IsWallAllowed(BasePlayer player, int wallId){
+            if (!WallPrefabs.ContainsKey(wallId)) return false;
+            // Values 0, 1 and 2 identify basic wall types; the remaining values are DLC item IDs.
+            return (wallId >= 0 && wallId <= 2) || IsSkinAllowed(player, wallId);
+        }
         
         private bool IsWallpaperAllowed(BasePlayer player, int skinId){
             if (skinId <= 0 || config.allowAllSkins || whitelistedSkins.Contains((ulong)skinId) || player.blueprints.steamInventory.HasItem(skinId)) return true;
@@ -1650,6 +1761,7 @@ namespace Oxide.Plugins
 
                             foreach (var skinid in remoteList)
                             {
+                                if (tcData.RemovedWallpapers.TryGetValue(category, out var removedSkins) && removedSkins.Contains(skinid)) continue;
                                 if (tcData.CustomWallpapers[category].Add(skinid))
                                     dataUpdated = true;
                             }
@@ -1776,8 +1888,8 @@ namespace Oxide.Plugins
             if (player == null) return;
             int type = config.notifyType["info"];
             if (style == GameTip.Styles.Error) type = config.notifyType["error"];
-            if (cup != null){
-                Effect.server.Run(sound, cup.transform.position);
+            Effect.server.Run(sound, cup != null ? cup.transform.position : player.transform.position);
+            if (cup != null && !config.notifyOnlyInitiator){
                 foreach (ulong userId in cup.authorizedPlayers){
     				BasePlayer foundPlayer = BasePlayer.Find(userId.ToString());
                     if(foundPlayer != null){
@@ -1788,7 +1900,6 @@ namespace Oxide.Plugins
                     
                 }
             } else {
-                Effect.server.Run(sound, player.transform.position);
                 if(config.alertgametip) player.ShowToast(style, text, true);
                 if(config.alertnotify && (Notify != null || UINotify != null)) Interface.Oxide.CallHook("SendNotify", player, type, text);
                 if(config.alertchat) PrintToChat(player, text);
@@ -1843,7 +1954,7 @@ namespace Oxide.Plugins
         private WallMaterialType GetWallType(string name){
             name = name.ToLower();
 
-            if (name.Contains("wood") || name.Contains("frontier"))
+            if (name.Contains("wood") || name.Contains("frontier") || name.Contains("legacy"))
                 return WallMaterialType.Wood;
 
             if (name.Contains("adobe") || name.Contains("stone") || name.Contains("ice"))
@@ -2369,6 +2480,10 @@ namespace Oxide.Plugins
                     if(grade == "stone") bg = BuildingGrade.Enum.Stone;
                     if(grade == "metal") bg = BuildingGrade.Enum.Metal;
                     if(grade == "armored") bg = BuildingGrade.Enum.TopTier;
+                    if (!IsWallAllowed(player, skinid)){
+                        CreateGameTip(cup, Lan("NoDLCPurchased", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
+                        return;
+                    }
                     BuildingCupboard[cup].id = id;
                     BuildingCupboard[cup].grade = bg;
                     BuildingCupboard[cup].skinid = skinid;
@@ -2559,7 +2674,8 @@ namespace Oxide.Plugins
                 return;
             }
             if (!tcData.CustomWallpapers.ContainsKey(category)) tcData.CustomWallpapers[category] = new HashSet<ulong>();
-            if (tcData.CustomWallpapers[category].Add(skinid))
+            bool restored = tcData.RemovedWallpapers.TryGetValue(category, out var removedSkins) && removedSkins.Remove(skinid);
+            if (tcData.CustomWallpapers[category].Add(skinid) || restored)
             {
                 SaveData();
                 SendMessage(player, Lan("AddWP_Added", userId, skinid, category));
@@ -2567,6 +2683,50 @@ namespace Oxide.Plugins
             else
             {
                 SendMessage(player, Lan("AddWP_AlreadyExists", userId));
+            }
+        }
+
+        [ChatCommand("removewp")]
+        private void CmdRemoveWallpaperChat(BasePlayer player, string command, string[] args){
+            HandleRemoveWallpaper(player, args);
+        }
+
+        [ConsoleCommand("removewp")]
+        private void CmdRemoveWallpaperConsole(ConsoleSystem.Arg arg){
+            BasePlayer player = arg.Player();
+            string[] args = arg.Args == null ? Array.Empty<string>() : Array.ConvertAll(arg.Args, a => a.ToString());
+            HandleRemoveWallpaper(player, args);
+        }
+
+        private void HandleRemoveWallpaper(BasePlayer player, string[] args){
+            string userId = player?.UserIDString ?? "console";
+            if (player != null && !HasPermission(userId, permadmin))
+            {
+                SendMessage(player, Lan("AddWP_NoPermission", userId));
+                return;
+            }
+            if (args == null || args.Length != 2 || !ulong.TryParse(args[0], out var skinid))
+            {
+                SendMessage(player, Lan("RemoveWP_Usage", userId));
+                return;
+            }
+            string category = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(args[1].Trim().ToLowerInvariant());
+            if (category != "Wall" && category != "Floor" && category != "Ceiling")
+            {
+                SendMessage(player, Lan("AddWP_InvalidCategory", userId));
+                return;
+            }
+            if (tcData.CustomWallpapers.TryGetValue(category, out var list) && list.Remove(skinid))
+            {
+                if (!tcData.RemovedWallpapers.TryGetValue(category, out var removedSkins))
+                    tcData.RemovedWallpapers[category] = removedSkins = new HashSet<ulong>();
+                removedSkins.Add(skinid);
+                SaveData();
+                SendMessage(player, Lan("RemoveWP_Removed", userId, skinid, category));
+            }
+            else
+            {
+                SendMessage(player, Lan("RemoveWP_NotFound", userId, skinid, category));
             }
         }
 
@@ -2850,7 +3010,7 @@ namespace Oxide.Plugins
                     yMin -= yStep;
                 }
                 
-                if (config.reskinwall && list_entry.wall != -1 && (list_entry.itemID2 == -2099697608 || IsSkinAllowed(player, list_entry.wall))){
+                if (config.reskinwall && IsWallAllowed(player, list_entry.wall)){
                     bool wall = BuildingCupboard[cup].upwall && BuildingCupboard[cup].id == ID;
                     UI.Panel(ref container, upgrade_3, wall ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
                     UI.Image2(ref container, upgrade_3, list_entry.itemID2, 0, $"0.825 {yMin + 0.005f}", $"0.945 {yMin + 0.12f}");
@@ -4330,9 +4490,9 @@ namespace Oxide.Plugins
         private void ApplyHarmonyPatches(){
             ApplyPatch(typeof(RPC_PickupWallpaperStart_Patch));
             ApplyPatch(typeof(HasClothForPlacement_Patch));
-            if (config.forcebothsides){
+            ApplyPatch(typeof(ManualExteriorDoBuild_Patch));
+            if (config.forcebothsides || ManualExteriorEnabled){
                 ApplyPatch(typeof(CheckWallpaper_Patch));
-                Puts("Harmony Patched (Force both sides wallpapers: true)");
             }
         }
 
@@ -4382,12 +4542,33 @@ namespace Oxide.Plugins
             }
         }
 
+        [HarmonyPatch(typeof(global::WallpaperPlanner), "DoBuild", new Type[] { typeof(Construction.Target), typeof(Construction) })]
+        public static class ManualExteriorDoBuild_Patch
+        {
+            [HarmonyPrefix]
+            public static bool Prefix(global::WallpaperPlanner __instance, Construction.Target target, ref BaseEntity __result){
+                if (self == null || !self.ManualExteriorEnabled || target.socket == null) return true;
+                var block = target.entity as BuildingBlock;
+                int side = target.socket.socketName != null && target.socket.socketName.EndsWith("2") ? 1 : 0;
+                if (!self.IsManualExteriorTarget(block, side)) return true;
+                __result = null;
+                try {
+                    self.TryPlaceManualExterior(__instance.GetOwnerPlayer(), __instance, block);
+                } catch (Exception e){
+                    self.PrintError($"Manual exterior wallpaper placement failed: {e.Message}");
+                }
+                return false;
+            }
+        }
+
         [HarmonyPatch(typeof(BuildingBlock), "CheckWallpaper")]
         public static class CheckWallpaper_Patch
         {
             [HarmonyPrefix]
-            public static bool Prefix(){
-                return false;
+            public static bool Prefix(BuildingBlock __instance){
+                if (self == null || config == null) return true;
+                if (config.forcebothsides) return false;
+                return !self.IsManualExteriorTarget(__instance, 1) || !__instance.HasWallpaper(1);
             }
         }
 
@@ -4547,6 +4728,9 @@ namespace Oxide.Plugins
             [JsonProperty("GUI Buttons TC - AnchorMax")]
             public string AnchorMax = "0.5 0";
 
+            [JsonProperty("Notify only the player who started the action")]
+            public bool notifyOnlyInitiator = false;
+
             [JsonProperty("Alert Gametip")]
             public bool alertgametip = true;
 
@@ -4630,6 +4814,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Force both sides including external sides")]
             public bool forcebothsides = true;
+
+            [JsonProperty("Allow manual exterior wallpapers on walls and floors")]
+            public bool manualExteriorWallpaper = true;
 
             [JsonProperty("Cooldown Frequency Upgrade (larger number is slower)")]
             public Dictionary<string, float> FrequencyUpgrade = new Dictionary<string, float>(){
@@ -4759,6 +4946,11 @@ namespace Oxide.Plugins
             try {
                 config = Config.ReadObject<ConfigData>();
                 if (config == null) LoadDefaultConfig();
+                var rawConfig = Config.ReadObject<Newtonsoft.Json.Linq.JObject>();
+                if (rawConfig != null && rawConfig["Allow manual exterior wallpapers on walls and floors"] == null
+                    && rawConfig["Allow manual exterior wall wallpapers (requires both sides options)"] != null){
+                    config.manualExteriorWallpaper = rawConfig["Allow manual exterior wall wallpapers (requires both sides options)"].ToObject<bool>();
+                }
             } catch {
                 PrintError("Configuration file is corrupt! Unloading plugin...");
                 Interface.Oxide.RootPluginManager.RemovePlugin(this);
@@ -4802,12 +4994,15 @@ namespace Oxide.Plugins
         {
         	public string Version;
             public Dictionary<string, HashSet<ulong>> CustomWallpapers = new Dictionary<string, HashSet<ulong>>();
+            public Dictionary<string, HashSet<ulong>> RemovedWallpapers = new Dictionary<string, HashSet<ulong>>();
         }
 
 		private BetterTCData tcData;
 
         private void LoadData(){
             tcData = Interface.Oxide.DataFileSystem.ReadObject<BetterTCData>("BetterTC") ?? new BetterTCData();
+            if (tcData.CustomWallpapers == null) tcData.CustomWallpapers = new Dictionary<string, HashSet<ulong>>();
+            if (tcData.RemovedWallpapers == null) tcData.RemovedWallpapers = new Dictionary<string, HashSet<ulong>>();
 
             string currentVersion = this.Version.ToString();
             string oldVersion = tcData.Version ?? "0.0.0";
@@ -4893,6 +5088,8 @@ namespace Oxide.Plugins
                 ["ManualWallpaperNoPermission"] = "You do not have permission to use the BetterTC Wallpaper Tool menu.",
                 ["ManualWallpaperCannotUse"] = "You cannot open the wallpaper menu right now.",
                 ["ManualWallpaperToolRequired"] = "You must hold the Wallpaper Tool to use /wp.",
+                ["ManualExteriorNoPermission"] = "You need bettertc.wallpaper permission to place exterior wallpapers.",
+                ["ManualExteriorBuildingBlocked"] = "You must have building permission and be authorized on this building's TC to place exterior wallpapers.",
                 ["STOP"] = "STOP",
                 ["UPGRADE"] = "UPGRADE",
                 ["ListAuth"] = "LIST AUTH",
@@ -4951,6 +5148,9 @@ namespace Oxide.Plugins
                 ["AddWP_InvalidCategory"] = "Invalid category. Use: Wall, Floor, or Ceiling.",
                 ["AddWP_Added"] = "Wallpaper SkinID: {0} added to category: {1}.",
                 ["AddWP_AlreadyExists"] = "That skin is already registered.",
+                ["RemoveWP_Usage"] = "Usage: /removewp <skinid> <Wall|Floor|Ceiling>",
+                ["RemoveWP_Removed"] = "Wallpaper SkinID: {0} removed from category: {1}.",
+                ["RemoveWP_NotFound"] = "Wallpaper SkinID: {0} is not registered in category: {1}.",
                 ["RepairBlockedRecentDamage"] = "Could not repair: {0} due to recent damage. Try again in {1} seconds.",
                 ["NoDLCPurchased"] = "You don't have this DLC purchased. Facepunch's server policy no longer allows you to use DLC you haven't purchased.",
                 ["DisableBarges"] = "Not available for Barges",

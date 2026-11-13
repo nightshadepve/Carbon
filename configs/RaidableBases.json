@@ -14,6 +14,7 @@
       "Multi Foundation Bases Or Profiles": []
     },
     "Raid Management": {
+      "Spawn Only In These Grids": [],
       "Block Grid On Spawns Database Positions": false,
       "Grids To Block Spawns At": [],
       "Blocked Monument Markers (* = everything)": [],
@@ -189,6 +190,7 @@
       "Only Award Owner Of Raid": false,
       "Mounts Can Take Damage From Players": false,
       "Player Cupboard Detection Radius": 125.0,
+      "Mounts With Players Under PVP Delay Can Take Damage Anywhere": false,
       "Players With PVP Delay Can Damage Anything Inside Zone": false,
       "Players With PVP Delay Can Damage Other Players With PVP Delay Anywhere": false,
       "PVP Delay Between Zone Hopping": 10.0,
@@ -274,6 +276,7 @@
       "Marker Name": "Raid Base",
       "Radius": 0.25,
       "Radius (Map Size 3600 Or Less)": 0.35,
+      "Map Marker Circle Opacity (0-1)": 0.75,
       "Use Vending Map Marker": true,
       "Show Remaining Loot When No Owner (PVE)": true,
       "Show Remaining Loot When No Owner (PVP)": false,
@@ -413,7 +416,8 @@
         "Refund Percentage": 100.0,
         "Refund Resets Cooldown Timer": false,
         "Cooldown (0 = No Cooldown)": 0.0,
-        "Purchase Same Base While On Despawn Cooldown": false
+        "Purchase Same Base While On Despawn Cooldown": false,
+        "Bypass Buyable Cooldown On Despawn": false
       },
       "Allow Players To Spawn Specified Base Files": false,
       "Allow Players To Buy PVP Raids": false,
@@ -646,8 +650,7 @@
     "Buy Raid Command": "buyraid",
     "Event Command": "rbe",
     "Hunter Command": "rb",
-    "Server Console Command": "rbevent",
-    "Remove Paid Content Command": "krhfxihk"
+    "Server Console Command": "rbevent"
   },
   "Event Messages": {
     "Ineligible For Rewards": {
@@ -742,10 +745,7 @@
       "Preset Skins": [],
       "Ignore If Skinned Already": true,
       "Use Identical Skins": false,
-      "Use Random Skin": false,
-      "Use Workshop Skins": false,
-      "Use Imported Workshop Skins File": false,
-      "Use Approved Workshop Skins Only": false
+      "Use Imported Workshop Skins File": false
     },
     "Npcs": {
       "Use Identical Skins": false,
@@ -753,18 +753,12 @@
       "Use Skins With Scientist Kits": false,
       "Ignore Skinned Murderer Kits": false,
       "Ignore Skinned Scientist Kits": false,
-      "Use Random Skin": false,
-      "Use Workshop Skins": false,
-      "Use Imported Workshop Skins File": false,
-      "Use Approved Workshop Skins Only": false
+      "Use Imported Workshop Skins File": false
     },
     "Loot Items": {
       "Use Identical Skins For Stackable Items": false,
       "Use Identical Skins For Non-Stackable Items": false,
-      "Use Random Skin": false,
-      "Use Workshop Skins": false,
-      "Use Imported Workshop Skins File": false,
-      "Use Approved Workshop Skins Only": false
+      "Use Imported Workshop Skins File": false
     },
     "Deployables": {
       "Partial Names": [
@@ -789,10 +783,7 @@
       "Skin Everything": false,
       "Ignore If Skinned Already": false,
       "Use Identical Skins": false,
-      "Use Random Skin": true,
-      "Use Workshop Skins": false,
-      "Use Imported Workshop Skins File": false,
-      "Use Approved Workshop Skins Only": false
+      "Use Imported Workshop Skins File": false
     }
   },
   "Treasure": {
@@ -924,6 +915,5 @@
     "Furnace Starting Fuel": 1000
   },
   "Log Debug To File": false,
-  "Block paid and restricted content to comply with Facepunch TOS": true,
   "Destroy DLC containers once looted": true
 }

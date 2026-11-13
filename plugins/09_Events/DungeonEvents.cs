@@ -18,7 +18,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("Dungeon Events", "Martian", "3.11.1")]
+    [Info("Dungeon Events", "Martian", "3.13.2")]
     [Description("Create dungeons populated with NPCs, turrets and loot containers.")]
     public class DungeonEvents : RustPlugin
     {
@@ -37,28 +37,36 @@ namespace Oxide.Plugins
             SkillTree;
         private static DungeonEvents _instance;
         private Configuration _config;
-        private List<ActiveDungeon> _activeDungeons = new List<ActiveDungeon>();
+        private readonly List<ActiveDungeon> _activeDungeons = new List<ActiveDungeon>();
         private readonly Dictionary<ulong, ActiveDungeon> _dungeonByEntityId = new Dictionary<ulong, ActiveDungeon>();
         private readonly Dictionary<string, ActiveDungeon> _dungeonByUniqueId = new Dictionary<string, ActiveDungeon>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, HashSet<ulong>> _dungeonEntityIdCache = new Dictionary<string, HashSet<ulong>>(StringComparer.OrdinalIgnoreCase);
-        private List<BasePlayer> _playersBuying = new List<BasePlayer>();
-        private List<BasePlayer> _wasInDungeonPlayers = new List<BasePlayer>();
+        private readonly HashSet<string> _dirtyDungeonEntityCaches = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Bounds> _enemySpawnBounds = new Dictionary<string, Bounds>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, LootFileCache> _lootFileCache = new Dictionary<string, LootFileCache>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<ulong, EventUiState> _eventUiStates = new Dictionary<ulong, EventUiState>();
+        private static readonly Func<BasePlayer, HashSet<string>> _getActiveUiPanels = CreateActiveUiPanelLookup();
+        private Timer _entityCacheFlushTimer;
+        private bool _isUnloading;
+        private readonly List<BasePlayer> _wasInDungeonPlayers = new List<BasePlayer>();
         private readonly Dictionary<ulong, PlayerLootRecovery> _pendingPlayerLootRecoveries = new Dictionary<ulong, PlayerLootRecovery>();
         private readonly Dictionary<ulong, float> _lastEntranceAttackWarning = new Dictionary<ulong, float>();
         private const float EntranceAttackWarningCooldown = 5f;
         private const float PlayerLootRecoveryLifetimeSeconds = 120f;
-        private Dictionary<ulong, Dictionary<string, DateTime>> _buyCooldowns = new Dictionary<ulong, Dictionary<string, DateTime>>();
-        private List<DungeonMarker> _activeDungeonMarkers = new List<DungeonMarker>();
-        private Queue<DungeonRequest> _dungeonQueue = new Queue<DungeonRequest>();
-        private Queue<DungeonRequest> _dungeonFailedAutoSpawnQueue = new Queue<DungeonRequest>();
-        private Queue<DungeonRequest> _dungeonFailedBuyQueue = new Queue<DungeonRequest>();
+        private readonly Dictionary<ulong, Dictionary<string, DateTime>> _buyCooldowns = new Dictionary<ulong, Dictionary<string, DateTime>>();
+        private readonly List<DungeonMarker> _activeDungeonMarkers = new List<DungeonMarker>();
+        private readonly Queue<DungeonRequest> _dungeonQueue = new Queue<DungeonRequest>();
+        private readonly Queue<DungeonRequest> _dungeonFailedAutoSpawnQueue = new Queue<DungeonRequest>();
+        private readonly Queue<DungeonRequest> _dungeonFailedBuyQueue = new Queue<DungeonRequest>();
         private Timer _dungeonTimer;
-        private bool isCreatingDungeon = false;
+        private bool _isCreatingDungeon;
         private DungeonRequest _currentDungeonRequest;
-        private const float TimeTimers = 10f;
+        private const float DungeonTimerInterval = 10f;
         private const string PermissionAdmin = "dungeonevents.admin";
         private const string PermissionBuy = "dungeonevents.buy";
         private const string PermissionEnter = "dungeonevents.enter";
+        private const string PermissionFree = "dungeonevents.free";
+        private const string PermissionBypassCooldown = "dungeonevents.bypasscooldown";
         private const string LootItemTextFieldKey = "Item.text";
         private const ulong OwnerID = 10203040505;
         private const string UiEventPanel = "yFifW5s1zAY09h5cU0qeIQUNV6GGwevG";
@@ -73,6 +81,18 @@ namespace Oxide.Plugins
         private int _activeDungeonCleanups;
         private float _lastCleanupCompletedAt = -99999f;
         private Coroutine _startupRoutine;
+        private Coroutine _dungeonCreationRoutine;
+        private const string ConstructionTypeConfigKey =
+            "Construction - 1:Wood 2:Legacy 3:Gingerbread 4:Stone 5:Adobe 6:Brick 7:Brutalist 8:Metal 9:Container 10:Armored 11:Jungle 12:Crypt 13:Space 14:Classic";
+        private const int ClassicDungeonSelection = 14;
+        private const int DungeonEnemyCollisionMask =
+            (Layers.Solid | Layers.Mask.AI | Layers.Mask.Player_Server | Layers.Mask.Player_Movement | Layers.Mask.Ragdoll | Layers.Mask.Physics_Debris | Layers.Mask.Prevent_Movement)
+            & ~Layers.Mask.Terrain;
+        private const string DungeonRockPrefab = "assets/bundled/prefabs/modding/admin/admin_rock_quarry_small_a.prefab";
+        private const string DungeonTorchPrefab = "assets/bundled/prefabs/static/torchholder_on.static.prefab";
+        private const float DungeonRockOverlap = 0.27f;
+        private static readonly Bounds DungeonRockBounds = new Bounds(new Vector3(0.004f, 0f, 0.007f), new Vector3(2.323f, 1.929f, 3.192f));
+        private static readonly Vector2Int[] RockDirections = { Vector2Int.right, Vector2Int.up, Vector2Int.left, Vector2Int.down };
         private const string WallPrefab = "assets/prefabs/building core/wall/wall.prefab";
         private const string FoundationPrefab = "assets/prefabs/building core/foundation/foundation.prefab";
         private const string CeilingPrefab = "assets/prefabs/building core/floor/floor.prefab";
@@ -104,11 +124,13 @@ namespace Oxide.Plugins
         private const float SubCellSpacing = 3f;
         private const float WallRotationOffset = 90f;
         private const float CeilingHeight = 3f;
+        private const float BossRouteStartFraction = 0.4f;
         private const float CorridorLength = 12f;
         private const float EntranceInnerLegLength = CorridorLength;
         private const float EntranceOuterLegLength = CellSpacing * 3f;
         private const float EntranceDoorDistanceFromTurn = CellSpacing * 2f;
         private const bool PlaceCeiling = true;
+        private const bool ClassicDungeonRoofForTesting = true;
         private const bool PlaceLights = true;
         private uint _randomSeed;
         private static readonly string[] BlockedRespawnPrefabs =
@@ -130,11 +152,9 @@ namespace Oxide.Plugins
         private const float WolfAnimalAttackCooldown = 1.2f;
         private Vector3 _cachedAnimalNavmeshSpawnPosition = Vector3.zero;
         private bool _animalNavmeshLookupFailed = false;
-        private bool _warnedAnimalDirectSpawnFallback = false;
-        private bool _terrainProtectionWarningLogged = false;
         private const float CustomTurretServerTickInterval = 0.05f;
         private const float NpcFireTickInterval = 0.10f;
-        private const int DungeonEntityCacheFlushBatchSize = 100;
+        private const float DungeonEntityCacheFlushInterval = 1f;
         private static readonly Dictionary<string, string> AnimalPrefabPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Boar"] = "assets/rust.ai/agents/boar/boar.prefab",
@@ -168,7 +188,7 @@ namespace Oxide.Plugins
         }
         #endregion
 
-        #region Harmony Patchs
+        #region Harmony Patches
         [AutoPatch]
         [HarmonyPatch(typeof(ScientistNPC), "get_displayName")]
         public static class ScientistNPC_DisplayName_Patch
@@ -194,16 +214,18 @@ namespace Oxide.Plugins
         #endregion
 
         #region Hooks
-        void Init()
+        private void Init()
         {
             _instance = this;
             permission.RegisterPermission(PermissionEnter, this);
             permission.RegisterPermission(PermissionAdmin, this);
             permission.RegisterPermission(PermissionBuy, this);
+            permission.RegisterPermission(PermissionFree, this);
+            permission.RegisterPermission(PermissionBypassCooldown, this);
             RegisterTierPermissions();
         }
 
-        void OnServerInitialized()
+        private void OnServerInitialized()
         {
             UpdatePerformanceDelays();
             EnsureUndergroundTerrainProtectionDisabled();
@@ -211,19 +233,31 @@ namespace Oxide.Plugins
             NextTick(RegisterCommands);
         }
 
-        void Unload()
+        private void Unload()
         {
+            _isUnloading = true;
+            _entityCacheFlushTimer?.Destroy();
+            _entityCacheFlushTimer = null;
             if (_startupRoutine != null)
                 ServerMgr.Instance.StopCoroutine(_startupRoutine);
+            if (_dungeonCreationRoutine != null)
+                ServerMgr.Instance.StopCoroutine(_dungeonCreationRoutine);
             _dungeonTimer?.Destroy();
             _dungeonQueue.Clear();
+            _dungeonFailedAutoSpawnQueue.Clear();
+            _dungeonFailedBuyQueue.Clear();
+            ResetDungeonCreation();
             DestroyAllUis();
             RemoveAllDungeons();
             _pendingPlayerLootRecoveries.Clear();
             _lastEntranceAttackWarning.Clear();
+            _wasInDungeonPlayers.Clear();
+            _eventUiStates.Clear();
+            _lootFileCache.Clear();
+            _dirtyDungeonEntityCaches.Clear();
         }
 
-        object CanDropActiveItem(BasePlayer player)
+        private object CanDropActiveItem(BasePlayer player)
         {
             if (RestoreUponDeath != null)
             {
@@ -231,8 +265,7 @@ namespace Oxide.Plugins
             }
             if (player == null)
                 return null;
-            var wasInDungeon = _wasInDungeonPlayers.FirstOrDefault(d => d == player);
-            if (wasInDungeon != null)
+            if (_wasInDungeonPlayers.Contains(player))
             {
                 var activeItem = player.GetActiveItem();
                 if (activeItem != null)
@@ -241,7 +274,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnBackpackDrop(Item backpack, PlayerInventory inventory)
+        private object OnBackpackDrop(Item backpack, PlayerInventory inventory)
         {
             if (!_config.PreventDropBackpack)
                 return null;
@@ -250,24 +283,22 @@ namespace Oxide.Plugins
                 return null;
             if (player == null)
                 return null;
-            var wasInDungeon = _wasInDungeonPlayers.FirstOrDefault(d => d == player);
-            if (wasInDungeon != null)
+            if (_wasInDungeonPlayers.Contains(player))
                 return true;
             return null;
         }
 
-        object CanDropBackpack(ulong userID, Vector3 backpackPluginHook)
+        private object CanDropBackpack(ulong userID, Vector3 backpackPluginHook)
         {
             var player = BasePlayer.Find(userID.ToString());
             if (player == null)
                 return null;
-            var wasInDungeon = _wasInDungeonPlayers.FirstOrDefault(d => d == player);
-            if (wasInDungeon != null)
+            if (_wasInDungeonPlayers.Contains(player))
                 return false;
             return null;
         }
 
-        object CanPickupEntity(BasePlayer player, BaseEntity entity)
+        private object CanPickupEntity(BasePlayer player, BaseEntity entity)
         {
             if (player == null)
                 return null;
@@ -276,7 +307,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object CanDeployItem(BasePlayer player, Deployer deployer, ulong entityId)
+        private object CanDeployItem(BasePlayer player, Deployer deployer, ulong entityId)
         {
             if (player == null)
                 return null;
@@ -291,7 +322,7 @@ namespace Oxide.Plugins
             return IsDungeonOwnerOrAlly(player.userID, portalDungeon) ? (object)null : false;
         }
 
-        object CanBuild(Planner planner, Construction prefab, Construction.Target target)
+        private object CanBuild(Planner planner, Construction prefab, Construction.Target target)
         {
             var player = planner?.GetOwnerPlayer();
             if (player == null)
@@ -309,7 +340,7 @@ namespace Oxide.Plugins
             return IsDungeonOwnerOrAlly(player.userID, portalDungeon) ? (object)null : false;
         }
 
-        object OnPlayerCommand(BasePlayer player, string command, string[] args)
+        private object OnPlayerCommand(BasePlayer player, string command, string[] args)
         {
             if (player == null)
                 return null;
@@ -323,7 +354,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnServerCommand(ConsoleSystem.Arg arg)
+        private object OnServerCommand(ConsoleSystem.Arg arg)
         {
             if (arg == null || arg.cmd == null)
                 return null;
@@ -339,7 +370,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnCustomNpcTarget(ScientistNPC scientistNPC, BasePlayer player)
+        private object OnCustomNpcTarget(ScientistNPC scientistNPC, BasePlayer player)
         {
             if (scientistNPC == null || !IsDungeonEntity(scientistNPC))
                 return null;
@@ -350,7 +381,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object CanEntityBeTargeted(BasePlayer player, AutoTurret turret)
+        private object CanEntityBeTargeted(BasePlayer player, AutoTurret turret)
         {
             if (turret == null || !IsDungeonEntity(turret))
                 return null;
@@ -361,7 +392,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        object OnEntityEnter(TargetTrigger trigger, ScientistNPC scientistNPC)
+        private object OnEntityEnter(TargetTrigger trigger, ScientistNPC scientistNPC)
         {
             if (trigger == null || scientistNPC == null || scientistNPC.net == null || scientistNPC.userID.IsSteamId())
                 return null;
@@ -373,7 +404,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnPortalUse(BasePlayer player, BasePortal portal)
+        private object OnPortalUse(BasePlayer player, BasePortal portal)
         {
             var activeDungeon = GetActiveDungeonByPortal(portal);
             if (activeDungeon == null)
@@ -393,14 +424,14 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object OnDoorAutoClose(BasePlayer player, Door door)
+        private object OnDoorAutoClose(BasePlayer player, Door door)
         {
             if (door == null)
                 return null;
             return IsDungeonEntity(door) ? (object)true : null;
         }
 
-        void OnCorpsePopulate(ScientistNPC npc, NPCPlayerCorpse corpse)
+        private void OnCorpsePopulate(ScientistNPC npc, NPCPlayerCorpse corpse)
         {
             if (npc == null || corpse == null)
                 return;
@@ -431,43 +462,11 @@ namespace Oxide.Plugins
                 if (items == null || items.Count == 0)
                     return;
                 int maxDifferentItems = storedData.IsBoss ? (activeDungeon?.TierConfig?.MaxItemsPerBossNpc ?? int.MaxValue) : (activeDungeon?.TierConfig?.MaxItemsPerNpc ?? int.MaxValue);
-                var lootItems = items.OrderBy(_ => Random.value).ToList();
-                int differentItemsCount = 0;
-                foreach (var itemCfg in lootItems)
-                {
-                    if (differentItemsCount >= maxDifferentItems)
-                        break;
-                    if (Random.value * 100f > itemCfg.InclusionChancePercentage)
-                        continue;
-                    var def = ItemManager.FindItemDefinition(itemCfg.ShortName);
-                    if (def == null)
-                        continue;
-                    int min = itemCfg.MinimumAmount;
-                    int max = itemCfg.MaximumAmount;
-                    if (min <= 0 || max <= 0)
-                        continue;
-                    if (max < min)
-                    {
-                        int t = min;
-                        min = max;
-                        max = t;
-                    }
-                    int amount = Random.Range(min, max + 1);
-                    if (amount <= 0)
-                        continue;
-                    if (container.itemList.Count >= container.capacity)
-                        break;
-                    var item = ItemManager.Create(def, amount, itemCfg.SkinID);
-                    if (item == null)
-                        continue;
-                    ApplyLootItemMetadata(item, itemCfg);
-                    item.MoveToContainer(container);
-                    differentItemsCount++;
-                }
+                PopulateLootContainer(container, items, maxDifferentItems);
             });
         }
 
-        void OnPlayerDeath(BasePlayer player, HitInfo info)
+        private void OnPlayerDeath(BasePlayer player, HitInfo info)
         {
             if (player == null || !player.userID.IsSteamId())
                 return;
@@ -510,23 +509,10 @@ namespace Oxide.Plugins
             {
                 LogDebug($"Failed to prepare player death recovery for {player.userID}: {ex.Message}", 2);
             }
-            HandlePlayerDungeonDeparture(dungeon);
-            if (dungeon.Entities == null)
-                return;
-            foreach (var door in dungeon.Entities.OfType<Door>())
-            {
-                if (door == null || door.IsDestroyed || door.transform == null)
-                    continue;
-                try
-                {
-                    door.SetOpen(false);
-                    door.SendNetworkUpdate();
-                }
-                catch (Exception) { }
-            }
+            HandlePlayerDungeonDeparture(dungeon, player.userID);
         }
 
-        object CanRaidBlock(BasePlayer player)
+        private object CanRaidBlock(BasePlayer player)
         {
             var dungeon = GetDungeonForPlayer(player);
             if (dungeon != null)
@@ -534,14 +520,17 @@ namespace Oxide.Plugins
             return null;
         }
 
-        void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
+        private void OnEntityDeath(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null)
                 return;
             ActiveDungeon dungeon = GetActiveDungeonByEntity(entity);
             if (dungeon == null || !dungeon.Spawned)
                 return;
-            bool isNpcReward = entity is ScientistNPC || IsAnimalEntity(entity);
+            bool isAnimal = IsAnimalEntity(entity);
+            bool isNpc = entity is ScientistNPC;
+            bool isBoss = isNpc && entity.GetComponent<BossMonoBehaviour>() != null;
+            bool isNpcReward = isNpc || isAnimal;
             bool isTurret = entity is AutoTurret;
             bool isBox = entity is StorageContainer;
             if (!isNpcReward && !isTurret && !isBox)
@@ -555,11 +544,15 @@ namespace Oxide.Plugins
             if (r == null)
                 return;
             int econ =
-                isNpcReward ? r.NpcEconomicsReward
+                isBoss ? r.BossEconomicsReward
+                : isAnimal ? r.AnimalEconomicsReward
+                : isNpc ? r.NpcEconomicsReward
                 : isTurret ? r.TurretEconomicsReward
                 : r.BoxEconomicsReward;
             int sr =
-                isNpcReward ? r.NpcServerRewards
+                isBoss ? r.BossServerRewards
+                : isAnimal ? r.AnimalServerRewards
+                : isNpc ? r.NpcServerRewards
                 : isTurret ? r.TurretServerRewards
                 : r.BoxServerRewards;
             if (econ > 0 && Economics != null)
@@ -593,15 +586,15 @@ namespace Oxide.Plugins
             return combatEntity.Health() > 0.01f;
         }
 
-        object OnEntityTakeDamage(BuildingBlock block, HitInfo info)
+        private object OnEntityTakeDamage(BuildingBlock block, HitInfo info)
         {
-            if (!IsDungeonEntity(block))
+            if (info == null || !IsDungeonEntity(block))
                 return null;
             info.damageTypes?.ScaleAll(0f);
             return true;
         }
 
-        object OnEntityTakeDamage(ScientistNPC scientistNPC, HitInfo info)
+        private object OnEntityTakeDamage(ScientistNPC scientistNPC, HitInfo info)
         {
             if (scientistNPC == null || info == null || info.Initiator == null)
                 return null;
@@ -692,14 +685,14 @@ namespace Oxide.Plugins
             }
         }
 
-        object OnEntityTakeDamage(BaseAnimalNPC animal, HitInfo info)
+        private object OnEntityTakeDamage(BaseAnimalNPC animal, HitInfo info)
         {
             if (animal == null || animal.net == null || info == null)
                 return null;
             return HandleDamageToDungeonAnimal(animal, info);
         }
 
-        object OnEntityTakeDamage(BaseNPC2 victim, HitInfo info)
+        private object OnEntityTakeDamage(BaseNPC2 victim, HitInfo info)
         {
             if (victim == null || info == null)
                 return null;
@@ -773,15 +766,15 @@ namespace Oxide.Plugins
             animal.Die(info);
         }
 
-        object CanEntityTakeDamage(BuildingBlock block, HitInfo info)
+        private object CanEntityTakeDamage(BuildingBlock block, HitInfo info)
         {
-            if (!IsDungeonEntity(block))
+            if (info == null || !IsDungeonEntity(block))
                 return null;
             info.damageTypes?.ScaleAll(0f);
             return false;
         }
 
-        object CanEntityTakeDamage(BasePlayer victim, HitInfo info)
+        private object CanEntityTakeDamage(BasePlayer victim, HitInfo info)
         {
             if (victim == null || info == null || !IsPlayer(victim))
                 return null;
@@ -805,7 +798,7 @@ namespace Oxide.Plugins
             return null;
         }
 
-        object CanEntityTakeDamage(AutoTurret autoTurret, HitInfo hitinfo)
+        private object CanEntityTakeDamage(AutoTurret autoTurret, HitInfo hitinfo)
         {
             if (autoTurret == null || hitinfo == null)
                 return null;
@@ -818,7 +811,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        object CanEntityTakeDamage(StorageContainer storageContainer, HitInfo hitinfo)
+        private object CanEntityTakeDamage(StorageContainer storageContainer, HitInfo hitinfo)
         {
             if (storageContainer == null || hitinfo == null)
                 return null;
@@ -831,7 +824,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        object CanEntityTakeDamage(Door victim, HitInfo hitinfo)
+        private object CanEntityTakeDamage(Door victim, HitInfo hitinfo)
         {
             if (victim == null || hitinfo == null)
                 return null;
@@ -842,7 +835,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        object CanEntityTakeDamage(BaseNPC2 victim, HitInfo info)
+        private object CanEntityTakeDamage(BaseNPC2 victim, HitInfo info)
         {
             if (victim == null || info == null)
                 return null;
@@ -855,7 +848,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        object CanEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        private object CanEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null)
                 return null;
@@ -892,6 +885,7 @@ namespace Oxide.Plugins
         #region Data Initialization
         protected override void LoadConfig()
         {
+            _lootFileCache.Clear();
             base.LoadConfig();
             try
             {
@@ -913,6 +907,7 @@ namespace Oxide.Plugins
                 mutated |= MigrateBuildingGradeSelectionPropertyName(raw);
                 mutated |= MigrateDungeonHeightPropertyName(raw);
                 mutated |= MigrateOldWolfPrefabToWolf2(raw);
+                mutated |= MigrateEnemyRewardProperties(raw);
                 _config = raw.ToObject<Configuration>() ?? new Configuration();
                 var changed = NormalizeAnimalConfigurations(raw);
                 if (_config.Version == null || _config.Version != Version)
@@ -1080,6 +1075,7 @@ namespace Oxide.Plugins
                     ["DungeonBuyTitle"] = "Buy Dungeon",
                     ["BuyButton"] = "{0} ({1})",
                     ["BuyButtonWithName"] = "{0} ({1} {2})",
+                    ["BuyButtonFreeWithName"] = "{0} (Free)",
                     ["CloseButton"] = "Close",
                     ["DungeonRemovalCountdown"] = "Your dungeon will be removed in {0} minute(s)!",
                     ["BlockedCommands"] = "You cannot use commands inside a dungeon!",
@@ -1126,6 +1122,7 @@ namespace Oxide.Plugins
                     ["DungeonBuyTitle"] = "Comprar Masmorra",
                     ["BuyButton"] = "{0} ({1})",
                     ["BuyButtonWithName"] = "{0} ({1} {2})",
+                    ["BuyButtonFreeWithName"] = "{0} (Grátis)",
                     ["CloseButton"] = "Fechar",
                     ["DungeonRemovalCountdown"] = "Sua masmorra será removida em {0} minuto(s)!",
                     ["BlockedCommands"] = "Você não pode usar comandos dentro de uma masmorra!",
@@ -1173,6 +1170,7 @@ namespace Oxide.Plugins
                     ["DungeonBuyTitle"] = "Verlies kaufen",
                     ["BuyButton"] = "{0} ({1})",
                     ["BuyButtonWithName"] = "{0} ({1} {2})",
+                    ["BuyButtonFreeWithName"] = "{0} (Kostenlos)",
                     ["CloseButton"] = "Schließen",
                     ["DungeonRemovalCountdown"] = "Dein Verlies wird in {0} Minute(n) entfernt!",
                     ["BlockedCommands"] = "Du kannst in einem Verlies keine Befehle verwenden!",
@@ -1220,6 +1218,7 @@ namespace Oxide.Plugins
                     ["DungeonBuyTitle"] = "Comprar Mazmorra",
                     ["BuyButton"] = "{0} ({1})",
                     ["BuyButtonWithName"] = "{0} ({1} {2})",
+                    ["BuyButtonFreeWithName"] = "{0} (Gratis)",
                     ["CloseButton"] = "Cerrar",
                     ["DungeonRemovalCountdown"] = "¡Tu mazmorra será eliminada en {0} minuto(s)!",
                     ["BlockedCommands"] = "¡No puedes usar comandos dentro de una mazmorra!",
@@ -1267,6 +1266,7 @@ namespace Oxide.Plugins
                     ["DungeonBuyTitle"] = "Купить Подземелье",
                     ["BuyButton"] = "{0} ({1})",
                     ["BuyButtonWithName"] = "{0} ({1} {2})",
+                    ["BuyButtonFreeWithName"] = "{0} (Бесплатно)",
                     ["CloseButton"] = "Закрыть",
                     ["DungeonRemovalCountdown"] = "Ваше подземелье будет удалено через {0} минут(ы)!",
                     ["BlockedCommands"] = "Вы не можете использовать команды внутри подземелья!",
@@ -1324,6 +1324,18 @@ namespace Oxide.Plugins
 
             [JsonProperty("Reset NPCs And Animals When The Last Player Dies Or Leaves The Dungeon")]
             public bool ResetEnemiesOnPlayerDeparture { get; set; } = true;
+
+            [JsonProperty("Place Entrance Room Doors And Frames")]
+            public bool PlaceEntranceDoors { get; set; } = true;
+
+            [JsonProperty("Place Dungeon Doors And Frames (Except Entrance Room)")]
+            public bool PlaceDungeonDoors { get; set; } = true;
+
+            [JsonProperty("Close Entrance Room Doors When No Players Remain Inside (Left Or Died)")]
+            public bool CloseEntranceDoorsWhenEmpty { get; set; } = true;
+
+            [JsonProperty("Close Dungeon Doors (Except Entrance Room) When No Players Remain Inside (Left Or Died)")]
+            public bool CloseDungeonDoorsWhenEmpty { get; set; } = false;
 
             [JsonProperty("Dungeon Light Spacing")]
             public float DungeonLightSpacing { get; set; } = 30f;
@@ -1446,7 +1458,7 @@ namespace Oxide.Plugins
                         TierName = "Easy",
                         MapName = "Dungeon: Easy",
                         MarkerColorHex = "#3cd834",
-                        BuildingGradeSelection = 3,
+                        BuildingGradeSelection = 14,
                         ContainerColor = 0,
                         DungeonRooms = 1,
                         DungeonRoomSize = 5,
@@ -1705,7 +1717,7 @@ namespace Oxide.Plugins
                         TierName = "Hard",
                         MapName = "Dungeon: Hard",
                         MarkerColorHex = "#9c1825",
-                        BuildingGradeSelection = 8,
+                        BuildingGradeSelection = 14,
                         ContainerColor = 5,
                         DungeonRooms = 4,
                         DungeonRoomSize = 5,
@@ -2052,8 +2064,27 @@ namespace Oxide.Plugins
 
         public class RewardConfig
         {
+            private int? _bossEconomicsReward;
+            private int? _animalEconomicsReward;
+            private int? _bossServerRewards;
+            private int? _animalServerRewards;
+
             [JsonProperty("NPC Economics Reward")]
             public int NpcEconomicsReward { get; set; } = 300;
+
+            [JsonProperty("Boss Economics Reward")]
+            public int BossEconomicsReward
+            {
+                get => _bossEconomicsReward ?? NpcEconomicsReward;
+                set => _bossEconomicsReward = value;
+            }
+
+            [JsonProperty("Animal Economics Reward")]
+            public int AnimalEconomicsReward
+            {
+                get => _animalEconomicsReward ?? NpcEconomicsReward;
+                set => _animalEconomicsReward = value;
+            }
 
             [JsonProperty("Turret Economics Reward")]
             public int TurretEconomicsReward { get; set; } = 200;
@@ -2063,6 +2094,20 @@ namespace Oxide.Plugins
 
             [JsonProperty("NPC ServerRewards Points")]
             public int NpcServerRewards { get; set; } = 300;
+
+            [JsonProperty("Boss ServerRewards Points")]
+            public int BossServerRewards
+            {
+                get => _bossServerRewards ?? NpcServerRewards;
+                set => _bossServerRewards = value;
+            }
+
+            [JsonProperty("Animal ServerRewards Points")]
+            public int AnimalServerRewards
+            {
+                get => _animalServerRewards ?? NpcServerRewards;
+                set => _animalServerRewards = value;
+            }
 
             [JsonProperty("Turret ServerRewards Points")]
             public int TurretServerRewards { get; set; } = 200;
@@ -2109,7 +2154,7 @@ namespace Oxide.Plugins
             [JsonProperty("Max Buy (0 to Unlimited)")]
             public int MaxActiveBuy { get; set; } = 2;
 
-            [JsonProperty("Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)")]
+            [JsonProperty(ConstructionTypeConfigKey)]
             public int BuildingGradeSelection { get; set; } = 9;
 
             [JsonProperty(
@@ -2336,6 +2381,9 @@ namespace Oxide.Plugins
             [JsonProperty(LootItemTextFieldKey)]
             public string Text { get; set; } = string.Empty;
 
+            [JsonProperty("Armor Insert Slots", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public int ArmorSlots { get; set; }
+
             [JsonProperty("SkinID")]
             public ulong SkinID { get; set; }
         }
@@ -2560,6 +2608,14 @@ namespace Oxide.Plugins
 
         public class ActiveDungeon
         {
+            public readonly HashSet<ulong> IndexedEntityIds = new HashSet<ulong>();
+            public readonly Dictionary<Vector3Int, List<BuildingBlock>> BuildingBlocksByPosition = new Dictionary<Vector3Int, List<BuildingBlock>>();
+            public bool HasUniformFloorHeight = true;
+            public float UniformFloorHeight;
+            public int UiCountsFrame = -1;
+            public int UiNpcCount;
+            public int UiBoxCount;
+            public int UiTurretCount;
             public DateTime? ActivationTime { get; set; } = null;
             public bool HasBeenCleared { get; set; } = false;
             public DateTime? DestructionCountdownStart { get; set; } = null;
@@ -2593,6 +2649,8 @@ namespace Oxide.Plugins
             public HashSet<string> OccupiedPositions = new HashSet<string>();
             public HashSet<Vector3> DungeonFloorCenters = new HashSet<Vector3>();
             public HashSet<ulong> PlayersInside = new HashSet<ulong>();
+            public readonly List<Door> Doors = new List<Door>();
+            public readonly List<(Vector3 Position, float Yaw)> ClassicDoorFrames = new List<(Vector3 Position, float Yaw)>();
             public List<Door> EntranceDoors = new List<Door>();
             public readonly List<Bounds> EntranceCorridorSegments = new List<Bounds>();
             public Bounds EntranceSafeZoneBounds;
@@ -2602,6 +2660,9 @@ namespace Oxide.Plugins
             public bool ClearRewardGiven { get; set; } = false;
             public List<Vector3> GridOrigins = new List<Vector3>();
             public List<bool[]> CellGrids = new List<bool[]>();
+            public readonly List<List<Vector3>> RockRoomSpawnPoints = new List<List<Vector3>>();
+            public readonly Dictionary<Vector3Int, List<Collider>> RockFloorColliders = new Dictionary<Vector3Int, List<Collider>>();
+            public readonly List<Vector3> RockTorchPositions = new List<Vector3>();
             public List<Vector3> Foundations = new List<Vector3>();
             public HashSet<string> FoundationKeys = new HashSet<string>();
             public HashSet<Vector3> RoomFloorCenters = new HashSet<Vector3>();
@@ -2613,6 +2674,32 @@ namespace Oxide.Plugins
             public MapMarkerGenericRadius MapMarkerGenericRadius { get; set; }
             public Vector3 Position { get; set; }
             public string Tier { get; set; }
+        }
+
+        private class EventUiState
+        {
+            public string DungeonId;
+            public bool Cleared;
+            public string Counter;
+            public int Npcs;
+            public int Boxes;
+            public int Turrets;
+        }
+
+        private class LootFileCache
+        {
+            public DateTime LastWriteTimeUtc;
+            public long Length;
+            public List<ItemConfig> Items;
+        }
+
+        private class DungeonEntitySpawns
+        {
+            public readonly List<Vector3> Turrets = new List<Vector3>();
+            public readonly List<Vector3> Boxes = new List<Vector3>();
+            public readonly List<Vector3> Npcs = new List<Vector3>();
+            public readonly List<Vector3> Bosses = new List<Vector3>();
+            public readonly List<Vector3> Animals = new List<Vector3>();
         }
 
         private class TierInfo
@@ -2688,7 +2775,7 @@ namespace Oxide.Plugins
             EnsureUndergroundTerrainProtectionDisabled();
             RegisterCommands();
             _dungeonTimer?.Destroy();
-            _dungeonTimer = timer.Every(TimeTimers, HandleDungeonTimers);
+            _dungeonTimer = timer.Every(DungeonTimerInterval, HandleDungeonTimers);
             UpdateMarkers();
             _dungeonQueue.Clear();
             if (player != null)
@@ -2741,19 +2828,20 @@ namespace Oxide.Plugins
                 return;
             }
             ActiveDungeon nearest = null;
-            float minDist = float.MaxValue;
+            float nearestDistance = float.MaxValue;
+            Vector3 playerPosition = player.transform.position;
             foreach (var dungeon in _activeDungeons)
             {
-                float d1 = Vector3.Distance(player.transform.position, dungeon.PortalPosition);
-                float d2 = Vector3.Distance(player.transform.position, dungeon.DungeonPosition);
-                float d = Mathf.Min(d1, d2);
-                if (d < minDist)
+                float portalDistance = Vector3.Distance(playerPosition, dungeon.PortalPosition);
+                float dungeonDistance = Vector3.Distance(playerPosition, dungeon.DungeonPosition);
+                float distance = Mathf.Min(portalDistance, dungeonDistance);
+                if (distance < nearestDistance)
                 {
-                    minDist = d;
+                    nearestDistance = distance;
                     nearest = dungeon;
                 }
             }
-            if (nearest == null || minDist > 10f)
+            if (nearest == null || nearestDistance > 10f)
             {
                 NotifyPlayer(player, "TooFarToRemove", 0);
                 return;
@@ -2873,6 +2961,11 @@ namespace Oxide.Plugins
                 return;
             }
             var tier = GetDifficultyWithLeastActiveDungeons();
+            if (tier == null)
+            {
+                arg.ReplyWith("No Auto Spawn tier is currently available.");
+                return;
+            }
             EnqueueDungeonRequest(null, tier, false);
             arg.ReplyWith($"Enqueued random dungeon spawn of tier: {_tierInfoMap[tier].Name} (no owner).");
         }
@@ -2989,7 +3082,8 @@ namespace Oxide.Plugins
             yield return new WaitForSeconds(delay);
             yield return RemoveLeftoverDungeonFiles();
             BlockZones();
-            _dungeonTimer = timer.Every(TimeTimers, HandleDungeonTimers);
+            _dungeonTimer?.Destroy();
+            _dungeonTimer = timer.Every(DungeonTimerInterval, HandleDungeonTimers);
         }
 
         private bool HasBlockedRespawnEntityNearby(Vector3 position, float radius)
@@ -3023,7 +3117,7 @@ namespace Oxide.Plugins
 
         private IEnumerator CreateDungeon(DungeonRequest request)
         {
-            isCreatingDungeon = true;
+            _isCreatingDungeon = true;
             yield return null;
             bool hasPreselectedCustomPortal = request.UsesCustomPortalPosition && request.PortalPosition != Vector3.zero;
             Vector3 preselectedCustomPortalPosition = hasPreselectedCustomPortal ? request.PortalPosition : Vector3.zero;
@@ -3062,10 +3156,7 @@ namespace Oxide.Plugins
                 if (!CanFallbackToRandomPortalPosition(origin, customLocationsConfigured))
                 {
                     LogDebug($"No available custom {origin} portal spawn location and random fallback is disabled. Requeuing...", 1);
-                    Requeue(request, origin);
-                    _currentDungeonRequest = null;
-                    isCreatingDungeon = false;
-                    ProcessDungeonQueue();
+                    RetryDungeonCreation(request);
                     yield break;
                 }
                 var configPortal = new GeneratorConfig
@@ -3073,8 +3164,8 @@ namespace Oxide.Plugins
                     Origin = player != null ? player.transform.position : Vector3.zero,
                     ClosestToOrigin = player != null,
                     YOffset = 0f,
-                    minDist = Mathf.Max(10f, _config?.MinimumPortalDistanceBetweenPortals ?? 50f),
-                    blocked = _activeDungeons.Select(d => d.PortalPosition).ToList(),
+                    MinimumDistance = Mathf.Max(10f, _config?.MinimumPortalDistanceBetweenPortals ?? 50f),
+                    BlockedPositions = _activeDungeons.Select(d => d.PortalPosition).ToList(),
                     AvoidTerrainTopology = sp.AvoidTerrainTopology,
                     AvoidedTopology = TerrainTopology.Enum.Building | TerrainTopology.Enum.Cliff | TerrainTopology.Enum.Monument | TerrainTopology.Enum.Ocean,
                     AboveWater = true,
@@ -3115,8 +3206,8 @@ namespace Oxide.Plugins
                 Origin = Vector3.zero,
                 ClosestToOrigin = false,
                 YOffset = Mathf.Min(_config.DungeonSpawn.DungeonHeight, 700f),
-                minDist = 200,
-                blocked = _activeDungeons.Select(d => d.DungeonPosition).ToList(),
+                MinimumDistance = 200,
+                BlockedPositions = _activeDungeons.Select(d => d.DungeonPosition).ToList(),
                 AvoidTerrainTopology = undergroundDungeon || sp.AvoidTerrainTopology,
                 AvoidedTopology = undergroundDungeon
                     ? TerrainTopology.Enum.Monument | TerrainTopology.Enum.Ocean | TerrainTopology.Enum.River | TerrainTopology.Enum.Lake
@@ -3158,30 +3249,23 @@ namespace Oxide.Plugins
             dungeonPosition = request.DungeonPosition;
             if (portalPosition == Vector3.zero || dungeonPosition == Vector3.zero)
             {
-                Requeue(request, origin);
                 LogDebug("Failed to find spawn points. Requeuing...", 1);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request);
                 yield break;
             }
             if (!request.UsesCustomPortalPosition && HasBlockedRespawnEntityNearby(portalPosition, 4f))
             {
                 LogDebug("Rejected portal spawn point because a bed/sleeping bag/beach towel is too close. Requeuing...", 1);
-                Requeue(request, origin);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request);
                 yield break;
             }
             LogDebug("Dungeon spawn point found.");
             portalPosition += new Vector3(0f, 0.3f, 0f);
             request.PortalPosition = portalPosition;
-            if (!_tierInfoMap.TryGetValue(tierConfig, out var tierInfo))
+            if (!_tierInfoMap.ContainsKey(tierConfig))
             {
                 LogDebug($"[CreateDungeon] Tier '{tierConfig?.MapName}' disabled!", 2);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
+                ResetDungeonCreation();
                 ProcessDungeonQueue();
                 yield break;
             }
@@ -3199,36 +3283,27 @@ namespace Oxide.Plugins
             activeDungeon.DungeonRooms = tierConfig.DungeonRooms;
             activeDungeon.DungeonRoomSize = tierConfig.DungeonRoomSize;
             float buildStarted = Time.realtimeSinceStartup;
-            yield return CreateCustomProceduralDynamicDungeon(activeDungeon);
+            if (IsClassicDungeon(activeDungeon))
+                yield return CreateClassicDungeon(activeDungeon);
+            else
+                yield return CreateCustomProceduralDynamicDungeon(activeDungeon);
             if (activeDungeon.EntranceLayoutFailed || activeDungeon.InsidePortal == null)
             {
                 LogDebug("Could not build a collision-free L-shaped dungeon entrance. Requeuing dungeon generation.", 2);
-                DestroyDungeon(activeDungeon);
-                Requeue(request, origin);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request, activeDungeon);
                 yield break;
             }
             if (_config.DungeonSpawn.DungeonHeight < 0f && DoesDungeonFootprintOverlapWater(activeDungeon))
             {
                 LogDebug("Generated underground dungeon footprint overlaps surface water (ocean, river, or lake). Requeuing...", 1);
-                DestroyDungeon(activeDungeon);
-                Requeue(request, origin);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request, activeDungeon);
                 yield break;
             }
             float boundsPadding = Mathf.Max(5f, GetPortalProtectionRadius());
             if (DoesDungeonOverlapExistingDungeons(activeDungeon, boundsPadding))
             {
                 LogDebug("Generated dungeon bounds overlap an existing dungeon. Requeuing...", 1);
-                DestroyDungeon(activeDungeon);
-                Requeue(request, origin);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request, activeDungeon);
                 yield break;
             }
             yield return BuildWalls(activeDungeon);
@@ -3238,22 +3313,41 @@ namespace Oxide.Plugins
             activeDungeon.Trigger.SetPosition(activeDungeon.DungeonBounds.center, activeDungeon.DungeonBounds.size);
             if (activeDungeon.SpawnPoints.Count == 0)
             {
-                UnityEngine.GameObject.Destroy(activeDungeon.Trigger);
-                DestroyDungeon(activeDungeon);
-                Requeue(request, origin);
-                _currentDungeonRequest = null;
-                isCreatingDungeon = false;
-                ProcessDungeonQueue();
+                RetryDungeonCreation(request, activeDungeon);
                 LogDebug("Failed to find spawn points. Requeuing...", 1);
                 yield break;
             }
-            _playersBuying.Remove(player);
-            AssignEntitiesToSpawnPoints(activeDungeon.SpawnPoints, tierConfig, out var turretSpawns, out var boxSpawns, out var npcSpawns, out var bossSpawns, out var animalSpawns);
+            var spawns = new DungeonEntitySpawns();
+            var spawnLimits = tierConfig.EntitySpawnLimits;
+            SelectRouteBossSpawnPoints(activeDungeon, Math.Min(spawnLimits.BossesCounts, activeDungeon.SpawnPoints.Count), spawns.Bosses);
+            var bossPoints = new HashSet<Vector3>(spawns.Bosses);
+            var limitsWithoutBosses = new EntitySpawnLimits
+            {
+                NpcsCounts = spawnLimits.NpcsCounts,
+                BossesCounts = 0,
+                AnimalsCounts = spawnLimits.AnimalsCounts,
+                TurretsCounts = spawnLimits.TurretsCounts,
+                LootBoxesCounts = spawnLimits.LootBoxesCounts,
+            };
+            if (IsClassicDungeon(activeDungeon))
+                yield return AssignClassicDungeonEntities(activeDungeon, spawns, bossPoints, limitsWithoutBosses);
+            else
+            {
+                yield return AssignEntitiesToSpawnPoints(activeDungeon.SpawnPoints.Where(point => !bossPoints.Contains(point)).ToList(), tierConfig, spawns, limitsWithoutBosses);
+                for (int i = 0; i < spawns.Bosses.Count; i++)
+                    spawns.Bosses[i] += Vector3.up * 0.1f;
+            }
             float entitySpawnStarted = Time.realtimeSinceStartup;
-            yield return PlaceEntities(turretSpawns, boxSpawns, npcSpawns, bossSpawns, animalSpawns, activeDungeon);
+            yield return PlaceEntities(spawns.Turrets, spawns.Boxes, spawns.Npcs, spawns.Bosses, spawns.Animals, activeDungeon);
             LogDebug($"Dungeon entities spawned in {Time.realtimeSinceStartup - entitySpawnStarted:0.00}s.", 1);
             CreateDungeonMarkers(activeDungeon);
             activeDungeon.BasePortal = CreateDungeonPortal(portalPosition, activeDungeon);
+            if (activeDungeon.BasePortal == null || activeDungeon.InsidePortal == null || activeDungeon.InsidePortal.IsDestroyed)
+            {
+                LogDebug("Could not create or link dungeon portals. Requeuing dungeon generation.", 2);
+                RetryDungeonCreation(request, activeDungeon);
+                yield break;
+            }
             IndexDungeonEntity(activeDungeon.BasePortal, activeDungeon);
             activeDungeon.InsidePortal.targetPortal = activeDungeon.BasePortal;
             activeDungeon.BasePortal.targetPortal = activeDungeon.InsidePortal;
@@ -3265,10 +3359,24 @@ namespace Oxide.Plugins
             LogDebug($"{activeDungeon.TierName} Dungeon spawned successfully at grid: {activeDungeon.Grid}.", 1);
             activeDungeon.Spawned = true;
             Interface.CallHook("OnDungeonSpawn", activeDungeon.OwnerID, activeDungeon.PortalPosition, activeDungeon.Grid, activeDungeon.TierName);
-            _currentDungeonRequest = null;
-            isCreatingDungeon = false;
+            ResetDungeonCreation();
             UpdateMarkers();
             DrawLines(activeDungeon, player);
+            ProcessDungeonQueue();
+        }
+
+        private void ResetDungeonCreation()
+        {
+            _currentDungeonRequest = null;
+            _isCreatingDungeon = false;
+        }
+
+        private void RetryDungeonCreation(DungeonRequest request, ActiveDungeon dungeon = null)
+        {
+            if (dungeon != null)
+                DestroyDungeon(dungeon);
+            Requeue(request, request.Origin);
+            ResetDungeonCreation();
             ProcessDungeonQueue();
         }
 
@@ -3404,16 +3512,16 @@ namespace Oxide.Plugins
                     ForceVisualDeath();
                     return;
                 }
-                if (_instance != null && _instance.IsInDungeonEntranceCorridor(_dungeon, _entity.transform.position))
+                if (
+                    _instance != null
+                    && (_instance.IsInDungeonEntranceCorridor(_dungeon, _entity.transform.position) || !_instance.TryGetDungeonFloorPoint(_dungeon, _entity.transform.position, out _))
+                )
                 {
                     StopAttackAnimation();
                     var home = _entity.GetComponent<AnimalHomePosition>();
                     if (home != null)
                     {
-                        _entity.transform.position = home.HomePosition;
-                        _entity.transform.rotation = home.HomeRotation;
-                        _entity.UpdateNetworkGroup();
-                        _entity.SendNetworkUpdateImmediate();
+                        _instance.TryReturnDungeonEnemyHome(_entity, _dungeon, home.HomePosition, home.HomeRotation);
                     }
                     return;
                 }
@@ -4102,6 +4210,8 @@ namespace Oxide.Plugins
 
             private BasePlayer FindClosestVisiblePlayer(float radius)
             {
+                if (_dungeon == null || _dungeon.PlayersInside.Count == 0)
+                    return null;
                 int hits = Physics.OverlapSphereNonAlloc(_entity.transform.position, radius, _playersBuffer, Layers.Mask.Player_Server, QueryTriggerInteraction.Ignore);
                 BasePlayer best = null;
                 float bestSqr = radius * radius;
@@ -4141,6 +4251,9 @@ namespace Oxide.Plugins
             private int _blockMask;
             private readonly Collider[] _playersBuffer = new Collider[128];
             private readonly Collider[] _nearbyBuffer = new Collider[64];
+            private Vector3 _lastNetworkPosition;
+            private Quaternion _lastNetworkRotation;
+            private bool _hasNetworkTransform;
 
             public void Init(ActiveDungeon dungeon, BaseCombatEntity animal, float moveSpeed, float senseRange, float maxDistanceFromHome, float attackRange)
             {
@@ -4152,8 +4265,14 @@ namespace Oxide.Plugins
                 _attackRange = Mathf.Clamp(attackRange, 0.5f, 6f);
                 _home = animal.transform.position;
                 _blockMask = Layers.Mask.Construction | Layers.Mask.Deployed | Layers.Mask.World | Layers.Mask.Terrain | Layers.Mask.Default;
-                _animal.transform.rotation = SafeLookRotation(_animal.transform, RandomFlatDir());
+                _lastNetworkPosition = _animal.transform.position;
+                _lastNetworkRotation = _animal.transform.rotation;
                 InvokeRepeating(nameof(Tick), Random.Range(0.15f, 0.40f), 0.2f);
+            }
+
+            public void SetHomePosition(Vector3 position)
+            {
+                _home = position;
             }
 
             private void OnDestroy()
@@ -4181,11 +4300,9 @@ namespace Oxide.Plugins
                         deadAnimal.Kill();
                     return;
                 }
-                if (_instance.IsInDungeonEntranceCorridor(_dungeon, _animal.transform.position))
+                if (_instance.IsInDungeonEntranceCorridor(_dungeon, _animal.transform.position) || !_instance.TryGetDungeonFloorPoint(_dungeon, _animal.transform.position, out _))
                 {
-                    _animal.transform.position = _home;
-                    _animal.UpdateNetworkGroup();
-                    _animal.SendNetworkUpdateImmediate();
+                    _instance.TryReturnDungeonEnemyHome(_animal, _dungeon, _home, _animal.transform.rotation);
                     return;
                 }
                 var gen2Attack = _animal.GetComponent<DungeonGen2AnimalAggroController>();
@@ -4248,13 +4365,18 @@ namespace Oxide.Plugins
                     fromHome.y = 0f;
                     if (fromHome.magnitude > _maxDistanceFromHome)
                     {
-                        Vector3 clamped = _home + fromHome.normalized * _maxDistanceFromHome;
-                        _animal.transform.position = new Vector3(clamped.x, _animal.transform.position.y, clamped.z);
+                        _instance.TryReturnDungeonEnemyHome(_animal, _dungeon, _home, _animal.transform.rotation);
                     }
                 }
                 ClampInsideDungeon();
                 SnapToGround();
-                _animal.SendNetworkUpdate();
+                if (!_hasNetworkTransform || _animal.transform.position != _lastNetworkPosition || _animal.transform.rotation != _lastNetworkRotation)
+                {
+                    _hasNetworkTransform = true;
+                    _lastNetworkPosition = _animal.transform.position;
+                    _lastNetworkRotation = _animal.transform.rotation;
+                    _animal.SendNetworkUpdate();
+                }
             }
 
             private float GetPreferredDistance()
@@ -4306,6 +4428,8 @@ namespace Oxide.Plugins
 
             private BasePlayer GetClosestDungeonPlayer(bool withLos, float radius)
             {
+                if (_dungeon == null || _dungeon.PlayersInside.Count == 0)
+                    return null;
                 int hits = Physics.OverlapSphereNonAlloc(_animal.transform.position, radius, _playersBuffer, Layers.Mask.Player_Server, QueryTriggerInteraction.Ignore);
                 BasePlayer best = null;
                 float bestDist = float.MaxValue;
@@ -4359,6 +4483,7 @@ namespace Oxide.Plugins
                     if (
                         !Physics.CapsuleCast(here + Vector3.up * 0.5f, here + Vector3.up * 1.6f, 0.28f, slideDir, out _, slide.magnitude, _blockMask, QueryTriggerInteraction.Ignore)
                         && !_instance.IsEnemyEntrancePositionBlocked(_dungeon, here + slide)
+                        && _instance.TryGetDungeonFloorPoint(_dungeon, here + slide, out _)
                     )
                     {
                         _animal.transform.position = here + slide;
@@ -4367,7 +4492,7 @@ namespace Oxide.Plugins
                     return;
                 }
                 Vector3 next = here + dir * moveDist;
-                if (_instance.IsEnemyEntrancePositionBlocked(_dungeon, next))
+                if (_instance.IsEnemyEntrancePositionBlocked(_dungeon, next) || !_instance.TryGetDungeonFloorPoint(_dungeon, next, out _))
                     return;
                 _animal.transform.position = next;
                 FaceEntityDirection(_animal, dir);
@@ -4375,14 +4500,10 @@ namespace Oxide.Plugins
 
             private void ClampInsideDungeon()
             {
-                if (_dungeon == null || _dungeon.DungeonBounds.size == Vector3.zero)
+                if (_dungeon == null || _animal == null || _animal.IsDestroyed)
                     return;
-                var p = _animal.transform.position;
-                var b = _dungeon.DungeonBounds;
-                float x = Mathf.Clamp(p.x, b.min.x + 0.35f, b.max.x - 0.35f);
-                float z = Mathf.Clamp(p.z, b.min.z + 0.35f, b.max.z - 0.35f);
-                if (Mathf.Abs(x - p.x) > 0.001f || Mathf.Abs(z - p.z) > 0.001f)
-                    _animal.transform.position = new Vector3(x, p.y, z);
+                if (!_dungeon.DungeonBounds.Contains(_animal.transform.position) || !_instance.TryGetDungeonFloorPoint(_dungeon, _animal.transform.position, out _))
+                    _instance.TryReturnDungeonEnemyHome(_animal, _dungeon, _home, _animal.transform.rotation);
             }
 
             private void SnapToGround()
@@ -4395,33 +4516,15 @@ namespace Oxide.Plugins
                     _animal.transform.position = new Vector3(pos.x, floorY, pos.z);
                     return;
                 }
-                int mask = Layers.Mask.Construction | Layers.Mask.World | Layers.Mask.Terrain | Layers.Mask.Deployed;
-                var p = _animal.transform.position + Vector3.up * 1.25f;
-                if (Physics.Raycast(p, Vector3.down, out var hit, 3f, mask, QueryTriggerInteraction.Ignore))
-                    _animal.transform.position = new Vector3(_animal.transform.position.x, hit.point.y + 0.02f, _animal.transform.position.z);
+                _instance.TryReturnDungeonEnemyHome(_animal, _dungeon, _home, _animal.transform.rotation);
             }
 
             private bool TryGetClosestDungeonFloorY(Vector3 position, out float floorY)
             {
                 floorY = 0f;
-                if (_dungeon == null || _dungeon.RoomFloorCenters == null || _dungeon.RoomFloorCenters.Count == 0)
+                if (_dungeon == null || _instance == null || !_instance.TryGetDungeonFloorPoint(_dungeon, position, out Vector3 floor))
                     return false;
-                float bestSqr = float.MaxValue;
-                Vector3 best = Vector3.zero;
-                foreach (var center in _dungeon.RoomFloorCenters)
-                {
-                    float dx = center.x - position.x;
-                    float dz = center.z - position.z;
-                    float sqr = dx * dx + dz * dz;
-                    if (sqr < bestSqr)
-                    {
-                        bestSqr = sqr;
-                        best = center;
-                    }
-                }
-                if (bestSqr == float.MaxValue)
-                    return false;
-                floorY = best.y + 0.02f;
+                floorY = floor.y + 0.02f;
                 return true;
             }
         }
@@ -4505,6 +4608,8 @@ namespace Oxide.Plugins
 
             private BasePlayer GetClosestTarget()
             {
+                if (_dungeon == null || _dungeon.PlayersInside.Count == 0)
+                    return null;
                 int hits = Physics.OverlapSphereNonAlloc(_animal.transform.position, _attackRange + 0.35f, _playersBuffer, Layers.Mask.Player_Server, QueryTriggerInteraction.Ignore);
                 BasePlayer best = null;
                 float bestDist = float.MaxValue;
@@ -4632,7 +4737,8 @@ namespace Oxide.Plugins
             private float _range;
             private float _attackDistance = 1f;
             private float _maxDistanceFromHome = 15f;
-            private float _lastPlayerScanTime;
+            private float _lastPlayerScanTime = -999f;
+            private float _lastAllyDamageReactionTime = -999f;
             private float _lastKnownTargetTime = -999f;
             private float _lastDamageReactionTime = -999f;
             private float _nextRepositionTime;
@@ -4700,6 +4806,16 @@ namespace Oxide.Plugins
                     return;
                 if ((_npc.transform.position - sourcePosition).sqrMagnitude > 18f * 18f)
                     return;
+                float now = Time.realtimeSinceStartup;
+                if (_combatTarget == attacker && now - _lastAllyDamageReactionTime < HitReactionCooldown)
+                {
+                    if (!IsValidPlayer(attacker, true))
+                        return;
+                    _lastKnownTargetPosition = attacker.transform.position;
+                    _lastKnownTargetTime = now;
+                    return;
+                }
+                _lastAllyDamageReactionTime = now;
                 RegisterCombatStimulus(attacker, sourcePosition, false);
             }
 
@@ -4779,8 +4895,13 @@ namespace Oxide.Plugins
 
             private BasePlayer GetFirstPlayer()
             {
-                if (Time.realtimeSinceStartup - _lastPlayerScanTime < PlayerRescanInterval && IsValidPlayer(_cachedPlayer, false))
-                    return _cachedPlayer;
+                if (Time.realtimeSinceStartup - _lastPlayerScanTime < PlayerRescanInterval)
+                {
+                    if (_cachedPlayer == null)
+                        return null;
+                    if (IsValidPlayer(_cachedPlayer, false))
+                        return _cachedPlayer;
+                }
                 float sense = _npcBrain != null ? _npcBrain.SenseRange : 30f;
                 sense = Mathf.Max(sense, _attackDistance * 1.5f, 30f);
                 int hitCount = Physics.OverlapSphereNonAlloc(_npc.transform.position, sense, _playerScanBuf, Layers.Mask.Player_Server, QueryTriggerInteraction.Ignore);
@@ -4835,9 +4956,10 @@ namespace Oxide.Plugins
                 if (_instance != null)
                 {
                     var dungeon = _instance.GetActiveDungeonByEntity(_npc);
-                    if (_instance.IsInDungeonEntranceCorridor(dungeon, _npc.transform.position))
+                    if (dungeon != null && (_instance.IsInDungeonEntranceCorridor(dungeon, _npc.transform.position) || !_instance.TryGetDungeonFloorPoint(dungeon, _npc.transform.position, out _)))
                     {
-                        _npc.Teleport(_initialPosition);
+                        if (_instance.TryReturnDungeonEnemyHome(_npc, dungeon, _initialPosition, _npc.transform.rotation))
+                            _initialPosition = _npc.transform.position;
                         ResetCombatAndReturnHome();
                         return;
                     }
@@ -5001,15 +5123,17 @@ namespace Oxide.Plugins
             private bool TryProjectCandidate(Vector3 candidate, out Vector3 grounded)
             {
                 grounded = new Vector3(candidate.x, _npc.transform.position.y, candidate.z);
-                if (TryGetGroundPosition(grounded, out var g))
-                    grounded = g;
+                if (!TryGetGroundPosition(grounded, out var g))
+                    return false;
+                grounded = g;
                 var dungeon = _instance?.GetActiveDungeonByEntity(_npc);
                 return _instance == null || !_instance.IsEnemyEntrancePositionBlocked(dungeon, grounded);
             }
 
             private bool IsWithinHomeLimit(Vector3 position)
             {
-                if (_instance != null && _instance.IsEnemyEntrancePositionBlocked(_instance.GetActiveDungeonByEntity(_npc), position))
+                var dungeon = _instance?.GetActiveDungeonByEntity(_npc);
+                if (dungeon != null && (_instance.IsEnemyEntrancePositionBlocked(dungeon, position) || !_instance.TryGetDungeonFloorPoint(dungeon, position, out _)))
                     return false;
                 if (_maxDistanceFromHome <= 0f)
                     return true;
@@ -5531,6 +5655,14 @@ namespace Oxide.Plugins
             private bool TryGetGroundPosition(Vector3 pos, out Vector3 groundPos)
             {
                 groundPos = pos;
+                var dungeon = _instance?.GetActiveDungeonByEntity(_npc);
+                if (dungeon != null)
+                {
+                    if (!_instance.TryGetDungeonFloorPoint(dungeon, pos, out Vector3 floor) || Mathf.Abs(_npc.transform.position.y - floor.y) > MaxStepHeight)
+                        return false;
+                    groundPos = floor + Vector3.up * 0.02f;
+                    return true;
+                }
                 if (Physics.Raycast(pos + Vector3.up * 1.5f, Vector3.down, out RaycastHit hit, 3f, _blockMask, QueryTriggerInteraction.Ignore))
                 {
                     float delta = _npc.transform.position.y - hit.point.y;
@@ -5578,27 +5710,27 @@ namespace Oxide.Plugins
 
         public class TurretMonoBehaviour : MonoBehaviour
         {
-            private AutoTurret turretEntity;
+            private AutoTurret _turret;
 
             private void Awake()
             {
-                turretEntity = GetComponent<AutoTurret>();
-                turretEntity.SetPeacekeepermode(false);
-                turretEntity.InitiateStartup();
-                turretEntity.isLootable = false;
-                turretEntity.dropFloats = false;
-                turretEntity.dropsLoot = false;
+                _turret = GetComponent<AutoTurret>();
+                _turret.SetPeacekeepermode(false);
+                _turret.InitiateStartup();
+                _turret.isLootable = false;
+                _turret.dropFloats = false;
+                _turret.dropsLoot = false;
                 InvokeRepeating(nameof(ManageAmmo), 2f, 30f);
                 InvokeRepeating(nameof(Perform360IdleSweep), 3f, 1f);
-                InvokeRepeating(nameof(RemoveInterfence), 1f, 1f);
+                InvokeRepeating(nameof(RemoveInterference), 1f, 1f);
             }
 
-            private void RemoveInterfence()
+            private void RemoveInterference()
             {
-                AutoTurret.interferenceUpdateList.Remove(turretEntity);
-                if (turretEntity.HasFlag(BaseEntity.Flags.OnFire))
+                AutoTurret.interferenceUpdateList.Remove(_turret);
+                if (_turret.HasFlag(BaseEntity.Flags.OnFire))
                 {
-                    using (var setFlags = turretEntity.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate_Flags))
+                    using (var setFlags = _turret.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate_Flags))
                     {
                         setFlags.Set(BaseEntity.Flags.OnFire, false);
                     }
@@ -5608,28 +5740,29 @@ namespace Oxide.Plugins
             private void ManageAmmo()
             {
                 const int maxAmmoCapacity = 1000;
-                if (turretEntity.AttachedWeapon is not BaseProjectile projectileWeapon || projectileWeapon.primaryMagazine?.ammoType == null)
+                if (_turret.AttachedWeapon is not BaseProjectile projectileWeapon || projectileWeapon.primaryMagazine?.ammoType == null)
                     return;
                 var ammoType = projectileWeapon.primaryMagazine.ammoType;
-                int currentAmmoCount = turretEntity.inventory.itemList.Where(item => item.info == ammoType).Sum(item => item.amount);
+                int currentAmmoCount = _turret.inventory.itemList.Where(item => item.info == ammoType).Sum(item => item.amount);
                 if (currentAmmoCount < maxAmmoCapacity)
                 {
                     int ammoNeeded = maxAmmoCapacity - currentAmmoCount;
                     Item additionalAmmo = ItemManager.Create(ammoType, ammoNeeded);
-                    additionalAmmo?.MoveToContainer(turretEntity.inventory);
-                    turretEntity.UpdateTotalAmmo();
-                    turretEntity.EnsureReloaded();
-                    turretEntity.SendNetworkUpdateImmediate();
+                    if (additionalAmmo != null && !additionalAmmo.MoveToContainer(_turret.inventory))
+                        additionalAmmo.Remove();
+                    _turret.UpdateTotalAmmo();
+                    _turret.EnsureReloaded();
+                    _turret.SendNetworkUpdateImmediate();
                 }
             }
 
             private void Perform360IdleSweep()
             {
-                if (!turretEntity.HasTarget())
+                if (!_turret.HasTarget())
                 {
-                    turretEntity.targetAimDir = Quaternion.Euler(0, Random.Range(0f, 360f), 0) * Vector3.forward;
-                    turretEntity.aimDir = Vector3.Lerp(turretEntity.aimDir, turretEntity.targetAimDir, Time.deltaTime * 2f);
-                    turretEntity.UpdateAiming(Time.deltaTime);
+                    _turret.targetAimDir = Quaternion.Euler(0, Random.Range(0f, 360f), 0) * Vector3.forward;
+                    _turret.aimDir = Vector3.Lerp(_turret.aimDir, _turret.targetAimDir, Time.deltaTime * 2f);
+                    _turret.UpdateAiming(Time.deltaTime);
                 }
             }
 
@@ -5637,17 +5770,15 @@ namespace Oxide.Plugins
             {
                 CancelInvoke(nameof(ManageAmmo));
                 CancelInvoke(nameof(Perform360IdleSweep));
-                CancelInvoke(nameof(RemoveInterfence));
+                CancelInvoke(nameof(RemoveInterference));
             }
         }
 
         public class DungeonEventsTrigger : FacepunchBehaviour
         {
             private ActiveDungeon _dungeon;
-            private bool rewardSent = false;
+            private bool _rewardSent = false;
             private Rigidbody _rigidbody;
-            private Collider _collider;
-            private Bounds _bounds;
             private BoxCollider _boxCollider;
             public int TriggerTime = 0;
             public float NightVisionTime = -1;
@@ -5681,7 +5812,7 @@ namespace Oxide.Plugins
 
             private void CheckDungeonClear()
             {
-                if (rewardSent || _dungeon == null || !_dungeon.Spawned)
+                if (_rewardSent || _dungeon == null || !_dungeon.Spawned || _instance == null || _instance._isUnloading)
                     return;
                 bool allNpcsDead = _instance.AreAllNpcsGone(_dungeon);
                 bool allBoxesDead = _instance.AreAllBoxesGone(_dungeon);
@@ -5690,7 +5821,7 @@ namespace Oxide.Plugins
                 {
                     _dungeon.ClearRewardGiven = true;
                     _instance.RewardDungeonClear(_dungeon);
-                    rewardSent = true;
+                    _rewardSent = true;
                 }
             }
 
@@ -5705,8 +5836,6 @@ namespace Oxide.Plugins
                         _boxCollider.isTrigger = true;
                     }
                     _boxCollider.size = size;
-                    _bounds = _boxCollider.bounds;
-                    _collider = _boxCollider;
                 }
             }
 
@@ -5718,27 +5847,42 @@ namespace Oxide.Plugins
                     CancelInvoke(nameof(CheckDungeonClear));
                     return;
                 }
-                List<ulong> toRemove = new List<ulong>();
                 double destructionTimeRemaining = 0;
                 if (_dungeon.HasBeenCleared && _dungeon.DestructionCountdownStart.HasValue)
                 {
                     double elapsed = (DateTime.UtcNow - _dungeon.DestructionCountdownStart.Value).TotalSeconds;
                     destructionTimeRemaining = _dungeon.DestructionDelay - elapsed;
                 }
-                foreach (var userID in _dungeon.PlayersInside.ToList())
+                var playersInside = Pool.Get<List<ulong>>();
+                var playersToRemove = Pool.Get<List<ulong>>();
+                try
                 {
-                    var player = BasePlayer.FindByID(userID);
-                    if (player == null || !player.IsConnected || _instance.GetDungeonForPlayer(player) != _dungeon)
+                    playersInside.AddRange(_dungeon.PlayersInside);
+                    foreach (var userID in playersInside)
                     {
-                        toRemove.Add(userID);
-                        continue;
+                        var player = BasePlayer.FindByID(userID);
+                        if (player == null || !player.IsConnected || _instance.GetDungeonForPlayer(player) != _dungeon)
+                        {
+                            playersToRemove.Add(userID);
+                            if (_instance._eventUiStates.TryGetValue(userID, out var state) && state.DungeonId == _dungeon.UniqueId)
+                            {
+                                _instance._eventUiStates.Remove(userID);
+                                _instance.DestroyEventUi(player);
+                            }
+                            continue;
+                        }
+                        _instance.OpenEventUI(player, _dungeon);
                     }
-                    _instance.OpenEventUI(player, _dungeon);
+                    foreach (var userID in playersToRemove)
+                        _dungeon.PlayersInside.Remove(userID);
+                    if (playersToRemove.Count > 0)
+                        _instance.HandlePlayerDungeonDeparture(_dungeon);
                 }
-                foreach (var userID in toRemove)
-                    _dungeon.PlayersInside.Remove(userID);
-                if (toRemove.Count > 0)
-                    _instance.HandlePlayerDungeonDeparture(_dungeon);
+                finally
+                {
+                    Pool.FreeUnmanaged(ref playersInside);
+                    Pool.FreeUnmanaged(ref playersToRemove);
+                }
                 if (_dungeon.HasBeenCleared && destructionTimeRemaining <= 0)
                 {
                     _instance.TeleportPlayersAndDestroyDungeon(_dungeon);
@@ -5797,45 +5941,47 @@ namespace Oxide.Plugins
 
         public class PlayerDungeonChecker : MonoBehaviour
         {
-            private BasePlayer player;
+            private BasePlayer _player;
+            private DungeonEvents _plugin;
             public float NightVisionTime = -1;
-            private float nextAdjust;
+            private float _nextTemperatureUpdate;
 
-            public void Initialize(BasePlayer p, float nightVisionTime)
+            public void Initialize(BasePlayer player, float nightVisionTime)
             {
-                player = p;
+                _player = player;
+                _plugin = _instance;
                 NightVisionTime = nightVisionTime;
-                nextAdjust = Time.time + 1f;
+                _nextTemperatureUpdate = Time.time + 1f;
                 InvokeRepeating(nameof(CheckDungeonStatus), 5f, 5f);
-                _instance._wasInDungeonPlayers.Add(player);
+                _plugin._wasInDungeonPlayers.Add(_player);
             }
 
             private void FixedUpdate()
             {
-                if (player == null || !player.IsConnected || !player.IsAlive())
+                if (_player == null || !_player.IsConnected || !_player.IsAlive())
                     return;
-                if (Time.time >= nextAdjust)
+                if (Time.time >= _nextTemperatureUpdate)
                 {
-                    nextAdjust = Time.time + 1f;
-                    float t = player.metabolism.temperature.value;
+                    _nextTemperatureUpdate = Time.time + 1f;
+                    float t = _player.metabolism.temperature.value;
                     if (t < 19f || t > 31f)
-                        player.metabolism.temperature.value = 25f;
+                        _player.metabolism.temperature.value = 25f;
                 }
             }
 
             private void CheckDungeonStatus()
             {
-                if (player == null || !player.IsConnected)
+                if (_player == null || !_player.IsConnected || _plugin == null || _plugin._isUnloading)
                 {
                     Destroy(this);
                     return;
                 }
-                if (_instance.GetDungeonForPlayer(player) == null)
+                if (_plugin.GetDungeonForPlayer(_player) == null)
                 {
-                    _instance.UpdateTime(player, -1);
-                    _instance.DestroyEventUi(player);
-                    if (_instance.NightVision != null && NightVisionTime > -1)
-                        _instance.NightVision.CallHook("LockPlayerTime", player, NightVisionTime);
+                    _plugin.UpdateTime(_player, -1);
+                    _plugin.DestroyEventUi(_player);
+                    if (_plugin.NightVision != null && NightVisionTime > -1)
+                        _plugin.NightVision.CallHook("LockPlayerTime", _player, NightVisionTime);
                     Destroy(this);
                 }
             }
@@ -5843,7 +5989,13 @@ namespace Oxide.Plugins
             private void OnDestroy()
             {
                 CancelInvoke(nameof(CheckDungeonStatus));
-                _instance.timer.Once(4f, () => _instance._wasInDungeonPlayers.Remove(player));
+                var plugin = _plugin;
+                if (plugin == null)
+                    return;
+                if (plugin._isUnloading)
+                    plugin._wasInDungeonPlayers.Remove(_player);
+                else
+                    plugin.timer.Once(4f, () => plugin._wasInDungeonPlayers.Remove(_player));
             }
         }
         #endregion
@@ -6401,6 +6553,8 @@ namespace Oxide.Plugins
                     return (BuildingGrade.Enum.Stone, 10472);
                 case 13:
                     return (BuildingGrade.Enum.TopTier, 10430);
+                case ClassicDungeonSelection:
+                    return (BuildingGrade.Enum.Stone, 0);
                 default:
                     return (BuildingGrade.Enum.Stone, 0);
             }
@@ -6514,23 +6668,30 @@ namespace Oxide.Plugins
 
         private bool MigrateBuildingGradeSelectionPropertyName(JObject root)
         {
-            const string oldKey = "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier)";
-            const string newKey =
-                "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)";
             var tiers = root?["Tiers"] as JArray;
             if (tiers == null)
                 return false;
+            string[] oldKeys =
+            {
+                "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier) 11(Jungle) 12(Crypt) 13(Space Station)",
+                "Building Grade - 1(Wood) 2(Legacy Wood) 3(Gingerbread) 4(Stone) 5(Adobe) 6(Brick) 7(Brutalist) 8(Metal) 9(Container) 10(TopTier)",
+            };
             bool changed = false;
             foreach (var token in tiers)
             {
                 var tier = token as JObject;
                 if (tier == null)
                     continue;
-                if (tier[newKey] != null || tier[oldKey] == null)
-                    continue;
-                tier[newKey] = tier[oldKey];
-                tier.Remove(oldKey);
-                changed = true;
+                foreach (string oldKey in oldKeys)
+                {
+                    var selection = tier[oldKey];
+                    if (selection == null)
+                        continue;
+                    if (tier[ConstructionTypeConfigKey] == null)
+                        tier[ConstructionTypeConfigKey] = selection;
+                    tier.Remove(oldKey);
+                    changed = true;
+                }
             }
             return changed;
         }
@@ -6545,6 +6706,30 @@ namespace Oxide.Plugins
             settings[newKey] = settings[oldKey];
             settings.Remove(oldKey);
             return true;
+        }
+
+        private bool MigrateEnemyRewardProperties(JObject root)
+        {
+            var tiers = root?["Tiers"] as JArray;
+            if (tiers == null)
+                return false;
+            bool changed = false;
+            foreach (var token in tiers)
+            {
+                var tier = token as JObject;
+                var rewards = tier?["Reward Config"] as JObject;
+                if (rewards == null)
+                    continue;
+                var config = rewards.ToObject<RewardConfig>();
+                foreach (string key in new[] { "Boss Economics Reward", "Animal Economics Reward", "Boss ServerRewards Points", "Animal ServerRewards Points" })
+                {
+                    if (rewards[key] != null)
+                        continue;
+                    rewards[key] = key.EndsWith("Economics Reward", StringComparison.Ordinal) ? config.NpcEconomicsReward : config.NpcServerRewards;
+                    changed = true;
+                }
+            }
+            return changed;
         }
 
         private bool MigrateOldWolfPrefabToWolf2(JObject root)
@@ -6747,13 +6932,18 @@ namespace Oxide.Plugins
                 NotifyPlayer(player, "NoTierPermission", 0, tier.TierName, GetTierPermission(tier));
                 return;
             }
-            if (TryGetBuyCooldown(player.userID, tier.TierName, out DateTime until) && DateTime.UtcNow < until)
+            if (!permission.UserHasPermission(player.UserIDString, PermissionBypassCooldown) && TryGetBuyCooldown(player.userID, tier.TierName, out DateTime until) && DateTime.UtcNow < until)
             {
                 int remaining = (int)(until - DateTime.UtcNow).TotalSeconds;
                 NotifyPlayer(player, "DungeonCooldownMessage", 0, remaining);
                 return;
             }
-            if (_activeDungeons.Any(d => d.OwnerID == player.userID) || _dungeonQueue.Any(r => r.Player?.userID == player.userID) || _dungeonFailedBuyQueue.Any(r => r.Player?.userID == player.userID))
+            if (
+                _activeDungeons.Any(d => d.OwnerID == player.userID)
+                || _currentDungeonRequest?.Player?.userID == player.userID
+                || _dungeonQueue.Any(r => r.Player?.userID == player.userID)
+                || _dungeonFailedBuyQueue.Any(r => r.Player?.userID == player.userID)
+            )
             {
                 NotifyPlayer(player, "AlreadyOwnsDungeonMessage", 0);
                 return;
@@ -6778,7 +6968,7 @@ namespace Oxide.Plugins
                 NotifyPlayer(player, "NoBuyPortalLocationAvailable", 0);
                 return;
             }
-            int cost = tier.BuyCost;
+            int cost = HasFreePurchase(player) ? 0 : tier.BuyCost;
             if (cost > 0)
             {
                 if (_config.EconomyPlugin == 3)
@@ -6786,7 +6976,6 @@ namespace Oxide.Plugins
                     if (!CheckAndRemoveBuyItems(player, cost))
                     {
                         NotifyPlayer(player, "InsufficientFundsMessage", 0, tierName, cost);
-                        _playersBuying.Remove(player);
                         return;
                     }
                 }
@@ -6795,19 +6984,22 @@ namespace Oxide.Plugins
                     if (!CheckBalance(player, cost))
                     {
                         NotifyPlayer(player, "InsufficientFundsMessage", 0, tierName, cost);
-                        _playersBuying.Remove(player);
                         return;
                     }
                     if (!WithdrawFunds(player, cost))
                     {
                         NotifyPlayer(player, "WithdrawFailedMessage", 0, tierName);
-                        _playersBuying.Remove(player);
                         return;
                     }
                 }
             }
             EnqueueDungeonRequest(player, tier, true, usePreselectedCustomPortal ? preselectedCustomPortalPosition : Vector3.zero);
             NotifyPlayer(player, "PurchaseSuccessMessage", 0, tier.MapName);
+        }
+
+        private bool HasFreePurchase(BasePlayer player)
+        {
+            return player != null && permission.UserHasPermission(player.UserIDString, PermissionFree);
         }
 
         private bool CheckAndRemoveBuyItems(BasePlayer player, int cost)
@@ -6951,6 +7143,14 @@ namespace Oxide.Plugins
         #endregion
 
         #region UI
+        private static Func<BasePlayer, HashSet<string>> CreateActiveUiPanelLookup()
+        {
+            var method = typeof(CuiHelper).GetMethod("GetActivePanelList", new[] { typeof(BasePlayer) });
+            if (method == null || !method.IsStatic || method.ReturnType != typeof(HashSet<string>))
+                return null;
+            return (Func<BasePlayer, HashSet<string>>)Delegate.CreateDelegate(typeof(Func<BasePlayer, HashSet<string>>), method);
+        }
+
         private void OpenEventUI(BasePlayer player, ActiveDungeon dungeon)
         {
             if (player == null || !player.IsConnected)
@@ -6973,10 +7173,56 @@ namespace Oxide.Plugins
                     timeLeft = 0;
                 counterText = FormatTime(timeLeft);
             }
-            int npcCount = dungeon.Npcs.Count(IsDungeonNpcAlive);
-            int boxCount = dungeon.Entities.OfType<StorageContainer>().Count(e => e.IsValid() && !e.IsDestroyed);
-            int turretCount = dungeon.Entities.OfType<AutoTurret>().Count(t => t.IsValid() && !t.IsDestroyed);
-            CuiHelper.DestroyUi(player, UiEventPanel);
+            if (dungeon.UiCountsFrame != Time.frameCount)
+            {
+                dungeon.UiNpcCount = 0;
+                foreach (var npc in dungeon.Npcs)
+                {
+                    if (IsDungeonNpcAlive(npc))
+                        dungeon.UiNpcCount++;
+                }
+                dungeon.UiBoxCount = 0;
+                dungeon.UiTurretCount = 0;
+                foreach (var entity in dungeon.Entities)
+                {
+                    if (entity == null || !entity.IsValid() || entity.IsDestroyed)
+                        continue;
+                    if (entity is StorageContainer)
+                        dungeon.UiBoxCount++;
+                    if (entity is AutoTurret)
+                        dungeon.UiTurretCount++;
+                }
+                dungeon.UiCountsFrame = Time.frameCount;
+            }
+            int npcCount = dungeon.UiNpcCount;
+            int boxCount = dungeon.UiBoxCount;
+            int turretCount = dungeon.UiTurretCount;
+            if (
+                _eventUiStates.TryGetValue(player.userID, out var state)
+                && state.DungeonId == dungeon.UniqueId
+                && state.Cleared == dungeon.HasBeenCleared
+                && (_getActiveUiPanels == null || _getActiveUiPanels(player).Contains(UiEventPanel))
+            )
+            {
+                if (state.Counter == counterText && state.Npcs == npcCount && state.Boxes == boxCount && state.Turrets == turretCount)
+                    return;
+                var updates = new CuiElementContainer();
+                if (state.Counter != counterText)
+                    AddEventTextUpdate(updates, 1, counterText);
+                if (state.Npcs != npcCount)
+                    AddEventTextUpdate(updates, 2, npcCount.ToString());
+                if (state.Boxes != boxCount)
+                    AddEventTextUpdate(updates, 3, boxCount.ToString());
+                if (state.Turrets != turretCount)
+                    AddEventTextUpdate(updates, 4, turretCount.ToString());
+                if (updates.Count > 0 && !CuiHelper.AddUi(player, CuiHelper.ToJson(updates)))
+                    return;
+                state.Counter = counterText;
+                state.Npcs = npcCount;
+                state.Boxes = boxCount;
+                state.Turrets = turretCount;
+                return;
+            }
             var infos = new List<IconInfo>
             {
                 new IconInfo
@@ -7020,10 +7266,42 @@ namespace Oxide.Plugins
                     Height = 17,
                 },
             };
-            CreateEventUI(player, dungeon, infos);
+            if (!CreateEventUI(player, dungeon, infos))
+                return;
+            _eventUiStates[player.userID] = new EventUiState
+            {
+                DungeonId = dungeon.UniqueId,
+                Cleared = dungeon.HasBeenCleared,
+                Counter = counterText,
+                Npcs = npcCount,
+                Boxes = boxCount,
+                Turrets = turretCount,
+            };
         }
 
-        private void CreateEventUI(BasePlayer player, ActiveDungeon dungeon, List<IconInfo> infos)
+        private void AddEventTextUpdate(CuiElementContainer updates, int index, string text)
+        {
+            updates.Add(
+                new CuiElement
+                {
+                    Name = $"Info_{index}_Text",
+                    Parent = $"Info_{index}_Panel",
+                    Update = true,
+                    Components =
+                    {
+                        new CuiTextComponent
+                        {
+                            Text = text,
+                            FontSize = 10,
+                            Align = TextAnchor.MiddleCenter,
+                            Color = "1 1 1 1",
+                        },
+                    },
+                }
+            );
+        }
+
+        private bool CreateEventUI(BasePlayer player, ActiveDungeon dungeon, List<IconInfo> infos)
         {
             string color = dungeon.HasBeenCleared ? "0.6 0.6 0 1" : "0.6 0 0 1";
             float panelWidth = 85f;
@@ -7140,7 +7418,7 @@ namespace Oxide.Plugins
                     $"Info_{i}_Text"
                 );
             }
-            CuiHelper.AddUi(player, container);
+            return CuiHelper.AddUi(player, container);
         }
 
         private bool TryGetBuyCostIcon(out int itemId, out ulong skinId)
@@ -7202,7 +7480,10 @@ namespace Oxide.Plugins
             int totalH = visibleTiers.Count * (rowH + gap);
             const int viewportH = 352;
             bool needScroll = totalH > viewportH;
-            bool showBuyCostIcon = TryGetBuyCostIcon(out int buyCostItemId, out ulong buyCostSkinId);
+            bool freePurchase = HasFreePurchase(player);
+            int buyCostItemId = 0;
+            ulong buyCostSkinId = 0UL;
+            bool showBuyCostIcon = !freePurchase && TryGetBuyCostIcon(out buyCostItemId, out buyCostSkinId);
             string body = UiMainPanel + "_viewport";
             elements.Add(new CuiPanel { Image = { Color = "0 0 0 0" }, RectTransform = { AnchorMin = "0.05 0.08", AnchorMax = "0.95 0.88" } }, UiMainPanel, body);
             string scroll = body + "_scroll";
@@ -7249,7 +7530,10 @@ namespace Oxide.Plugins
             {
                 var tierInfo = kvp.Value;
                 string rowId = $"{scroll}_row_{index}";
-                string buyText = Msg(player.UserIDString, "BuyButtonWithName", tierInfo.MapName, tierInfo.BuyCost, _config.GetEconomyDisplayName());
+                string buyText =
+                    freePurchase || tierInfo.BuyCost <= 0
+                        ? Msg(player.UserIDString, "BuyButtonFreeWithName", tierInfo.MapName)
+                        : Msg(player.UserIDString, "BuyButtonWithName", tierInfo.MapName, tierInfo.BuyCost, _config.GetEconomyDisplayName());
                 float iconOffset = Mathf.Clamp((buyText.Length * 4.6f) - 20f, 90f, 330f);
                 elements.Add(
                     new CuiPanel
@@ -7381,6 +7665,7 @@ namespace Oxide.Plugins
         {
             if (player == null)
                 return;
+            _eventUiStates.Remove(player.userID);
             CuiHelper.DestroyUi(player, UiEventPanel);
         }
 
@@ -7397,22 +7682,26 @@ namespace Oxide.Plugins
         #region Dungeon Spawn
         private void SaveDungeonEntities(string dungeonId, List<ulong> entityIds)
         {
-            var file = Interface.Oxide.DataFileSystem.GetFile($"{Name}_Cache_Data/{dungeonId}");
+            var file = new Oxide.Core.Configuration.DynamicConfigFile(GetDungeonEntitiesFilePath(dungeonId));
             file.WriteObject(entityIds);
         }
 
         private List<ulong> LoadDungeonEntities(string dungeonId)
         {
-            var file = Interface.Oxide.DataFileSystem.GetFile($"{Name}_Cache_Data/{dungeonId}");
+            var file = new Oxide.Core.Configuration.DynamicConfigFile(GetDungeonEntitiesFilePath(dungeonId));
+            if (!file.Exists())
+                return new List<ulong>();
             return file.ReadObject<List<ulong>>() ?? new List<ulong>();
+        }
+
+        private string GetDungeonEntitiesFilePath(string dungeonId)
+        {
+            return Path.Combine(Interface.Oxide.DataFileSystem.Directory, $"{Name}_Cache_Data", $"{dungeonId}.json");
         }
 
         private void DeleteDungeonEntitiesFile(string dungeonId)
         {
-            string folder = Path.Combine(Interface.Oxide.DataFileSystem.Directory, $"{Name}_Cache_Data");
-            if (!Directory.Exists(folder))
-                return;
-            string filePath = Path.Combine(folder, $"{dungeonId}.json");
+            string filePath = GetDungeonEntitiesFilePath(dungeonId);
             if (File.Exists(filePath))
             {
                 try
@@ -7436,18 +7725,55 @@ namespace Oxide.Plugins
                 ids = new HashSet<ulong>();
                 _dungeonEntityIdCache[dungeonId] = ids;
             }
-            if (ids.Add(id) && ids.Count % DungeonEntityCacheFlushBatchSize == 0)
-                SaveDungeonEntities(dungeonId, ids.ToList());
+            if (ids.Add(id))
+                MarkDungeonEntityCacheDirty(dungeonId);
             if (_dungeonByUniqueId.TryGetValue(dungeonId, out var dungeon))
-                _dungeonByEntityId[id] = dungeon;
+                IndexDungeonEntity(entity, dungeon);
+        }
+
+        private void MarkDungeonEntityCacheDirty(string dungeonId)
+        {
+            if (_isUnloading)
+                return;
+            _dirtyDungeonEntityCaches.Add(dungeonId);
+            if (_entityCacheFlushTimer == null)
+                _entityCacheFlushTimer = timer.Once(DungeonEntityCacheFlushInterval, FlushDirtyDungeonEntityCaches);
+        }
+
+        private void FlushDirtyDungeonEntityCaches()
+        {
+            _entityCacheFlushTimer = null;
+            var dirty = Pool.Get<List<string>>();
+            try
+            {
+                dirty.AddRange(_dirtyDungeonEntityCaches);
+                foreach (string dungeonId in dirty)
+                    FlushDungeonEntityCache(dungeonId);
+            }
+            finally
+            {
+                Pool.FreeUnmanaged(ref dirty);
+            }
+            if (!_isUnloading && _dirtyDungeonEntityCaches.Count > 0 && _entityCacheFlushTimer == null)
+                _entityCacheFlushTimer = timer.Once(10f, FlushDirtyDungeonEntityCaches);
         }
 
         private void FlushDungeonEntityCache(string dungeonId)
         {
-            if (string.IsNullOrEmpty(dungeonId))
+            if (string.IsNullOrEmpty(dungeonId) || !_dirtyDungeonEntityCaches.Contains(dungeonId))
                 return;
-            if (_dungeonEntityIdCache.TryGetValue(dungeonId, out var ids))
-                SaveDungeonEntities(dungeonId, ids.ToList());
+            try
+            {
+                if (_dungeonEntityIdCache.TryGetValue(dungeonId, out var ids))
+                    SaveDungeonEntities(dungeonId, ids.ToList());
+                _dirtyDungeonEntityCaches.Remove(dungeonId);
+            }
+            catch (Exception ex)
+            {
+                PrintError($"Failed to save dungeon entity cache {dungeonId}: {ex.Message}");
+                if (!_isUnloading && _entityCacheFlushTimer == null)
+                    _entityCacheFlushTimer = timer.Once(10f, FlushDirtyDungeonEntityCaches);
+            }
         }
 
         private void UnregisterSpawnedEntityForDungeon(BaseEntity entity, string dungeonId)
@@ -7456,8 +7782,13 @@ namespace Oxide.Plugins
                 return;
             ulong id = entity.net.ID.Value;
             _dungeonByEntityId.Remove(id);
+            if (_dungeonByUniqueId.TryGetValue(dungeonId, out var dungeon))
+                dungeon.IndexedEntityIds.Remove(id);
             if (_dungeonEntityIdCache.TryGetValue(dungeonId, out var ids))
-                ids.Remove(id);
+            {
+                if (ids.Remove(id))
+                    MarkDungeonEntityCacheDirty(dungeonId);
+            }
         }
 
         private void IndexDungeonEntity(BaseEntity entity, ActiveDungeon dungeon)
@@ -7465,21 +7796,20 @@ namespace Oxide.Plugins
             if (entity?.net == null || dungeon == null)
                 return;
             _dungeonByEntityId[entity.net.ID.Value] = dungeon;
+            dungeon.IndexedEntityIds.Add(entity.net.ID.Value);
         }
 
         private void RemoveDungeonEntityIndex(ActiveDungeon dungeon)
         {
             if (dungeon == null)
                 return;
-            foreach (var entity in dungeon.Entities)
-            {
-                if (entity?.net != null)
-                    _dungeonByEntityId.Remove(entity.net.ID.Value);
-            }
-            if (dungeon.BasePortal?.net != null)
-                _dungeonByEntityId.Remove(dungeon.BasePortal.net.ID.Value);
+            foreach (ulong id in dungeon.IndexedEntityIds)
+                _dungeonByEntityId.Remove(id);
+            dungeon.IndexedEntityIds.Clear();
+            dungeon.BuildingBlocksByPosition.Clear();
             if (!string.IsNullOrEmpty(dungeon.UniqueId))
             {
+                _dirtyDungeonEntityCaches.Remove(dungeon.UniqueId);
                 _dungeonEntityIdCache.Remove(dungeon.UniqueId);
                 _dungeonByUniqueId.Remove(dungeon.UniqueId);
             }
@@ -7506,7 +7836,8 @@ namespace Oxide.Plugins
         {
             if (string.IsNullOrEmpty(dungeonId))
                 yield break;
-            var ids = _dungeonEntityIdCache.TryGetValue(dungeonId, out var cachedIds) ? cachedIds.ToList() : LoadDungeonEntities(dungeonId);
+            bool hasMemoryCache = _dungeonEntityIdCache.TryGetValue(dungeonId, out var cachedIds);
+            var ids = hasMemoryCache ? cachedIds.ToList() : LoadDungeonEntities(dungeonId);
             int count = 0;
             int batch = Mathf.Clamp(Performance.CleanupEntitiesPerBatch, 1, 250);
             foreach (ulong id in ids)
@@ -7514,7 +7845,7 @@ namespace Oxide.Plugins
                 if (killedIds != null && !killedIds.Add(id))
                     continue;
                 var entity = BaseNetworkable.serverEntities.Find(new NetworkableId(id)) as BaseEntity;
-                if (entity != null && !entity.IsDestroyed)
+                if (entity != null && !entity.IsDestroyed && (hasMemoryCache || entity.OwnerID == OwnerID))
                     KillDungeonEntity(entity);
                 _dungeonByEntityId.Remove(id);
                 if (++count >= batch)
@@ -7524,6 +7855,7 @@ namespace Oxide.Plugins
                 }
             }
             _dungeonEntityIdCache.Remove(dungeonId);
+            _dirtyDungeonEntityCaches.Remove(dungeonId);
             DeleteDungeonEntitiesFile(dungeonId);
         }
 
@@ -7557,62 +7889,132 @@ namespace Oxide.Plugins
             yield return CleanupExistingEntities();
         }
 
-        private Vector3 GetCenterFoundationPositionNearPlayer(BasePlayer player, float portalHeight)
+        private bool TryGetDungeonFloorPoint(ActiveDungeon dungeon, Vector3 position, out Vector3 floor)
         {
-            const float searchRadius = 8f;
-            const float minDistance = 2f;
-            const float playerClearance = 1.5f;
-            Vector3 selected = Vector3.zero;
-            float bestDist = float.MaxValue;
-            List<BuildingBlock> blocks = Pool.Get<List<BuildingBlock>>();
-            Vis.Entities(player.transform.position, searchRadius, blocks, Layers.Mask.Construction);
-            foreach (var block in blocks)
+            floor = position;
+            if (dungeon.Foundations.Count == 0)
+                return false;
+            Vector3 origin = dungeon.Foundations[0];
+            var tile = new Vector3(
+                origin.x + Mathf.Round((position.x - origin.x) / SubCellSpacing) * SubCellSpacing,
+                origin.y,
+                origin.z + Mathf.Round((position.z - origin.z) / SubCellSpacing) * SubCellSpacing
+            );
+            if (!dungeon.FoundationKeys.Contains(PositionKey(tile, 2)))
+                return false;
+            if (IsClassicDungeon(dungeon))
+                return TryGetRockFloorPoint(position, dungeon, out floor);
+            Vector3 rayOrigin = new Vector3(position.x, origin.y + 1.5f, position.z);
+            float closest = 4f;
+            bool found = false;
+            foreach (var hit in Physics.RaycastAll(rayOrigin, Vector3.down, 4f, Layers.Mask.Construction, QueryTriggerInteraction.Ignore))
             {
-                if (block == null)
+                var entity = hit.collider.ToBaseEntity();
+                if (entity == null || entity.IsDestroyed || !dungeon.Entities.Contains(entity) || entity.PrefabName != FoundationPrefab || hit.distance >= closest)
                     continue;
-                if (!block.PrefabName.Contains("foundation"))
+                closest = hit.distance;
+                floor = hit.point;
+                found = true;
+            }
+            return found;
+        }
+
+        private static Bounds GetPortalPlacementBounds(BasePortal portal)
+        {
+            Bounds bounds = portal.bounds;
+            foreach (Collider collider in portal.GetComponentsInChildren<Collider>())
+            {
+                if (!collider.enabled || collider.isTrigger)
                     continue;
-                float dist = Vector3.Distance(block.transform.position, player.transform.position);
-                if (dist < minDistance)
-                    continue;
-                List<BasePlayer> nearPlayers = Pool.Get<List<BasePlayer>>();
-                Vis.Entities(block.transform.position, playerClearance, nearPlayers, Layers.Mask.Player_Server);
-                bool hasPlayer = nearPlayers.Count > 0;
-                Pool.FreeUnmanaged(ref nearPlayers);
-                if (hasPlayer)
-                    continue;
-                if (dist < bestDist)
+                Bounds worldBounds = collider.bounds;
+                for (int i = 0; i < 8; i++)
                 {
-                    bestDist = dist;
-                    selected = block.transform.position;
+                    Vector3 corner = worldBounds.center + Vector3.Scale(worldBounds.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    bounds.Encapsulate(portal.transform.InverseTransformPoint(corner));
                 }
             }
-            if (selected == Vector3.zero)
+            bounds.Expand(new Vector3(0.3f, 0.1f, 0.3f));
+            return bounds;
+        }
+
+        private static bool IsPortalSpaceClear(BasePortal portal, Vector3 center, Vector3 extents, Quaternion rotation)
+        {
+            int mask = Physics.AllLayers & ~Layers.Mask.Terrain;
+            foreach (Collider collider in Physics.OverlapBox(center, extents, rotation, mask, QueryTriggerInteraction.Ignore))
             {
-                foreach (var block in blocks)
+                if (collider.transform.IsChildOf(portal.transform))
+                    continue;
+                return false;
+            }
+            return true;
+        }
+
+        private bool IsPortalFootprintSupported(ActiveDungeon dungeon, Vector3 floor, Quaternion rotation, Vector3 localCenter, Vector3 extents)
+        {
+            for (int x = -1; x <= 1; x++)
+            for (int z = -1; z <= 1; z++)
+            {
+                Vector3 sample = floor + rotation * new Vector3(localCenter.x + x * extents.x, 0f, localCenter.z + z * extents.z);
+                if (!TryGetDungeonFloorPoint(dungeon, sample, out Vector3 support) || Mathf.Abs(support.y - floor.y) > 0.25f)
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool IsPortalApproachVisible(BasePortal portal, Vector3 playerPosition, Vector3 approach)
+        {
+            Vector3 from = playerPosition + Vector3.up * 1.2f;
+            Vector3 to = approach + Vector3.up * 1.2f;
+            Vector3 direction = to - from;
+            foreach (var hit in Physics.RaycastAll(from, direction.normalized, direction.magnitude, Physics.AllLayers & ~Layers.Mask.Terrain, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.collider.transform.IsChildOf(portal.transform) || hit.collider.ToBaseEntity() is BasePlayer)
+                    continue;
+                return false;
+            }
+            return true;
+        }
+
+        private bool TryFindDungeonPortalPosition(ActiveDungeon dungeon, Vector3 playerPosition, out Vector3 position, out Quaternion rotation)
+        {
+            BasePortal portal = dungeon.InsidePortal;
+            position = portal.transform.position;
+            rotation = portal.transform.rotation;
+            if (!dungeon.DungeonBounds.Contains(playerPosition) || !TryGetDungeonFloorPoint(dungeon, playerPosition, out Vector3 playerFloor) || Mathf.Abs(playerPosition.y - playerFloor.y) > 3f)
+                return false;
+            Bounds portalBounds = GetPortalPlacementBounds(portal);
+            Vector3 entry = portal.transform.InverseTransformPoint(portal.GetLocalEntryExitPosition());
+            Vector3 approachCenter = new Vector3(entry.x, 1f, entry.z);
+            Vector3 approachExtents = new Vector3(0.45f, 0.9f, 0.45f);
+            var candidates = dungeon.Foundations.OrderBy(p => (new Vector2(p.x - playerPosition.x, p.z - playerPosition.z)).sqrMagnitude);
+            foreach (Vector3 candidate in candidates)
+            {
+                if (Vector3.Distance(candidate, playerPosition) < 2f || !TryGetDungeonFloorPoint(dungeon, candidate, out Vector3 floor))
+                    continue;
+                Vector3 direction = playerPosition - candidate;
+                direction.y = 0f;
+                Quaternion facing = Quaternion.LookRotation(direction.normalized, Vector3.up);
+                for (int turn = 0; turn < 4; turn++)
                 {
-                    if (block == null)
+                    Quaternion candidateRotation = facing * Quaternion.Euler(0f, turn * 90f, 0f);
+                    Vector3 candidatePosition = floor + Vector3.up * 0.15f;
+                    if (!IsPortalFootprintSupported(dungeon, floor, candidateRotation, portalBounds.center, portalBounds.extents))
                         continue;
-                    if (!block.PrefabName.Contains("foundation"))
+                    if (!IsPortalFootprintSupported(dungeon, floor, candidateRotation, approachCenter, approachExtents))
                         continue;
-                    List<BasePlayer> nearPlayers = Pool.Get<List<BasePlayer>>();
-                    Vis.Entities(block.transform.position, playerClearance, nearPlayers, Layers.Mask.Player_Server);
-                    bool hasPlayer = nearPlayers.Count > 0;
-                    Pool.FreeUnmanaged(ref nearPlayers);
-                    if (hasPlayer)
+                    if (!IsPortalSpaceClear(portal, candidatePosition + candidateRotation * portalBounds.center, portalBounds.extents, candidateRotation))
                         continue;
-                    float dist = Vector3.Distance(block.transform.position, player.transform.position);
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        selected = block.transform.position;
-                    }
+                    if (!IsPortalSpaceClear(portal, candidatePosition + candidateRotation * approachCenter, approachExtents, candidateRotation))
+                        continue;
+                    Vector3 approach = floor + candidateRotation * new Vector3(entry.x, 0f, entry.z);
+                    if (!IsPortalApproachVisible(portal, playerPosition, approach))
+                        continue;
+                    position = candidatePosition;
+                    rotation = candidateRotation;
+                    return true;
                 }
             }
-            Pool.FreeUnmanaged(ref blocks);
-            if (selected == Vector3.zero)
-                return Vector3.zero;
-            return new Vector3(selected.x, portalHeight, selected.z);
+            return false;
         }
 
         private void RewardDungeonClear(ActiveDungeon dungeon)
@@ -7790,18 +8192,17 @@ namespace Oxide.Plugins
                 }
                 if (targetPlayer != null)
                 {
-                    Vector3 centerPos = GetCenterFoundationPositionNearPlayer(targetPlayer, dungeon.InsidePortal.transform.position.y);
-                    if (centerPos == Vector3.zero)
+                    if (TryFindDungeonPortalPosition(dungeon, targetPlayer.transform.position, out Vector3 portalPosition, out Quaternion portalRotation))
                     {
-                        Vector3 fallback = targetPlayer.transform.position + targetPlayer.transform.right * 2f;
-                        fallback.y = dungeon.InsidePortal.transform.position.y;
-                        dungeon.InsidePortal.transform.position = fallback;
+                        dungeon.InsidePortal.transform.position = portalPosition;
+                        dungeon.InsidePortal.transform.rotation = portalRotation;
+                        dungeon.InsidePortal.UpdateNetworkGroup();
+                        dungeon.InsidePortal.SendNetworkUpdateImmediate();
                     }
                     else
                     {
-                        dungeon.InsidePortal.transform.position = centerPos;
+                        LogDebug("No clear dungeon floor position near the player for the exit portal; keeping its entrance position.", 1);
                     }
-                    dungeon.InsidePortal.SendNetworkUpdateImmediate();
                 }
             }
         }
@@ -7938,9 +8339,58 @@ namespace Oxide.Plugins
                 entity.SetParent(null, true, true);
             }
             catch { }
-            entity.transform.position = position;
+            var corpse = entity as PlayerCorpse;
+            if (corpse != null)
+                MovePlayerCorpse(corpse, position);
+            else
+                entity.transform.position = position;
             entity.UpdateNetworkGroup();
             entity.SendNetworkUpdateImmediate();
+            if (corpse != null && corpse.CorpseRagdollScript != null)
+            {
+                corpse.CorpseRagdollScript.SyncJointsToClients();
+                timer.Repeat(
+                    1f,
+                    3,
+                    () =>
+                    {
+                        if (corpse == null || corpse.IsDestroyed || corpse.CorpseRagdollScript == null || corpse.CorpseRagdollScript.IsKinematic || corpse.rigidBody == null || corpse.buoyancy == null)
+                            return;
+                        corpse.SleepCheck();
+                        corpse.SendNetworkUpdateImmediate();
+                    }
+                );
+            }
+        }
+
+        private void MovePlayerCorpse(PlayerCorpse corpse, Vector3 position)
+        {
+            corpse.parentEnt = null;
+            Physics.SyncTransforms();
+            var rigidbodies = corpse.GetComponentsInChildren<Rigidbody>(true);
+            var bodyPositions = new Vector3[rigidbodies.Length];
+            Vector3 offset = position - corpse.transform.position;
+            for (int i = 0; i < rigidbodies.Length; i++)
+            {
+                if (rigidbodies[i] != null)
+                    bodyPositions[i] = rigidbodies[i].position + offset;
+            }
+            corpse.BecomeActive();
+            corpse.transform.position = position;
+            for (int i = 0; i < rigidbodies.Length; i++)
+            {
+                var body = rigidbodies[i];
+                if (body == null)
+                    continue;
+                body.position = bodyPositions[i];
+                if (body.isKinematic)
+                    continue;
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+                body.WakeUp();
+            }
+            Physics.SyncTransforms();
+            corpse.prevLocalPos = corpse.transform.localPosition;
         }
 
         private void SchedulePlayerLootRecovery(BaseEntity entity, ulong ownerId)
@@ -8049,34 +8499,48 @@ namespace Oxide.Plugins
         {
             if (player == null || !player.IsConnected)
                 return;
-            player.limitNetworking = true;
-            player.EnsureDismounted();
-            player.Teleport(pos);
-            player.limitNetworking = false;
+            bool wasNetworkingLimited = player.limitNetworking;
+            try
+            {
+                player.limitNetworking = true;
+                player.EnsureDismounted();
+                player.Teleport(pos);
+            }
+            finally
+            {
+                player.limitNetworking = wasNetworkingLimited;
+            }
             player.SendNetworkUpdateImmediate();
         }
 
-        private List<Vector3> GreedySelectPositions(List<Vector3> candidates, int requiredCount)
+        private IEnumerator GreedySelectPositions(List<Vector3> candidates, int requiredCount, List<Vector3> selected)
         {
-            List<Vector3> selected = new List<Vector3>();
             if (candidates.Count == 0)
-                return selected;
+                yield break;
+            var selectedSet = new HashSet<Vector3>();
+            var minDistances = new float[candidates.Count];
+            for (int i = 0; i < minDistances.Length; i++)
+                minDistances[i] = float.MaxValue;
             selected.Add(candidates[0]);
+            selectedSet.Add(candidates[0]);
+            int operations = 0;
             while (selected.Count < requiredCount && selected.Count < candidates.Count)
             {
                 Vector3 nextCandidate = candidates[0];
                 float bestMinDistance = 0;
-                foreach (var candidate in candidates)
+                Vector3 newest = selected[selected.Count - 1];
+                for (int i = 0; i < candidates.Count; i++)
                 {
-                    if (selected.Contains(candidate))
-                        continue;
-                    float minDistance = float.MaxValue;
-                    foreach (var sel in selected)
+                    if (++operations >= 1024)
                     {
-                        float d = Vector3.Distance(candidate, sel);
-                        if (d < minDistance)
-                            minDistance = d;
+                        operations = 0;
+                        yield return null;
                     }
+                    var candidate = candidates[i];
+                    if (selectedSet.Contains(candidate))
+                        continue;
+                    float minDistance = Mathf.Min(minDistances[i], Vector3.Distance(candidate, newest));
+                    minDistances[i] = minDistance;
                     if (minDistance > bestMinDistance)
                     {
                         bestMinDistance = minDistance;
@@ -8084,72 +8548,88 @@ namespace Oxide.Plugins
                     }
                 }
                 selected.Add(nextCandidate);
+                selectedSet.Add(nextCandidate);
             }
-            return selected;
         }
 
-        private List<Tuple<Vector3, Vector3>> GreedySelectPairs(List<Tuple<Vector3, Vector3>> pairs, int requiredCount)
+        private IEnumerator GreedySelectPairs(List<Tuple<Vector3, Vector3>> pairs, int requiredCount, List<Tuple<Vector3, Vector3>> selected, bool uniquePoints = false)
         {
-            List<Tuple<Vector3, Vector3>> selected = new List<Tuple<Vector3, Vector3>>();
             if (requiredCount <= 0 || pairs.Count == 0)
-                return selected;
+                yield break;
+            var usedPoints = new HashSet<Vector3>();
+            var selectedSet = new HashSet<Tuple<Vector3, Vector3>>();
+            var centers = new Vector3[pairs.Count];
+            var minDistances = new float[pairs.Count];
+            int operations = 0;
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                centers[i] = (pairs[i].Item1 + pairs[i].Item2) / 2;
+                minDistances[i] = float.MaxValue;
+                if (++operations >= 1024)
+                {
+                    operations = 0;
+                    yield return null;
+                }
+            }
             selected.Add(pairs[0]);
+            selectedSet.Add(pairs[0]);
+            usedPoints.Add(pairs[0].Item1);
+            usedPoints.Add(pairs[0].Item2);
             while (selected.Count < requiredCount && selected.Count < pairs.Count)
             {
-                Tuple<Vector3, Vector3> nextPair = pairs[0];
+                Tuple<Vector3, Vector3> nextPair = uniquePoints ? null : pairs[0];
                 float bestMinDistance = 0;
-                foreach (var pair in pairs)
+                var newest = selected[selected.Count - 1];
+                Vector3 newestCenter = (newest.Item1 + newest.Item2) / 2;
+                for (int i = 0; i < pairs.Count; i++)
                 {
-                    if (selected.Contains(pair))
-                        continue;
-                    Vector3 avg = (pair.Item1 + pair.Item2) / 2;
-                    float minDistance = float.MaxValue;
-                    foreach (var sel in selected)
+                    if (++operations >= 1024)
                     {
-                        Vector3 selAvg = (sel.Item1 + sel.Item2) / 2;
-                        float d = Vector3.Distance(avg, selAvg);
-                        if (d < minDistance)
-                            minDistance = d;
+                        operations = 0;
+                        yield return null;
                     }
+                    var pair = pairs[i];
+                    if (selectedSet.Contains(pair) || (uniquePoints && (usedPoints.Contains(pair.Item1) || usedPoints.Contains(pair.Item2))))
+                        continue;
+                    float minDistance = Mathf.Min(minDistances[i], Vector3.Distance(centers[i], newestCenter));
+                    minDistances[i] = minDistance;
                     if (minDistance > bestMinDistance)
                     {
                         bestMinDistance = minDistance;
                         nextPair = pair;
                     }
                 }
+                if (nextPair == null)
+                    break;
                 selected.Add(nextPair);
+                selectedSet.Add(nextPair);
+                usedPoints.Add(nextPair.Item1);
+                usedPoints.Add(nextPair.Item2);
             }
-            return selected;
         }
 
-        private void AssignEntitiesToSpawnPoints(
-            List<Vector3> spawnPoints,
-            DungeonTierConfig tierConfig,
-            out List<Vector3> turretSpawns,
-            out List<Vector3> boxSpawns,
-            out List<Vector3> npcSpawns,
-            out List<Vector3> bossSpawns,
-            out List<Vector3> animalSpawns
-        )
+        private IEnumerator AssignEntitiesToSpawnPoints(List<Vector3> spawnPoints, DungeonTierConfig tierConfig, DungeonEntitySpawns spawns, EntitySpawnLimits spawnLimits = null)
         {
-            float spawnHeightOffset = 0.1f;
-            turretSpawns = new List<Vector3>();
-            boxSpawns = new List<Vector3>();
-            npcSpawns = new List<Vector3>();
-            bossSpawns = new List<Vector3>();
-            animalSpawns = new List<Vector3>();
+            bool classicDungeon = tierConfig.BuildingGradeSelection == ClassicDungeonSelection;
+            float spawnHeightOffset = classicDungeon ? 0f : 0.1f;
+            var limits = spawnLimits ?? tierConfig.EntitySpawnLimits;
+            var turretSpawns = spawns.Turrets;
+            var boxSpawns = spawns.Boxes;
+            var npcSpawns = spawns.Npcs;
+            var bossSpawns = spawns.Bosses;
+            var animalSpawns = spawns.Animals;
             int totalPoints = spawnPoints.Count;
             LogDebug("Total spawn points: " + totalPoints);
-            LogDebug("TierConfig TurretsCounts: " + tierConfig.EntitySpawnLimits.TurretsCounts);
-            LogDebug("TierConfig LootBoxesCounts: " + tierConfig.EntitySpawnLimits.LootBoxesCounts);
-            LogDebug("TierConfig NpcsCounts: " + tierConfig.EntitySpawnLimits.NpcsCounts);
-            LogDebug("TierConfig BossesCounts: " + tierConfig.EntitySpawnLimits.BossesCounts);
-            LogDebug("TierConfig AnimalsCounts: " + tierConfig.EntitySpawnLimits.AnimalsCounts);
-            int requiredTurrets = Math.Min(tierConfig.EntitySpawnLimits.TurretsCounts, totalPoints);
-            int requiredBoxes = Math.Min(tierConfig.EntitySpawnLimits.LootBoxesCounts, totalPoints);
-            int requiredNPCs = Math.Min(tierConfig.EntitySpawnLimits.NpcsCounts, totalPoints);
-            int requiredBosses = Math.Min(tierConfig.EntitySpawnLimits.BossesCounts, totalPoints);
-            int requiredAnimals = tierConfig.AnimalConfig != null && tierConfig.AnimalConfig.Enabled ? Math.Min(tierConfig.EntitySpawnLimits.AnimalsCounts, totalPoints) : 0;
+            LogDebug("TierConfig TurretsCounts: " + limits.TurretsCounts);
+            LogDebug("TierConfig LootBoxesCounts: " + limits.LootBoxesCounts);
+            LogDebug("TierConfig NpcsCounts: " + limits.NpcsCounts);
+            LogDebug("TierConfig BossesCounts: " + limits.BossesCounts);
+            LogDebug("TierConfig AnimalsCounts: " + limits.AnimalsCounts);
+            int requiredTurrets = Math.Min(limits.TurretsCounts, totalPoints);
+            int requiredBoxes = Math.Min(limits.LootBoxesCounts, totalPoints);
+            int requiredNPCs = Math.Min(limits.NpcsCounts, totalPoints);
+            int requiredBosses = Math.Min(limits.BossesCounts, totalPoints);
+            int requiredAnimals = tierConfig.AnimalConfig != null && tierConfig.AnimalConfig.Enabled ? Math.Min(limits.AnimalsCounts, totalPoints) : 0;
             LogDebug("Initial requiredTurrets: " + requiredTurrets);
             LogDebug("Initial requiredBoxes: " + requiredBoxes);
             LogDebug("Initial requiredNPCs: " + requiredNPCs);
@@ -8162,19 +8642,48 @@ namespace Oxide.Plugins
             {
                 float maxPairDistance = 5f;
                 List<Tuple<Vector3, Vector3>> candidatePairs = new List<Tuple<Vector3, Vector3>>();
+                var buckets = new Dictionary<Vector3Int, List<int>>();
+                int operations = 0;
                 for (int i = 0; i < spawnPoints.Count; i++)
                 {
-                    for (int j = i + 1; j < spawnPoints.Count; j++)
+                    var key = GetSpatialBucket(spawnPoints[i], maxPairDistance);
+                    if (!buckets.TryGetValue(key, out var indices))
+                        buckets[key] = indices = new List<int>();
+                    indices.Add(i);
+                    if (++operations >= 1024)
                     {
-                        float distance = Vector3.Distance(spawnPoints[i], spawnPoints[j]);
-                        if (distance <= maxPairDistance)
-                        {
-                            candidatePairs.Add(new Tuple<Vector3, Vector3>(spawnPoints[i], spawnPoints[j]));
-                        }
+                        operations = 0;
+                        yield return null;
                     }
                 }
+                var nearbyIndices = new List<int>();
+                for (int i = 0; i < spawnPoints.Count; i++)
+                {
+                    nearbyIndices.Clear();
+                    var key = GetSpatialBucket(spawnPoints[i], maxPairDistance);
+                    for (int x = -1; x <= 1; x++)
+                    for (int y = -1; y <= 1; y++)
+                    for (int z = -1; z <= 1; z++)
+                    {
+                        if (!buckets.TryGetValue(key + new Vector3Int(x, y, z), out var indices))
+                            continue;
+                        foreach (int j in indices)
+                        {
+                            if (j > i && Vector3.Distance(spawnPoints[i], spawnPoints[j]) <= maxPairDistance)
+                                nearbyIndices.Add(j);
+                            if (++operations >= 1024)
+                            {
+                                operations = 0;
+                                yield return null;
+                            }
+                        }
+                    }
+                    nearbyIndices.Sort();
+                    foreach (int j in nearbyIndices)
+                        candidatePairs.Add(new Tuple<Vector3, Vector3>(spawnPoints[i], spawnPoints[j]));
+                }
                 LogDebug("Candidate pairs count: " + candidatePairs.Count);
-                selectedPairs = GreedySelectPairs(candidatePairs, pairCount);
+                yield return GreedySelectPairs(candidatePairs, pairCount, selectedPairs, classicDungeon);
                 LogDebug("Selected pairs count: " + selectedPairs.Count);
             }
             HashSet<Vector3> usedPoints = new HashSet<Vector3>();
@@ -8200,7 +8709,7 @@ namespace Oxide.Plugins
             List<Vector3> selectedRemaining = new List<Vector3>();
             if (remainingPoints.Count > 0 && remainingRequired > 0)
             {
-                selectedRemaining = GreedySelectPositions(remainingPoints, remainingRequired);
+                yield return GreedySelectPositions(remainingPoints, remainingRequired, selectedRemaining);
             }
             LogDebug("Selected remaining points count for NPCs, Bosses and Animals: " + selectedRemaining.Count);
             int count = selectedRemaining.Count;
@@ -8237,7 +8746,8 @@ namespace Oxide.Plugins
                 LogDebug("Extra needed (requiredTurrets + requiredBoxes): " + extraNeeded);
                 if (extraPoints.Count > 0 && extraNeeded > 0)
                 {
-                    List<Vector3> selectedExtra = GreedySelectPositions(extraPoints, extraNeeded);
+                    var selectedExtra = new List<Vector3>();
+                    yield return GreedySelectPositions(extraPoints, extraNeeded, selectedExtra);
                     LogDebug("Selected extra points count: " + selectedExtra.Count);
                     int extraCount = selectedExtra.Count;
                     for (int i = 0; i < extraCount; i++)
@@ -8272,7 +8782,7 @@ namespace Oxide.Plugins
             foreach (var turretPos in turretSpawns)
             {
                 var rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
-                SpawnTurret(turretPos, rotation, activeDungeon.TierConfig.AutoTurretConfig, activeDungeon);
+                SpawnTurret(GetDungeonEntitySpawnPosition(turretPos, activeDungeon), rotation, activeDungeon.TierConfig.AutoTurretConfig, activeDungeon);
                 count++;
                 if (count >= batch)
                 {
@@ -8282,27 +8792,7 @@ namespace Oxide.Plugins
             }
             foreach (var boxPos in boxSpawns)
             {
-                SpawnLootBox(boxPos, Quaternion.identity, activeDungeon.TierConfig, activeDungeon);
-                count++;
-                if (count >= batch)
-                {
-                    count = 0;
-                    yield return _spawnBatchDelay;
-                }
-            }
-            foreach (var npcPos in npcSpawns)
-            {
-                SpawnNpc(npcPos, activeDungeon);
-                count++;
-                if (count >= batch)
-                {
-                    count = 0;
-                    yield return _spawnBatchDelay;
-                }
-            }
-            foreach (var bossPos in bossSpawns)
-            {
-                SpawnNpc(bossPos, activeDungeon, true);
+                SpawnLootBox(GetDungeonEntitySpawnPosition(boxPos, activeDungeon), Quaternion.identity, activeDungeon.TierConfig, activeDungeon);
                 count++;
                 if (count >= batch)
                 {
@@ -8312,7 +8802,27 @@ namespace Oxide.Plugins
             }
             foreach (var animalPos in animalSpawns)
             {
-                SpawnAnimal(animalPos, activeDungeon);
+                SpawnAnimal(GetDungeonEntitySpawnPosition(animalPos, activeDungeon), activeDungeon);
+                count++;
+                if (count >= batch)
+                {
+                    count = 0;
+                    yield return _spawnBatchDelay;
+                }
+            }
+            foreach (var npcPos in npcSpawns)
+            {
+                SpawnNpc(GetDungeonEntitySpawnPosition(npcPos, activeDungeon), activeDungeon);
+                count++;
+                if (count >= batch)
+                {
+                    count = 0;
+                    yield return _spawnBatchDelay;
+                }
+            }
+            foreach (var bossPos in bossSpawns)
+            {
+                SpawnNpc(GetDungeonEntitySpawnPosition(bossPos, activeDungeon), activeDungeon, true);
                 count++;
                 if (count >= batch)
                 {
@@ -8324,8 +8834,7 @@ namespace Oxide.Plugins
 
         private BasePortal CreateDungeonPortal(Vector3 position, ActiveDungeon activeDungeon)
         {
-            var prefabPath = "assets/prefabs/missions/portal/halloweenportalexit.prefab";
-            var dungeonPortal = GameManager.server.CreateEntity(prefabPath, position) as BasePortal;
+            var dungeonPortal = GameManager.server.CreateEntity(PortalPrefab, position) as BasePortal;
             if (dungeonPortal == null)
                 return null;
             dungeonPortal.OwnerID = OwnerID;
@@ -8574,6 +9083,8 @@ namespace Oxide.Plugins
                 dungeon.Entities.Clear();
                 dungeon.Npcs.Clear();
                 dungeon.EntranceDoors.Clear();
+                dungeon.Doors.Clear();
+                dungeon.ClassicDoorFrames.Clear();
                 dungeon.EntranceCorridorSegments.Clear();
                 dungeon.EntranceSafeZoneBounds = default(Bounds);
                 dungeon.HasEntranceSafeZone = false;
@@ -8752,9 +9263,6 @@ namespace Oxide.Plugins
             if (spawnSettings == null || spawnSettings.DungeonHeight >= 0f)
                 return;
             ConsoleSystem.Run(ConsoleSystem.Option.Server.Quiet(), "antihack.terrain_protection 0");
-            if (_terrainProtectionWarningLogged)
-                return;
-            _terrainProtectionWarningLogged = true;
         }
 
         private bool IsUndergroundDungeon(ActiveDungeon dungeon)
@@ -9120,8 +9628,7 @@ namespace Oxide.Plugins
 
         private void SpawnTurret(Vector3 position, Quaternion rotation, TurretConfig turretConfig, ActiveDungeon activeDungeon)
         {
-            const string turretPrefabPath = "assets/prefabs/npc/autoturret/autoturret_deployed.prefab";
-            var turretEntity = GameManager.server.CreateEntity(turretPrefabPath, position, rotation) as AutoTurret;
+            var turretEntity = GameManager.server.CreateEntity(TurretPrefab, position, rotation) as AutoTurret;
             if (turretEntity == null)
             {
                 LogDebug($"Failed to spawn turret at {position}.", 1);
@@ -9142,9 +9649,17 @@ namespace Oxide.Plugins
             turretEntity.inventory.canAcceptItem -= turretEntity.CanAcceptItem;
             turretEntity.inventory.canAcceptItem += CanAcceptTurretItem;
             var weapon = ItemManager.CreateByName(turretConfig.WeaponShortName);
-            weapon?.MoveToContainer(turretEntity.inventory, 0);
-            var laserSight = ItemManager.CreateByName("weapon.mod.lasersight");
-            laserSight?.MoveToContainer(weapon?.contents);
+            if (weapon != null)
+            {
+                if (!weapon.MoveToContainer(turretEntity.inventory, 0))
+                    weapon.Remove();
+                else if (weapon.contents != null)
+                {
+                    var laserSight = ItemManager.CreateByName("weapon.mod.lasersight");
+                    if (laserSight != null && !laserSight.MoveToContainer(weapon.contents))
+                        laserSight.Remove();
+                }
+            }
             turretEntity.UpdateAttachedWeapon();
             turretEntity.gameObject.AddComponent<TurretMonoBehaviour>();
             activeDungeon.Entities.Add(turretEntity);
@@ -9154,6 +9669,8 @@ namespace Oxide.Plugins
 
         private bool CanAcceptTurretItem(BasePlayer player, Item item, int pos)
         {
+            if (item?.info == null)
+                return false;
             if (pos == 0)
                 return item.info.category == ItemCategory.Weapon;
             return item.info.category == ItemCategory.Ammunition;
@@ -9173,11 +9690,198 @@ namespace Oxide.Plugins
             lootBoxEntity.SetParent(parent, true, true);
             lootBoxEntity.Spawn();
             var boxItems = GetLootBoxItems(tierConfig);
-            PopulateStorage(lootBoxEntity.inventory, tierConfig, boxItems);
+            PopulateLootContainer(lootBoxEntity.inventory, boxItems, tierConfig.MaxItemsPerBox);
             AddLock(lootBoxEntity);
             activeDungeon.Entities.Add(lootBoxEntity);
             RegisterSpawnedEntityForDungeon(lootBoxEntity, activeDungeon.UniqueId);
             LogDebug($"LootBox spawned at {position}.", 0);
+        }
+
+        private static Bounds TransformDungeonBounds(Bounds bounds, Transform source, Transform destination)
+        {
+            Bounds transformed = new Bounds(destination.InverseTransformPoint(source.TransformPoint(bounds.center)), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                transformed.Encapsulate(destination.InverseTransformPoint(source.TransformPoint(corner)));
+            }
+            return transformed;
+        }
+
+        private static Bounds GetDungeonWorldBounds(Bounds bounds, Vector3 position, Quaternion rotation)
+        {
+            Bounds transformed = new Bounds(position + rotation * bounds.center, Vector3.zero);
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                transformed.Encapsulate(position + rotation * corner);
+            }
+            return transformed;
+        }
+
+        private bool TryGetDungeonEnemyBounds(string prefab, out Bounds bounds)
+        {
+            if (_enemySpawnBounds.TryGetValue(prefab, out bounds))
+                return true;
+            var template = GameManager.server.FindPrefab(prefab)?.GetComponent<BaseEntity>();
+            if (template == null)
+                return false;
+            bounds = template.bounds;
+            foreach (Collider collider in template.GetComponentsInChildren<Collider>())
+            {
+                if (!collider.enabled || collider.isTrigger || ((1 << collider.gameObject.layer) & DungeonEnemyCollisionMask) == 0)
+                    continue;
+                Bounds colliderBounds;
+                if (collider is BoxCollider box)
+                {
+                    colliderBounds = new Bounds(box.center, box.size);
+                }
+                else if (collider is CapsuleCollider capsule)
+                {
+                    Vector3 size = Vector3.one * (capsule.radius * 2f);
+                    size[capsule.direction] = Mathf.Max(size[capsule.direction], capsule.height);
+                    colliderBounds = new Bounds(capsule.center, size);
+                }
+                else if (collider is SphereCollider sphere)
+                {
+                    colliderBounds = new Bounds(sphere.center, Vector3.one * (sphere.radius * 2f));
+                }
+                else
+                {
+                    continue;
+                }
+                bounds.Encapsulate(TransformDungeonBounds(colliderBounds, collider.transform, template.transform));
+            }
+            Vector3 minimum = bounds.min - new Vector3(0.1f, 0f, 0.1f);
+            Vector3 maximum = bounds.max + new Vector3(0.1f, 0.05f, 0.1f);
+            minimum.y = 0.08f;
+            maximum.y = Mathf.Max(maximum.y, minimum.y + 0.2f);
+            bounds.SetMinMax(minimum, maximum);
+            _enemySpawnBounds[prefab] = bounds;
+            return true;
+        }
+
+        private bool IsDungeonEnemyPositionClear(ActiveDungeon dungeon, Bounds bounds, Vector3 position, Quaternion rotation, BaseEntity ignoredEntity)
+        {
+            if (!dungeon.DungeonBounds.Contains(position) || IsEnemyEntrancePositionBlocked(dungeon, position))
+                return false;
+            Bounds worldBounds = GetDungeonWorldBounds(bounds, position, rotation);
+            foreach (Door door in dungeon.Doors)
+            {
+                if (door == null || door.IsDestroyed)
+                    continue;
+                Bounds doorway = door.WorldSpaceBounds().ToBounds();
+                doorway.Expand(new Vector3(0.4f, 0.1f, 0.4f));
+                if (doorway.Intersects(worldBounds))
+                    return false;
+            }
+            foreach (BaseEntity other in dungeon.Npcs)
+            {
+                if (other == ignoredEntity || !IsDungeonNpcAlive(other) || !TryGetDungeonEnemyBounds(other.PrefabName, out Bounds otherBounds))
+                    continue;
+                if (worldBounds.Intersects(GetDungeonWorldBounds(otherBounds, other.transform.position, other.transform.rotation)))
+                    return false;
+            }
+            foreach (Collider collider in Physics.OverlapBox(position + rotation * bounds.center, bounds.extents, rotation, DungeonEnemyCollisionMask, QueryTriggerInteraction.Ignore))
+            {
+                if (ignoredEntity != null && collider.transform.IsChildOf(ignoredEntity.transform))
+                    continue;
+                return false;
+            }
+            int xSteps = Mathf.Max(1, Mathf.CeilToInt(bounds.size.x / (SubCellSpacing * 0.5f)));
+            int zSteps = Mathf.Max(1, Mathf.CeilToInt(bounds.size.z / (SubCellSpacing * 0.5f)));
+            for (int x = 0; x <= xSteps; x++)
+            for (int z = 0; z <= zSteps; z++)
+            {
+                Vector3 sample = position + rotation * new Vector3(Mathf.Lerp(bounds.min.x, bounds.max.x, (float)x / xSteps), 0f, Mathf.Lerp(bounds.min.z, bounds.max.z, (float)z / zSteps));
+                if (IsEnemyEntrancePositionBlocked(dungeon, sample) || !TryGetDungeonFloorPoint(dungeon, sample, out Vector3 support) || Mathf.Abs(support.y + 0.02f - position.y) > 0.25f)
+                    return false;
+            }
+            return true;
+        }
+
+        private bool TryFindDungeonEnemyPosition(
+            ActiveDungeon dungeon,
+            string prefab,
+            Vector3 preferredPosition,
+            Quaternion preferredRotation,
+            BaseEntity ignoredEntity,
+            out Vector3 position,
+            out Quaternion rotation
+        )
+        {
+            position = preferredPosition;
+            rotation = preferredRotation;
+            if (dungeon == null || dungeon.MarkedForRemoval || !TryGetDungeonEnemyBounds(prefab, out Bounds bounds))
+                return false;
+            Physics.SyncTransforms();
+            var points = dungeon.SpawnPoints != null && dungeon.SpawnPoints.Count > 0 ? dungeon.SpawnPoints : dungeon.Foundations;
+            var candidates = new List<Vector3>(points.Count + 1) { preferredPosition };
+            candidates.AddRange(points.OrderBy(p => (p - preferredPosition).sqrMagnitude));
+            foreach (Vector3 candidate in candidates)
+            {
+                if (!TryGetDungeonFloorPoint(dungeon, candidate, out Vector3 floor))
+                    continue;
+                Vector3 grounded = floor + Vector3.up * 0.02f;
+                for (int turn = 0; turn < 5; turn++)
+                {
+                    Quaternion facing = turn == 0 ? preferredRotation : Quaternion.Euler(0f, (turn - 1) * 90f, 0f);
+                    if (!IsDungeonEnemyPositionClear(dungeon, bounds, grounded, facing, ignoredEntity))
+                        continue;
+                    position = grounded;
+                    rotation = facing;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryReturnDungeonEnemyHome(BaseEntity entity, ActiveDungeon dungeon, Vector3 preferredPosition, Quaternion preferredRotation)
+        {
+            if (
+                entity == null
+                || entity.IsDestroyed
+                || !TryFindDungeonEnemyPosition(dungeon, entity.PrefabName, preferredPosition, preferredRotation, entity, out Vector3 position, out Quaternion rotation)
+            )
+                return false;
+            if (entity is ScientistNPC npc)
+                npc.Teleport(position);
+            else if (IsGen2Animal(entity))
+                ApplyGen2DungeonPosition(entity, position, rotation);
+            else
+                entity.transform.position = position;
+            entity.transform.rotation = rotation;
+            var npcHome = entity.GetComponent<NpcHomePosition>();
+            if (npcHome != null)
+            {
+                npcHome.HomePosition = position;
+                npcHome.HomeRotation = rotation;
+            }
+            var animalHome = entity.GetComponent<AnimalHomePosition>();
+            if (animalHome != null)
+            {
+                animalHome.HomePosition = position;
+                animalHome.HomeRotation = rotation;
+            }
+            var movement = entity.GetComponent<DungeonAnimalMovement>();
+            if (movement != null)
+                movement.SetHomePosition(position);
+            entity.UpdateNetworkGroup();
+            entity.SendNetworkUpdateImmediate();
+            Physics.SyncTransforms();
+            return true;
+        }
+
+        private void RecheckDungeonAnimalPosition(BaseEntity entity, ActiveDungeon dungeon, Vector3 preferredPosition, Quaternion rotation)
+        {
+            if (entity == null || entity.IsDestroyed || dungeon == null || dungeon.MarkedForRemoval || !TryGetDungeonEnemyBounds(entity.PrefabName, out Bounds bounds))
+                return;
+            Physics.SyncTransforms();
+            if (!TryGetDungeonFloorPoint(dungeon, preferredPosition, out Vector3 floor))
+                return;
+            Vector3 position = floor + Vector3.up * 0.02f;
+            if (IsDungeonEnemyPositionClear(dungeon, bounds, position, rotation, entity))
+                ApplyGen2DungeonPosition(entity, position, rotation);
         }
 
         private void SpawnNpc(Vector3 position, ActiveDungeon activeDungeon, bool boss = false)
@@ -9185,6 +9889,11 @@ namespace Oxide.Plugins
             if (activeDungeon == null)
                 return;
             var rot = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            if (!TryFindDungeonEnemyPosition(activeDungeon, ScientistPrefab, position, rot, null, out position, out rot))
+            {
+                LogDebug("No clear dungeon floor position for the scientist; spawn skipped.", 2);
+                return;
+            }
             var npc = CreateScientist(position, rot);
             if (npc == null)
             {
@@ -9205,6 +9914,7 @@ namespace Oxide.Plugins
             activeDungeon.Entities.Add(npc);
             activeDungeon.Npcs.Add(npc);
             RegisterSpawnedEntityForDungeon(npc, activeDungeon.UniqueId);
+            Physics.SyncTransforms();
             LogDebug($"NPC spawned (native) at {position}.", 0);
         }
 
@@ -9231,15 +9941,18 @@ namespace Oxide.Plugins
             if (species == null || !AnimalPrefabPaths.TryGetValue(species.Animal, out string prefab))
                 return;
             float hp = Mathf.Max(1f, species.Health);
-            Vector3 targetPos = SnapAnimalToGround(position, activeDungeon);
+            Quaternion targetRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            if (!TryFindDungeonEnemyPosition(activeDungeon, prefab, position, targetRotation, null, out Vector3 targetPos, out targetRotation))
+            {
+                LogDebug($"No clear dungeon floor position for animal '{species.Animal}'; spawn skipped.", 2);
+                return;
+            }
             Vector3 spawnPos = FindAnimalPosition();
             if (spawnPos == Vector3.zero)
             {
-                if (!_warnedAnimalDirectSpawnFallback)
-                    _warnedAnimalDirectSpawnFallback = true;
                 spawnPos = targetPos;
             }
-            var entity = SpawnAnimalEntityCommon(prefab, spawnPos, hp, targetPos, null);
+            var entity = SpawnAnimalEntityCommon(prefab, spawnPos, hp, targetPos, targetRotation, activeDungeon);
             if (entity == null)
             {
                 LogDebug($"Failed to spawn animal '{species.Animal}' ({prefab}) at {spawnPos}", 1);
@@ -9254,6 +9967,7 @@ namespace Oxide.Plugins
             activeDungeon.Entities.Add(entity);
             activeDungeon.Npcs.Add(entity);
             RegisterSpawnedEntityForDungeon(entity, activeDungeon.UniqueId);
+            Physics.SyncTransforms();
             LogDebug($"Animal spawned at {entity.transform.position}: {species.Animal} (HP {hp:0})", 0);
         }
 
@@ -9276,11 +9990,17 @@ namespace Oxide.Plugins
             return eligible[eligible.Count - 1];
         }
 
-        private BaseEntity SpawnAnimalEntityCommon(string prefab, Vector3 spawnPos, float hp, Vector3? finalPos = null, Quaternion? finalRotation = null)
+        private BaseEntity SpawnAnimalEntityCommon(string prefab, Vector3 spawnPos, float hp, Vector3? finalPos = null, Quaternion? finalRotation = null, ActiveDungeon dungeon = null)
         {
             var entity = GameManager.server.CreateEntity(prefab, spawnPos);
             if (entity == null)
                 return null;
+            if (entity is BaseCombatEntity combat)
+            {
+                var skeleton = combat.skeletonProperties;
+                if (skeleton != null && skeleton.boneReference == null && skeleton.quickLookup == null)
+                    combat.skeletonProperties = null;
+            }
             if (entity is Chicken chicken)
             {
                 chicken.EggDropFrequency = int.MaxValue;
@@ -9298,8 +10018,8 @@ namespace Oxide.Plugins
                 {
                     Quaternion rotation = finalRotation ?? SafeLookRotation(gen2.transform, RandomFlatDir());
                     ApplyGen2DungeonPosition(gen2, finalPos.Value, rotation);
-                    gen2.Invoke(() => ApplyGen2DungeonPosition(gen2, finalPos.Value, rotation), 0.05f);
-                    gen2.Invoke(() => ApplyGen2DungeonPosition(gen2, finalPos.Value, rotation), 0.25f);
+                    gen2.Invoke(() => RecheckDungeonAnimalPosition(gen2, dungeon, finalPos.Value, rotation), 0.05f);
+                    gen2.Invoke(() => RecheckDungeonAnimalPosition(gen2, dungeon, finalPos.Value, rotation), 0.25f);
                 }
                 return gen2;
             }
@@ -9659,37 +10379,6 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private Vector3 SnapAnimalToGround(Vector3 basePos, ActiveDungeon activeDungeon)
-        {
-            if (TryGetClosestDungeonFloorPoint(activeDungeon, basePos, out var floorPoint))
-                return new Vector3(floorPoint.x, floorPoint.y + 0.12f, floorPoint.z);
-            int mask = Layers.Mask.Construction | Layers.Mask.World | Layers.Mask.Terrain | Layers.Mask.Deployed;
-            Vector3 from = basePos + Vector3.up * 1.25f;
-            if (Physics.Raycast(from, Vector3.down, out RaycastHit hit, 3f, mask, QueryTriggerInteraction.Ignore))
-                return new Vector3(basePos.x, hit.point.y + 0.12f, basePos.z);
-            return new Vector3(basePos.x, basePos.y + 0.12f, basePos.z);
-        }
-
-        private bool TryGetClosestDungeonFloorPoint(ActiveDungeon activeDungeon, Vector3 basePos, out Vector3 floorPoint)
-        {
-            floorPoint = Vector3.zero;
-            if (activeDungeon == null || activeDungeon.RoomFloorCenters == null || activeDungeon.RoomFloorCenters.Count == 0)
-                return false;
-            float bestSqr = float.MaxValue;
-            foreach (var center in activeDungeon.RoomFloorCenters)
-            {
-                float dx = center.x - basePos.x;
-                float dz = center.z - basePos.z;
-                float sqr = dx * dx + dz * dz;
-                if (sqr < bestSqr)
-                {
-                    bestSqr = sqr;
-                    floorPoint = center;
-                }
-            }
-            return bestSqr < float.MaxValue;
-        }
-
         private static Quaternion SafeLookRotation(Transform transformFallback, Vector3 direction)
         {
             direction.y = 0f;
@@ -9717,31 +10406,46 @@ namespace Oxide.Plugins
             entity.transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
         }
 
-        private void CloseDungeonEntranceDoors(ActiveDungeon dungeon)
+        private void CloseDoorsOnDungeonEmpty(ActiveDungeon dungeon)
         {
-            if (dungeon?.EntranceDoors == null)
+            bool closeEntranceDoors = _config?.CloseEntranceDoorsWhenEmpty == true;
+            bool closeDungeonDoors = _config?.CloseDungeonDoorsWhenEmpty == true;
+            if (dungeon?.Doors == null || (!closeEntranceDoors && !closeDungeonDoors))
                 return;
-            foreach (var door in dungeon.EntranceDoors)
+            foreach (var door in dungeon.Doors)
             {
                 if (door == null || door.IsDestroyed)
+                    continue;
+                bool isEntranceDoor = dungeon.EntranceDoors != null && dungeon.EntranceDoors.Contains(door);
+                if (isEntranceDoor ? !closeEntranceDoors : !closeDungeonDoors)
                     continue;
                 door.SetOpen(false);
                 door.SendNetworkUpdate();
             }
         }
 
-        private void HandlePlayerDungeonDeparture(ActiveDungeon dungeon)
+        private bool HasOtherLivingPlayersInsideDungeon(ActiveDungeon dungeon, ulong excludedUserId)
+        {
+            foreach (var insidePlayer in GetPlayersPhysicallyInsideDungeon(dungeon))
+            {
+                if (insidePlayer.userID != excludedUserId)
+                    return true;
+            }
+            return false;
+        }
+
+        private void HandlePlayerDungeonDeparture(ActiveDungeon dungeon, ulong departedUserId = 0UL)
         {
             if (dungeon == null || !dungeon.Spawned || dungeon.MarkedForRemoval)
                 return;
-            CloseDungeonEntranceDoors(dungeon);
-            if (_config?.ResetEnemiesOnPlayerDeparture != true)
-                return;
             NextTick(() =>
             {
-                if (dungeon == null || !dungeon.Spawned || dungeon.MarkedForRemoval || _config?.ResetEnemiesOnPlayerDeparture != true)
+                if (dungeon == null || !dungeon.Spawned || dungeon.MarkedForRemoval)
                     return;
-                if (GetPlayersPhysicallyInsideDungeon(dungeon).Count > 0)
+                if (HasOtherLivingPlayersInsideDungeon(dungeon, departedUserId))
+                    return;
+                CloseDoorsOnDungeonEmpty(dungeon);
+                if (_config?.ResetEnemiesOnPlayerDeparture != true)
                     return;
                 float now = Time.realtimeSinceStartup;
                 if (now - dungeon.LastEnemyResetAt < 0.5f)
@@ -9813,9 +10517,8 @@ namespace Oxide.Plugins
                     var home = npc.GetComponent<NpcHomePosition>();
                     if (home == null)
                         continue;
-                    npc.Teleport(home.HomePosition);
-                    npc.transform.rotation = home.HomeRotation;
-                    npc.SendNetworkUpdateImmediate();
+                    if (!TryReturnDungeonEnemyHome(npc, dungeon, home.HomePosition, home.HomeRotation))
+                        continue;
                     var mv = npc.GetComponent<NpcMovement>();
                     if (mv != null)
                         UnityEngine.Object.Destroy(mv);
@@ -9827,10 +10530,8 @@ namespace Oxide.Plugins
                     var home = ent.GetComponent<AnimalHomePosition>();
                     if (home == null)
                         continue;
-                    ent.transform.position = home.HomePosition;
-                    ent.transform.rotation = home.HomeRotation;
-                    ent.UpdateNetworkGroup();
-                    ent.SendNetworkUpdateImmediate();
+                    if (!TryReturnDungeonEnemyHome(ent, dungeon, home.HomePosition, home.HomeRotation))
+                        continue;
                     var movement = ent.GetComponent<DungeonAnimalMovement>();
                     if (movement != null)
                         UnityEngine.Object.Destroy(movement);
@@ -9847,7 +10548,7 @@ namespace Oxide.Plugins
             }
         }
 
-        void OnPlayerCorpseSpawned(BasePlayer player, PlayerCorpse corpse)
+        private void OnPlayerCorpseSpawned(BasePlayer player, PlayerCorpse corpse)
         {
             if (corpse == null)
                 return;
@@ -9855,10 +10556,16 @@ namespace Oxide.Plugins
             SchedulePlayerLootRecovery(corpse, ownerId);
         }
 
-        void OnEntitySpawned(BaseCorpse corpse)
+        private void OnEntitySpawned(BaseCorpse corpse)
         {
             if (corpse == null)
                 return;
+            if (corpse is PlayerCorpse playerCorpse && TryGetPendingPlayerLootRecovery(playerCorpse.playerSteamID, out var recoveryPosition))
+            {
+                MovePlayerCorpse(playerCorpse, recoveryPosition);
+                playerCorpse.UpdateNetworkGroup();
+                return;
+            }
             if (corpse.parentEnt == null)
                 return;
             var animal = corpse.parentEnt as BaseEntity;
@@ -9873,7 +10580,7 @@ namespace Oxide.Plugins
             corpse.Invoke("KillMessage", 1f);
         }
 
-        void OnEntitySpawned(DroppedItemContainer container)
+        private void OnEntitySpawned(DroppedItemContainer container)
         {
             if (container == null || !container.playerSteamID.IsSteamId())
                 return;
@@ -9934,30 +10641,26 @@ namespace Oxide.Plugins
                 item.name = config.CustomName;
             if (!string.IsNullOrEmpty(config.Text))
                 item.text = config.Text;
+            if (config.ArmorSlots > 0 && item.contents == null && item.info.TryGetComponent<ItemModContainerArmorSlot>(out var armorSlots))
+                armorSlots.CreateAtCapacity(Mathf.Min(config.ArmorSlots, armorSlots.MaxSlots), item);
         }
 
         private List<ItemConfig> GetNpcLootItems(NpcConfig cfg)
         {
-            if (cfg == null)
-                return new List<ItemConfig>();
-            if (string.IsNullOrEmpty(cfg.LootDropDataFile))
-                return GetDefaultLootItems().Where(i => i.MinimumAmount > 0 && i.MaximumAmount > 0).ToList();
-            var list = LoadLootItems(cfg.LootDropDataFile);
-            if (list == null || list.Count == 0)
-                list = GetDefaultLootItems();
-            return (list ?? new List<ItemConfig>()).Where(i => i.MinimumAmount > 0 && i.MaximumAmount > 0).ToList();
+            return cfg == null ? new List<ItemConfig>() : GetConfiguredLootItems(cfg.LootDropDataFile);
         }
 
         private List<ItemConfig> GetLootBoxItems(DungeonTierConfig tierConfig)
         {
-            if (tierConfig == null)
-                return new List<ItemConfig>();
-            if (string.IsNullOrEmpty(tierConfig.LootBoxDataFile))
-                return GetDefaultLootItems().Where(i => i.MinimumAmount > 0 && i.MaximumAmount > 0).ToList();
-            var list = LoadLootItems(tierConfig.LootBoxDataFile);
-            if (list == null || list.Count == 0)
-                list = GetDefaultLootItems();
-            return (list ?? new List<ItemConfig>()).Where(i => i.MinimumAmount > 0 && i.MaximumAmount > 0).ToList();
+            return tierConfig == null ? new List<ItemConfig>() : GetConfiguredLootItems(tierConfig.LootBoxDataFile);
+        }
+
+        private List<ItemConfig> GetConfiguredLootItems(string dataFile)
+        {
+            var items = string.IsNullOrEmpty(dataFile) ? GetDefaultLootItems() : LoadLootItems(dataFile);
+            if (items == null || items.Count == 0)
+                items = GetDefaultLootItems();
+            return items.Where(item => item != null && item.MinimumAmount > 0 && item.MaximumAmount > 0).ToList();
         }
 
         private List<ItemConfig> LoadLootItems(string dataFile)
@@ -9965,8 +10668,26 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(dataFile))
                 return new List<ItemConfig>();
             var file = Interface.Oxide.DataFileSystem.GetFile(dataFile);
+            var info = new FileInfo(file.Filename);
+            DateTime lastWriteTime = info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue;
+            long length = info.Exists ? info.Length : -1L;
+            if (_lootFileCache.TryGetValue(dataFile, out var cached) && cached.LastWriteTimeUtc == lastWriteTime && cached.Length == length)
+                return cached.Items;
             var obj = file.ReadObject<LootDropConfig>();
-            return obj?.Items ?? new List<ItemConfig>();
+            var items = obj?.Items ?? new List<ItemConfig>();
+            info.Refresh();
+            if (length >= 0L && (!info.Exists || info.LastWriteTimeUtc != lastWriteTime || info.Length != length))
+            {
+                _lootFileCache.Remove(dataFile);
+                return items;
+            }
+            _lootFileCache[dataFile] = new LootFileCache
+            {
+                LastWriteTimeUtc = info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue,
+                Length = info.Exists ? info.Length : -1L,
+                Items = items,
+            };
+            return items;
         }
 
         private void EnsureLootDataFiles()
@@ -10301,9 +11022,7 @@ namespace Oxide.Plugins
 
         private List<ItemConfig> GetDefaultLootItems()
         {
-            var file = Interface.Oxide.DataFileSystem.GetFile("DungeonEvents/Default_Loot");
-            var obj = file.ReadObject<LootDropConfig>();
-            return obj?.Items ?? new List<ItemConfig>();
+            return LoadLootItems("DungeonEvents/Default_Loot");
         }
 
         private void EnqueueDungeonRequest(BasePlayer player, DungeonTierConfig tier, bool lockToPlayer = false, Vector3 customPortalPosition = default(Vector3))
@@ -10321,14 +11040,14 @@ namespace Oxide.Plugins
             if (player != null)
             {
                 NotifyPlayer(player, "ReceivedRequest", 0);
-                if (!isCreatingDungeon)
+                if (!_isCreatingDungeon)
                     ProcessDungeonQueue();
             }
         }
 
         private void ProcessDungeonQueue()
         {
-            if (isCreatingDungeon || IsDungeonCreationPaused() || _dungeonQueue.Count == 0)
+            if (_isUnloading || _isCreatingDungeon || IsDungeonCreationPaused() || _dungeonQueue.Count == 0)
                 return;
             DungeonRequest req = _dungeonQueue.Dequeue();
             if (req == null || req.Tier == null)
@@ -10407,8 +11126,8 @@ namespace Oxide.Plugins
                 }
             }
             _currentDungeonRequest = req;
-            isCreatingDungeon = true;
-            ServerMgr.Instance.StartCoroutine(CreateDungeon(req));
+            _isCreatingDungeon = true;
+            _dungeonCreationRoutine = ServerMgr.Instance.StartCoroutine(CreateDungeon(req));
         }
 
         private int GetTierCooldownSeconds(DungeonTierConfig tier)
@@ -10452,10 +11171,14 @@ namespace Oxide.Plugins
                 return null;
             if (portal.net != null && _dungeonByEntityId.TryGetValue(portal.net.ID.Value, out var indexedDungeon))
                 return indexedDungeon;
-            var dungeon = _activeDungeons.FirstOrDefault(d => d != null && d.BasePortal == portal);
-            if (dungeon != null)
+            foreach (var dungeon in _activeDungeons)
+            {
+                if (dungeon == null || dungeon.BasePortal != portal)
+                    continue;
                 IndexDungeonEntity(portal, dungeon);
-            return dungeon;
+                return dungeon;
+            }
+            return null;
         }
 
         private ActiveDungeon GetActiveDungeonByEntity(BaseEntity entity)
@@ -10464,10 +11187,14 @@ namespace Oxide.Plugins
                 return null;
             if (entity.net != null && _dungeonByEntityId.TryGetValue(entity.net.ID.Value, out var indexedDungeon))
                 return indexedDungeon;
-            var dungeon = _activeDungeons.FirstOrDefault(d => d != null && d.Entities != null && d.Entities.Contains(entity));
-            if (dungeon != null)
+            foreach (var dungeon in _activeDungeons)
+            {
+                if (dungeon?.Entities == null || !dungeon.Entities.Contains(entity))
+                    continue;
                 IndexDungeonEntity(entity, dungeon);
-            return dungeon;
+                return dungeon;
+            }
+            return null;
         }
 
         private string GetAvailableTiers()
@@ -10660,14 +11387,18 @@ namespace Oxide.Plugins
             return candidates.Count == 0 ? null : candidates[Random.Range(0, candidates.Count)];
         }
 
-        private void PopulateStorage(ItemContainer container, DungeonTierConfig tierConfig, List<ItemConfig> lootItems)
+        private void PopulateLootContainer(ItemContainer container, List<ItemConfig> lootItems, int maxDifferentItems)
         {
+            if (container == null || lootItems == null)
+                return;
             var shuffled = lootItems.OrderBy(_ => Random.value).ToList();
             int differentItemsCount = 0;
             foreach (var itemConfig in shuffled)
             {
-                if (differentItemsCount >= tierConfig.MaxItemsPerBox)
+                if (differentItemsCount >= maxDifferentItems)
                     break;
+                if (itemConfig == null)
+                    continue;
                 if (Random.value * 100f > itemConfig.InclusionChancePercentage)
                     continue;
                 var def = ItemManager.FindItemDefinition(itemConfig.ShortName);
@@ -10692,7 +11423,11 @@ namespace Oxide.Plugins
                 if (item == null)
                     continue;
                 ApplyLootItemMetadata(item, itemConfig);
-                item.MoveToContainer(container);
+                if (!item.MoveToContainer(container))
+                {
+                    item.Remove();
+                    continue;
+                }
                 differentItemsCount++;
             }
         }
@@ -10758,6 +11493,738 @@ namespace Oxide.Plugins
         #endregion
 
         #region Grid / Construction
+        private sealed class RockRoom
+        {
+            public int X;
+            public int Z;
+            public int Width;
+            public int Depth;
+            public Vector2Int Slot;
+            public readonly HashSet<Vector2Int> Cells = new HashSet<Vector2Int>();
+            public Vector2Int Center => new Vector2Int(X + Width / 2, Z + Depth / 2);
+        }
+
+        private sealed class RockConnection
+        {
+            public int From;
+            public int To;
+            public int Width;
+            public readonly List<Vector2Int> Path = new List<Vector2Int>();
+        }
+
+        private sealed class RockLayout
+        {
+            public int Seed;
+            public int RoomSize;
+            public int SlotSize;
+            public int MainRoomCount;
+            public readonly HashSet<Vector2Int> Cells = new HashSet<Vector2Int>();
+            public readonly List<RockRoom> Rooms = new List<RockRoom>();
+            public readonly List<RockConnection> Connections = new List<RockConnection>();
+            public int CorridorCount => Connections.Count;
+        }
+
+        private struct RockAttachment
+        {
+            public int Parent;
+            public Vector2Int Slot;
+        }
+
+        private static RockLayout CreateRockLayout(int seed, int rooms, int roomSize)
+        {
+            if (rooms < 1 || rooms > 120 || roomSize < 3 || roomSize > 4)
+                throw new ArgumentOutOfRangeException(nameof(rooms));
+            var random = new System.Random(seed);
+            int branches = rooms > 2 ? random.Next(rooms / 3 + 1) : 0;
+            int mainCount = rooms - branches;
+            var layout = new RockLayout
+            {
+                Seed = seed,
+                MainRoomCount = mainCount,
+                RoomSize = roomSize,
+                SlotSize = roomSize + 2,
+            };
+            var path = new List<Vector2Int> { Vector2Int.zero };
+            var occupied = new HashSet<Vector2Int> { Vector2Int.zero };
+            int budget = 4096;
+            int turnChance = random.Next(0, 76);
+            if (!TryGrowRockPath(path, occupied, mainCount, turnChance, random, ref budget))
+            {
+                path.Clear();
+                for (int i = 0; i < mainCount; i++)
+                    path.Add(new Vector2Int(i / 2, (i + 1) / 2));
+            }
+            int turns = random.Next(4);
+            bool mirror = random.Next(2) == 0;
+            occupied.Clear();
+            for (int i = 0; i < path.Count; i++)
+            {
+                path[i] = TransformRockSlot(path[i], turns, mirror);
+                occupied.Add(path[i]);
+                AddRandomRockRoom(layout, path[i], random);
+            }
+            int narrow = rooms > 1 ? random.Next(rooms - 1) : 0;
+            int wide = rooms > 2 ? (narrow + 1 + random.Next(rooms - 2)) % (rooms - 1) : narrow;
+            for (int to = 1; to < mainCount; to++)
+                AddRockConnection(layout, to - 1, to, ChooseRockCorridorWidth(layout.Connections.Count, narrow, wide, random), new List<Vector2Int> { path[to - 1], path[to] });
+            while (layout.Rooms.Count < rooms)
+            {
+                var frontier = new List<RockAttachment>();
+                for (int i = 0; i < layout.Rooms.Count; i++)
+                    foreach (Vector2Int direction in RockDirections)
+                    {
+                        Vector2Int candidate = layout.Rooms[i].Slot + direction;
+                        if (!occupied.Contains(candidate))
+                            frontier.Add(new RockAttachment { Parent = i, Slot = candidate });
+                    }
+                RockAttachment attachment = frontier[random.Next(frontier.Count)];
+                int to = layout.Rooms.Count;
+                AddRandomRockRoom(layout, attachment.Slot, random);
+                occupied.Add(attachment.Slot);
+                AddRockConnection(
+                    layout,
+                    attachment.Parent,
+                    to,
+                    ChooseRockCorridorWidth(layout.Connections.Count, narrow, wide, random),
+                    new List<Vector2Int> { layout.Rooms[attachment.Parent].Slot, attachment.Slot }
+                );
+            }
+            for (int i = 0; i < layout.Rooms.Count; i++)
+            {
+                CreateRockRoomShape(layout, i, random);
+                layout.Cells.UnionWith(layout.Rooms[i].Cells);
+            }
+            return layout;
+        }
+
+        private static bool TryGrowRockPath(List<Vector2Int> path, HashSet<Vector2Int> occupied, int target, int turnChance, System.Random random, ref int budget)
+        {
+            if (path.Count == target)
+                return true;
+            if (--budget < 0)
+                return false;
+            var directions = (Vector2Int[])RockDirections.Clone();
+            for (int i = directions.Length - 1; i > 0; i--)
+            {
+                int other = random.Next(i + 1);
+                Vector2Int swap = directions[i];
+                directions[i] = directions[other];
+                directions[other] = swap;
+            }
+            if (path.Count > 1 && random.Next(100) < turnChance)
+            {
+                Vector2Int previous = path[path.Count - 1] - path[path.Count - 2];
+                for (int i = 0; i < directions.Length - 1; i++)
+                {
+                    if (directions[i] != previous)
+                        continue;
+                    Vector2Int swap = directions[directions.Length - 1];
+                    directions[directions.Length - 1] = directions[i];
+                    directions[i] = swap;
+                    break;
+                }
+            }
+            Vector2Int current = path[path.Count - 1];
+            foreach (Vector2Int direction in directions)
+            {
+                Vector2Int candidate = current + direction;
+                if (!occupied.Add(candidate))
+                    continue;
+                path.Add(candidate);
+                if (TryGrowRockPath(path, occupied, target, turnChance, random, ref budget))
+                    return true;
+                path.RemoveAt(path.Count - 1);
+                occupied.Remove(candidate);
+                if (budget < 0)
+                    break;
+            }
+            return false;
+        }
+
+        private static int ChooseRockCorridorWidth(int index, int narrow, int wide, System.Random random)
+        {
+            return index == narrow ? 1
+                : index == wide ? 2
+                : random.Next(1, 3);
+        }
+
+        private static Vector2Int TransformRockSlot(Vector2Int slot, int turns, bool mirror)
+        {
+            if (mirror)
+                slot.x = -slot.x;
+            for (int i = 0; i < turns; i++)
+                slot = new Vector2Int(-slot.y, slot.x);
+            return slot;
+        }
+
+        private static void AddRandomRockRoom(RockLayout layout, Vector2Int slot, System.Random random)
+        {
+            int width = random.Next(3, layout.RoomSize + 1);
+            int depth = random.Next(3, layout.RoomSize + 1);
+            layout.Rooms.Add(
+                new RockRoom
+                {
+                    X = slot.x * layout.SlotSize - width / 2,
+                    Z = slot.y * layout.SlotSize - depth / 2,
+                    Width = width,
+                    Depth = depth,
+                    Slot = slot,
+                }
+            );
+        }
+
+        private static void CreateRockRoomShape(RockLayout layout, int index, System.Random random)
+        {
+            RockRoom room = layout.Rooms[index];
+            StampRockRoom(room, room.Center - Vector2Int.one, 2);
+            foreach (RockConnection connection in layout.Connections)
+            {
+                if (connection.From != index && connection.To != index)
+                    continue;
+                int other = connection.From == index ? connection.To : connection.From;
+                Vector2Int direction = layout.Rooms[other].Slot - room.Slot;
+                int width = connection.Width;
+                Vector2Int from = room.Center + new Vector2Int(1 - width, 1 - width);
+                Vector2Int to = from;
+                if (direction.x > 0)
+                    to.x = room.X + room.Width - width;
+                else if (direction.x < 0)
+                    to.x = room.X;
+                else if (direction.y > 0)
+                    to.y = room.Z + room.Depth - width;
+                else
+                    to.y = room.Z;
+                while (true)
+                {
+                    StampRockRoom(room, from, width);
+                    if (from == to)
+                        break;
+                    from += new Vector2Int(Math.Sign(to.x - from.x), Math.Sign(to.y - from.y));
+                }
+            }
+            int minimum = Math.Max(room.Cells.Count, (room.Width * room.Depth * random.Next(60, 86) + 99) / 100);
+            int density = random.Next(35, 81);
+            for (int x = room.X; x < room.X + room.Width; x++)
+            for (int z = room.Z; z < room.Z + room.Depth; z++)
+                if (random.Next(100) < density)
+                    room.Cells.Add(new Vector2Int(x, z));
+            var reachable = new HashSet<Vector2Int> { room.Center };
+            var pending = new List<Vector2Int> { room.Center };
+            for (int i = 0; i < pending.Count; i++)
+                foreach (Vector2Int direction in RockDirections)
+                {
+                    Vector2Int next = pending[i] + direction;
+                    if (room.Cells.Contains(next) && reachable.Add(next))
+                        pending.Add(next);
+                }
+            room.Cells.IntersectWith(reachable);
+            while (room.Cells.Count < minimum)
+            {
+                var frontier = new List<Vector2Int>();
+                for (int x = room.X; x < room.X + room.Width; x++)
+                for (int z = room.Z; z < room.Z + room.Depth; z++)
+                {
+                    Vector2Int cell = new Vector2Int(x, z);
+                    if (room.Cells.Contains(cell))
+                        continue;
+                    foreach (Vector2Int direction in RockDirections)
+                    {
+                        if (!room.Cells.Contains(cell + direction))
+                            continue;
+                        frontier.Add(cell);
+                        break;
+                    }
+                }
+                if (frontier.Count == 0)
+                    break;
+                room.Cells.Add(frontier[random.Next(frontier.Count)]);
+            }
+        }
+
+        private static void StampRockRoom(RockRoom room, Vector2Int origin, int width)
+        {
+            for (int x = 0; x < width; x++)
+            for (int z = 0; z < width; z++)
+            {
+                Vector2Int cell = origin + new Vector2Int(x, z);
+                if (cell.x >= room.X && cell.x < room.X + room.Width && cell.y >= room.Z && cell.y < room.Z + room.Depth)
+                    room.Cells.Add(cell);
+            }
+        }
+
+        private static void AddRockConnection(RockLayout layout, int fromIndex, int toIndex, int width, List<Vector2Int> path)
+        {
+            var connection = new RockConnection
+            {
+                From = fromIndex,
+                To = toIndex,
+                Width = width,
+            };
+            connection.Path.AddRange(path);
+            Vector2Int offset = new Vector2Int(1 - width, 1 - width);
+            for (int i = 0; i < path.Count - 1; i++)
+            {
+                Vector2Int from = path[i] * layout.SlotSize + offset;
+                Vector2Int to = path[i + 1] * layout.SlotSize + offset;
+                while (true)
+                {
+                    for (int x = 0; x < width; x++)
+                    for (int z = 0; z < width; z++)
+                        layout.Cells.Add(from + new Vector2Int(x, z));
+                    if (from == to)
+                        break;
+                    from += new Vector2Int(Math.Sign(to.x - from.x), Math.Sign(to.y - from.y));
+                }
+            }
+            layout.Connections.Add(connection);
+        }
+
+        private static bool IsClassicDungeon(ActiveDungeon dungeon)
+        {
+            return dungeon.TierConfig.BuildingGradeSelection == ClassicDungeonSelection;
+        }
+
+        private IEnumerator CreateClassicDungeon(ActiveDungeon dungeon)
+        {
+            _gridSize = dungeon.DungeonRoomSize;
+            int rooms = dungeon.DungeonRooms * Mathf.Max(1, (_gridSize * _gridSize + 2) / 5);
+            var layout = CreateRockLayout(Random.Range(0, int.MaxValue), rooms, 4);
+            Vector3 origin = dungeon.DungeonPosition + new Vector3(-90f, 0f, 0f);
+            RockRoom first = layout.Rooms[0];
+            for (int x = first.X; x < first.X + first.Width; x++)
+            for (int lane = -1; lane <= 0; lane++)
+                layout.Cells.Add(new Vector2Int(x, first.Center.y + lane));
+            for (int z = first.Z; z < first.Z + first.Depth; z++)
+            for (int lane = -1; lane <= 0; lane++)
+                layout.Cells.Add(new Vector2Int(first.Center.x + lane, z));
+            var entranceEdges = new Dictionary<Vector3, Vector3>
+            {
+                [Vector3.left] = origin + new Vector3(first.X * SubCellSpacing, 0f, (first.Center.y - 1) * SubCellSpacing),
+                [Vector3.right] = origin + new Vector3((first.X + first.Width - 2) * SubCellSpacing, 0f, (first.Center.y - 1) * SubCellSpacing),
+                [Vector3.back] = origin + new Vector3((first.Center.x - 1) * SubCellSpacing, 0f, first.Z * SubCellSpacing),
+                [Vector3.forward] = origin + new Vector3((first.Center.x - 1) * SubCellSpacing, 0f, (first.Z + first.Depth - 2) * SubCellSpacing),
+            };
+            var cells = layout.Cells.OrderBy(c => c.y).ThenBy(c => c.x).ToList();
+            int batch = Mathf.Clamp(Performance.BuildCellsPerBatch, 1, 100) * SubCells * SubCells;
+            int processed = 0;
+            foreach (Vector2Int cell in cells)
+            {
+                Vector3 position = origin + new Vector3(cell.x * SubCellSpacing, 0f, cell.y * SubCellSpacing);
+                HandleSubCell(position, dungeon, false);
+                if (++processed >= batch)
+                {
+                    processed = 0;
+                    yield return _buildBatchDelay;
+                }
+            }
+            CollectClassicDoorFrames(layout, origin, dungeon);
+            foreach (RockRoom room in layout.Rooms)
+            {
+                var points = room.Cells.OrderBy(c => c.y).ThenBy(c => c.x).Select(c => origin + new Vector3(c.x * SubCellSpacing, 0f, c.y * SubCellSpacing)).ToList();
+                dungeon.RockRoomSpawnPoints.Add(points);
+                dungeon.TurretPositions.AddRange(points);
+            }
+            yield return BuildSingleRoomExtraCorridor(origin, null, null, dungeon, entranceEdges);
+            dungeon.SpawnPoints = dungeon.TurretPositions;
+            dungeon.DungeonBounds = CalculateRoomBounds(dungeon);
+            LogDebug($"Classic dungeon: {layout.Rooms.Count} chambers, {layout.Rooms.Count - layout.MainRoomCount} branches, {dungeon.SpawnPoints.Count} room spawn points.", 1);
+        }
+
+        private void CollectClassicDoorFrames(RockLayout layout, Vector3 origin, ActiveDungeon dungeon)
+        {
+            dungeon.ClassicDoorFrames.Clear();
+            foreach (RockConnection connection in layout.Connections)
+            {
+                AddClassicRoomExitFrames(layout, connection, connection.From, connection.To, origin, dungeon);
+                AddClassicRoomExitFrames(layout, connection, connection.To, connection.From, origin, dungeon);
+            }
+        }
+
+        private void AddClassicRoomExitFrames(RockLayout layout, RockConnection connection, int roomIndex, int otherRoomIndex, Vector3 origin, ActiveDungeon dungeon)
+        {
+            RockRoom room = layout.Rooms[roomIndex];
+            Vector2Int slotOffset = layout.Rooms[otherRoomIndex].Slot - room.Slot;
+            var direction = new Vector2Int(Math.Sign(slotOffset.x), Math.Sign(slotOffset.y));
+            bool alongX = direction.x != 0;
+            if (alongX == (direction.y != 0))
+                return;
+            int edge;
+            float yaw;
+            if (direction.x > 0)
+            {
+                edge = room.X + room.Width - 1;
+                yaw = 90f + WallRotationOffset;
+            }
+            else if (direction.x < 0)
+            {
+                edge = room.X;
+                yaw = 270f + WallRotationOffset;
+            }
+            else if (direction.y > 0)
+            {
+                edge = room.Z + room.Depth - 1;
+                yaw = 0f + WallRotationOffset;
+            }
+            else
+            {
+                edge = room.Z;
+                yaw = 180f + WallRotationOffset;
+            }
+            var outward = new Vector3(direction.x, 0f, direction.y);
+            var frames = new List<(Vector3 Position, float Yaw)>();
+            for (int lane = 1 - connection.Width; lane <= 0; lane++)
+            {
+                Vector2Int inside = alongX ? new Vector2Int(edge, room.Center.y + lane) : new Vector2Int(room.Center.x + lane, edge);
+                if (!layout.Cells.Contains(inside) || !layout.Cells.Contains(inside + direction))
+                    return;
+                Vector3 position = origin + new Vector3(inside.x * SubCellSpacing, 0f, inside.y * SubCellSpacing) + outward * (SubCellSpacing * 0.5f);
+                frames.Add((position, yaw));
+            }
+            dungeon.ClassicDoorFrames.AddRange(frames);
+        }
+
+        private IEnumerator AssignClassicDungeonEntities(ActiveDungeon dungeon, DungeonEntitySpawns spawns, HashSet<Vector3> reservedPoints, EntitySpawnLimits limits)
+        {
+            var groups = dungeon.RockRoomSpawnPoints.Select(points => points.Where(point => !reservedPoints.Contains(point)).ToList()).ToList();
+            for (int i = groups.Count - 1; i > 0; i--)
+            {
+                int other = Random.Range(0, i + 1);
+                var swap = groups[i];
+                groups[i] = groups[other];
+                groups[other] = swap;
+            }
+            for (int i = 0; i < groups.Count; i++)
+            {
+                var roomLimits = new EntitySpawnLimits
+                {
+                    NpcsCounts = GetRockRoomEntityCount(limits.NpcsCounts, groups.Count, i, 0),
+                    BossesCounts = GetRockRoomEntityCount(limits.BossesCounts, groups.Count, i, limits.NpcsCounts),
+                    AnimalsCounts = GetRockRoomEntityCount(limits.AnimalsCounts, groups.Count, i, limits.NpcsCounts + limits.BossesCounts),
+                    TurretsCounts = GetRockRoomEntityCount(limits.TurretsCounts, groups.Count, i, 0),
+                    LootBoxesCounts = GetRockRoomEntityCount(limits.LootBoxesCounts, groups.Count, i, 0),
+                };
+                var roomSpawns = new DungeonEntitySpawns();
+                yield return AssignEntitiesToSpawnPoints(groups[i], dungeon.TierConfig, roomSpawns, roomLimits);
+                spawns.Turrets.AddRange(roomSpawns.Turrets);
+                spawns.Boxes.AddRange(roomSpawns.Boxes);
+                spawns.Npcs.AddRange(roomSpawns.Npcs);
+                spawns.Bosses.AddRange(roomSpawns.Bosses);
+                spawns.Animals.AddRange(roomSpawns.Animals);
+                if ((i + 1) % 4 == 0)
+                    yield return null;
+            }
+            var used = new HashSet<Vector3>(spawns.Turrets);
+            used.UnionWith(spawns.Boxes);
+            used.UnionWith(spawns.Npcs);
+            used.UnionWith(spawns.Bosses);
+            used.UnionWith(spawns.Animals);
+            var remaining = dungeon.SpawnPoints.Where(p => !used.Contains(p)).ToList();
+            var remainingLimits = new EntitySpawnLimits
+            {
+                TurretsCounts = Mathf.Max(0, limits.TurretsCounts - spawns.Turrets.Count),
+                LootBoxesCounts = Mathf.Max(0, limits.LootBoxesCounts - spawns.Boxes.Count),
+                NpcsCounts = Mathf.Max(0, limits.NpcsCounts - spawns.Npcs.Count),
+                BossesCounts = Mathf.Max(0, limits.BossesCounts - spawns.Bosses.Count),
+                AnimalsCounts = Mathf.Max(0, limits.AnimalsCounts - spawns.Animals.Count),
+            };
+            var extra = new DungeonEntitySpawns();
+            yield return AssignEntitiesToSpawnPoints(remaining, dungeon.TierConfig, extra, remainingLimits);
+            spawns.Turrets.AddRange(extra.Turrets);
+            spawns.Boxes.AddRange(extra.Boxes);
+            spawns.Npcs.AddRange(extra.Npcs);
+            spawns.Bosses.AddRange(extra.Bosses);
+            spawns.Animals.AddRange(extra.Animals);
+        }
+
+        private void SelectRouteBossSpawnPoints(ActiveDungeon dungeon, int count, List<Vector3> result)
+        {
+            if (count <= 0 || dungeon?.SpawnPoints == null || dungeon.SpawnPoints.Count == 0)
+                return;
+            var candidates = new List<(Vector3 Point, int Distance)>();
+            if (dungeon.Foundations.Count > 0 && dungeon.InsidePortal != null)
+            {
+                Vector3 reference = dungeon.Foundations[0];
+                var routeDistances = GetRouteDistancesFromEntrance(dungeon, reference);
+                foreach (Vector3 point in dungeon.SpawnPoints.Distinct())
+                {
+                    if (routeDistances.TryGetValue(GetRouteCell(point, reference), out int distance))
+                        candidates.Add((point, distance));
+                }
+            }
+            if (candidates.Count == 0)
+            {
+                result.AddRange(dungeon.SpawnPoints.Distinct().OrderBy(_ => Random.value).Take(count));
+                return;
+            }
+            for (int i = candidates.Count - 1; i > 0; i--)
+            {
+                int other = Random.Range(0, i + 1);
+                var swap = candidates[i];
+                candidates[i] = candidates[other];
+                candidates[other] = swap;
+            }
+            count = Math.Min(count, candidates.Count);
+            int maxDistance = candidates.Max(candidate => candidate.Distance);
+            var used = new HashSet<int>();
+            for (int bossIndex = 1; bossIndex <= count; bossIndex++)
+            {
+                float routeFraction = BossRouteStartFraction + (1f - BossRouteStartFraction) * bossIndex / count;
+                float target = maxDistance * routeFraction;
+                float bestDelta = float.MaxValue;
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    if (!used.Contains(i))
+                        bestDelta = Mathf.Min(bestDelta, Mathf.Abs(candidates[i].Distance - target));
+                }
+                int selected = -1;
+                float bestSeparation = -1f;
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    if (used.Contains(i) || Mathf.Abs(candidates[i].Distance - target) > bestDelta + 1f)
+                        continue;
+                    float separation = float.MaxValue;
+                    foreach (Vector3 boss in result)
+                        separation = Mathf.Min(separation, (candidates[i].Point - boss).sqrMagnitude);
+                    if (separation <= bestSeparation)
+                        continue;
+                    bestSeparation = separation;
+                    selected = i;
+                }
+                if (selected < 0)
+                    break;
+                used.Add(selected);
+                result.Add(candidates[selected].Point);
+            }
+        }
+
+        private Dictionary<Vector3Int, int> GetRouteDistancesFromEntrance(ActiveDungeon dungeon, Vector3 reference)
+        {
+            var distances = new Dictionary<Vector3Int, int>();
+            var floorCells = new HashSet<Vector3Int>();
+            Vector3 entrance = dungeon.InsidePortal.transform.position;
+            Vector3Int start = default;
+            float closest = float.MaxValue;
+            foreach (Vector3 foundation in dungeon.Foundations)
+            {
+                Vector3Int cell = GetRouteCell(foundation, reference);
+                floorCells.Add(cell);
+                float distance = new Vector2(foundation.x - entrance.x, foundation.z - entrance.z).sqrMagnitude;
+                if (distance >= closest)
+                    continue;
+                closest = distance;
+                start = cell;
+            }
+            var pending = new Queue<Vector3Int>();
+            distances[start] = 0;
+            pending.Enqueue(start);
+            var directions = new[] { new Vector3Int(1, 0, 0), new Vector3Int(-1, 0, 0), new Vector3Int(0, 0, 1), new Vector3Int(0, 0, -1) };
+            while (pending.Count > 0)
+            {
+                Vector3Int current = pending.Dequeue();
+                int next = distances[current] + 1;
+                foreach (Vector3Int direction in directions)
+                {
+                    Vector3Int neighbor = current + direction;
+                    if (!floorCells.Contains(neighbor) || distances.ContainsKey(neighbor))
+                        continue;
+                    distances[neighbor] = next;
+                    pending.Enqueue(neighbor);
+                }
+            }
+            return distances;
+        }
+
+        private static Vector3Int GetRouteCell(Vector3 position, Vector3 reference)
+        {
+            return new Vector3Int(
+                Mathf.RoundToInt((position.x - reference.x) / SubCellSpacing),
+                Mathf.RoundToInt(position.y - reference.y),
+                Mathf.RoundToInt((position.z - reference.z) / SubCellSpacing)
+            );
+        }
+
+        private static int GetRockRoomEntityCount(int total, int rooms, int index, int offset)
+        {
+            total = Mathf.Max(0, total);
+            return total / rooms + ((index - offset % rooms + rooms) % rooms < total % rooms ? 1 : 0);
+        }
+
+        private bool TryGetRockFloorPoint(Vector3 position, ActiveDungeon dungeon, out Vector3 point)
+        {
+            point = position;
+            var bucket = GetSpatialBucket(position, SubCellSpacing);
+            int floorBucketY = GetSpatialBucket(dungeon.DungeonPosition, SubCellSpacing).y;
+            var ray = new Ray(new Vector3(position.x, dungeon.DungeonPosition.y + 1.5f, position.z), Vector3.down);
+            bool found = false;
+            float distance = 4f;
+            for (int x = -1; x <= 1; x++)
+            for (int z = -1; z <= 1; z++)
+            {
+                var key = new Vector3Int(bucket.x + x, floorBucketY, bucket.z + z);
+                if (!dungeon.RockFloorColliders.TryGetValue(key, out var colliders))
+                    continue;
+                foreach (Collider collider in colliders)
+                {
+                    if (collider == null || !collider.enabled || collider.isTrigger || !collider.gameObject.activeInHierarchy)
+                        continue;
+                    if (!collider.Raycast(ray, out RaycastHit hit, distance) || hit.distance >= distance)
+                        continue;
+                    point = hit.point;
+                    distance = hit.distance;
+                    found = true;
+                }
+            }
+            return found;
+        }
+
+        private Vector3 GetDungeonEntitySpawnPosition(Vector3 position, ActiveDungeon dungeon)
+        {
+            return IsClassicDungeon(dungeon) && TryGetRockFloorPoint(position, dungeon, out Vector3 floor) ? floor + Vector3.up * 0.02f : position;
+        }
+
+        private static Bounds GetDungeonRockBounds(Quaternion rotation)
+        {
+            Vector3 min = DungeonRockBounds.min;
+            Vector3 max = DungeonRockBounds.max;
+            var bounds = new Bounds(rotation * min, Vector3.zero);
+            for (int i = 0; i < 8; i++)
+                bounds.Encapsulate(rotation * new Vector3((i & 1) == 0 ? min.x : max.x, (i & 2) == 0 ? min.y : max.y, (i & 4) == 0 ? min.z : max.z));
+            return bounds;
+        }
+
+        private BaseEntity SpawnDungeonRock(Vector3 center, Quaternion rotation, ActiveDungeon dungeon)
+        {
+            Bounds bounds = GetDungeonRockBounds(rotation);
+            BaseEntity entity = GameManager.server.CreateEntity(DungeonRockPrefab, center - bounds.center, rotation);
+            if (entity == null)
+            {
+                dungeon.EntranceLayoutFailed = true;
+                return null;
+            }
+            entity.OwnerID = OwnerID;
+            entity.enableSaving = false;
+            dungeon.Entities.Add(entity);
+            entity.Spawn();
+            if (entity.IsDestroyed)
+            {
+                dungeon.EntranceLayoutFailed = true;
+                return null;
+            }
+            RegisterSpawnedEntityForDungeon(entity, dungeon.UniqueId);
+            return entity;
+        }
+
+        private BaseEntity CreateRockFloor(Vector3 position, ActiveDungeon dungeon)
+        {
+            string key = PositionKey(position, 2);
+            if (dungeon.FoundationKeys.Contains(key))
+                return null;
+            BaseEntity floor = null;
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 center = position + new Vector3(i == 0 ? -0.75f : 0.75f, -DungeonRockBounds.extents.y, 0f);
+                BaseEntity rock = SpawnDungeonRock(center, Quaternion.identity, dungeon);
+                if (floor == null)
+                    floor = rock;
+                if (rock != null)
+                {
+                    var bucket = GetSpatialBucket(position, SubCellSpacing);
+                    if (!dungeon.RockFloorColliders.TryGetValue(bucket, out var colliders))
+                        dungeon.RockFloorColliders[bucket] = colliders = new List<Collider>();
+                    colliders.AddRange(rock.GetComponentsInChildren<Collider>());
+                }
+                if (ClassicDungeonRoofForTesting)
+                {
+                    Quaternion rotation = Quaternion.AngleAxis(180f, Vector3.right);
+                    center.y = position.y + CeilingHeight + DungeonRockBounds.extents.y;
+                    SpawnDungeonRock(center, rotation, dungeon);
+                }
+            }
+            return floor;
+        }
+
+        private bool CreateRockWall(Vector3 foundation, Vector3 offset, ActiveDungeon dungeon)
+        {
+            string key = "ROCKWALL:" + PositionKey(foundation + offset * 0.5f, 2);
+            if (dungeon.OccupiedPositions.Contains(key))
+                return true;
+            Vector3 outward = offset.normalized;
+            bool alongX = Mathf.Abs(outward.x) > 0.5f;
+            Quaternion rotation = alongX ? Quaternion.AngleAxis(outward.x * 90f, Vector3.forward) : Quaternion.AngleAxis(-outward.z * 90f, Vector3.right);
+            Bounds bounds = GetDungeonRockBounds(rotation);
+            int columns = alongX ? 1 : 2;
+            float thickness = alongX ? bounds.extents.x : bounds.extents.z;
+            Vector3 wallCenter = foundation + outward * (SubCellSpacing * 0.5f + thickness - DungeonRockOverlap);
+            int layers = Mathf.CeilToInt((CeilingHeight + DungeonRockOverlap) / (bounds.size.y - DungeonRockOverlap));
+            BaseEntity torchWall = null;
+            for (int column = 0; column < columns; column++)
+            for (int layer = 0; layer < layers; layer++)
+            {
+                Vector3 center = wallCenter;
+                if (!alongX)
+                    center.x += column == 0 ? -0.75f : 0.75f;
+                center.y += -DungeonRockOverlap + bounds.extents.y + layer * (bounds.size.y - DungeonRockOverlap);
+                BaseEntity rock = SpawnDungeonRock(center, rotation, dungeon);
+                if (rock == null)
+                    return false;
+                if (torchWall == null)
+                    torchWall = rock;
+            }
+            dungeon.OccupiedPositions.Add(key);
+            CreateRockTorch(torchWall, foundation + outward * SubCellSpacing * 0.5f + Vector3.up * 1.5f, -outward, thickness * 2f + 2f, dungeon);
+            return true;
+        }
+
+        private void CreateRockTorch(BaseEntity wall, Vector3 position, Vector3 inward, float distance, ActiveDungeon dungeon)
+        {
+            if (!_config.EnableDungeonLights || wall == null)
+                return;
+            float spacing = Mathf.Clamp(_config.DungeonLightSpacing, SubCellSpacing * 1.5f, 10.5f);
+            int maxTorches = Mathf.Max(100, dungeon.RockRoomSpawnPoints.Count * 8 + 16);
+            if (dungeon.RockTorchPositions.Count >= maxTorches || dungeon.RockTorchPositions.Any(p => (p - position).sqrMagnitude < spacing * spacing))
+                return;
+            Collider[] colliders = wall.GetComponentsInChildren<Collider>();
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                Vector3 tangent = Vector3.Cross(Vector3.up, inward);
+                float side =
+                    attempt == 0 ? 0f
+                    : attempt == 1 ? -0.35f
+                    : 0.35f;
+                var ray = new Ray(position + tangent * side + inward * 0.75f, -inward);
+                RaycastHit nearest = default(RaycastHit);
+                bool found = false;
+                float nearestDistance = distance;
+                foreach (Collider collider in colliders)
+                {
+                    if (!collider.enabled || collider.isTrigger || !collider.gameObject.activeInHierarchy)
+                        continue;
+                    if (!collider.Raycast(ray, out RaycastHit hit, distance) || Vector3.Dot(hit.normal, inward) < 0.25f || hit.distance >= nearestDistance)
+                        continue;
+                    nearest = hit;
+                    nearestDistance = hit.distance;
+                    found = true;
+                }
+                if (!found)
+                    continue;
+                Vector3 facing = new Vector3(nearest.normal.x, 0f, nearest.normal.z).normalized;
+                BaseEntity torch = GameManager.server.CreateEntity(DungeonTorchPrefab, nearest.point + facing * 0.03f, Quaternion.LookRotation(facing, Vector3.up));
+                if (torch == null)
+                    return;
+                torch.OwnerID = OwnerID;
+                torch.enableSaving = false;
+                dungeon.Entities.Add(torch);
+                torch.SetParent(wall, worldPositionStays: true);
+                torch.Spawn();
+                if (!torch.IsDestroyed)
+                {
+                    dungeon.RockTorchPositions.Add(torch.transform.position);
+                    RegisterSpawnedEntityForDungeon(torch, dungeon.UniqueId);
+                }
+                return;
+            }
+        }
+
         private IEnumerator CreateCustomProceduralDynamicDungeon(ActiveDungeon activeDungeon)
         {
             yield return null;
@@ -10782,7 +12249,7 @@ namespace Oxide.Plugins
             activeDungeon.DungeonBounds = CalculateRoomBounds(activeDungeon);
         }
 
-        private IEnumerator BuildSingleRoomExtraCorridor(Vector3 origin, bool[] grid, Vector3? nextOrigin, ActiveDungeon activeDungeon)
+        private IEnumerator BuildSingleRoomExtraCorridor(Vector3 origin, bool[] grid, Vector3? nextOrigin, ActiveDungeon activeDungeon, IReadOnlyDictionary<Vector3, Vector3> entranceEdges = null)
         {
             var row = _gridSize / 2;
             var col = _gridSize / 2;
@@ -10805,7 +12272,7 @@ namespace Oxide.Plugins
             int lowestCollisionCount = int.MaxValue;
             foreach (Vector3 direction in directions)
             {
-                Vector3 roomEdge = GetEntranceRoomEdge(origin, grid, row, col, direction);
+                Vector3 roomEdge = entranceEdges != null ? entranceEdges[direction] : GetEntranceRoomEdge(origin, grid, row, col, direction);
                 Vector3 straightEnd = roomEdge + direction * EntranceInnerLegLength;
                 Vector3 side = new Vector3(-direction.z, 0f, direction.x);
                 foreach (Vector3 turn in new[] { side, -side })
@@ -10833,6 +12300,8 @@ namespace Oxide.Plugins
             yield return BuildCorridor(chosenStart, chosenStraightEnd, activeDungeon, false, false, true);
             yield return BuildCorridor(chosenTurnStart, chosenOuterEnd, activeDungeon, false, true, true);
             ConfigureEntranceSafeZone(activeDungeon, chosenTurnStart, chosenTurn);
+            if (_config?.PlaceEntranceDoors != true)
+                yield break;
             if (!HasEntranceDoorFloorSupport(chosenTurnStart, chosenTurn, activeDungeon))
             {
                 activeDungeon.EntranceLayoutFailed = true;
@@ -11206,6 +12675,11 @@ namespace Oxide.Plugins
 
         private IEnumerator BuildFrames(ActiveDungeon activeDungeon)
         {
+            if (IsClassicDungeon(activeDungeon))
+            {
+                yield return BuildClassicDoorFrames(activeDungeon);
+                yield break;
+            }
             yield return null;
             var corridorRow = _gridSize / 2;
             for (var i = 0; i < activeDungeon.CellGrids.Count; i++)
@@ -11224,6 +12698,33 @@ namespace Oxide.Plugins
             else
                 PlaceFinalExitFrames(activeDungeon.GridOrigins[^1], activeDungeon.GridOrigins[^1] + Vector3.right, corridorRow, activeDungeon);
             yield return _buildBatchDelay;
+        }
+
+        private IEnumerator BuildClassicDoorFrames(ActiveDungeon activeDungeon)
+        {
+            if (_config?.PlaceDungeonDoors != true)
+                yield break;
+            int processed = 0;
+            int batch = Mathf.Clamp(Performance.BuildFrameCellsPerBatch, 1, 100);
+            foreach (var frame in activeDungeon.ClassicDoorFrames)
+            {
+                PlaceDoorFrame(frame.Position, frame.Yaw, activeDungeon);
+                if (++processed >= batch)
+                {
+                    processed = 0;
+                    yield return _buildBatchDelay;
+                }
+            }
+        }
+
+        private Door PlaceDoorFrame(Vector3 position, float yaw, ActiveDungeon room)
+        {
+            var rotation = Quaternion.Euler(0, yaw, 0);
+            var frame = CreateBlock(WallFramePrefab, position, rotation, room);
+            if (frame == null)
+                return null;
+            room.Entities.Add(frame);
+            return CreateDoor(position, rotation, room) as Door;
         }
 
         private void CreateCorridorFrames(Vector3 originA, Vector3 originB, int corridorRow, ActiveDungeon activeDungeon)
@@ -11268,26 +12769,28 @@ namespace Oxide.Plugins
             yield return null;
             int batch = Mathf.Clamp(Performance.BuildWallFoundationsPerBatch, 1, 100);
             var loop = 0;
+            var retries = new List<(Vector3 Foundation, Vector3 Offset, float Yaw)>();
             foreach (var foundation in activeDungeon.Foundations)
             {
-                TryPlaceWall(foundation, Vector3.forward * SubCellSpacing, WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.back * SubCellSpacing, 180f + WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.right * SubCellSpacing, 90f + WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.left * SubCellSpacing, 270f + WallRotationOffset, activeDungeon);
+                if (!TryPlaceWall(foundation, Vector3.forward * SubCellSpacing, WallRotationOffset, activeDungeon))
+                    retries.Add((foundation, Vector3.forward * SubCellSpacing, WallRotationOffset));
+                if (!TryPlaceWall(foundation, Vector3.back * SubCellSpacing, 180f + WallRotationOffset, activeDungeon))
+                    retries.Add((foundation, Vector3.back * SubCellSpacing, 180f + WallRotationOffset));
+                if (!TryPlaceWall(foundation, Vector3.right * SubCellSpacing, 90f + WallRotationOffset, activeDungeon))
+                    retries.Add((foundation, Vector3.right * SubCellSpacing, 90f + WallRotationOffset));
+                if (!TryPlaceWall(foundation, Vector3.left * SubCellSpacing, 270f + WallRotationOffset, activeDungeon))
+                    retries.Add((foundation, Vector3.left * SubCellSpacing, 270f + WallRotationOffset));
                 loop++;
                 if (loop % batch == 0)
                     yield return _buildBatchDelay;
             }
             yield return _buildBatchDelay;
             loop = 0;
-            foreach (var foundation in activeDungeon.Foundations)
+            foreach (var retry in retries)
             {
-                TryPlaceWall(foundation, Vector3.forward * SubCellSpacing, WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.back * SubCellSpacing, 180f + WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.right * SubCellSpacing, 90f + WallRotationOffset, activeDungeon);
-                TryPlaceWall(foundation, Vector3.left * SubCellSpacing, 270f + WallRotationOffset, activeDungeon);
+                TryPlaceWall(retry.Foundation, retry.Offset, retry.Yaw, activeDungeon);
                 loop++;
-                if (loop % batch == 0)
+                if (loop % (batch * 4) == 0)
                     yield return _buildBatchDelay;
             }
         }
@@ -11359,7 +12862,14 @@ namespace Oxide.Plugins
 
         private bool IsGridConnected(bool[] grid, IEnumerable<Vector2Int> requiredCells, Vector2Int root)
         {
-            return requiredCells.All(c => HasPath(grid, root.x, root.y, c.x, c.y));
+            var reachable = FindConnectedCells(grid, root.x, root.y);
+            foreach (var cell in requiredCells)
+            {
+                int index = GridIndex(cell.x, cell.y);
+                if (index == -1 || !reachable[index])
+                    return false;
+            }
+            return true;
         }
 
         private void ResetRandomSeed()
@@ -11389,6 +12899,10 @@ namespace Oxide.Plugins
             IndexDungeonEntity(entity, room);
             if (entity is BuildingBlock b)
             {
+                var bucket = GetSpatialBucket(b.transform.position, 1f);
+                if (!room.BuildingBlocksByPosition.TryGetValue(bucket, out var blocks))
+                    room.BuildingBlocksByPosition[bucket] = blocks = new List<BuildingBlock>();
+                blocks.Add(b);
                 b.SetHealthToMax();
                 if (b.skinID == 10221 && room.TierConfig.ContainerColor >= 1 && room.TierConfig.ContainerColor <= 16)
                 {
@@ -11409,13 +12923,15 @@ namespace Oxide.Plugins
             door.enableSaving = false;
             door.Spawn();
             room.Entities.Add(door);
+            if (door is Door dungeonDoor)
+                room.Doors.Add(dungeonDoor);
             RegisterSpawnedEntityForDungeon(door, room.UniqueId);
             return door;
         }
 
         private void CreateLight(Vector3 centre, ActiveDungeon room)
         {
-            if (room == null || _config == null)
+            if (room == null || _config == null || IsClassicDungeon(room))
                 return;
             if (!_config.EnableDungeonLights)
                 return;
@@ -11449,7 +12965,7 @@ namespace Oxide.Plugins
 
         private void HandleSubCell(Vector3 subCellPos, ActiveDungeon room, bool allowTurret)
         {
-            var foundation = CreateBlock(FoundationPrefab, subCellPos, Quaternion.identity, room);
+            var foundation = IsClassicDungeon(room) ? CreateRockFloor(subCellPos, room) : CreateBlock(FoundationPrefab, subCellPos, Quaternion.identity, room);
             if (foundation == null)
                 return;
             room.Entities.Add(foundation);
@@ -11458,9 +12974,15 @@ namespace Oxide.Plugins
                 room.Foundations.Add(subCellPos);
             if (allowTurret)
                 CreateTurret(subCellPos, room);
-            var centre = RoundVector(subCellPos + new Vector3(SubCellSpacing * 0.5f, 0, SubCellSpacing * 0.5f), 2);
-            room.RoomFloorCenters.Add(centre);
-            if (PlaceCeiling)
+            var centre = IsClassicDungeon(room) ? subCellPos : RoundVector(subCellPos + new Vector3(SubCellSpacing * 0.5f, 0, SubCellSpacing * 0.5f), 2);
+            if (room.RoomFloorCenters.Add(centre))
+            {
+                if (room.RoomFloorCenters.Count == 1)
+                    room.UniformFloorHeight = centre.y;
+                else if (centre.y != room.UniformFloorHeight)
+                    room.HasUniformFloorHeight = false;
+            }
+            if (PlaceCeiling && !IsClassicDungeon(room))
                 CreateCeiling(subCellPos, room);
         }
 
@@ -11543,26 +13065,30 @@ namespace Oxide.Plugins
             var portal = GameManager.server.CreateEntity(PortalPrefab, mid + portalOffset, Quaternion.Euler(0, yaw, 0)) as BasePortal;
             if (portal == null)
                 yield break;
+            portal.OwnerID = OwnerID;
             portal.Spawn();
             room.InsidePortal = portal;
             room.Entities.Add(portal);
             RegisterSpawnedEntityForDungeon(portal, room.UniqueId);
         }
 
-        private void TryPlaceWall(Vector3 foundationPos, Vector3 offset, float yaw, ActiveDungeon room)
+        private bool TryPlaceWall(Vector3 foundationPos, Vector3 offset, float yaw, ActiveDungeon room)
         {
             if (room.FoundationKeys.Contains(PositionKey(foundationPos + offset, 2)))
-                return;
+                return true;
             Vector3 basePos =
                 Mathf.Abs(offset.x) > 0
                     ? foundationPos + new Vector3(offset.x > 0 ? SubCellSpacing : 0f, 0f, SubCellSpacing * 0.5f) + _wallOffset
                     : foundationPos + new Vector3(SubCellSpacing * 0.5f, 0f, offset.z > 0 ? SubCellSpacing : 0f) + _wallOffset;
+            if (IsClassicDungeon(room))
+                return CreateRockWall(foundationPos, offset, room);
             if (HasLiveBuildingBlockAt(basePos, room))
-                return;
+                return true;
             room.OccupiedPositions.Remove(PositionKey(basePos, 2));
             var wall = CreateBlock(WallPrefab, basePos, Quaternion.Euler(0, yaw, 0), room);
             if (wall != null)
                 room.Entities.Add(wall);
+            return wall != null;
         }
 
         private bool HasLiveBuildingBlockAt(Vector3 position, ActiveDungeon room, float tolerance = 0.05f)
@@ -11570,15 +13096,18 @@ namespace Oxide.Plugins
             if (room?.Entities == null)
                 return false;
             float toleranceSqr = tolerance * tolerance;
-            foreach (var entity in room.Entities)
+            var minimum = GetSpatialBucket(position - Vector3.one * tolerance, 1f);
+            var maximum = GetSpatialBucket(position + Vector3.one * tolerance, 1f);
+            for (int x = minimum.x; x <= maximum.x; x++)
+            for (int y = minimum.y; y <= maximum.y; y++)
+            for (int z = minimum.z; z <= maximum.z; z++)
             {
-                if (entity == null || entity.IsDestroyed)
+                if (!room.BuildingBlocksByPosition.TryGetValue(new Vector3Int(x, y, z), out var blocks))
                     continue;
-                if (entity is not BuildingBlock)
-                    continue;
-                if ((entity.transform.position - position).sqrMagnitude <= toleranceSqr)
+                foreach (var block in blocks)
                 {
-                    return true;
+                    if (block != null && !block.IsDestroyed && (block.transform.position - position).sqrMagnitude <= toleranceSqr)
+                        return true;
                 }
             }
             return false;
@@ -11586,7 +13115,7 @@ namespace Oxide.Plugins
 
         private void PlaceEdgeWalls(Vector3 cellPos, float size, bool frameNeeded, float yaw, string direction, ActiveDungeon room)
         {
-            if (!frameNeeded)
+            if (!frameNeeded || IsClassicDungeon(room) || _config?.PlaceDungeonDoors != true)
                 return;
             for (var i = 0; i < SubCells; i++)
             {
@@ -11605,16 +13134,14 @@ namespace Oxide.Plugins
                 var basePos = new Vector3(x, cellPos.y, z) + _wallOffset;
                 if (room.OccupiedPositions.Contains(PositionKey(basePos, 2)))
                     continue;
-                var frameEnt = CreateBlock(WallFramePrefab, basePos, Quaternion.Euler(0, yaw, 0), room);
-                if (frameEnt == null)
-                    continue;
-                room.Entities.Add(frameEnt);
-                CreateDoor(basePos, Quaternion.Euler(0, yaw, 0), room);
+                PlaceDoorFrame(basePos, yaw, room);
             }
         }
 
         private void PlaceCorridorFrame(string side, Vector3 cellPos, float size, ActiveDungeon room, bool isEntrance = false)
         {
+            if (isEntrance ? _config?.PlaceEntranceDoors != true : _config?.PlaceDungeonDoors != true)
+                return;
             float yaw;
             switch (side)
             {
@@ -11651,11 +13178,7 @@ namespace Oxide.Plugins
                 var basePos = new Vector3(x, cellPos.y, z) + _wallOffset;
                 if (room.OccupiedPositions.Contains(PositionKey(basePos, 2)))
                     continue;
-                var frameEnt = CreateBlock(WallFramePrefab, basePos, Quaternion.Euler(0, yaw, 0), room);
-                if (frameEnt == null)
-                    continue;
-                room.Entities.Add(frameEnt);
-                var door = CreateDoor(basePos, Quaternion.Euler(0, yaw, 0), room) as Door;
+                var door = PlaceDoorFrame(basePos, yaw, room);
                 if (isEntrance && door != null)
                     room.EntranceDoors.Add(door);
             }
@@ -11778,34 +13301,42 @@ namespace Oxide.Plugins
 
         private void PruneIsolatedCells(bool[] grid, int targetX, int targetY)
         {
-            for (var x = 0; x < _gridSize; x++)
-            for (var y = 0; y < _gridSize; y++)
-                if (GetGridValue(grid, x, y) && !HasPath(grid, x, y, targetX, targetY))
-                    SetGridValue(grid, x, y, false);
+            var reachable = FindConnectedCells(grid, targetX, targetY);
+            for (int i = 0; i < grid.Length; i++)
+                grid[i] &= reachable[i];
         }
 
-        private bool HasPath(bool[] grid, int x, int y, int targetX, int targetY)
+        private bool[] FindConnectedCells(bool[] grid, int startX, int startY)
         {
-            var checkedCells = new List<int>();
-            var result = CheckPath(grid, x, y, targetX, targetY, checkedCells);
-            checkedCells.Clear();
-            return result;
+            var reachable = new bool[grid.Length];
+            int start = GridIndex(startX, startY);
+            if (start == -1 || !grid[start])
+                return reachable;
+            var pending = new int[grid.Length];
+            int readIndex = 0;
+            int writeIndex = 0;
+            reachable[start] = true;
+            pending[writeIndex++] = start;
+            while (readIndex < writeIndex)
+            {
+                int index = pending[readIndex++];
+                int x = index % _gridSize;
+                int y = index / _gridSize;
+                QueueConnectedCell(grid, x + 1, y, reachable, pending, ref writeIndex);
+                QueueConnectedCell(grid, x - 1, y, reachable, pending, ref writeIndex);
+                QueueConnectedCell(grid, x, y + 1, reachable, pending, ref writeIndex);
+                QueueConnectedCell(grid, x, y - 1, reachable, pending, ref writeIndex);
+            }
+            return reachable;
         }
 
-        private bool CheckPath(bool[] grid, int x, int y, int targetX, int targetY, ICollection<int> checkedCells)
+        private void QueueConnectedCell(bool[] grid, int x, int y, bool[] reachable, int[] pending, ref int writeIndex)
         {
             var index = GridIndex(x, y);
-            if (index == -1 || checkedCells.Contains(index))
-                return false;
-            checkedCells.Add(index);
-            if (!GetGridValue(grid, x, y))
-                return false;
-            if (x == targetX && y == targetY)
-                return true;
-            return CheckPath(grid, x + 1, y, targetX, targetY, checkedCells)
-                || CheckPath(grid, x - 1, y, targetX, targetY, checkedCells)
-                || CheckPath(grid, x, y + 1, targetX, targetY, checkedCells)
-                || CheckPath(grid, x, y - 1, targetX, targetY, checkedCells);
+            if (index == -1 || reachable[index] || !grid[index])
+                return;
+            reachable[index] = true;
+            pending[writeIndex++] = index;
         }
 
         private static Vector3 RoundVector(Vector3 v, int decimals)
@@ -11819,7 +13350,10 @@ namespace Oxide.Plugins
             return $"{r.x}_{r.y}_{r.z}";
         }
 
-        private Dictionary<Vector3, ZoneInfo> zones = new Dictionary<Vector3, ZoneInfo>();
+        private static Vector3Int GetSpatialBucket(Vector3 position, float size)
+        {
+            return new Vector3Int(Mathf.FloorToInt(position.x / size), Mathf.FloorToInt(position.y / size), Mathf.FloorToInt(position.z / size));
+        }
 
         private class ZoneInfo
         {
@@ -11834,8 +13368,8 @@ namespace Oxide.Plugins
             public Vector3 Origin;
             public bool ClosestToOrigin;
             public float YOffset;
-            public float minDist;
-            public List<Vector3> blocked;
+            public float MinimumDistance;
+            public List<Vector3> BlockedPositions;
             public bool AvoidTerrainTopology;
             public TerrainTopology.Enum AvoidedTopology;
             public Vector3 WaterCheckOffset;
@@ -11853,7 +13387,7 @@ namespace Oxide.Plugins
             public List<string> RockCheck;
         }
 
-        private IEnumerator TryFindPosition(GeneratorConfig config, DungeonRequest request, bool IsPortal)
+        private IEnumerator TryFindPosition(GeneratorConfig config, DungeonRequest request, bool isPortal)
         {
             var sp = _config?.SpawnPointConfiguration;
             bool duelistLoaded = Duelist != null && Duelist.IsLoaded && (sp?.CheckDuelist ?? true);
@@ -11861,7 +13395,7 @@ namespace Oxide.Plugins
             bool abandonedBasesLoaded = AbandonedBases != null && AbandonedBases.IsLoaded && (sp?.CheckAbandonedBases ?? true);
             int attempts = config.MaxAttempts;
             float half = World.Size * 0.5f;
-            if (config.ClosestToOrigin && IsPortal && config.Origin != Vector3.zero)
+            if (config.ClosestToOrigin && isPortal && config.Origin != Vector3.zero)
             {
                 Vector3 closePosition = Vector3.zero;
                 yield return TryFindClosestPortalPosition(config, duelistLoaded, raidableBasesLoaded, abandonedBasesLoaded, result => closePosition = result);
@@ -11884,7 +13418,7 @@ namespace Oxide.Plugins
                     float rx = Random.Range(-half, half);
                     float rz = Random.Range(-half, half);
                     Vector3 candidate = new Vector3(rx, 0f, rz);
-                    Vector3 final = CheckCandidate(candidate, config, duelistLoaded, raidableBasesLoaded, abandonedBasesLoaded, IsPortal);
+                    Vector3 final = CheckCandidate(candidate, config, duelistLoaded, raidableBasesLoaded, abandonedBasesLoaded, isPortal);
                     if (final != Vector3.zero)
                     {
                         float dist = Vector3.Distance(final, config.Origin);
@@ -11901,7 +13435,7 @@ namespace Oxide.Plugins
                         yield return _searchBatchDelay;
                     }
                 }
-                if (IsPortal)
+                if (isPortal)
                     request.PortalPosition = bestPosition;
                 else
                     request.DungeonPosition = bestPosition;
@@ -11913,10 +13447,10 @@ namespace Oxide.Plugins
                 float rx = Random.Range(-half, half);
                 float rz = Random.Range(-half, half);
                 Vector3 candidate = new Vector3(rx, 0f, rz);
-                Vector3 final = CheckCandidate(candidate, config, duelistLoaded, raidableBasesLoaded, abandonedBasesLoaded, IsPortal);
+                Vector3 final = CheckCandidate(candidate, config, duelistLoaded, raidableBasesLoaded, abandonedBasesLoaded, isPortal);
                 if (final != Vector3.zero)
                 {
-                    if (IsPortal)
+                    if (isPortal)
                         request.PortalPosition = final;
                     else
                         request.DungeonPosition = final;
@@ -11929,7 +13463,7 @@ namespace Oxide.Plugins
                     yield return _searchBatchDelay;
                 }
             }
-            if (IsPortal)
+            if (isPortal)
                 request.PortalPosition = Vector3.zero;
             else
                 request.DungeonPosition = Vector3.zero;
@@ -11938,6 +13472,7 @@ namespace Oxide.Plugins
         private IEnumerator TryFindClosestPortalPosition(GeneratorConfig config, bool duelistLoaded, bool raidableBasesLoaded, bool abandonedBasesLoaded, Action<Vector3> result)
         {
             int count = 0;
+            int batch = Mathf.Clamp(Performance.SearchAttemptsPerBatch, 1, 2000);
             Vector3 origin = config.Origin;
             origin.y = 0f;
             for (int pass = 0; pass < 4; pass++)
@@ -11977,10 +13512,10 @@ namespace Oxide.Plugins
                             yield break;
                         }
                         count++;
-                        if (count >= 300)
+                        if (count >= batch)
                         {
                             count = 0;
-                            yield return null;
+                            yield return _searchBatchDelay;
                         }
                     }
                 }
@@ -11999,10 +13534,10 @@ namespace Oxide.Plugins
                     yield break;
                 }
                 count++;
-                if (count >= 300)
+                if (count >= batch)
                 {
                     count = 0;
-                    yield return null;
+                    yield return _searchBatchDelay;
                 }
             }
             result(Vector3.zero);
@@ -12073,7 +13608,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                if (IsPositionTooCloseToExistingDungeons(position, cfg.minDist))
+                if (IsPositionTooCloseToExistingDungeons(position, cfg.MinimumDistance))
                     return Vector3.zero;
                 if (IsNearBlocked(position, cfg))
                     return Vector3.zero;
@@ -12151,11 +13686,11 @@ namespace Oxide.Plugins
 
         private bool IsNearBlocked(Vector3 position, GeneratorConfig cfg)
         {
-            if (cfg.blocked == null || cfg.blocked.Count == 0)
+            if (cfg.BlockedPositions == null || cfg.BlockedPositions.Count == 0)
                 return false;
-            for (int i = 0; i < cfg.blocked.Count; i++)
+            for (int i = 0; i < cfg.BlockedPositions.Count; i++)
             {
-                if (Vector3.Distance(position, cfg.blocked[i]) < cfg.minDist)
+                if (Vector3.Distance(position, cfg.BlockedPositions[i]) < cfg.MinimumDistance)
                     return true;
             }
             return false;
@@ -12169,9 +13704,17 @@ namespace Oxide.Plugins
 
         private bool IsInsideRock(Vector3 point, GeneratorConfig cfg)
         {
-            Physics.queriesHitBackfaces = true;
-            bool upward = CheckRockUp(point, cfg);
-            Physics.queriesHitBackfaces = false;
+            bool previousHitBackfaces = Physics.queriesHitBackfaces;
+            bool upward;
+            try
+            {
+                Physics.queriesHitBackfaces = true;
+                upward = CheckRockUp(point, cfg);
+            }
+            finally
+            {
+                Physics.queriesHitBackfaces = previousHitBackfaces;
+            }
             if (upward)
                 return true;
             return CheckRockDown(point, cfg);
@@ -12219,9 +13762,9 @@ namespace Oxide.Plugins
 
         private bool ZoneBlocked(Vector3 pos)
         {
-            if (zones.Count == 0)
+            if (_blockedZones.Count == 0)
                 return false;
-            foreach (var kvp in zones)
+            foreach (var kvp in _blockedZones)
             {
                 var z = kvp.Value;
                 if (z.Size != Vector3.zero)
@@ -12242,7 +13785,7 @@ namespace Oxide.Plugins
         {
             if (ZoneManager == null || !ZoneManager.IsLoaded)
                 return;
-            zones.Clear();
+            _blockedZones.Clear();
             var zoneIds = ZoneManager.Call("GetZoneIDs") as string[];
             if (zoneIds == null)
                 return;
@@ -12261,21 +13804,22 @@ namespace Oxide.Plugins
                     zi.Size = s;
                     zi.OBB = new OBB(zi.Pos, s, Quaternion.identity);
                 }
-                zones[v] = zi;
+                _blockedZones[v] = zi;
             }
         }
 
         private bool HasEntities(Vector3 position, float radius, int layers)
         {
             List<BaseEntity> list = Pool.Get<List<BaseEntity>>();
-            Vis.Entities(position, radius, list, 2162689);
-            if (list.Count > 0)
+            try
+            {
+                Vis.Entities(position, radius, list, layers);
+                return list.Count > 0;
+            }
+            finally
             {
                 Pool.FreeUnmanaged(ref list);
-                return true;
             }
-            Pool.FreeUnmanaged(ref list);
-            return false;
         }
         #endregion
     }

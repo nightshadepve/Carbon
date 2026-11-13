@@ -2,7 +2,7 @@
   "Version": {
     "Major": 2,
     "Minor": 0,
-    "Patch": 5
+    "Patch": 9
   },
   "Prefix of chat messages": "",
   "Main Setting": {
@@ -828,7 +828,6 @@
     {
       "Preset Name": "bradley_default",
       "HP": 750.0,
-      "Scale damage": 0.3,
       "The viewing distance": 85.0,
       "Radius of search": 85.0,
       "The multiplier of Machine-gun aim cone": 1.1,

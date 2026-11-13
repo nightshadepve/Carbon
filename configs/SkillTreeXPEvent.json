@@ -617,13 +617,24 @@
       "Item id": 989925924,
       "Commands fired on start": [],
       "Commands fired on end": []
+    },
+    "CollectWoodNodes": {
+      "Chance for this source to be selected [weight system][0=off]": 50,
+      "Minimum multiplier to roll": 0.8,
+      "Maximum multiplier to roll": 1.2,
+      "Minimum duration for the event to run [seconds]": 300,
+      "Maximum duration for the event to run [seconds]": 1200,
+      "Skin ID that appears in the popup": 0,
+      "Item id": -151838493,
+      "Commands fired on start": [],
+      "Commands fired on end": []
     }
   },
   "Notification settings": {
     "Hud hint notification settings": {
       "Send event notifications via hud hint?": true,
-      "Hud hint duration [seconds]": 10.0,
-      "Hex colour code for the hud hint": "62d507"
+      "Hud hint style [Blue_Normal, Red_Normal, Blue_Long, Blue_Short, Server_Event, Error]": "Blue_Normal",
+      "Show the hud hint over open menus?": true
     },
     "UINotify settings": {
       "Send event notifications via UINotify?": true,

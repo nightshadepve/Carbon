@@ -1,0 +1,2181 @@
+{
+  "SubscribeToOnEntityBuilt": true,
+  "VehicleItems": [
+    {
+      "PrefabPath": "assets/custom/airbus.prefab",
+      "SkinID": 3304955504
+    },
+    {
+      "PrefabPath": "assets/custom/warbus.prefab",
+      "SkinID": 3304955700
+    },
+    {
+      "PrefabPath": "assets/custom/fighterbus.prefab",
+      "SkinID": 3304632499
+    },
+    {
+      "PrefabPath": "assets/custom/fighter.prefab",
+      "SkinID": 3304627495
+    },
+    {
+      "PrefabPath": "assets/custom/skyplane.prefab",
+      "SkinID": 3304632844
+    },
+    {
+      "PrefabPath": "assets/custom/skyboat.prefab",
+      "SkinID": 3304633054
+    },
+    {
+      "PrefabPath": "assets/custom/tinfighter.prefab",
+      "SkinID": 3602703654
+    },
+    {
+      "PrefabPath": "assets/custom/rustwing.prefab",
+      "SkinID": 3304636255
+    },
+    {
+      "PrefabPath": "assets/custom/marsfighter.prefab",
+      "SkinID": 3591754609
+    },
+    {
+      "PrefabPath": "assets/custom/santa.prefab",
+      "SkinID": 3304955196
+    },
+    {
+      "PrefabPath": "assets/custom/warsanta.prefab",
+      "SkinID": 3304955338
+    },
+    {
+      "PrefabPath": "assets/custom/witch.prefab",
+      "SkinID": 3304955096
+    },
+    {
+      "PrefabPath": "assets/custom/magiccarpet.prefab",
+      "SkinID": 3304954964
+    },
+    {
+      "PrefabPath": "assets/custom/heavyfighter.prefab",
+      "SkinID": 3320180998
+    },
+    {
+      "PrefabPath": "assets/custom/wingfighter.prefab",
+      "SkinID": 3341945669
+    },
+    {
+      "PrefabPath": "assets/custom/wingbomber.prefab",
+      "SkinID": 3342310318
+    },
+    {
+      "PrefabPath": "assets/custom/timberwing.prefab",
+      "SkinID": 3341947091
+    },
+    {
+      "PrefabPath": "assets/custom/ufo_solo.prefab",
+      "SkinID": 3353713669
+    },
+    {
+      "PrefabPath": "assets/custom/ufo_duo.prefab",
+      "SkinID": 3353802572
+    },
+    {
+      "PrefabPath": "assets/custom/ufo_mothership.prefab",
+      "SkinID": 3353714203
+    },
+    {
+      "PrefabPath": "assets/custom/ufo_spooky.prefab",
+      "SkinID": 3359647681
+    },
+    {
+      "PrefabPath": "assets/custom/driftwood.prefab",
+      "SkinID": 3359643345
+    },
+    {
+      "PrefabPath": "assets/custom/raptor.prefab",
+      "SkinID": 3384380126
+    },
+    {
+      "PrefabPath": "assets/custom/dronebackpack.prefab",
+      "SkinID": 3384380664
+    },
+    {
+      "PrefabPath": "assets/custom/glider.prefab",
+      "SkinID": 3384380938
+    },
+    {
+      "PrefabPath": "assets/custom/gliderarmed.prefab",
+      "SkinID": 3384381200
+    },
+    {
+      "PrefabPath": "assets/custom/uap_solo.prefab",
+      "SkinID": 3384381497
+    },
+    {
+      "PrefabPath": "assets/custom/uap_duo.prefab",
+      "SkinID": 3384381754
+    },
+    {
+      "PrefabPath": "assets/custom/uap_prototype.prefab",
+      "SkinID": 3384382026
+    },
+    {
+      "PrefabPath": "assets/custom/uap_xmas.prefab",
+      "SkinID": 3384382397
+    },
+    {
+      "PrefabPath": "assets/custom/miniplane.prefab",
+      "SkinID": 3393719283
+    },
+    {
+      "PrefabPath": "assets/custom/warplane.prefab",
+      "SkinID": 3393719447
+    },
+    {
+      "PrefabPath": "assets/custom/raidplane.prefab",
+      "SkinID": 3393719610
+    },
+    {
+      "PrefabPath": "assets/custom/skywing.prefab",
+      "SkinID": 3397456143
+    },
+    {
+      "PrefabPath": "assets/custom/starfighter.prefab",
+      "SkinID": 3400535847
+    },
+    {
+      "PrefabPath": "assets/custom/oppressor.prefab",
+      "SkinID": 3429972346
+    },
+    {
+      "PrefabPath": "assets/custom/imperialshuttle.prefab",
+      "SkinID": 3437930139
+    },
+    {
+      "PrefabPath": "assets/custom/airspeeder.prefab",
+      "SkinID": 3437930578
+    },
+    {
+      "PrefabPath": "assets/custom/f15solo.prefab",
+      "SkinID": 3439231615
+    },
+    {
+      "PrefabPath": "assets/custom/f15duo.prefab",
+      "SkinID": 3439231743
+    },
+    {
+      "PrefabPath": "assets/custom/a10.prefab",
+      "SkinID": 3810895234
+    },
+    {
+      "PrefabPath": "assets/custom/batwing.prefab",
+      "SkinID": 3455850901
+    },
+    {
+      "PrefabPath": "assets/custom/batwingduo.prefab",
+      "SkinID": 3455851072
+    },
+    {
+      "PrefabPath": "assets/custom/flyingboat.prefab",
+      "SkinID": 3441601359
+    },
+    {
+      "PrefabPath": "assets/custom/invader.prefab",
+      "SkinID": 3475792691
+    },
+    {
+      "PrefabPath": "assets/custom/nighthawk.prefab",
+      "SkinID": 3512343436
+    },
+    {
+      "PrefabPath": "assets/custom/mininighthawk.prefab",
+      "SkinID": 3512343567
+    },
+    {
+      "PrefabPath": "assets/custom/scrapjeta.prefab",
+      "SkinID": 3515081080
+    },
+    {
+      "PrefabPath": "assets/custom/scrapjetb.prefab",
+      "SkinID": 3515081172
+    },
+    {
+      "PrefabPath": "assets/custom/boogieboard.prefab",
+      "SkinID": 3517306571
+    },
+    {
+      "PrefabPath": "assets/custom/leviathan.prefab",
+      "SkinID": 3539931146
+    },
+    {
+      "PrefabPath": "assets/custom/leviathancarrier.prefab",
+      "SkinID": 3539931238
+    },
+    {
+      "PrefabPath": "assets/custom/leviathangigacarrier.prefab",
+      "SkinID": 3539931354
+    },
+    {
+      "PrefabPath": "assets/custom/kamikaze.prefab",
+      "SkinID": 3543683753
+    },
+    {
+      "PrefabPath": "assets/custom/kamikaze_nuke.prefab",
+      "SkinID": 3714203841
+    },
+    {
+      "PrefabPath": "assets/custom/mig17.prefab",
+      "SkinID": 3599095555
+    },
+    {
+      "PrefabPath": "assets/custom/harrier.prefab",
+      "SkinID": 3599095887
+    },
+    {
+      "PrefabPath": "assets/custom/su47.prefab",
+      "SkinID": 3592114874
+    },
+    {
+      "PrefabPath": "assets/custom/su47_qt.prefab",
+      "SkinID": 3592115081
+    },
+    {
+      "PrefabPath": "assets/custom/su47_bling.prefab",
+      "SkinID": 3592115170
+    },
+    {
+      "PrefabPath": "assets/custom/cf105.prefab",
+      "SkinID": 3660174519
+    },
+    {
+      "PrefabPath": "assets/custom/tornado_grey.prefab",
+      "SkinID": 3600246115
+    },
+    {
+      "PrefabPath": "assets/custom/tornado_tan.prefab",
+      "SkinID": 3600246337
+    },
+    {
+      "PrefabPath": "assets/custom/jetson.prefab",
+      "SkinID": 3538019780
+    },
+    {
+      "PrefabPath": "assets/custom/viperwing.prefab",
+      "SkinID": 3636057961
+    },
+    {
+      "PrefabPath": "assets/custom/nightwing.prefab",
+      "SkinID": 3636058137
+    },
+    {
+      "PrefabPath": "assets/custom/razor.prefab",
+      "SkinID": 3567458728
+    },
+    {
+      "PrefabPath": "assets/custom/stormwing.prefab",
+      "SkinID": 3697809667
+    },
+    {
+      "PrefabPath": "assets/custom/c001a.prefab",
+      "SkinID": 3717703561
+    },
+    {
+      "PrefabPath": "assets/custom/interceptor.prefab",
+      "SkinID": 3752723035
+    },
+    {
+      "PrefabPath": "assets/custom/paraglider.prefab",
+      "SkinID": 3795165434
+    },
+    {
+      "PrefabPath": "assets/custom/paragliderquad.prefab",
+      "SkinID": 3795165656
+    },
+    {
+      "PrefabPath": "assets/custom/gunship.prefab",
+      "SkinID": 3795165827
+    },
+    {
+      "PrefabPath": "assets/custom/deathwing_a.prefab",
+      "SkinID": 3806474269
+    },
+    {
+      "PrefabPath": "assets/custom/deathwing_b.prefab",
+      "SkinID": 3806474272
+    },
+    {
+      "PrefabPath": "assets/custom/deathwing_c.prefab",
+      "SkinID": 3807031648
+    },
+    {
+      "PrefabPath": "assets/custom/toyplane.prefab",
+      "SkinID": 3806477692
+    },
+    {
+      "PrefabPath": "assets/custom/toyjet.prefab",
+      "SkinID": 3806477799
+    },
+    {
+      "PrefabPath": "assets/custom/toycargo.prefab",
+      "SkinID": 3806477911
+    },
+    {
+      "PrefabPath": "assets/custom/toyrocket.prefab",
+      "SkinID": 3806478046
+    },
+    {
+      "PrefabPath": "assets/custom/spark_grey.prefab",
+      "SkinID": 3806258551
+    },
+    {
+      "PrefabPath": "assets/custom/spark_yellow.prefab",
+      "SkinID": 3806258424
+    },
+    {
+      "PrefabPath": "assets/custom/spark_white.prefab",
+      "SkinID": 3806258275
+    },
+    {
+      "PrefabPath": "assets/custom/spark_olive.prefab",
+      "SkinID": 3806258212
+    },
+    {
+      "PrefabPath": "assets/custom/spark_black.prefab",
+      "SkinID": 3806258094
+    },
+    {
+      "PrefabPath": "assets/custom/spark_wine.prefab",
+      "SkinID": 3806257880
+    },
+    {
+      "PrefabPath": "assets/custom/spark_pink.prefab",
+      "SkinID": 3806257778
+    },
+    {
+      "PrefabPath": "assets/custom/spark_blue.prefab",
+      "SkinID": 3806257604
+    },
+    {
+      "PrefabPath": "assets/custom/spark_purple.prefab",
+      "SkinID": 3806810178
+    },
+    {
+      "PrefabPath": "assets/custom/littlebird.prefab",
+      "SkinID": 3591733142
+    },
+    {
+      "PrefabPath": "assets/custom/warbird.prefab",
+      "SkinID": 3591732692
+    },
+    {
+      "PrefabPath": "assets/custom/ah69t.prefab",
+      "SkinID": 3591492685
+    },
+    {
+      "PrefabPath": "assets/custom/ah69r.prefab",
+      "SkinID": 3591492822
+    },
+    {
+      "PrefabPath": "assets/custom/ah69a.prefab",
+      "SkinID": 3591492741
+    },
+    {
+      "PrefabPath": "assets/custom/ah69g.prefab",
+      "SkinID": 3591492614
+    },
+    {
+      "PrefabPath": "assets/custom/mavik.prefab",
+      "SkinID": 3304635370
+    },
+    {
+      "PrefabPath": "assets/custom/waterheli.prefab",
+      "SkinID": 3304631553
+    },
+    {
+      "PrefabPath": "assets/custom/patrolheli.prefab",
+      "SkinID": 3304956227
+    },
+    {
+      "PrefabPath": "assets/custom/patrolheli_seats.prefab",
+      "SkinID": 3726553202
+    },
+    {
+      "PrefabPath": "assets/custom/porcelaincommander.prefab",
+      "SkinID": 3320177356
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_green.prefab",
+      "SkinID": 3591739914
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_grey.prefab",
+      "SkinID": 3591740064
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_black.prefab",
+      "SkinID": 3593394622
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_babyblue.prefab",
+      "SkinID": 3750412029
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_limegreen.prefab",
+      "SkinID": 3750412165
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_pink.prefab",
+      "SkinID": 3750412275
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_red.prefab",
+      "SkinID": 3750412434
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_orange.prefab",
+      "SkinID": 3750412540
+    },
+    {
+      "PrefabPath": "assets/custom/cobra_yellow.prefab",
+      "SkinID": 3750412646
+    },
+    {
+      "PrefabPath": "assets/custom/tardis.prefab",
+      "SkinID": 3359641974
+    },
+    {
+      "PrefabPath": "assets/custom/talon.prefab",
+      "SkinID": 3384379565
+    },
+    {
+      "PrefabPath": "assets/custom/helihatunarmed.prefab",
+      "SkinID": 3421776733
+    },
+    {
+      "PrefabPath": "assets/custom/helihat.prefab",
+      "SkinID": 3421777224
+    },
+    {
+      "PrefabPath": "assets/custom/falcon.prefab",
+      "SkinID": 3432359164
+    },
+    {
+      "PrefabPath": "assets/custom/mamba.prefab",
+      "SkinID": 3439032408
+    },
+    {
+      "PrefabPath": "assets/custom/orlik.prefab",
+      "SkinID": 3486941098
+    },
+    {
+      "PrefabPath": "assets/custom/oppressorcopter.prefab",
+      "SkinID": 3536950519
+    },
+    {
+      "PrefabPath": "assets/custom/skycrane.prefab",
+      "SkinID": 3538069269
+    },
+    {
+      "PrefabPath": "assets/custom/predator_x.prefab",
+      "SkinID": 3567674071
+    },
+    {
+      "PrefabPath": "assets/custom/predator_y.prefab",
+      "SkinID": 3567674225
+    },
+    {
+      "PrefabPath": "assets/custom/predator_rp.prefab",
+      "SkinID": 3567673954
+    },
+    {
+      "PrefabPath": "assets/custom/spookopter.prefab",
+      "SkinID": 3591305869
+    },
+    {
+      "PrefabPath": "assets/custom/boltbucket.prefab",
+      "SkinID": 3607656691
+    },
+    {
+      "PrefabPath": "assets/custom/crudebird.prefab",
+      "SkinID": 3607554924
+    },
+    {
+      "PrefabPath": "assets/custom/ah001.prefab",
+      "SkinID": 3614037875
+    },
+    {
+      "PrefabPath": "assets/custom/mh60x.prefab",
+      "SkinID": 3614162444
+    },
+    {
+      "PrefabPath": "assets/custom/jetpack.prefab",
+      "SkinID": 3615513926
+    },
+    {
+      "PrefabPath": "assets/custom/jetpackunarmed.prefab",
+      "SkinID": 3615514099
+    },
+    {
+      "PrefabPath": "assets/custom/umbrellacopter.prefab",
+      "SkinID": 3636060264
+    },
+    {
+      "PrefabPath": "assets/custom/deskcopter.prefab",
+      "SkinID": 3636060488
+    },
+    {
+      "PrefabPath": "assets/custom/spaceheli.prefab",
+      "SkinID": 3636057568
+    },
+    {
+      "PrefabPath": "assets/custom/spaceheliarmed.prefab",
+      "SkinID": 3636057795
+    },
+    {
+      "PrefabPath": "assets/custom/assaultdrone.prefab",
+      "SkinID": 3636058367
+    },
+    {
+      "PrefabPath": "assets/custom/apache.prefab",
+      "SkinID": 3679169539
+    },
+    {
+      "PrefabPath": "assets/custom/policebird.prefab",
+      "SkinID": 3717364909
+    },
+    {
+      "PrefabPath": "assets/custom/pookiecopter.prefab",
+      "SkinID": 3719410912
+    },
+    {
+      "PrefabPath": "assets/custom/plushiecopter.prefab",
+      "SkinID": 3719411266
+    },
+    {
+      "PrefabPath": "assets/custom/plushiecopter2.prefab",
+      "SkinID": 3721290469
+    },
+    {
+      "PrefabPath": "assets/custom/plushiecopter3.prefab",
+      "SkinID": 3719411771
+    },
+    {
+      "PrefabPath": "assets/custom/stingerblue.prefab",
+      "SkinID": 3752724484
+    },
+    {
+      "PrefabPath": "assets/custom/stingerred.prefab",
+      "SkinID": 3754181835
+    },
+    {
+      "PrefabPath": "assets/custom/helipark.prefab",
+      "SkinID": 3810286774
+    },
+    {
+      "PrefabPath": "assets/custom/atv.prefab",
+      "SkinID": 3304633269
+    },
+    {
+      "PrefabPath": "assets/custom/atv_blue.prefab",
+      "SkinID": 3660191058
+    },
+    {
+      "PrefabPath": "assets/custom/atv_camo.prefab",
+      "SkinID": 3660191201
+    },
+    {
+      "PrefabPath": "assets/custom/atv_red.prefab",
+      "SkinID": 3660191301
+    },
+    {
+      "PrefabPath": "assets/custom/atv_yellow.prefab",
+      "SkinID": 3660191380
+    },
+    {
+      "PrefabPath": "assets/custom/racesofa.prefab",
+      "SkinID": 3304956030
+    },
+    {
+      "PrefabPath": "assets/custom/trainwreck.prefab",
+      "SkinID": 3304634586
+    },
+    {
+      "PrefabPath": "assets/custom/trainwrecker.prefab",
+      "SkinID": 3304634870
+    },
+    {
+      "PrefabPath": "assets/custom/twistedtruck.prefab",
+      "SkinID": 3304956542
+    },
+    {
+      "PrefabPath": "assets/custom/dunebuggie.prefab",
+      "SkinID": 3591754757
+    },
+    {
+      "PrefabPath": "assets/custom/dunebuggieoffroad.prefab",
+      "SkinID": 3717364806
+    },
+    {
+      "PrefabPath": "assets/custom/dunetruckarmed.prefab",
+      "SkinID": 3320173387
+    },
+    {
+      "PrefabPath": "assets/custom/dunetruckunarmed.prefab",
+      "SkinID": 3320176268
+    },
+    {
+      "PrefabPath": "assets/custom/doomsdaydiscovan.prefab",
+      "SkinID": 3320180260
+    },
+    {
+      "PrefabPath": "assets/custom/forklift.prefab",
+      "SkinID": 3593397329
+    },
+    {
+      "PrefabPath": "assets/custom/lawnmower_red.prefab",
+      "SkinID": 3591738202
+    },
+    {
+      "PrefabPath": "assets/custom/lawnmower_green.prefab",
+      "SkinID": 3591737690
+    },
+    {
+      "PrefabPath": "assets/custom/chariot.prefab",
+      "SkinID": 3320181563
+    },
+    {
+      "PrefabPath": "assets/custom/soulharvester.prefab",
+      "SkinID": 3341443781
+    },
+    {
+      "PrefabPath": "assets/custom/dreadnought.prefab",
+      "SkinID": 3341448356
+    },
+    {
+      "PrefabPath": "assets/custom/dreadtrailer.prefab",
+      "SkinID": 3341447177
+    },
+    {
+      "PrefabPath": "assets/custom/boatmobile.prefab",
+      "SkinID": 3341945311
+    },
+    {
+      "PrefabPath": "assets/custom/onyx.prefab",
+      "SkinID": 3341945954
+    },
+    {
+      "PrefabPath": "assets/custom/f1.prefab",
+      "SkinID": 3341946170
+    },
+    {
+      "PrefabPath": "assets/custom/rustlers.prefab",
+      "SkinID": 3341946584
+    },
+    {
+      "PrefabPath": "assets/custom/rustlerg.prefab",
+      "SkinID": 3341946793
+    },
+    {
+      "PrefabPath": "assets/custom/landbeetle.prefab",
+      "SkinID": 3342309897
+    },
+    {
+      "PrefabPath": "assets/custom/onyx_aa.prefab",
+      "SkinID": 3342310051
+    },
+    {
+      "PrefabPath": "assets/custom/onyx_ifv.prefab",
+      "SkinID": 3342310158
+    },
+    {
+      "PrefabPath": "assets/custom/wheelchair.prefab",
+      "SkinID": 3342316383
+    },
+    {
+      "PrefabPath": "assets/custom/tractor.prefab",
+      "SkinID": 3592434799
+    },
+    {
+      "PrefabPath": "assets/custom/farmtractor.prefab",
+      "SkinID": 3599108191
+    },
+    {
+      "PrefabPath": "assets/custom/semitruck_red.prefab",
+      "SkinID": 3342310427
+    },
+    {
+      "PrefabPath": "assets/custom/semitruck_white.prefab",
+      "SkinID": 3342311904
+    },
+    {
+      "PrefabPath": "assets/custom/semitruck_green.prefab",
+      "SkinID": 3342313002
+    },
+    {
+      "PrefabPath": "assets/custom/semitruck_yellow.prefab",
+      "SkinID": 3342314797
+    },
+    {
+      "PrefabPath": "assets/custom/semitruck_blue.prefab",
+      "SkinID": 3342312310
+    },
+    {
+      "PrefabPath": "assets/custom/semitrailer_orange.prefab",
+      "SkinID": 3342317066
+    },
+    {
+      "PrefabPath": "assets/custom/semitrailer_blue.prefab",
+      "SkinID": 3342317473
+    },
+    {
+      "PrefabPath": "assets/custom/semitrailer_green.prefab",
+      "SkinID": 3342317842
+    },
+    {
+      "PrefabPath": "assets/custom/semitrailer_yellow.prefab",
+      "SkinID": 3342318300
+    },
+    {
+      "PrefabPath": "assets/custom/semitrailer_fuel.prefab",
+      "SkinID": 3342318764
+    },
+    {
+      "PrefabPath": "assets/custom/mobilecasino.prefab",
+      "SkinID": 3342316147
+    },
+    {
+      "PrefabPath": "assets/custom/tricycle.prefab",
+      "SkinID": 3346486513
+    },
+    {
+      "PrefabPath": "assets/custom/shoppingcart.prefab",
+      "SkinID": 3346486704
+    },
+    {
+      "PrefabPath": "assets/custom/shoppingcart_blue.prefab",
+      "SkinID": 3346910705
+    },
+    {
+      "PrefabPath": "assets/custom/spookyshoppingcart.prefab",
+      "SkinID": 3346910998
+    },
+    {
+      "PrefabPath": "assets/custom/batbike.prefab",
+      "SkinID": 3351506226
+    },
+    {
+      "PrefabPath": "assets/custom/spookybatbike.prefab",
+      "SkinID": 3351506940
+    },
+    {
+      "PrefabPath": "assets/custom/sportsbike_red.prefab",
+      "SkinID": 3351507331
+    },
+    {
+      "PrefabPath": "assets/custom/sportsbike_orange.prefab",
+      "SkinID": 3351507608
+    },
+    {
+      "PrefabPath": "assets/custom/sportsbike_blue.prefab",
+      "SkinID": 3351507886
+    },
+    {
+      "PrefabPath": "assets/custom/sportsbike_green.prefab",
+      "SkinID": 3351508300
+    },
+    {
+      "PrefabPath": "assets/custom/sportsbike_black.prefab",
+      "SkinID": 3351508593
+    },
+    {
+      "PrefabPath": "assets/custom/superbike_red.prefab",
+      "SkinID": 3544251162
+    },
+    {
+      "PrefabPath": "assets/custom/superbike_orange.prefab",
+      "SkinID": 3544250308
+    },
+    {
+      "PrefabPath": "assets/custom/superbike_blue.prefab",
+      "SkinID": 3544250857
+    },
+    {
+      "PrefabPath": "assets/custom/superbike_green.prefab",
+      "SkinID": 3544250117
+    },
+    {
+      "PrefabPath": "assets/custom/superbike_black.prefab",
+      "SkinID": 3544250603
+    },
+    {
+      "PrefabPath": "assets/custom/bikehellrider.prefab",
+      "SkinID": 3351509101
+    },
+    {
+      "PrefabPath": "assets/custom/partytrailer.prefab",
+      "SkinID": 3351509582
+    },
+    {
+      "PrefabPath": "assets/custom/partytrailer2.prefab",
+      "SkinID": 3695126650
+    },
+    {
+      "PrefabPath": "assets/custom/hoversled.prefab",
+      "SkinID": 3359643687
+    },
+    {
+      "PrefabPath": "assets/custom/moonbuggy.prefab",
+      "SkinID": 3359643089
+    },
+    {
+      "PrefabPath": "assets/custom/mandospeeder.prefab",
+      "SkinID": 3359642758
+    },
+    {
+      "PrefabPath": "assets/custom/hailfirebike.prefab",
+      "SkinID": 3359650866
+    },
+    {
+      "PrefabPath": "assets/custom/warchair.prefab",
+      "SkinID": 3384379014
+    },
+    {
+      "PrefabPath": "assets/custom/scooter.prefab",
+      "SkinID": 3384377815
+    },
+    {
+      "PrefabPath": "assets/custom/hoverscooter.prefab",
+      "SkinID": 3384378070
+    },
+    {
+      "PrefabPath": "assets/custom/hoverbatbike.prefab",
+      "SkinID": 3384378485
+    },
+    {
+      "PrefabPath": "assets/custom/frostsled.prefab",
+      "SkinID": 3384377387
+    },
+    {
+      "PrefabPath": "assets/custom/podspeeder.prefab",
+      "SkinID": 3384378716
+    },
+    {
+      "PrefabPath": "assets/custom/heelies.prefab",
+      "SkinID": 3392724567
+    },
+    {
+      "PrefabPath": "assets/custom/ehoverboard.prefab",
+      "SkinID": 3392725075
+    },
+    {
+      "PrefabPath": "assets/custom/monocycle.prefab",
+      "SkinID": 3392725407
+    },
+    {
+      "PrefabPath": "assets/custom/hovercraft.prefab",
+      "SkinID": 3392872830
+    },
+    {
+      "PrefabPath": "assets/custom/hovercraftarmed.prefab",
+      "SkinID": 3392873025
+    },
+    {
+      "PrefabPath": "assets/custom/m939.prefab",
+      "SkinID": 3599083298
+    },
+    {
+      "PrefabPath": "assets/custom/m939_enclosed.prefab",
+      "SkinID": 3599083449
+    },
+    {
+      "PrefabPath": "assets/custom/m939_desert.prefab",
+      "SkinID": 3599083608
+    },
+    {
+      "PrefabPath": "assets/custom/m939_desert_enclosed.prefab",
+      "SkinID": 3599083721
+    },
+    {
+      "PrefabPath": "assets/custom/droneboard.prefab",
+      "SkinID": 3419871513
+    },
+    {
+      "PrefabPath": "assets/custom/goblinglider.prefab",
+      "SkinID": 3421078110
+    },
+    {
+      "PrefabPath": "assets/custom/tumbler.prefab",
+      "SkinID": 3431103990
+    },
+    {
+      "PrefabPath": "assets/custom/tumblerarmed.prefab",
+      "SkinID": 3431163009
+    },
+    {
+      "PrefabPath": "assets/custom/roadsterrp.prefab",
+      "SkinID": 3439032164
+    },
+    {
+      "PrefabPath": "assets/custom/groundspeeder.prefab",
+      "SkinID": 3437931340
+    },
+    {
+      "PrefabPath": "assets/custom/ballistacar.prefab",
+      "SkinID": 3437934051
+    },
+    {
+      "PrefabPath": "assets/custom/ambulance.prefab",
+      "SkinID": 3439232220
+    },
+    {
+      "PrefabPath": "assets/custom/landspeeder.prefab",
+      "SkinID": 3441553188
+    },
+    {
+      "PrefabPath": "assets/custom/motortrike.prefab",
+      "SkinID": 3449936338
+    },
+    {
+      "PrefabPath": "assets/custom/supertrike.prefab",
+      "SkinID": 3449936799
+    },
+    {
+      "PrefabPath": "assets/custom/oppressorbike.prefab",
+      "SkinID": 3443061081
+    },
+    {
+      "PrefabPath": "assets/custom/sithspeeder.prefab",
+      "SkinID": 3456245630
+    },
+    {
+      "PrefabPath": "assets/custom/carriage1.prefab",
+      "SkinID": 3463487527
+    },
+    {
+      "PrefabPath": "assets/custom/carriage2.prefab",
+      "SkinID": 3463487813
+    },
+    {
+      "PrefabPath": "assets/custom/carriage3.prefab",
+      "SkinID": 3463488142
+    },
+    {
+      "PrefabPath": "assets/custom/kart1.prefab",
+      "SkinID": 3593315332
+    },
+    {
+      "PrefabPath": "assets/custom/kart2.prefab",
+      "SkinID": 3593315540
+    },
+    {
+      "PrefabPath": "assets/custom/kart3.prefab",
+      "SkinID": 3593315700
+    },
+    {
+      "PrefabPath": "assets/custom/kart4.prefab",
+      "SkinID": 3593315875
+    },
+    {
+      "PrefabPath": "assets/custom/kart5.prefab",
+      "SkinID": 3593316023
+    },
+    {
+      "PrefabPath": "assets/custom/kart6.prefab",
+      "SkinID": 3593316132
+    },
+    {
+      "PrefabPath": "assets/custom/kart7.prefab",
+      "SkinID": 3593316264
+    },
+    {
+      "PrefabPath": "assets/custom/kart8.prefab",
+      "SkinID": 3593316382
+    },
+    {
+      "PrefabPath": "assets/custom/mongoose.prefab",
+      "SkinID": 3472373789
+    },
+    {
+      "PrefabPath": "assets/custom/warthog.prefab",
+      "SkinID": 3472374010
+    },
+    {
+      "PrefabPath": "assets/custom/warthogt.prefab",
+      "SkinID": 3472374190
+    },
+    {
+      "PrefabPath": "assets/custom/warthogs.prefab",
+      "SkinID": 3472374342
+    },
+    {
+      "PrefabPath": "assets/custom/ballcar.prefab",
+      "SkinID": 3472379405
+    },
+    {
+      "PrefabPath": "assets/custom/slotscar.prefab",
+      "SkinID": 3472379595
+    },
+    {
+      "PrefabPath": "assets/custom/tablecar.prefab",
+      "SkinID": 3472379852
+    },
+    {
+      "PrefabPath": "assets/custom/beancar.prefab",
+      "SkinID": 3472380009
+    },
+    {
+      "PrefabPath": "assets/custom/drumcar.prefab",
+      "SkinID": 3472382725
+    },
+    {
+      "PrefabPath": "assets/custom/pianocar.prefab",
+      "SkinID": 3472382977
+    },
+    {
+      "PrefabPath": "assets/custom/bonecar.prefab",
+      "SkinID": 3472383141
+    },
+    {
+      "PrefabPath": "assets/custom/bumperblue.prefab",
+      "SkinID": 3482062860
+    },
+    {
+      "PrefabPath": "assets/custom/bumperblack.prefab",
+      "SkinID": 3482062969
+    },
+    {
+      "PrefabPath": "assets/custom/bumperred.prefab",
+      "SkinID": 3482063050
+    },
+    {
+      "PrefabPath": "assets/custom/bumperorange.prefab",
+      "SkinID": 3482063130
+    },
+    {
+      "PrefabPath": "assets/custom/bumpergreen.prefab",
+      "SkinID": 3482063203
+    },
+    {
+      "PrefabPath": "assets/custom/monstertruck.prefab",
+      "SkinID": 3593311806
+    },
+    {
+      "PrefabPath": "assets/custom/monstertruck2.prefab",
+      "SkinID": 3593311999
+    },
+    {
+      "PrefabPath": "assets/custom/monstertruckbat.prefab",
+      "SkinID": 3593312158
+    },
+    {
+      "PrefabPath": "assets/custom/monstertruckbean.prefab",
+      "SkinID": 3593312353
+    },
+    {
+      "PrefabPath": "assets/custom/monstertrucksemi.prefab",
+      "SkinID": 3593312527
+    },
+    {
+      "PrefabPath": "assets/custom/policecar.prefab",
+      "SkinID": 3480197155
+    },
+    {
+      "PrefabPath": "assets/custom/policebike.prefab",
+      "SkinID": 3480197341
+    },
+    {
+      "PrefabPath": "assets/custom/swatvan.prefab",
+      "SkinID": 3480197446
+    },
+    {
+      "PrefabPath": "assets/custom/jeep.prefab",
+      "SkinID": 3486897889
+    },
+    {
+      "PrefabPath": "assets/custom/jeepjp.prefab",
+      "SkinID": 3486898040
+    },
+    {
+      "PrefabPath": "assets/custom/jeepcamo.prefab",
+      "SkinID": 3486898162
+    },
+    {
+      "PrefabPath": "assets/custom/jeepdesert.prefab",
+      "SkinID": 3486898288
+    },
+    {
+      "PrefabPath": "assets/custom/jeepaa.prefab",
+      "SkinID": 3486898412
+    },
+    {
+      "PrefabPath": "assets/custom/flintmobile.prefab",
+      "SkinID": 3487419010
+    },
+    {
+      "PrefabPath": "assets/custom/airboat.prefab",
+      "SkinID": 3487418748
+    },
+    {
+      "PrefabPath": "assets/custom/airboat2.prefab",
+      "SkinID": 3487418880
+    },
+    {
+      "PrefabPath": "assets/custom/schoolbus.prefab",
+      "SkinID": 3799342365
+    },
+    {
+      "PrefabPath": "assets/custom/prisonbus.prefab",
+      "SkinID": 3799342558
+    },
+    {
+      "PrefabPath": "assets/custom/citybus.prefab",
+      "SkinID": 3799342465
+    },
+    {
+      "PrefabPath": "assets/custom/schoolbus1.prefab",
+      "SkinID": 3493431710
+    },
+    {
+      "PrefabPath": "assets/custom/schoolbus2.prefab",
+      "SkinID": 3493431766
+    },
+    {
+      "PrefabPath": "assets/custom/schoolbusshort.prefab",
+      "SkinID": 3493431818
+    },
+    {
+      "PrefabPath": "assets/custom/bigdumptruck.prefab",
+      "SkinID": 3493431872
+    },
+    {
+      "PrefabPath": "assets/custom/bigtractor.prefab",
+      "SkinID": 3493431941
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_intercettore.prefab",
+      "SkinID": 3599713753
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_black.prefab",
+      "SkinID": 3600244831
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_blue.prefab",
+      "SkinID": 3600245292
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_gold.prefab",
+      "SkinID": 3600245204
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_green.prefab",
+      "SkinID": 3600245095
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_pink.prefab",
+      "SkinID": 3600245005
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_strada_yellow.prefab",
+      "SkinID": 3600244915
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_red.prefab",
+      "SkinID": 3599605986
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_blue.prefab",
+      "SkinID": 3599605888
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_black.prefab",
+      "SkinID": 3599605765
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_green.prefab",
+      "SkinID": 3599605637
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_white.prefab",
+      "SkinID": 3599605534
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_pink.prefab",
+      "SkinID": 3599605420
+    },
+    {
+      "PrefabPath": "assets/custom/badcoppi_sport_yellow.prefab",
+      "SkinID": 3599605323
+    },
+    {
+      "PrefabPath": "assets/custom/minesweeper.prefab",
+      "SkinID": 3492018941
+    },
+    {
+      "PrefabPath": "assets/custom/minidozer.prefab",
+      "SkinID": 3492019000
+    },
+    {
+      "PrefabPath": "assets/custom/minitipper.prefab",
+      "SkinID": 3492019127
+    },
+    {
+      "PrefabPath": "assets/custom/steamroller.prefab",
+      "SkinID": 3492019185
+    },
+    {
+      "PrefabPath": "assets/custom/luggagecart.prefab",
+      "SkinID": 3506172978
+    },
+    {
+      "PrefabPath": "assets/custom/luggagetrailer.prefab",
+      "SkinID": 3506173178
+    },
+    {
+      "PrefabPath": "assets/custom/luggagetrailer2.prefab",
+      "SkinID": 3506173358
+    },
+    {
+      "PrefabPath": "assets/custom/luggagetrailer3.prefab",
+      "SkinID": 3506173536
+    },
+    {
+      "PrefabPath": "assets/custom/luggagetrailer4.prefab",
+      "SkinID": 3506173717
+    },
+    {
+      "PrefabPath": "assets/custom/hoverscout.prefab",
+      "SkinID": 3514995362
+    },
+    {
+      "PrefabPath": "assets/custom/scoutspeeder.prefab",
+      "SkinID": 3536940684
+    },
+    {
+      "PrefabPath": "assets/custom/minibike.prefab",
+      "SkinID": 3529896282
+    },
+    {
+      "PrefabPath": "assets/custom/minitrike.prefab",
+      "SkinID": 3529896378
+    },
+    {
+      "PrefabPath": "assets/custom/eggmobile.prefab",
+      "SkinID": 3512345168
+    },
+    {
+      "PrefabPath": "assets/custom/eggkart.prefab",
+      "SkinID": 3512345300
+    },
+    {
+      "PrefabPath": "assets/custom/drillcar.prefab",
+      "SkinID": 3512345434
+    },
+    {
+      "PrefabPath": "assets/custom/bm21.prefab",
+      "SkinID": 3567708048
+    },
+    {
+      "PrefabPath": "assets/custom/towtruck.prefab",
+      "SkinID": 3568203736
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart1.prefab",
+      "SkinID": 3599924190
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart2.prefab",
+      "SkinID": 3599924261
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart3.prefab",
+      "SkinID": 3599924321
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart4.prefab",
+      "SkinID": 3599924404
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart5.prefab",
+      "SkinID": 3599924469
+    },
+    {
+      "PrefabPath": "assets/custom/shifterkart6.prefab",
+      "SkinID": 3599924578
+    },
+    {
+      "PrefabPath": "assets/custom/tuktuk.prefab",
+      "SkinID": 3600448417
+    },
+    {
+      "PrefabPath": "assets/custom/stretch_black.prefab",
+      "SkinID": 3607478184
+    },
+    {
+      "PrefabPath": "assets/custom/stretch_white.prefab",
+      "SkinID": 3607478055
+    },
+    {
+      "PrefabPath": "assets/custom/stretch_pink.prefab",
+      "SkinID": 3607477979
+    },
+    {
+      "PrefabPath": "assets/custom/motorhome.prefab",
+      "SkinID": 3614037059
+    },
+    {
+      "PrefabPath": "assets/custom/cybertruck.prefab",
+      "SkinID": 3609417989
+    },
+    {
+      "PrefabPath": "assets/custom/cyberkart.prefab",
+      "SkinID": 3609418080
+    },
+    {
+      "PrefabPath": "assets/custom/karttoy.prefab",
+      "SkinID": 3609418176
+    },
+    {
+      "PrefabPath": "assets/custom/kartufo.prefab",
+      "SkinID": 3609418432
+    },
+    {
+      "PrefabPath": "assets/custom/kartsemi.prefab",
+      "SkinID": 3609420186
+    },
+    {
+      "PrefabPath": "assets/custom/kartsedan.prefab",
+      "SkinID": 3609420303
+    },
+    {
+      "PrefabPath": "assets/custom/kartracebed.prefab",
+      "SkinID": 3610359235
+    },
+    {
+      "PrefabPath": "assets/custom/kartpinata.prefab",
+      "SkinID": 3609420423
+    },
+    {
+      "PrefabPath": "assets/custom/kartpie.prefab",
+      "SkinID": 3609420551
+    },
+    {
+      "PrefabPath": "assets/custom/kartcoop.prefab",
+      "SkinID": 3609420655
+    },
+    {
+      "PrefabPath": "assets/custom/kartcatapult.prefab",
+      "SkinID": 3609420772
+    },
+    {
+      "PrefabPath": "assets/custom/kartcake.prefab",
+      "SkinID": 3609420891
+    },
+    {
+      "PrefabPath": "assets/custom/kartbradley.prefab",
+      "SkinID": 3609420998
+    },
+    {
+      "PrefabPath": "assets/custom/scrapbuggy.prefab",
+      "SkinID": 3609417660
+    },
+    {
+      "PrefabPath": "assets/custom/scrapcar.prefab",
+      "SkinID": 3609417744
+    },
+    {
+      "PrefabPath": "assets/custom/scraptruck.prefab",
+      "SkinID": 3609417893
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_black.prefab",
+      "SkinID": 3617429031
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_blue.prefab",
+      "SkinID": 3617429150
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_gold.prefab",
+      "SkinID": 3617429243
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_green.prefab",
+      "SkinID": 3617429443
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_orange.prefab",
+      "SkinID": 3617429718
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_pink.prefab",
+      "SkinID": 3617429832
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_police.prefab",
+      "SkinID": 3617429977
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_purple.prefab",
+      "SkinID": 3617430102
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_red.prefab",
+      "SkinID": 3617430199
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_white.prefab",
+      "SkinID": 3617430278
+    },
+    {
+      "PrefabPath": "assets/custom/diablo_yellow.prefab",
+      "SkinID": 3617430361
+    },
+    {
+      "PrefabPath": "assets/custom/126p_blue.prefab",
+      "SkinID": 3617502042
+    },
+    {
+      "PrefabPath": "assets/custom/126p_brown.prefab",
+      "SkinID": 3617501965
+    },
+    {
+      "PrefabPath": "assets/custom/126p_purple.prefab",
+      "SkinID": 3617501881
+    },
+    {
+      "PrefabPath": "assets/custom/126p_green.prefab",
+      "SkinID": 3617501820
+    },
+    {
+      "PrefabPath": "assets/custom/126p_lime.prefab",
+      "SkinID": 3617501752
+    },
+    {
+      "PrefabPath": "assets/custom/santasled.prefab",
+      "SkinID": 3618546323
+    },
+    {
+      "PrefabPath": "assets/custom/portapotty.prefab",
+      "SkinID": 3636056790
+    },
+    {
+      "PrefabPath": "assets/custom/spacebuggy.prefab",
+      "SkinID": 3636057371
+    },
+    {
+      "PrefabPath": "assets/custom/chaircar.prefab",
+      "SkinID": 3636058552
+    },
+    {
+      "PrefabPath": "assets/custom/rockingchaircar.prefab",
+      "SkinID": 3636058720
+    },
+    {
+      "PrefabPath": "assets/custom/beanbagcar.prefab",
+      "SkinID": 3636058889
+    },
+    {
+      "PrefabPath": "assets/custom/beanbagcarduo.prefab",
+      "SkinID": 3636059064
+    },
+    {
+      "PrefabPath": "assets/custom/beachchaircar.prefab",
+      "SkinID": 3636059302
+    },
+    {
+      "PrefabPath": "assets/custom/beachchaircarduo.prefab",
+      "SkinID": 3636059477
+    },
+    {
+      "PrefabPath": "assets/custom/hoverthrone.prefab",
+      "SkinID": 3636059695
+    },
+    {
+      "PrefabPath": "assets/custom/rocketseat.prefab",
+      "SkinID": 3636059880
+    },
+    {
+      "PrefabPath": "assets/custom/deskcar.prefab",
+      "SkinID": 3636060126
+    },
+    {
+      "PrefabPath": "assets/custom/utilitytruck.prefab",
+      "SkinID": 3636060646
+    },
+    {
+      "PrefabPath": "assets/custom/utilitytruck2.prefab",
+      "SkinID": 3636060788
+    },
+    {
+      "PrefabPath": "assets/custom/utilitytruck3.prefab",
+      "SkinID": 3636060955
+    },
+    {
+      "PrefabPath": "assets/custom/semitandemaxle.prefab",
+      "SkinID": 3636080042
+    },
+    {
+      "PrefabPath": "assets/custom/ares_hc.prefab",
+      "SkinID": 3652205166
+    },
+    {
+      "PrefabPath": "assets/custom/ares_aa.prefab",
+      "SkinID": 3652205067
+    },
+    {
+      "PrefabPath": "assets/custom/ares_t.prefab",
+      "SkinID": 3652204964
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux.prefab",
+      "SkinID": 3660148126
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_50cal.prefab",
+      "SkinID": 3660148041
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_armor.prefab",
+      "SkinID": 3660147961
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_he.prefab",
+      "SkinID": 3660147251
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_hv.prefab",
+      "SkinID": 3660147154
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_mlrs.prefab",
+      "SkinID": 3660147075
+    },
+    {
+      "PrefabPath": "assets/custom/rustlux_cargo.prefab",
+      "SkinID": 3668165142
+    },
+    {
+      "PrefabPath": "assets/custom/fireambulance.prefab",
+      "SkinID": 3660171649
+    },
+    {
+      "PrefabPath": "assets/custom/firetruck.prefab",
+      "SkinID": 3660172157
+    },
+    {
+      "PrefabPath": "assets/custom/firelightrescue.prefab",
+      "SkinID": 3660171915
+    },
+    {
+      "PrefabPath": "assets/custom/firepickuptruck.prefab",
+      "SkinID": 3660172033
+    },
+    {
+      "PrefabPath": "assets/custom/hoverracer.prefab",
+      "SkinID": 3660173231
+    },
+    {
+      "PrefabPath": "assets/custom/beevan.prefab",
+      "SkinID": 3660452958
+    },
+    {
+      "PrefabPath": "assets/custom/foodtruck.prefab",
+      "SkinID": 3660453115
+    },
+    {
+      "PrefabPath": "assets/custom/guntruck.prefab",
+      "SkinID": 3660453225
+    },
+    {
+      "PrefabPath": "assets/custom/vaultvan.prefab",
+      "SkinID": 3660453348
+    },
+    {
+      "PrefabPath": "assets/custom/deliveryvan.prefab",
+      "SkinID": 3660453442
+    },
+    {
+      "PrefabPath": "assets/custom/stretch_charityspecial.prefab",
+      "SkinID": 3657618056
+    },
+    {
+      "PrefabPath": "assets/custom/cannoncar.prefab",
+      "SkinID": 3678802042
+    },
+    {
+      "PrefabPath": "assets/custom/weedvan.prefab",
+      "SkinID": 3678802494
+    },
+    {
+      "PrefabPath": "assets/custom/warthogblack.prefab",
+      "SkinID": 3678802866
+    },
+    {
+      "PrefabPath": "assets/custom/podracersky.prefab",
+      "SkinID": 3678803223
+    },
+    {
+      "PrefabPath": "assets/custom/wedge.prefab",
+      "SkinID": 3679218825
+    },
+    {
+      "PrefabPath": "assets/custom/transit.prefab",
+      "SkinID": 3697807602
+    },
+    {
+      "PrefabPath": "assets/custom/transitdropside.prefab",
+      "SkinID": 3697808041
+    },
+    {
+      "PrefabPath": "assets/custom/transitrecycling.prefab",
+      "SkinID": 3697808456
+    },
+    {
+      "PrefabPath": "assets/custom/transitbox.prefab",
+      "SkinID": 3697808693
+    },
+    {
+      "PrefabPath": "assets/custom/sentrycar.prefab",
+      "SkinID": 3697809021
+    },
+    {
+      "PrefabPath": "assets/custom/sentrycar2.prefab",
+      "SkinID": 3697809236
+    },
+    {
+      "PrefabPath": "assets/custom/barrelcarthing.prefab",
+      "SkinID": 3697810981
+    },
+    {
+      "PrefabPath": "assets/custom/humancar.prefab",
+      "SkinID": 3697811364
+    },
+    {
+      "PrefabPath": "assets/custom/humankart.prefab",
+      "SkinID": 3697811695
+    },
+    {
+      "PrefabPath": "assets/custom/monsterbike.prefab",
+      "SkinID": 3697812288
+    },
+    {
+      "PrefabPath": "assets/custom/tire.prefab",
+      "SkinID": 3697812775
+    },
+    {
+      "PrefabPath": "assets/custom/zergatron.prefab",
+      "SkinID": 3697813122
+    },
+    {
+      "PrefabPath": "assets/custom/oxideman.prefab",
+      "SkinID": 3697813618
+    },
+    {
+      "PrefabPath": "assets/custom/coffincar.prefab",
+      "SkinID": 3697857763
+    },
+    {
+      "PrefabPath": "assets/custom/jackrabbit.prefab",
+      "SkinID": 3719407467
+    },
+    {
+      "PrefabPath": "assets/custom/jackrabbitgl.prefab",
+      "SkinID": 3719408103
+    },
+    {
+      "PrefabPath": "assets/custom/jackrabbitt.prefab",
+      "SkinID": 3719408996
+    },
+    {
+      "PrefabPath": "assets/custom/megaboard.prefab",
+      "SkinID": 3719412325
+    },
+    {
+      "PrefabPath": "assets/custom/longboard.prefab",
+      "SkinID": 3719412642
+    },
+    {
+      "PrefabPath": "assets/custom/longboard2.prefab",
+      "SkinID": 3719412858
+    },
+    {
+      "PrefabPath": "assets/custom/longboard3.prefab",
+      "SkinID": 3719413047
+    },
+    {
+      "PrefabPath": "assets/custom/longboard4.prefab",
+      "SkinID": 3719413301
+    },
+    {
+      "PrefabPath": "assets/custom/longboard5.prefab",
+      "SkinID": 3719413461
+    },
+    {
+      "PrefabPath": "assets/custom/longboard6.prefab",
+      "SkinID": 3719413670
+    },
+    {
+      "PrefabPath": "assets/custom/longboard7.prefab",
+      "SkinID": 3719413847
+    },
+    {
+      "PrefabPath": "assets/custom/mantis.prefab",
+      "SkinID": 3719414233
+    },
+    {
+      "PrefabPath": "assets/custom/mantisduo.prefab",
+      "SkinID": 3719414425
+    },
+    {
+      "PrefabPath": "assets/custom/warthogtblack.prefab",
+      "SkinID": 3719414691
+    },
+    {
+      "PrefabPath": "assets/custom/warthogsblack.prefab",
+      "SkinID": 3719414924
+    },
+    {
+      "PrefabPath": "assets/custom/crane.prefab",
+      "SkinID": 3719412105
+    },
+    {
+      "PrefabPath": "assets/custom/kart1offroad.prefab",
+      "SkinID": 3719416147
+    },
+    {
+      "PrefabPath": "assets/custom/kart2offroad.prefab",
+      "SkinID": 3719416583
+    },
+    {
+      "PrefabPath": "assets/custom/kart3offroad.prefab",
+      "SkinID": 3719416791
+    },
+    {
+      "PrefabPath": "assets/custom/kart4offroad.prefab",
+      "SkinID": 3719416978
+    },
+    {
+      "PrefabPath": "assets/custom/kart5offroad.prefab",
+      "SkinID": 3719417198
+    },
+    {
+      "PrefabPath": "assets/custom/kart6offroad.prefab",
+      "SkinID": 3719417359
+    },
+    {
+      "PrefabPath": "assets/custom/kart7offroad.prefab",
+      "SkinID": 3719417540
+    },
+    {
+      "PrefabPath": "assets/custom/kart8offroad.prefab",
+      "SkinID": 3719417709
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_black.prefab",
+      "SkinID": 3738567633
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_blackwidow.prefab",
+      "SkinID": 3738567727
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_blue.prefab",
+      "SkinID": 3738567825
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_kpc1.prefab",
+      "SkinID": 3738567950
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_kpc2.prefab",
+      "SkinID": 3738568043
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_orange.prefab",
+      "SkinID": 3738568177
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_police.prefab",
+      "SkinID": 3738568300
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_purple.prefab",
+      "SkinID": 3738568434
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_red.prefab",
+      "SkinID": 3738568578
+    },
+    {
+      "PrefabPath": "assets/custom/superglide_white.prefab",
+      "SkinID": 3738568656
+    },
+    {
+      "PrefabPath": "assets/custom/transit.prefab",
+      "SkinID": 3737678187
+    },
+    {
+      "PrefabPath": "assets/custom/transitblack.prefab",
+      "SkinID": 3737678331
+    },
+    {
+      "PrefabPath": "assets/custom/transitrecycling.prefab",
+      "SkinID": 3737678443
+    },
+    {
+      "PrefabPath": "assets/custom/transitdropside.prefab",
+      "SkinID": 3737678539
+    },
+    {
+      "PrefabPath": "assets/custom/transittaxi.prefab",
+      "SkinID": 3737678539
+    },
+    {
+      "PrefabPath": "assets/custom/transitbox.prefab",
+      "SkinID": 3737678722
+    },
+    {
+      "PrefabPath": "assets/custom/transitnews.prefab",
+      "SkinID": 3791224313
+    },
+    {
+      "PrefabPath": "assets/custom/factorycart.prefab",
+      "SkinID": 3737678920
+    },
+    {
+      "PrefabPath": "assets/custom/motorwheel.prefab",
+      "SkinID": 3737679025
+    },
+    {
+      "PrefabPath": "assets/custom/garbagetruck.prefab",
+      "SkinID": 3737679586
+    },
+    {
+      "PrefabPath": "assets/custom/eurotruck_black.prefab",
+      "SkinID": 3737451025
+    },
+    {
+      "PrefabPath": "assets/custom/eurotruck_white.prefab",
+      "SkinID": 3737451168
+    },
+    {
+      "PrefabPath": "assets/custom/eurotrailer_black.prefab",
+      "SkinID": 3737451281
+    },
+    {
+      "PrefabPath": "assets/custom/eurotrailer_green.prefab",
+      "SkinID": 3737451392
+    },
+    {
+      "PrefabPath": "assets/custom/eurotrailer_blue.prefab",
+      "SkinID": 3737451511
+    },
+    {
+      "PrefabPath": "assets/custom/eurotrailer_yellow.prefab",
+      "SkinID": 3737451708
+    },
+    {
+      "PrefabPath": "assets/custom/eurotrailer_white.prefab",
+      "SkinID": 3737451806
+    },
+    {
+      "PrefabPath": "assets/custom/utv.prefab",
+      "SkinID": 3719409868
+    },
+    {
+      "PrefabPath": "assets/custom/utv6x4.prefab",
+      "SkinID": 3719410172
+    },
+    {
+      "PrefabPath": "assets/custom/utvrecycler.prefab",
+      "SkinID": 3719410351
+    },
+    {
+      "PrefabPath": "assets/custom/utvworkbench.prefab",
+      "SkinID": 3719410545
+    },
+    {
+      "PrefabPath": "assets/custom/roadsweeper.prefab",
+      "SkinID": 3738795054
+    },
+    {
+      "PrefabPath": "assets/custom/skipvan.prefab",
+      "SkinID": 3752207562
+    },
+    {
+      "PrefabPath": "assets/custom/e30_black.prefab",
+      "SkinID": 3752721266
+    },
+    {
+      "PrefabPath": "assets/custom/e30_drift.prefab",
+      "SkinID": 3752721527
+    },
+    {
+      "PrefabPath": "assets/custom/e30_purple.prefab",
+      "SkinID": 3752722086
+    },
+    {
+      "PrefabPath": "assets/custom/e30_red.prefab",
+      "SkinID": 3752721940
+    },
+    {
+      "PrefabPath": "assets/custom/e30_white.prefab",
+      "SkinID": 3752722314
+    },
+    {
+      "PrefabPath": "assets/custom/e30_silver.prefab",
+      "SkinID": 3752722629
+    },
+    {
+      "PrefabPath": "assets/custom/rickshaw.prefab",
+      "SkinID": 3752722842
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_red.prefab",
+      "SkinID": 3750465740
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_yellow.prefab",
+      "SkinID": 3750465627
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_blue.prefab",
+      "SkinID": 3750465513
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_pink.prefab",
+      "SkinID": 3750465393
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_green.prefab",
+      "SkinID": 3750465263
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_purple.prefab",
+      "SkinID": 3750465130
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_orange .prefab",
+      "SkinID": 3750464986
+    },
+    {
+      "PrefabPath": "assets/custom/retroracer_black.prefab",
+      "SkinID": 3750464901
+    },
+    {
+      "PrefabPath": "assets/custom/tubmarine.prefab",
+      "SkinID": 3766513892
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy1.prefab",
+      "SkinID": 3786994104
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy2.prefab",
+      "SkinID": 3786994136
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy3.prefab",
+      "SkinID": 3786994176
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy4.prefab",
+      "SkinID": 3786994228
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy5.prefab",
+      "SkinID": 3786994264
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy6.prefab",
+      "SkinID": 3786994308
+    },
+    {
+      "PrefabPath": "assets/custom/golfbuggy7.prefab",
+      "SkinID": 3786994350
+    },
+    {
+      "PrefabPath": "assets/custom/racesink.prefab",
+      "SkinID": 3795165994
+    },
+    {
+      "PrefabPath": "assets/custom/racetoilet.prefab",
+      "SkinID": 3795166161
+    },
+    {
+      "PrefabPath": "assets/custom/racetub.prefab",
+      "SkinID": 3795166299
+    },
+    {
+      "PrefabPath": "assets/custom/transitelectric.prefab",
+      "SkinID": 3805191505
+    },
+    {
+      "PrefabPath": "assets/custom/transitsecurity.prefab",
+      "SkinID": 3805191708
+    },
+    {
+      "PrefabPath": "assets/custom/meattruck.prefab",
+      "SkinID": 3805191909
+    },
+    {
+      "PrefabPath": "assets/custom/milkfloat.prefab",
+      "SkinID": 3805192274
+    },
+    {
+      "PrefabPath": "assets/custom/racecornersofa.prefab",
+      "SkinID": 3809248460
+    },
+    {
+      "PrefabPath": "assets/custom/axel.prefab",
+      "SkinID": 3809278827
+    },
+    {
+      "PrefabPath": "assets/custom/sharksuit.prefab",
+      "SkinID": 3678803629
+    },
+    {
+      "PrefabPath": "assets/custom/sharksuitarmed.prefab",
+      "SkinID": 3678803996
+    },
+    {
+      "PrefabPath": "assets/custom/sharkboat.prefab",
+      "SkinID": 3678804247
+    },
+    {
+      "PrefabPath": "assets/custom/sharkboatarmed.prefab",
+      "SkinID": 3678804529
+    },
+    {
+      "PrefabPath": "assets/custom/sharkboathuge.prefab",
+      "SkinID": 3678804788
+    },
+    {
+      "PrefabPath": "assets/custom/standski.prefab",
+      "SkinID": 3678805116
+    },
+    {
+      "PrefabPath": "assets/custom/standski2.prefab",
+      "SkinID": 3678805323
+    },
+    {
+      "PrefabPath": "assets/custom/standski3.prefab",
+      "SkinID": 3678805781
+    },
+    {
+      "PrefabPath": "assets/custom/standski4.prefab",
+      "SkinID": 3678806122
+    },
+    {
+      "PrefabPath": "assets/custom/standski5.prefab",
+      "SkinID": 3678806281
+    },
+    {
+      "PrefabPath": "assets/custom/standski6.prefab",
+      "SkinID": 3678806636
+    },
+    {
+      "PrefabPath": "assets/custom/jetskiblack.prefab",
+      "SkinID": 3679169928
+    },
+    {
+      "PrefabPath": "assets/custom/jetskiblue.prefab",
+      "SkinID": 3679170039
+    },
+    {
+      "PrefabPath": "assets/custom/jetskiblueredstriped.prefab",
+      "SkinID": 3679170179
+    },
+    {
+      "PrefabPath": "assets/custom/jetskiblueyellowstriped.prefab",
+      "SkinID": 3679170323
+    },
+    {
+      "PrefabPath": "assets/custom/jetskicamo.prefab",
+      "SkinID": 3679170472
+    },
+    {
+      "PrefabPath": "assets/custom/jetskigold.prefab",
+      "SkinID": 3679170603
+    },
+    {
+      "PrefabPath": "assets/custom/jetskigreen.prefab",
+      "SkinID": 3679170712
+    },
+    {
+      "PrefabPath": "assets/custom/jetskipink.prefab",
+      "SkinID": 3679170791
+    },
+    {
+      "PrefabPath": "assets/custom/jetskipolice.prefab",
+      "SkinID": 3679170890
+    },
+    {
+      "PrefabPath": "assets/custom/jetskipurple.prefab",
+      "SkinID": 3679170993
+    },
+    {
+      "PrefabPath": "assets/custom/jetskired.prefab",
+      "SkinID": 3679171101
+    },
+    {
+      "PrefabPath": "assets/custom/jetskiyellow.prefab",
+      "SkinID": 3679171190
+    },
+    {
+      "PrefabPath": "assets/custom/motorbikeboard.prefab",
+      "SkinID": 3679215956
+    },
+    {
+      "PrefabPath": "assets/custom/bikeboard.prefab",
+      "SkinID": 3679216206
+    },
+    {
+      "PrefabPath": "assets/custom/trikeboard.prefab",
+      "SkinID": 3679216472
+    },
+    {
+      "PrefabPath": "assets/custom/minirhib.prefab",
+      "SkinID": 3697885595
+    },
+    {
+      "PrefabPath": "assets/custom/miniptboat.prefab",
+      "SkinID": 3697886456
+    },
+    {
+      "PrefabPath": "assets/custom/minisub.prefab",
+      "SkinID": 3697886692
+    },
+    {
+      "PrefabPath": "assets/custom/minisub2.prefab",
+      "SkinID": 3697886948
+    },
+    {
+      "PrefabPath": "assets/custom/cpv_grey.prefab",
+      "SkinID": 3697696931
+    },
+    {
+      "PrefabPath": "assets/custom/cpv_green.prefab",
+      "SkinID": 3697697057
+    },
+    {
+      "PrefabPath": "assets/custom/bananaboat.prefab",
+      "SkinID": 3721290603
+    },
+    {
+      "PrefabPath": "assets/custom/bananaboathuge.prefab",
+      "SkinID": 3721290774
+    },
+    {
+      "PrefabPath": "assets/custom/galleon.prefab",
+      "SkinID": 3733884735
+    },
+    {
+      "PrefabPath": "assets/custom/tubmarine.prefab",
+      "SkinID": 3766513892
+    },
+    {
+      "PrefabPath": "assets/custom/bradleyvehicle.prefab",
+      "SkinID": 3416082800
+    }
+  ]
+}

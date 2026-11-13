@@ -9,6 +9,7 @@
   "GUI Buttons TC - OffsetMax": "573 643",
   "GUI Buttons TC - AnchorMin": "0.5 0",
   "GUI Buttons TC - AnchorMax": "0.5 0",
+  "Notify only the player who started the action": false,
   "Alert Gametip": false,
   "Alert Chat": false,
   "Alert Notify Plugin": true,
@@ -39,6 +40,7 @@
   "Wallpaper Damage": true,
   "Wallpaper both sides": true,
   "Force both sides including external sides": true,
+  "Allow manual exterior wallpapers on walls and floors": true,
   "Cooldown Frequency Upgrade (larger number is slower)": {
     "bettertc.use": 0.5,
     "bettertc.vip": 0.25
@@ -247,6 +249,20 @@
       "Img Icon": "https://cdn.rustspain.com/plugins/bettertc/crypt.png",
       "ItemID": 0,
       "SkinID": 10472,
+      "Color": false,
+      "Wall": -1,
+      "ItemID2": 0,
+      "Permission Use": "bettertc.upskin",
+      "Disable for Barges": false
+    },
+    {
+      "ID": 14,
+      "Enabled": true,
+      "Short Name": "Scrap King",
+      "Grade": "metal",
+      "Img Icon": "https://cdn.rustspain.com/plugins/bettertc/scrap-king.png",
+      "ItemID": 69511070,
+      "SkinID": 10566,
       "Color": false,
       "Wall": -1,
       "ItemID2": 0,

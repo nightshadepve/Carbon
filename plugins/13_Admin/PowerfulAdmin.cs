@@ -20415,7 +20415,7 @@ namespace Oxide.Plugins
                 UI_Text(container, st,
                     pendingSwitch ? GetLocalizedMessage(TranslateKey.StorageMigrateQ, player) : GetLocalizedMessage(TranslateKey.StorageNote, player),
                     9, Fonts.Body, TextAnchor.MiddleLeft, Palette.CText3, "0 1", "1 1", "316 -72", "-190 -46",
-                    st + ".mig" + ".1794427566");
+                    st + ".mig" + ".1793904376");
                 if (pendingSwitch && PeekAdmin(player.userID)?.StorageConfirm == true)
                 {
                     UI_Btn(container, st, GetLocalizedMessage(TranslateKey.ConfirmNo, player), "pa.storagemig 0",

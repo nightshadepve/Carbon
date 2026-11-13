@@ -20,6 +20,19 @@
   "PanelOpened": true,
   "QuickButtons": [
     {
+      "Id": "9f68ebad63f3403b95711beeaddd7016",
+      "Name": "Cargo",
+      "Target": "Global",
+      "Command": "spawn.cargoshipevent",
+      "Icon": "assets/icons/terrain.png",
+      "Color": "",
+      "Permission": "",
+      "Confirm": true,
+      "Places": "Popup",
+      "Order": 0,
+      "Enabled": true
+    },
+    {
       "Id": "warn",
       "Name": "Warning",
       "Target": "Player",
@@ -29,7 +42,7 @@
       "Permission": "",
       "Confirm": false,
       "Places": "Popup, Map",
-      "Order": 0,
+      "Order": 1,
       "Enabled": true
     },
     {
@@ -42,7 +55,7 @@
       "Permission": "",
       "Confirm": false,
       "Places": "Map",
-      "Order": 1,
+      "Order": 2,
       "Enabled": true
     },
     {
@@ -55,7 +68,7 @@
       "Permission": "",
       "Confirm": true,
       "Places": "Widget, Dashboard",
-      "Order": 2,
+      "Order": 3,
       "Enabled": true
     }
   ],
@@ -70,7 +83,7 @@
   ],
   "Version": {
     "Major": 1,
-    "Minor": 2,
-    "Patch": 7
+    "Minor": 3,
+    "Patch": 1
   }
 }

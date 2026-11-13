@@ -1,9 +1,9 @@
 {
   "name": "RKFISHHH",
-  "xp": 387043.71095983923,
+  "xp": 476518.45595986012,
   "prestige_level": 0,
-  "current_level": 43,
-  "achieved_level": 43,
+  "current_level": 48,
+  "achieved_level": 48,
   "available_points": 6,
   "non_level_related_points_given": 0,
   "buff_values": {
@@ -37,7 +37,11 @@
     "MacGyver": 1,
     "Expert Tinkerer": 3,
     "Fry Cook": 5,
-    "Tea Connoisseur": 3
+    "Tea Connoisseur": 5,
+    "Fruggal Rationer": 3,
+    "Burst Of Energy": 1,
+    "Drum Mag": 5,
+    "Lucky Shot": 4
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -49,19 +53,22 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T15:05:40.009563+00:00",
+  "logged_off": "2026-11-13T07:06:47.985725+00:00",
   "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
     "Harvester_Ultimate": {
       "enabled": true
+    },
+    "Cooking_Ultimate": {
+      "enabled": true
     }
   },
   "plant_genes": "gggyyy",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
-  "cooking_ultimate_used_time": "0001-01-01T00:00:00",
+  "cooking_ultimate_used_time": "2026-11-13T06:16:01.145728+00:00",
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.827519+00:00",
   "Loot_Spotter_used_time": "2026-11-05T19:06:43.82752+00:00",
   "xp_debt": 0.0,
@@ -76,5 +83,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 129
+  "GetTotalSkillPoints": 144
 }

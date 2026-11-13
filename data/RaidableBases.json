@@ -73,28 +73,28 @@
     },
     "76561198383506301": {
       "Name": "TXIuVG9vdHNpZXM",
-      "Raids": 2,
-      "Points": 8,
-      "TotalRaids": 11,
-      "TotalPoints": 47,
-      "ExpiredDate": "2027-01-11T09:04:35.552008+00:00",
+      "Raids": 5,
+      "Points": 22,
+      "TotalRaids": 14,
+      "TotalPoints": 61,
+      "ExpiredDate": "2027-01-12T12:39:59.542628+00:00",
       "Easy": 0,
       "Medium": 0,
       "Hard": 0,
-      "Expert": 2,
-      "Nightmare": 0,
+      "Expert": 3,
+      "Nightmare": 2,
       "MediumPoints": 0,
       "TotalMedium": 1,
       "TotalMediumPoints": 2,
       "HardPoints": 0,
       "TotalHard": 1,
       "TotalHardPoints": 3,
-      "ExpertPoints": 8,
-      "TotalExpert": 3,
-      "TotalExpertPoints": 12,
-      "NightmarePoints": 0,
-      "TotalNightmare": 6,
-      "TotalNightmarePoints": 30
+      "ExpertPoints": 12,
+      "TotalExpert": 4,
+      "TotalExpertPoints": 16,
+      "NightmarePoints": 10,
+      "TotalNightmare": 8,
+      "TotalNightmarePoints": 40
     },
     "76561198017547177": {
       "Name": "UktGSVNISEg",
@@ -127,21 +127,33 @@
       "ExpertPoints": 4,
       "TotalExpert": 1,
       "TotalExpertPoints": 4
+    },
+    "76561199649462056": {
+      "Name": "R29uZSBGaXNoaW4",
+      "Raids": 1,
+      "Points": 1,
+      "TotalRaids": 1,
+      "TotalPoints": 1,
+      "ExpiredDate": "2027-01-11T17:31:40.282176+00:00",
+      "Easy": 1,
+      "Medium": 0,
+      "Hard": 0,
+      "Expert": 0,
+      "Nightmare": 0,
+      "EasyPoints": 1,
+      "TotalEasy": 1,
+      "TotalEasyPoints": 1
     }
   },
   "BuyableCooldowns": {},
   "RustNavigationBuilds": [
     {
-      "center": "1725.252 3.721023 775.0602",
-      "size": "46.19043 12.82491 46.01001"
-    },
-    {
-      "center": "475.3552 29.3867 388.3506",
-      "size": "13.11865 5.900005 10.67749"
+      "center": "-1725.906 13.3649 -224.6721",
+      "size": "43.40112 30.1721 33.26645"
     }
   ],
   "RaidTime": "0001-01-01T00:00:00",
-  "TotalEvents": 311,
+  "TotalEvents": 316,
   "WipeId": "715b982d16da46ea9070449c6685466d",
   "protocol": 290
 }

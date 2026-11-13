@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Carbon.Plugins
 {
-    [Info("UnifiedLootProtection", "Nightshade", "1.1.1")]
+    [Info("UnifiedLootProtection", "Nightshade", "1.1.2")]
     [Description("Unified loot protection combining damage-based ownership and TC-based container protection.")]
     public class UnifiedLootProtection : CarbonPlugin
     {
@@ -20,7 +20,7 @@ namespace Carbon.Plugins
         // set of prefab short names that are always publicly accessible
         private static readonly HashSet<string> PublicEntities = new(StringComparer.OrdinalIgnoreCase)
         {
-            "mailbox.deployed", "repairbench_deployed", "dropbox",
+            "mailbox.deployed", "repairbench_deployed",
             "workbench1", "workbench2", "workbench3", "iotable",
             "research.table", "researchtable_deployed", "mixingtable.deployed",
             "electric.switch", "sam_site_turret_deployed", "autoturret_deployed",
@@ -47,7 +47,8 @@ namespace Carbon.Plugins
 
         private const string PermAdmin = "unifiedlootprotection.admin";
 
-        [PluginReference] private Plugin RaidableBases, TruePVE;
+        [PluginReference] private Plugin RaidableBases, TruePVE, NightshadeRaidProtection;
+        [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
 
         #endregion
 
@@ -102,6 +103,15 @@ namespace Carbon.Plugins
 
             [JsonProperty("Disable Bradley, heli, NPC, hackable crate and supply drop ownership locks")]
             public bool DisableEventOwnershipLocks { get; set; } = true;
+
+            [JsonProperty("Allow access during active Purge ruleset")]
+            public bool AllowDuringPurge { get; set; } = true;
+
+            [JsonProperty("TruePVE Purge ruleset name")]
+            public string PurgeRuleSet { get; set; } = "purge";
+
+            [JsonProperty("Keep TC authorization restricted during raiding")]
+            public bool KeepTcAuthProtected { get; set; } = true;
         }
 
         private class BradleyConfig
@@ -217,7 +227,7 @@ namespace Carbon.Plugins
                     _config = new PluginConfig();
                 if (_config.WeekendPvP == null)
                     _config.WeekendPvP = new WeekendPvPConfig();
-                SaveConfig();
+                // Do not rewrite config or plugin source during every load.
             }
             catch
             {
@@ -242,6 +252,9 @@ namespace Carbon.Plugins
             if (knownStored != null) _knownPlayers = knownStored;
 
             Puts($"[UnifiedLootProtection] Loaded share data: {_shareData.Count} entries. Known players: {_knownPlayers.Count}.");
+            if (!_config.StorageProtection.Enabled)
+                PrintWarning("StorageProtection.Enabled is FALSE. Weekday storage will not be protected; enable StorageProtection in UnifiedLootProtection.json.");
+
         }
 
         // Called when a player connects — keep known players list up to date
@@ -294,25 +307,21 @@ namespace Carbon.Plugins
 
         #region Weekend PvP / TruePVE profile integration
 
-        // TruePVE 2.4.4 exposes GetPlayerMapping, NOT a global GetCurrentRuleSet hook.
-        // The Nightshade TruePVE config must map nightshade_pvp_weekend to itself to
-        // make the current global weekend profile visible through GetPlayerMapping.
-        // On weekday monument zones it may return monumentpvp: that is intentionally
-        // NOT a signal to disable ULP's server-wide loot protections.
+        // GetPlayerMapping is location-specific; it may report a monument or stale
+        // mapping and MUST NEVER, by itself, unlock someone else's storage.
         private string GetTruePveMapping(BasePlayer player)
         {
             if (_config?.WeekendPvP == null || !_config.WeekendPvP.ReadTruePVEProfile ||
                 TruePVE == null || !TruePVE.IsLoaded || player == null)
                 return null;
-            try
-            {
-                return TruePVE.Call("GetPlayerMapping", player) as string;
-            }
-            catch (Exception ex)
-            {
-                PrintWarning("TruePVE GetPlayerMapping failed: " + ex.Message);
-                return null;
-            }
+            return TruePVE.Call("GetPlayerMapping", player) as string;
+        }
+
+        // TruePVE 2.4.4 exposes its actual GLOBAL current ruleset through this API.
+        private string GetTruePveRuleSet()
+        {
+            if (TruePVE == null || !TruePVE.IsLoaded) return null;
+            return TruePVE.Call("CurrentRuleSetName") as string;
         }
 
         private TimeZoneInfo _nightshadeEasternZone;
@@ -336,7 +345,7 @@ namespace Carbon.Plugins
                 if (!_warnedEasternZone)
                 {
                     _warnedEasternZone = true;
-                    PrintError("Could not find Eastern timezone; weekend clock fallback disabled. Check host timezone data.");
+                    PrintError("Could not find Eastern timezone; weekend loot opening is disabled. Check host timezone data.");
                 }
                 return false;
             }
@@ -352,21 +361,111 @@ namespace Carbon.Plugins
             }
         }
 
+        private bool IsPurgeActive()
+        {
+            var opt = _config?.WeekendPvP;
+            if (opt == null || !opt.Enabled || !opt.AllowDuringPurge) return false;
+            // Prefer the actual purge controller when available.
+            if (PurgeStatus != null && PurgeStatus.IsLoaded)
+            {
+                var overrideName = PurgeStatus.Call("API_GetActiveRulesetOverride") as string;
+                if (overrideName != null)
+                    return overrideName.Equals(opt.PurgeRuleSet, StringComparison.OrdinalIgnoreCase);
+            }
+            // Also support scheduled/manual Purge via TruePVE when the purge plugin
+            // is not installed or does not expose an override.
+            return string.Equals(GetTruePveRuleSet(), opt.PurgeRuleSet, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool TryGetRaidWeekendState(out bool active)
+        {
+            active = false;
+            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded) return false;
+            var value = NightshadeRaidProtection.Call("API_IsPvPActive");
+            if (!(value is bool)) return false;
+            active = (bool)value;
+            return true;
+        }
+
+        // The real Eastern clock is an additional guard: nrp.faketime modifies
+        // NRP's published window, but its damage blocker uses the REAL clock.
+        // Never open storage on a weekday just because the test clock is active.
         private bool IsWeekendPvp(BasePlayer player = null)
         {
-            var weekend = _config?.WeekendPvP;
-            if (weekend == null || !weekend.Enabled) return false;
-            string mapping = GetTruePveMapping(player);
-            if (!string.IsNullOrEmpty(mapping) &&
-                string.Equals(mapping, weekend.WeekendRuleSet, StringComparison.OrdinalIgnoreCase))
-                return true;
-            // The clock fallback also handles NPC/cargo events with no player argument,
-            // as well as missing/empty TruePVE mapping for the weekend ruleset.
-            return weekend.EasternClockFallback && IsEasternWeekendWindow();
+            var opt = _config?.WeekendPvP;
+            if (opt == null || !opt.Enabled) return false;
+            if (IsPurgeActive()) return true;
+            bool realWeekend = IsEasternWeekendWindow();
+            if (!realWeekend) return false;
+            bool raidActive;
+            if (TryGetRaidWeekendState(out raidActive)) return raidActive;
+            // Safe fallback when NRP is absent: require BOTH Eastern weekend time
+            // and TruePVE's actual global weekend profile, not a zone mapping.
+            return opt.EasternClockFallback &&
+                string.Equals(GetTruePveRuleSet(), opt.WeekendRuleSet, StringComparison.OrdinalIgnoreCase);
         }
 
         private bool SkipEventOwnership(BasePlayer player = null) =>
             IsWeekendPvp(player) && _config.WeekendPvP.DisableEventOwnershipLocks;
+
+        private bool IsPlayerOrTeamOwner(BasePlayer player, ulong ownerId)
+        {
+            if (player == null || ownerId == 0UL) return false;
+            if (player.userID == ownerId) return true;
+            if (!_config.StorageProtection.UseTeams || player.currentTeam == 0UL) return false;
+            var team = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
+            return team != null && team.members.Contains(ownerId);
+        }
+
+        private static bool IsStorage(BaseEntity entity) =>
+            entity is StorageContainer || entity is BaseOven || entity is ContainerIOEntity;
+
+        // Use the entity's OWN building privilege, not the first TC located in a
+        // 16m sphere (which can belong to a neighboring base).
+        private static BuildingPrivlidge GetStorageTc(BaseEntity entity) =>
+            entity == null || entity is SupplyDrop ? null : entity.GetBuildingPrivilege();
+
+        private bool IsExplicitlyShared(BasePlayer player, BaseEntity entity)
+        {
+            if (player == null || entity?.net == null) return false;
+            HashSet<ulong> shared;
+            return _shareData.TryGetValue(entity.net.ID.Value, out shared) && shared.Contains(player.userID);
+        }
+
+        private bool CanPlayerUseStorage(BasePlayer player, BaseEntity entity, out string explanation)
+        {
+            explanation = "Unknown";
+            if (player == null || entity == null || !IsStorage(entity))
+            { explanation = "Not managed storage"; return true; }
+            if (player.IsAdmin) { explanation = "Admin bypass"; return true; }
+            if (IsExplicitlyShared(player, entity)) { explanation = "Explicitly shared"; return true; }
+            if (IsPlayerOrTeamOwner(player, entity.OwnerID))
+            { explanation = "Owner or Rust teammate"; return true; }
+
+            BuildingPrivlidge tc = GetStorageTc(entity);
+            ulong owner = entity.OwnerID != 0UL ? entity.OwnerID : tc != null ? tc.OwnerID : 0UL;
+            if (owner == 0UL && tc == null)
+            { explanation = "Unowned / no TC (public)"; return true; }
+            if (IsPlayerOrTeamOwner(player, owner))
+            { explanation = "TC owner or Rust teammate"; return true; }
+            explanation = "Not owner/team/shared";
+            return false;
+        }
+
+        // A protected TC must keep its boxes protected even during open raiding;
+        // NRP 1.1.4 provides a read-only status that covers both PAID and OFFLINE.
+        private bool IsLootProtectedByRaidShield(BasePlayer player, BaseEntity entity)
+        {
+            if (player != null && player.IsAdmin) return false;
+            if (entity == null || !IsStorage(entity) || NightshadeRaidProtection == null ||
+                !NightshadeRaidProtection.IsLoaded) return false;
+            BuildingPrivlidge tc = GetStorageTc(entity);
+            if (tc == null || tc.net == null || tc.IsDestroyed) return false;
+            if (IsPlayerOrTeamOwner(player, entity.OwnerID) || IsPlayerOrTeamOwner(player, tc.OwnerID) ||
+                IsExplicitlyShared(player, entity)) return false;
+            var result = NightshadeRaidProtection.Call("API_IsCupboardLootProtected", tc.net.ID.Value);
+            return result is bool && (bool)result;
+        }
 
         #endregion
 
@@ -488,7 +587,16 @@ namespace Carbon.Plugins
         private object CheckLootAccess(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return null;
-            if (IsWeekendPvp(player)) return null;
+            if (IsWeekendPvp(player))
+            {
+                if (IsLootProtectedByRaidShield(player, entity))
+                {
+                    if (_config.ChatAlerts.StorageBlocked)
+                        player.ChatMessage("<color=#A04A4A>This base has active Nightshade raid protection.</color>");
+                    return false;
+                }
+                return null;
+            }
 
             // Admins always bypass storage/loot protection
             if (player.IsAdmin)
@@ -540,79 +648,29 @@ namespace Carbon.Plugins
             if (_shareData.TryGetValue(uid, out var entityShared) && entityShared.Contains(player.userID))
                 return null;
 
-            // Storage protection — OwnerID + TC, always enforced
-            if (_config.StorageProtection.Enabled)
+            // Weekday PVE: only box owner, their Rust team, or an explicit share.
+            // TC authorization ALONE does not grant box access to outsiders.
+            if (_config.StorageProtection.Enabled && IsStorage(entity))
             {
-                bool isProtectable = entity is StorageContainer
-                    || entity is BaseOven
-                    || entity is ContainerIOEntity;
-
-                if (!isProtectable) return null;
-
-                var ownerId = entity.OwnerID;
-
-                // ── OwnerID check ─────────────────────────────────────────────
-                if (ownerId != 0)
+                string explanation;
+                if (!CanPlayerUseStorage(player, entity, out explanation))
                 {
-                    if (ownerId == player.userID)
-                    {
-                        return null;
-                    }
-
-                    if (player.currentTeam != 0)
-                    {
-                        var team = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
-                        if (team != null && team.members.Contains(ownerId))
-                        {
-                            return null;
-                        }
-                    }
+                    if (_config.ChatAlerts.StorageBlocked)
+                        player.ChatMessage("<color=#A04A4A>Storage is private during PvE (owner/team/shared only).</color>");
+                    return false;
                 }
-                else
-                {
-                }
-
-                // ── TC check ──────────────────────────────────────────────────
-                // Supply drops are owner-only — skip TC check entirely
-                bool isSupplyDrop = entity is SupplyDrop;
-
-                if (!isSupplyDrop)
-                {
-                    var privs = new List<BuildingPrivlidge>();
-                    Vis.Entities(entity.transform.position, 16f, privs);
-
-                    if (privs.Count > 0)
-                    {
-                        foreach (var priv in privs)
-                        {
-                            if (IsAuthorizedOrTeammate(player, priv)) return null;
-                        }
-
-                        // TC found but not authed — deny
-                        if (_config.ChatAlerts.StorageBlocked)
-                            player.ChatMessage("<color=#A04A4A>You are not authorized to access this storage.</color>");
-                        return false;
-                    }
-                }
-
-                // ── No TC (or supply drop), no OwnerID ────────────────────────
-                if (ownerId == 0) return null;
-
-                // ── Has OwnerID, player didn't pass owner/team check ──────────
-                if (_config.ChatAlerts.StorageBlocked)
-                    player.ChatMessage("<color=#A04A4A>You are not authorized to access this storage.</color>");
-                return false;
             }
 
             return null;
         }
 
-        // Protect sleeping players all week, including PvP weekends.
+        // Protect sleeping players all week, including PvP weekends AND Purge.
         // Do NOT apply IsWeekendPvp here: CanLootPlayer covers live player inventories.
         // Dead-player corpse containers are handled separately by CanLootEntity.
         private object CanLootPlayer(BasePlayer target, BasePlayer looter)
         {
-            if (!_config.CorpseProtection.Enabled) return null;
+            // Nightshade rule: sleeper inventories stay protected in ALL modes,
+            // even if the generic CorpseProtection.Enabled config was disabled.
             if (looter == null || target == null) return null;
             if (looter.IsAdmin && _config.CorpseProtection.AdminCanLoot) return null;
             if (looter.userID == target.userID) return null;
@@ -822,7 +880,9 @@ namespace Carbon.Plugins
         private object OnCupboardAuthorize(BuildingPrivlidge privilege, BasePlayer player)
         {
             if (privilege == null || player == null) return null;
-            if (IsWeekendPvp(player)) return null;
+            // Keep TC authorization protected during raid windows by default.
+            // Letting an attacker authorize on a TC could defeat offline protection.
+            if (IsWeekendPvp(player) && !_config.WeekendPvP.KeepTcAuthProtected) return null;
             if (player.IsAdmin) return null;
 
             // Allow TC auth inside RaidableBases zones
@@ -1284,19 +1344,20 @@ namespace Carbon.Plugins
 
         private bool PlayerCanShare(BasePlayer player, BaseEntity entity)
         {
+            if (player == null || entity == null || entity.net == null) return false;
+            if (player.IsAdmin) return true;
             var uid = entity.net.ID.Value;
 
-            // FIX 4: allow contributors (not just OwnerId) to share
-            if (_entityOwnership.TryGetValue(uid, out var data) && data.CanAccess(player.userID))
-                return true;
+            // Event owners/contributors may share their event rewards.
+            OwnershipData data;
+            if (_entityOwnership.TryGetValue(uid, out data) && data.OwnerId != 0UL)
+                return data.CanAccess(player.userID);
 
-            // TC auth covers storage containers
-            var privs = new List<BuildingPrivlidge>();
-            Vis.Entities(entity.transform.position, 16f, privs);
-            foreach (var priv in privs)
-                if (priv.IsAuthed(player)) return true;
-
-            return false;
+            // A TC authorization by itself does NOT let a stranger add themselves
+            // or others to a private storage box's explicit share list.
+            if (IsPlayerOrTeamOwner(player, entity.OwnerID)) return true;
+            BuildingPrivlidge tc = GetStorageTc(entity);
+            return entity.OwnerID == 0UL && tc != null && IsPlayerOrTeamOwner(player, tc.OwnerID);
         }
 
         [ChatCommand("ulp")]
@@ -1313,16 +1374,21 @@ namespace Carbon.Plugins
                 player.ChatMessage(
                     "<color=#88D66C>/ulp unlock</color> — Remove ownership lock from entity you're looking at\n" +
                     "<color=#88D66C>/ulp info</color> — Show full ownership info for entity you're looking at\n" +
-                    "<color=#88D66C>/ulp weekend</color> — Show TruePVE mapping and weekend bypass status");
+                    "<color=#88D66C>/ulp weekend</color> — Show global TruePVE, Purge and raid window status\n" +
+                    "<color=#88D66C>/ulp check [playername]</color> — Audit access to the box you're looking at");
                 return;
             }
 
             if (args[0].Equals("weekend", StringComparison.OrdinalIgnoreCase))
             {
-                string mapping = GetTruePveMapping(player) ?? "(none / unavailable)";
+                string mapping = GetTruePveMapping(player) ?? "(none)";
+                string globalRule = GetTruePveRuleSet() ?? "(unavailable)";
+                bool raidActive;
+                string nrp = TryGetRaidWeekendState(out raidActive) ? raidActive.ToString() : "unavailable";
                 bool clock = IsEasternWeekendWindow();
+                bool purge = IsPurgeActive();
                 bool bypass = IsWeekendPvp(player);
-                player.ChatMessage($"<color=#B084FF>Nightshade PvP Weekend</color> | TruePVE mapping: {mapping} | Eastern weekend window: {clock} | ULP access bypass: {bypass} | Event ownership bypass: {bypass && _config.WeekendPvP.DisableEventOwnershipLocks}");
+                player.ChatMessage($"<color=#B084FF>Nightshade Access</color> | TruePVE global: {globalRule} | Mapping (diagnostic only): {mapping} | Real ET weekend: {clock} | NRP API: {nrp} | Purge: {purge} | Open raids/loot: {bypass} | Sleeper looting: PROTECTED");
                 return;
             }
 
@@ -1334,6 +1400,36 @@ namespace Carbon.Plugins
             }
 
             var uid = entity.net.ID.Value;
+
+            if (args[0].Equals("check", StringComparison.OrdinalIgnoreCase))
+            {
+                BasePlayer subject = player;
+                if (args.Length > 1)
+                {
+                    var find = string.Join(" ", args, 1, args.Length - 1);
+                    BasePlayer found = FindPlayerByName(find);
+                    if (found == null)
+                    {
+                        player.ChatMessage("Specified player must be online with a unique matching name.");
+                        return;
+                    }
+                    subject = found;
+                }
+                if (!IsStorage(entity))
+                {
+                    player.ChatMessage("/ulp check is for boxes and other protected storage containers.");
+                    return;
+                }
+                string why;
+                bool weekdayPermit = CanPlayerUseStorage(subject, entity, out why);
+                bool publicExempt = PublicEntities.Contains(entity.ShortPrefabName);
+                BuildingPrivlidge tc = GetStorageTc(entity);
+                bool open = IsWeekendPvp(subject);
+                bool raidProtected = open && IsLootProtectedByRaidShield(subject, entity);
+                bool permitted = open ? !raidProtected : publicExempt || !_config.StorageProtection.Enabled || weekdayPermit;
+                player.ChatMessage($"<color=#B084FF>ULP STORAGE CHECK</color> {subject.displayName} | {entity.ShortPrefabName} | Box owner: {entity.OwnerID} | TC owner: {(tc == null ? 0UL : tc.OwnerID)} | Team: {subject.currentTeam} | PvP/Purge: {open} | Shield/ORP: {raidProtected} | Weekday rule: {weekdayPermit} ({why}) | Storage decision: {(permitted ? "ALLOW" : "DENY")}");
+                return;
+            }
 
             if (args[0].ToLower() == "unlock")
             {

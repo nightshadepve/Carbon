@@ -1,10 +1,10 @@
 {
   "name": "Blue",
-  "xp": 325978.36230002373,
+  "xp": 348637.9985127743,
   "prestige_level": 0,
-  "current_level": 39,
-  "achieved_level": 39,
-  "available_points": 52,
+  "current_level": 41,
+  "achieved_level": 41,
+  "available_points": 58,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Miner": 5,
@@ -36,8 +36,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T06:57:54.885291+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-13T07:13:22.157807+00:00",
+  "xp_bonus_pool": 5000.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
@@ -52,7 +52,7 @@
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.828067+00:00",
   "Loot_Spotter_used_time": "2026-11-05T19:06:43.828068+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-12T04:46:05.310782+00:00",
+  "last_xp_loss": "2026-11-13T01:45:24.754765+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -63,5 +63,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 117
+  "GetTotalSkillPoints": 123
 }

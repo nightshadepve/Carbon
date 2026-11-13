@@ -114,5 +114,10 @@
   "Floor": "FLOOR",
   "Ceiling": "CEILING",
   "NotOnBoat": "You must be mounted on a boat steering wheel to use this command.",
-  "BoatWallpaperNotAvailable": "Boat wallpaper is not available right now."
+  "BoatWallpaperNotAvailable": "Boat wallpaper is not available right now.",
+  "ManualExteriorNoPermission": "You need bettertc.wallpaper permission to place exterior wallpapers.",
+  "ManualExteriorBuildingBlocked": "You must have building permission and be authorized on this building's TC to place exterior wallpapers.",
+  "RemoveWP_Usage": "Usage: /removewp <skinid> <Wall|Floor|Ceiling>",
+  "RemoveWP_Removed": "Wallpaper SkinID: {0} removed from category: {1}.",
+  "RemoveWP_NotFound": "Wallpaper SkinID: {0} is not registered in category: {1}."
 }
