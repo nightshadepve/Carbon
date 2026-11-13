@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.0")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.1")]
     [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from a panel left of the hotbar, and under the clothing column while inventory is open.")]
     public class NightshadeVoteDay : RustPlugin
     {
@@ -279,6 +279,7 @@ namespace Oxide.Plugins
             {
                 MigrateLogo(raw, config);
                 MigratePanelLayers(raw, config);
+                MigrateOpenLayer(raw, config);
                 config.ConfigVersion = NightshadeVoteDayRules.CurrentConfigVersion;
             }
         }
@@ -300,7 +301,8 @@ namespace Oxide.Plugins
         {
             if (config == null) return;
             bool hasClosed = HasConfigKey(raw, NightshadeVoteDayRules.ClosedLayerKey);
-            bool hasOpen = HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey);
+            bool hasOpen = HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey)
+                || HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV2);
             if (hasClosed && hasOpen) return;
             string legacy = null;
             if (HasConfigKey(raw, NightshadeVoteDayRules.LayerKey))
@@ -316,6 +318,28 @@ namespace Oxide.Plugins
             }
             if (!hasOpen)
                 config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+        }
+
+        // 1.6.0 stock "Hud.Menu" is under the inventory blur, so that copy never shows.
+        // A custom open layer (Overlay, Overall, or anything else) is left alone.
+        internal static void MigrateOpenLayer(JObject raw, PluginConfig config)
+        {
+            if (config == null) return;
+            if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKey))
+            {
+                if (NightshadeVoteDayRules.IsBrokenOpenLayer(config.OpenLayer))
+                    config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+                return;
+            }
+            string previous = null;
+            if (HasConfigKey(raw, NightshadeVoteDayRules.OpenLayerKeyV2))
+                previous = ConfigText(raw[NightshadeVoteDayRules.OpenLayerKeyV2]);
+            else if (!string.IsNullOrWhiteSpace(config.OpenLayer))
+                previous = config.OpenLayer;
+            if (string.IsNullOrWhiteSpace(previous) || NightshadeVoteDayRules.IsBrokenOpenLayer(previous))
+                config.OpenLayer = NightshadeVoteDayRules.OpenLayerName;
+            else
+                config.OpenLayer = previous.Trim();
         }
 
         private static bool HasConfigKey(JObject raw, string key)
@@ -1142,7 +1166,13 @@ namespace Oxide.Plugins
                 bool secondsChanged = seconds != _shownSeconds;
                 bool votesChanged = votes != _shownVotes || needed != _shownNeeded;
                 bool priceChanged = cost != _shownCost;
-                if (!secondsChanged && !votesChanged && !priceChanged) return;
+                if (!secondsChanged && !votesChanged && !priceChanged)
+                {
+                    // The inventory view can drop foreign children when it rebuilds. Replace that
+                    // copy on its own; the hotbar panel stays where it is.
+                    EachPlayer(AddMenuCopy);
+                    return;
+                }
                 if (priceChanged)
                 {
                     _shownSeconds = seconds;
@@ -1166,26 +1196,18 @@ namespace Oxide.Plugins
                     if (secondsChanged)
                     {
                         if (collapsed)
-                        {
                             AddTextUpdate(container, CountName, secondText, ink, 12, TextAnchor.MiddleLeft, true);
-                            AddTextUpdate(container, CountName + MenuSuffix, secondText, ink, 12, TextAnchor.MiddleLeft, true);
-                        }
                         else
-                        {
                             AddTextUpdate(container, CountName, headline, countColor, font, TextAnchor.MiddleCenter, true);
-                            AddTextUpdate(container, CountName + MenuSuffix, headline, countColor, font, TextAnchor.MiddleCenter, true);
-                        }
                     }
                     if (!collapsed && votesChanged)
                     {
                         AddFill(container, fraction, false);
-                        AddFill(container, fraction, true);
                         AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0", false);
-                        AddStretchText(container, VotesName, TrackName, Ui("UiVotes"), ink, 8, TextAnchor.MiddleLeft, true, "4 0", "-34 0", true);
                         AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", false);
-                        AddEdgeText(container, HaveName, TrackName, have, ink, 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", true);
                     }
                     if (container.Count > 0) CuiHelper.AddUi(player, container);
+                    AddMenuCopy(player);
                 });
                 _shownSeconds = seconds;
                 _shownVotes = votes;
@@ -1248,24 +1270,36 @@ namespace Oxide.Plugins
             if (player == null || !player.IsConnected) return;
             try
             {
-                DestroyPanel(player);
+                CuiHelper.DestroyUi(player, Root);
                 var container = new CuiElementContainer();
-                if (IsCollapsed(player))
-                {
-                    BuildCollapsed(container, player, false);
-                    BuildCollapsed(container, player, true);
-                }
-                else
-                {
-                    BuildExpanded(container, player, false);
-                    BuildExpanded(container, player, true);
-                }
-                CuiHelper.AddUi(player, container);
+                if (IsCollapsed(player)) BuildCollapsed(container, player, false);
+                else BuildExpanded(container, player, false);
+                if (container.Count > 0) CuiHelper.AddUi(player, container);
             }
             catch (Exception ex)
             {
                 PrintWarning("Vote panel could not be shown: " + ex.Message);
             }
+            try
+            {
+                AddMenuCopy(player);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Inventory vote panel could not be shown: " + ex.Message);
+            }
+        }
+
+        // Sent on its own. The inventory view is hidden while playing and shown only in that
+        // menu, so this copy does not sit on top of the hotbar panel. Rebuilding it replaces
+        // the root (DestroyUi) without touching the Hud copy.
+        private void AddMenuCopy(BasePlayer player)
+        {
+            if (player == null || !player.IsConnected || !_panelOpen || _config == null) return;
+            var container = new CuiElementContainer();
+            if (IsCollapsed(player)) BuildCollapsed(container, player, true);
+            else BuildExpanded(container, player, true);
+            if (container.Count > 0) CuiHelper.AddUi(player, container);
         }
 
         private void BuildExpanded(CuiElementContainer container, BasePlayer player, bool menu)
@@ -1300,7 +1334,7 @@ namespace Oxide.Plugins
             AddEdgeText(container, HaveName, TrackName, NightshadeVoteDayRules.VotesLabel(DisplayVotes(), DisplayNeeded()), Hex(P().Text), 8, TextAnchor.MiddleRight, true, "-40 0", "-4 0", menu);
             string status;
             string kind;
-            PlayerStatus(player, out status, out kind);
+            PlayerStatus(player, menu, out status, out kind);
             AddText(container, StatusName, BgName, status, KindColor(kind), 8, TextAnchor.MiddleCenter, false, 4f, NightshadeVoteDayRules.StatusBottom, width - 4f, NightshadeVoteDayRules.StatusTop, menu);
             if (!voting) return;
             bool voted = player != null && _votes.Contains(player.userID);
@@ -1334,14 +1368,17 @@ namespace Oxide.Plugins
             AddToggle(container, width - 16f, -1f, 14f, 14f, menu);
         }
 
-        // The hotbar copy is parented to Hud, which hides while the inventory menu is open.
-        // The attire copy is parented to Hud.Menu, which is shown only in that menu, so the
-        // two positions never appear together. Inventory already frees the cursor.
+        // Hud sits under the inventory blur, so the hotbar copy disappears while that menu is open.
+        // The attire copy is parented to the Inventory view, which is the menu itself: hidden while
+        // playing, above the blur, and already holding the cursor. Hud.Menu is under that blur,
+        // which is why the 1.6.0 copy never appeared. These are two AddUi calls so a rejected
+        // inventory parent cannot drop the hotbar panel.
         private void AddRoot(CuiElementContainer container, NightshadeVoteDayRules.ScreenBox box, bool menu, bool cursor)
         {
             string root = UiId(Root, menu);
             string layer = menu ? _config.OpenLayer : _config.ClosedLayer;
             if (string.IsNullOrEmpty(layer)) layer = menu ? NightshadeVoteDayRules.OpenLayerName : NightshadeVoteDayRules.ClosedLayerName;
+            else if (menu && NightshadeVoteDayRules.IsBrokenOpenLayer(layer)) layer = NightshadeVoteDayRules.OpenLayerName;
             var element = new CuiElement
             {
                 Name = root,
@@ -1587,7 +1624,7 @@ namespace Oxide.Plugins
             };
         }
 
-        private void PlayerStatus(BasePlayer player, out string text, out string kind)
+        private void PlayerStatus(BasePlayer player, bool menu, out string text, out string kind)
         {
             if (_phase == NightshadeVoteDayRules.PhaseVoting && player != null && _confirming.Contains(player.userID))
             {
@@ -1604,7 +1641,7 @@ namespace Oxide.Plugins
             }
             if (_phase == NightshadeVoteDayRules.PhaseVoting)
             {
-                text = ActionHint(player);
+                text = ActionHint(player, menu);
                 kind = "idle";
                 return;
             }
@@ -1831,9 +1868,10 @@ namespace Oxide.Plugins
             public string Source = "Nightshade";
         }
 
-        private string ActionHint(BasePlayer player)
+        private string ActionHint(BasePlayer player, bool menu)
         {
-            if (_config.CursorWhileExpanded) return Ui("UiHintReady");
+            // The inventory menu already freed the cursor, so Vote and Buy take a normal click.
+            if (menu || _config.CursorWhileExpanded) return Ui("UiHintReady");
             if (player != null && _cursor.Contains(player.userID)) return Ui("UiHintReady");
             string key = NightshadeVoteDayRules.NormalizeCursorKey(_config.CursorKey);
             if (key == "use") return Ui("UiHintUse");
@@ -2016,16 +2054,21 @@ namespace Oxide.Plugins
         internal const string PhaseBought = "bought";
         internal static readonly string MenuLayer = "Overlay";
         internal const string ClosedLayerName = "Hud";
-        internal const string OpenLayerName = "Hud.Menu";
+        // The inventory view. Hud.Menu is a lower layer and the blur covers it, so a panel
+        // parented there does not show. Overlay and Overall stay above every menu; they also
+        // stay up while playing, so they are not the default for this copy.
+        internal const string OpenLayerName = "Inventory";
+        internal const string BrokenOpenLayer = "Hud.Menu";
         internal const string LayerKey = "Panel layer (Overlay stays above the inventory, Overall is above every menu, Hud sits under it)";
         internal const string OldLayerKey = "Panel layer (Hud sits with the hotbar, Overlay stays up in menus)";
         internal const string ClosedLayerKey = "Panel layer when the inventory is closed (Hud hides while it is open)";
-        internal const string OpenLayerKey = "Panel layer when the inventory is open (Hud.Menu shows only then)";
+        internal const string OpenLayerKeyV2 = "Panel layer when the inventory is open (Hud.Menu shows only then)";
+        internal const string OpenLayerKey = "Panel layer when the inventory is open (Inventory view; Overlay stays above every menu)";
+        internal const int CurrentConfigVersion = 3;
         internal const string OpenRightKey = "Inventory open panel right (px from bottom center)";
         internal const string OpenBottomKey = "Inventory open panel bottom (px)";
         internal const string LogoKey = "Panel logo URL (empty hides the logo)";
         internal const string ConfigVersionKey = "Config version";
-        internal const int CurrentConfigVersion = 2;
         internal const float DefaultHotbarLeft = -204f;
         internal const float DefaultGap = 8f;
         internal const float DefaultBottom = 16f;
@@ -2050,6 +2093,14 @@ namespace Oxide.Plugins
         internal static readonly float VoteBottom = -83f;
         internal static readonly float ActionTop = -85f;
         internal static readonly float ActionBottom = -103f;
+
+        internal static bool IsBrokenOpenLayer(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return true;
+            value = value.Trim();
+            return value.Equals(BrokenOpenLayer, StringComparison.OrdinalIgnoreCase)
+                || value.Equals("Hud.Menus", StringComparison.OrdinalIgnoreCase);
+        }
 
         internal static string NormalizeCursorKey(string key)
         {
