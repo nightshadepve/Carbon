@@ -11,7 +11,7 @@
   "Economics Cost": 500.0,
   "Show vote panel": true,
   "Panel layer when the inventory is closed (Hud hides while it is open)": "Hud",
-  "Panel layer when the inventory is open (Hud.Menu shows only then)": "Hud.Menu",
+  "Panel layer when the inventory is open (Inventory view; Overlay stays above every menu)": "Inventory",
   "Theme mode (Shop, Auto, or a theme name)": "Shop",
   "Theme source config file": "NightshadeShop.json",
   "Panel anchor": "0.5 0",
@@ -37,5 +37,5 @@
   "Cursor key (firethird, use, reload, none)": "firethird",
   "Panel logo URL (empty hides the logo)": "",
   "Seconds to keep the panel after the vote ends (0 removes it immediately)": 6.0,
-  "Config version": 2
+  "Config version": 3
 }
