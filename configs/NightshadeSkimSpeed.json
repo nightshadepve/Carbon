@@ -1,4 +1,9 @@
 {
   "Enabled": true,
-  "Skim speed multiplier": 2.0
+  "Skim speed multiplier": 2.0,
+  "Skim without fridge time": false,
+  "Chat command": "skim",
+  "Skim your inventory": true,
+  "Skim the container you have open": true,
+  "Milk item shortname": "milk"
 }

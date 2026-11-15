@@ -14,27 +14,44 @@
 // writes the convar back through the console so clients receive it. Unload
 // restores the captured hours. Cow milk charges (Cow.MilkCooldown) are a
 // different clock and are left alone.
+//
+// A whole stack is skimmed by calling the milk item's vanilla ItemModSwap
+// once per milk. That action consumes one milk and creates the outputs
+// defined on the item. Players need nightshadeskimspeed.skimall, which is
+// not granted automatically. /skim covers the inventory and an open
+// container. The vanilla Skim button on a stack does that whole stack.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using HarmonyLib;
 using Newtonsoft.Json;
 using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeSkimSpeed", "Nightshade", "1.0.0")]
-    [Description("Scales vanilla fridge milk skim time through server.creamseparationhours.")]
+    [Info("NightshadeSkimSpeed", "Nightshade", "1.1.0")]
+    [Description("Scales fridge milk skim time and skims a whole milk stack at once.")]
     public class NightshadeSkimSpeed : RustPlugin
     {
         private const string ConvarName = "server.creamseparationhours";
         private const string StatePath = "Nightshade/NightshadeSkimSpeed/State";
+        private const string PermSkimAll = "nightshadeskimspeed.skimall";
+        private const string PatchId = "com.nightshade.skimspeed";
+        private const string DefaultChatCommand = "skim";
+        private const string DefaultMilkShortname = "milk";
+        private const int MaxUnitsPerUse = 2000;
         private const float DefaultVanillaHours = 4f;
         private const float MinimumHours = 1f / 3600f;
         private const float HoursEpsilon = 0.0001f;
 
+        private static NightshadeSkimSpeed _plugin;
+
         private PluginConfig _config;
+        private Harmony _harmony;
         private float _baselineHours = DefaultVanillaHours;
         private bool _baselineReady;
+        private string _chatCommand = DefaultChatCommand;
 
         private class PluginConfig
         {
@@ -43,6 +60,29 @@ namespace Oxide.Plugins
 
             [JsonProperty("Skim speed multiplier")]
             public float SkimSpeedMultiplier = 2f;
+
+            [JsonProperty("Skim without fridge time")]
+            public bool SkimWithoutFridgeTime = false;
+
+            [JsonProperty("Chat command")]
+            public string ChatCommand = DefaultChatCommand;
+
+            [JsonProperty("Skim your inventory")]
+            public bool SkimYourInventory = true;
+
+            [JsonProperty("Skim the container you have open")]
+            public bool SkimOpenContainer = true;
+
+            [JsonProperty("Milk item shortname")]
+            public string MilkShortname = DefaultMilkShortname;
+        }
+
+        private struct SkimTotals
+        {
+            public int Units;
+            public int Stacks;
+            public int Waiting;
+            public bool HitCap;
         }
 
         private class BaselineState
@@ -85,6 +125,13 @@ namespace Oxide.Plugins
                 _config.SkimSpeedMultiplier = 1f;
             }
 
+            _config.ChatCommand = CleanCommand(_config.ChatCommand);
+            if (string.IsNullOrEmpty(_config.MilkShortname))
+            {
+                _config.MilkShortname = DefaultMilkShortname;
+            }
+
+            _config.MilkShortname = _config.MilkShortname.Trim();
             SaveConfig();
         }
 
@@ -95,6 +142,16 @@ namespace Oxide.Plugins
 
         private void Init()
         {
+            _plugin = this;
+            if (_config == null)
+            {
+                LoadConfig();
+            }
+
+            permission.RegisterPermission(PermSkimAll, this);
+            _chatCommand = _config.ChatCommand;
+            cmd.AddChatCommand(_chatCommand, this, nameof(CmdSkim));
+            TryPatch();
             Apply(WorldIsUp());
         }
 
@@ -105,6 +162,24 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
+            try
+            {
+                if (_harmony != null)
+                {
+                    _harmony.UnpatchAll(PatchId);
+                }
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Harmony unpatch warning: " + ex.Message);
+            }
+
+            _harmony = null;
+            if (_plugin == this)
+            {
+                _plugin = null;
+            }
+
             if (!_baselineReady)
             {
                 return;
@@ -366,10 +441,14 @@ namespace Oxide.Plugins
             float live = ReadConvar();
             string mode = _config != null && _config.Enabled ? "on" : "off";
             float multiplier = _config != null ? _config.SkimSpeedMultiplier : 1f;
+            string bypass = _config != null && _config.SkimWithoutFridgeTime ? "on" : "off";
             return "NightshadeSkimSpeed " + mode
                 + ". Multiplier " + FormatHours(multiplier)
                 + ". Vanilla " + FormatHours(_baselineHours) + " hours"
                 + ". " + ConvarName + " is " + FormatHours(live) + " hours."
+                + " Whole-stack skim permission " + PermSkimAll + " (not granted automatically)."
+                + " Chat /" + _chatCommand + "."
+                + " Skim without fridge time " + bypass + "."
                 + " Reload with nsskim.reload.";
         }
 
@@ -386,6 +465,411 @@ namespace Oxide.Plugins
         private static bool HasConsoleAccess(ConsoleSystem.Arg arg)
         {
             return arg.Connection == null || arg.Connection.authLevel >= 2;
+        }
+
+        private static string CleanCommand(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return DefaultChatCommand;
+            }
+
+            command = command.Trim();
+            if (command.StartsWith("/", StringComparison.Ordinal))
+            {
+                command = command.Substring(1);
+            }
+
+            return string.IsNullOrEmpty(command) ? DefaultChatCommand : command;
+        }
+
+        private void TryPatch()
+        {
+            try
+            {
+                _harmony = new Harmony(PatchId);
+                _harmony.PatchAll();
+            }
+            catch (Exception ex)
+            {
+                PrintError("Could not patch the milk skim button. /" + _chatCommand + " still works. " + ex.Message);
+                _harmony = null;
+            }
+        }
+
+        private void CmdSkim(BasePlayer player, string command, string[] args)
+        {
+            if (player == null)
+            {
+                return;
+            }
+
+            if (!HasSkimAllPermission(player))
+            {
+                SendReply(player, "You do not have permission to skim a whole stack.");
+                return;
+            }
+
+            SkimTotals totals = SkimPlayer(player);
+            if (totals.HitCap)
+            {
+                SendReply(player, "Skimmed " + totals.Units + " milk and stopped at the safety cap.");
+                return;
+            }
+
+            if (totals.Units <= 0 && totals.Waiting <= 0)
+            {
+                SendReply(player, "No milk to skim.");
+                return;
+            }
+
+            if (totals.Units <= 0)
+            {
+                SendReply(player, totals.Waiting + " milk still needs time in a fridge.");
+                return;
+            }
+
+            if (totals.Waiting > 0)
+            {
+                SendReply(player, "Skimmed " + totals.Units + " milk. " + totals.Waiting + " milk still needs time in a fridge.");
+                return;
+            }
+
+            SendReply(player, "Skimmed " + totals.Units + " milk.");
+        }
+
+        private bool HasSkimAllPermission(BasePlayer player)
+        {
+            return player != null && permission.UserHasPermission(player.UserIDString, PermSkimAll);
+        }
+
+        private SkimTotals SkimPlayer(BasePlayer player)
+        {
+            List<ItemContainer> containers = new List<ItemContainer>();
+            if (_config.SkimYourInventory && player.inventory != null)
+            {
+                AddContainer(containers, player.inventory.containerMain);
+                AddContainer(containers, player.inventory.containerBelt);
+            }
+
+            if (_config.SkimOpenContainer && player.inventory != null && player.inventory.loot != null)
+            {
+                List<ItemContainer> open = player.inventory.loot.containers;
+                if (open != null)
+                {
+                    for (int i = 0; i < open.Count; i++)
+                    {
+                        AddContainer(containers, open[i]);
+                    }
+                }
+            }
+
+            List<Item> milk = new List<Item>();
+            for (int i = 0; i < containers.Count; i++)
+            {
+                CollectMilk(containers[i], milk, 0);
+            }
+
+            SkimTotals totals = new SkimTotals();
+            for (int i = 0; i < milk.Count; i++)
+            {
+                if (totals.Units >= MaxUnitsPerUse)
+                {
+                    totals.HitCap = true;
+                    break;
+                }
+
+                Item item = milk[i];
+                if (!IsMilk(item))
+                {
+                    continue;
+                }
+
+                ItemModSwap swap = FindSkimSwap(item.info);
+                if (swap == null)
+                {
+                    continue;
+                }
+
+                int skimmed = SkimStack(item, player, swap, MaxUnitsPerUse - totals.Units);
+                totals.Units += skimmed;
+                if (skimmed > 0)
+                {
+                    totals.Stacks++;
+                }
+                else if (item.amount > 0)
+                {
+                    totals.Waiting += item.amount;
+                }
+
+                if (skimmed > 0 && totals.Units >= MaxUnitsPerUse)
+                {
+                    totals.HitCap = true;
+                }
+            }
+
+            return totals;
+        }
+
+        private int SkimStack(Item item, BasePlayer player, ItemModSwap swap, int limit)
+        {
+            if (item == null || player == null || swap == null || limit <= 0)
+            {
+                return 0;
+            }
+
+            int guard = item.amount;
+            if (guard > limit)
+            {
+                guard = limit;
+            }
+
+            int skimmed = 0;
+            bool ignoreFridgeTime = _config != null && _config.SkimWithoutFridgeTime;
+            for (int i = 0; i < guard; i++)
+            {
+                if (item.amount <= 0)
+                {
+                    break;
+                }
+
+                if (!CanSkim(swap, item, player, ignoreFridgeTime))
+                {
+                    break;
+                }
+
+                int before = item.amount;
+                try
+                {
+                    swap.DoAction(item, player);
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning("Milk skim action failed. " + ex.Message);
+                    break;
+                }
+
+                if (item.amount >= before)
+                {
+                    break;
+                }
+
+                skimmed++;
+            }
+
+            return skimmed;
+        }
+
+        private static bool CanSkim(ItemModSwap swap, Item item, BasePlayer player, bool ignoreFridgeTime)
+        {
+            ItemMod[] siblings = swap.siblingMods;
+            if (siblings == null)
+            {
+                return ignoreFridgeTime || ItemModConditionRefrigeratedTime.IsReady(item);
+            }
+
+            if (swap.CanDoAction(item, player))
+            {
+                return true;
+            }
+
+            if (!ignoreFridgeTime)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < siblings.Length; i++)
+            {
+                ItemMod sibling = siblings[i];
+                if (sibling == null || sibling is ItemModConditionRefrigeratedTime)
+                {
+                    continue;
+                }
+
+                if (!sibling.Passes(item))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private bool IsMilk(Item item)
+        {
+            if (item == null || item.info == null || string.IsNullOrEmpty(item.info.shortname))
+            {
+                return false;
+            }
+
+            string expected = _config != null && !string.IsNullOrEmpty(_config.MilkShortname) ? _config.MilkShortname : DefaultMilkShortname;
+            return string.Equals(item.info.shortname, expected, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static ItemModSwap FindSkimSwap(ItemDefinition info)
+        {
+            if (info == null || info.itemMods == null)
+            {
+                return null;
+            }
+
+            ItemModSwap fallback = null;
+            for (int i = 0; i < info.itemMods.Length; i++)
+            {
+                ItemModMenuOption option = info.itemMods[i] as ItemModMenuOption;
+                if (option == null)
+                {
+                    continue;
+                }
+
+                ItemModSwap swap = option.actionTarget as ItemModSwap;
+                if (swap == null)
+                {
+                    continue;
+                }
+
+                if (HasRefrigeratedSibling(swap))
+                {
+                    return swap;
+                }
+
+                if (fallback == null)
+                {
+                    fallback = swap;
+                }
+            }
+
+            if (fallback != null)
+            {
+                return fallback;
+            }
+
+            for (int i = 0; i < info.itemMods.Length; i++)
+            {
+                ItemModSwap swap = info.itemMods[i] as ItemModSwap;
+                if (swap != null && HasRefrigeratedSibling(swap))
+                {
+                    return swap;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool HasRefrigeratedSibling(ItemMod mod)
+        {
+            if (mod == null || mod.siblingMods == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < mod.siblingMods.Length; i++)
+            {
+                if (mod.siblingMods[i] is ItemModConditionRefrigeratedTime)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsSkimOption(ItemModMenuOption option, Item item)
+        {
+            if (option == null || !IsMilk(item))
+            {
+                return false;
+            }
+
+            ItemModSwap swap = option.actionTarget as ItemModSwap;
+            if (swap == null)
+            {
+                return false;
+            }
+
+            if (HasRefrigeratedSibling(swap))
+            {
+                return true;
+            }
+
+            return FindSkimSwap(item.info) == swap;
+        }
+
+        private static void AddContainer(List<ItemContainer> list, ItemContainer container)
+        {
+            if (container == null || container.itemList == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i] == container)
+                {
+                    return;
+                }
+            }
+
+            list.Add(container);
+        }
+
+        private void CollectMilk(ItemContainer container, List<Item> milk, int depth)
+        {
+            if (container == null || container.itemList == null || depth > 3)
+            {
+                return;
+            }
+
+            int count = container.itemList.Count;
+            for (int i = 0; i < count; i++)
+            {
+                Item item = container.itemList[i];
+                if (item == null)
+                {
+                    continue;
+                }
+
+                if (IsMilk(item))
+                {
+                    milk.Add(item);
+                }
+
+                if (item.contents != null && item.contents != container)
+                {
+                    CollectMilk(item.contents, milk, depth + 1);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ItemModMenuOption), "ServerCommand")]
+        private static class MenuSkimPatch
+        {
+            private static bool Prefix(ItemModMenuOption __instance, Item item, string command, BasePlayer player)
+            {
+                NightshadeSkimSpeed plugin = _plugin;
+                if (plugin == null || __instance == null || item == null || player == null)
+                {
+                    return true;
+                }
+
+                if (string.IsNullOrEmpty(command) || string.IsNullOrEmpty(__instance.commandName))
+                {
+                    return true;
+                }
+
+                if (!string.Equals(command, __instance.commandName, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                if (!plugin.HasSkimAllPermission(player) || !plugin.IsSkimOption(__instance, item))
+                {
+                    return true;
+                }
+
+                plugin.SkimStack(item, player, __instance.actionTarget as ItemModSwap, MaxUnitsPerUse);
+                return false;
+            }
         }
     }
 }
