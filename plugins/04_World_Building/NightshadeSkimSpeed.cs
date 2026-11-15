@@ -10,10 +10,13 @@
 // the build default is 4 hours. Items already chilling do not pick up a new
 // value until their next network update.
 //
-// This plugin divides the captured hours by "Skim speed multiplier" and
-// writes the convar back through the console so clients receive it. Unload
-// restores the captured hours. Cow milk charges (Cow.MilkCooldown) are a
-// different clock and are left alone.
+// "Change skim speed" is off by default. While it is off the plugin does
+// not read or write server.creamseparationhours and does not refresh
+// fridges. If an older load stored a changed baseline in State.json, that
+// vanilla value is restored once, those fridges are refreshed once, and
+// then the convar is left alone. The multiplier is kept for when the
+// toggle is turned on. Cow milk charges (Cow.MilkCooldown) are a different
+// clock and are left alone.
 //
 // A whole stack is skimmed by calling the milk item's vanilla ItemModSwap
 // once per milk. That action consumes one milk and creates the outputs
@@ -30,8 +33,8 @@ using Oxide.Core;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeSkimSpeed", "Nightshade", "1.1.0")]
-    [Description("Scales fridge milk skim time and skims a whole milk stack at once.")]
+    [Info("NightshadeSkimSpeed", "Nightshade", "1.1.1")]
+    [Description("Skims a whole milk stack at once. Skim speed stays off unless enabled.")]
     public class NightshadeSkimSpeed : RustPlugin
     {
         private const string ConvarName = "server.creamseparationhours";
@@ -51,10 +54,15 @@ namespace Oxide.Plugins
         private Harmony _harmony;
         private float _baselineHours = DefaultVanillaHours;
         private bool _baselineReady;
+        private bool _undoNeedsRefresh;
+        private bool _loggedSpeedOff;
         private string _chatCommand = DefaultChatCommand;
 
         private class PluginConfig
         {
+            [JsonProperty("Change skim speed")]
+            public bool ChangeSkimSpeed = false;
+
             [JsonProperty("Enabled")]
             public bool Enabled = true;
 
@@ -225,6 +233,12 @@ namespace Oxide.Plugins
                 LoadConfig();
             }
 
+            if (!_config.ChangeSkimSpeed)
+            {
+                UndoPreviousSpeed(refresh);
+                return;
+            }
+
             float baseline = ResolveBaseline();
             _baselineHours = baseline;
             _baselineReady = true;
@@ -252,6 +266,46 @@ namespace Oxide.Plugins
 
             string mode = _config.Enabled ? "on" : "off";
             Puts("Skim speed " + mode + ". Multiplier " + FormatHours(_config.SkimSpeedMultiplier) + ". " + ConvarName + " " + FormatHours(baseline) + " -> " + FormatHours(ReadConvar()) + " hours." + (refresh ? " Refreshed " + items + " milk items in " + fridges + " fridges." : ""));
+        }
+
+        // One undo for a server that already had an older load rewrite the
+        // convar. After Applied is cleared, later loads do not read or write
+        // it and do not walk fridges.
+        private void UndoPreviousSpeed(bool refresh)
+        {
+            _baselineReady = false;
+            BaselineState state = ReadState();
+            if (state != null && state.Applied && state.VanillaHours > 0f)
+            {
+                if (Nearly(ReadConvar(), state.AppliedHours))
+                {
+                    SetConvar(state.VanillaHours);
+                    WriteState(state.VanillaHours, state.VanillaHours, false);
+                    _undoNeedsRefresh = true;
+                    Puts("Restored " + ConvarName + " to " + FormatHours(state.VanillaHours) + " hours from an older NightshadeSkimSpeed load. Skim speed stays off.");
+                }
+                else
+                {
+                    WriteState(state.VanillaHours, state.AppliedHours, false);
+                    Puts("Skim speed is off. " + ConvarName + " was not the saved sped-up value, so it was left alone.");
+                }
+            }
+            else if (!_loggedSpeedOff)
+            {
+                _loggedSpeedOff = true;
+                Puts("Skim speed is off. Vanilla fridge timing is unchanged.");
+            }
+
+            if (!_undoNeedsRefresh || !refresh)
+            {
+                return;
+            }
+
+            int fridges;
+            int items;
+            RefreshFridges(out fridges, out items);
+            _undoNeedsRefresh = false;
+            Puts("Refreshed " + items + " milk items in " + fridges + " fridges after restoring vanilla skim hours.");
         }
 
         private float ResolveBaseline()
@@ -438,18 +492,24 @@ namespace Oxide.Plugins
 
         private string StatusText()
         {
-            float live = ReadConvar();
-            string mode = _config != null && _config.Enabled ? "on" : "off";
+            bool speed = _config != null && _config.ChangeSkimSpeed;
             float multiplier = _config != null ? _config.SkimSpeedMultiplier : 1f;
             string bypass = _config != null && _config.SkimWithoutFridgeTime ? "on" : "off";
-            return "NightshadeSkimSpeed " + mode
+            string text = "NightshadeSkimSpeed 1.1.1. Change skim speed " + (speed ? "on" : "off")
                 + ". Multiplier " + FormatHours(multiplier)
-                + ". Vanilla " + FormatHours(_baselineHours) + " hours"
-                + ". " + ConvarName + " is " + FormatHours(live) + " hours."
-                + " Whole-stack skim permission " + PermSkimAll + " (not granted automatically)."
+                + ". Whole-stack skim permission " + PermSkimAll + " (not granted automatically)."
                 + " Chat /" + _chatCommand + "."
-                + " Skim without fridge time " + bypass + "."
-                + " Reload with nsskim.reload.";
+                + " Skim without fridge time " + bypass + ".";
+            if (speed)
+            {
+                text += " " + ConvarName + " is " + FormatHours(ReadConvar()) + " hours.";
+            }
+            else
+            {
+                text += " Vanilla fridge timing is untouched.";
+            }
+
+            return text + " Reload with nsskim.reload.";
         }
 
         private static string FormatHours(float hours)
