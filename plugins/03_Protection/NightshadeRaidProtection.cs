@@ -380,13 +380,50 @@ namespace Oxide.Plugins
         }
     }
 
+    // Whether one authorized player has been offline long enough for automatic protection.
+    // A connected player is never eligible. When both the sleeper clock and the saved
+    // last-seen exist, both have to clear the grace, so a stale login stamp cannot win.
+    public static class NightshadeOfflineGate
+    {
+        public static bool OfflineLongEnough(bool online, bool hasSleepClock, float sleepSeconds, bool hasLastSeen, long lastSeenUtcTicks, DateTime nowUtc, int graceMinutes)
+        {
+            if (online) return false;
+            int grace = graceMinutes < 0 ? 0 : graceMinutes;
+            bool anyClock = false;
+            if (hasSleepClock)
+            {
+                anyClock = true;
+                if (sleepSeconds < 0f) sleepSeconds = 0f;
+                if (sleepSeconds < grace * 60f) return false;
+            }
+            if (hasLastSeen && lastSeenUtcTicks > 0L)
+            {
+                anyClock = true;
+                double minutes = (nowUtc - new DateTime(lastSeenUtcTicks, DateTimeKind.Utc)).TotalMinutes;
+                if (minutes < grace) return false;
+            }
+            return anyClock;
+        }
+
+        // Paid shields fully block. Offline protection scales only when the base qualified.
+        public static float Reduction(bool paidShield, bool offlineProtected, int offlinePercent)
+        {
+            if (paidShield) return 1f;
+            if (!offlineProtected || offlinePercent <= 0) return 0f;
+            float scale = offlinePercent / 100f;
+            if (scale > 1f) return 1f;
+            return scale;
+        }
+    }
+
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.3.0")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.0")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
         private const string PermAdmin = "nightshaderaidprotection.admin";
         private const string DataPath = "Nightshade/NightshadeRaidProtection/RaidProtection";
+        private const ulong SteamIdMin = 76561197960265728UL;
         // These IDs identify the three dedicated custom-icon voucher skins.
         // The shop delivers PAPER items using these IDs. No purchase-registration plugin is needed.
         private const string VoucherShortname = "paper";
@@ -524,19 +561,11 @@ namespace Oxide.Plugins
             published.Clear();
             Save();
         }
-        private void OnPlayerDisconnected(BasePlayer player, string reason)
-        {
-            if (player == null) return;
-            store.LastSeenUtcTicks[player.userID] = DateTime.UtcNow.Ticks;
-        }
-        private void OnPlayerConnected(BasePlayer player)
-        {
-            if (player != null) store.LastSeenUtcTicks[player.userID] = DateTime.UtcNow.Ticks;
-        }
+        private void OnPlayerDisconnected(BasePlayer player, string reason) => NoteSeen(player);
+        private void OnPlayerConnected(BasePlayer player) => NoteSeen(player);
         private void OnServerInitialized()
         {
-            foreach (var player in BasePlayer.activePlayerList)
-                if (player != null) store.LastSeenUtcTicks[player.userID] = DateTime.UtcNow.Ticks;
+            TouchConnectedPlayers();
             if (usedZoneFallback)
                 PrintWarning("America/New_York and Eastern Standard Time were unavailable. Using a built-in US Eastern zone (EST/EDT).");
             SeedShieldStates();
@@ -859,18 +888,81 @@ namespace Oxide.Plugins
             shield.LastAccountedTicks = now.Ticks;
         }
 
+        // Automatic offline protection is not "the owners are offline" and it is not a raid shield.
+        // Every steam id on the TC must be offline for the configured minutes. No record means not protected.
         private bool OfflineProtected(BuildingPrivlidge tc, DateTime now)
         {
-            if (!settings.OfflineProtection || tc.authorizedPlayers == null || tc.authorizedPlayers.Count == 0) return false;
-            foreach (var auth in tc.authorizedPlayers)
+            if (!settings.OfflineProtection || tc == null || tc.authorizedPlayers == null || tc.authorizedPlayers.Count == 0)
+                return false;
+            int grace = settings.OfflineGraceMinutes;
+            bool any = false;
+            ulong owner = tc.OwnerID;
+            bool ownerAuthed = false;
+            foreach (ulong auth in tc.authorizedPlayers)
             {
-                ulong id = auth;
-                if (BasePlayer.activePlayerList.Any(p => p != null && p.userID == id && p.IsConnected)) return false;
-                long ticks;
-                if (!store.LastSeenUtcTicks.TryGetValue(id, out ticks)) return false; // Fail open rather than guessing offline time.
-                if ((now - new DateTime(ticks, DateTimeKind.Utc)).TotalMinutes < Math.Max(0, settings.OfflineGraceMinutes)) return false;
+                if (!IsSteamId(auth)) continue;
+                any = true;
+                if (auth == owner) ownerAuthed = true;
+                if (!MemberOfflineLongEnough(auth, now, grace)) return false;
             }
+            if (!any) return false;
+            // The placer can be missing from the auth set. A connected owner is not an offline base.
+            if (IsSteamId(owner) && !ownerAuthed && IsConnectedPlayer(owner)) return false;
             return true;
+        }
+
+        private bool MemberOfflineLongEnough(ulong id, DateTime now, int grace)
+        {
+            float sleepSeconds;
+            bool sleeping = TrySleepingSeconds(id, out sleepSeconds);
+            long ticks;
+            bool hasSeen = store.LastSeenUtcTicks.TryGetValue(id, out ticks);
+            return NightshadeOfflineGate.OfflineLongEnough(IsConnectedPlayer(id), sleeping, sleepSeconds, hasSeen, ticks, now, grace);
+        }
+
+        private static bool IsSteamId(ulong id) => id >= SteamIdMin;
+
+        private static ulong SteamIdOf(BasePlayer player)
+        {
+            if (player == null) return 0UL;
+            ulong id = player.userID;
+            return id;
+        }
+
+        // Read the steam id out of EncryptedValue before comparing. userID == ulong does not.
+        private static bool IsConnectedPlayer(ulong steamId)
+        {
+            if (!IsSteamId(steamId) || BasePlayer.activePlayerList == null) return false;
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                if (SteamIdOf(player) == steamId) return true;
+            }
+            return false;
+        }
+
+        // StartSleeping stores UnityEngine.Time.time. -1 means this body is not asleep.
+        private static bool TrySleepingSeconds(ulong steamId, out float seconds)
+        {
+            seconds = 0f;
+            if (!IsSteamId(steamId)) return false;
+            BasePlayer sleeper = BasePlayer.FindSleeping(steamId);
+            if (sleeper == null || sleeper.sleepStartTime < 0f) return false;
+            seconds = UnityEngine.Time.time - sleeper.sleepStartTime;
+            return true;
+        }
+
+        private void NoteSeen(BasePlayer player)
+        {
+            ulong id = SteamIdOf(player);
+            if (!IsSteamId(id)) return;
+            store.LastSeenUtcTicks[id] = DateTime.UtcNow.Ticks;
+        }
+
+        private void TouchConnectedPlayers()
+        {
+            if (BasePlayer.activePlayerList == null) return;
+            foreach (var player in BasePlayer.activePlayerList)
+                NoteSeen(player);
         }
 
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hit)
@@ -886,9 +978,10 @@ namespace Oxide.Plugins
             BuildingPrivlidge tc = entity as BuildingPrivlidge;
             if (tc == null) tc = entity.GetBuildingPrivilege();
             if (tc == null || tc.IsDestroyed) return null;
-            // Ensure a structure's attached privilege refers to its OWN building.
-            var block = entity as BuildingBlock;
-            if (block != null && block.buildingID != tc.buildingID) return null;
+            // A nearby cupboard must not protect a different building's blocks, doors, or deployables.
+            DecayEntity decay = entity as DecayEntity;
+            if (decay != null && decay.buildingID != 0u && tc.buildingID != 0u && decay.buildingID != tc.buildingID)
+                return null;
             ulong attacker = hit.InitiatorPlayer != null ? hit.InitiatorPlayer.userID :
                 hit.Initiator != null ? hit.Initiator.OwnerID : 0UL;
             if (!settings.ProtectFromAuthorizedPlayers && attacker != 0UL && Authorized(tc, attacker)) return null;
@@ -896,8 +989,7 @@ namespace Oxide.Plugins
             bool paid = settings.PaidShields && store.Shields.TryGetValue(CupboardId(tc), out shield) && shield != null && shield.ExpiresUtcTicks == end.Ticks;
             if (paid) { Account(shield, now); paid = shield.RemainingSeconds > 0d && shield.BuildingId == tc.buildingID; PublishShield(shield); }
             bool offline = OfflineProtected(tc, now);
-            if (!paid && !offline) return null;
-            float reduction = paid ? 1f : Mathf.Clamp01(settings.OfflineReductionPercent / 100f);
+            float reduction = NightshadeOfflineGate.Reduction(paid, offline, settings.OfflineReductionPercent);
             if (reduction <= 0f) return null;
             hit.damageTypes.ScaleAll(1f - reduction);
             if (settings.NotifyAttacker && hit.InitiatorPlayer != null)
@@ -931,11 +1023,30 @@ namespace Oxide.Plugins
             bool realActive;
             Weekend(DateTime.UtcNow, out realStart, out realEnd, out realActive);
             if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield.ExpiresUtcTicks != realEnd.Ticks)
-            { Reply(player, "TC paid shield: none for this weekend."); return; }
+            {
+                Reply(player, "TC paid shield: none for this weekend.");
+                ReplyOffline(player, tc);
+                return;
+            }
             Account(shield, DateTime.UtcNow);
             bool showActive = realActive && shield.RemainingSeconds > 0d;
             Reply(player, (showActive ? "TC raid shield active: " : realActive ? "TC raid shield expired: " : "TC raid shield queued: ") + Format(TimeSpan.FromSeconds(Math.Max(0, shield.RemainingSeconds))) +
                 ". Unused time expires Monday 3 AM Eastern.");
+            ReplyOffline(player, tc);
+        }
+
+        private void ReplyOffline(BasePlayer player, BuildingPrivlidge tc)
+        {
+            if (!settings.OfflineProtection)
+            {
+                Reply(player, "Offline protection: off.");
+                return;
+            }
+            int grace = Math.Max(0, settings.OfflineGraceMinutes);
+            if (OfflineProtected(tc, DateTime.UtcNow))
+                Reply(player, "Offline protection: on. Everyone authorized has been offline for at least " + grace + " minutes, so damage is reduced.");
+            else
+                Reply(player, "Offline protection: not active. An offline base with no raid shield takes normal damage until that time has passed.");
         }
 
         private static string Format(TimeSpan t) => ((int)Math.Max(0, t.TotalHours)) + "h " + Math.Max(0, t.Minutes) + "m";
@@ -1114,6 +1225,7 @@ namespace Oxide.Plugins
         // when it fires; this still flips the window if that timer was late or the process was down.
         private void OnReconcileTick()
         {
+            TouchConnectedPlayers();
             DateTime start, end;
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
