@@ -499,7 +499,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.2")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.3")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -1568,17 +1568,31 @@ namespace Oxide.Plugins
                 + " | " + excavatorStatus);
         }
 
+        // Args is string[] on some builds and Facepunch.StringView[] on others.
+        // GetString returns each token as a string on both, so callers never take the array type.
+        private static string[] ConsoleArgs(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !arg.HasArgs())
+                return new string[0];
+            int count = arg.Args.Length;
+            string[] copy = new string[count];
+            for (int i = 0; i < count; i++)
+                copy[i] = arg.GetString(i);
+            return copy;
+        }
+
         private void CmdFakeTime(ConsoleSystem.Arg arg)
         {
             if (!ConsoleAdmin(arg)) return;
-            if (arg.Args == null || arg.Args.Length == 0)
+            string[] args = ConsoleArgs(arg);
+            if (args.Length == 0)
             {
                 arg.ReplyWith(fakeUtc.HasValue
                     ? "Test clock is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). nrp.faketime clear"
                     : "Test clock is off. nrp.faketime 2026-11-02T07:59:00Z   or   nrp.faketime eastern 2026-10-30 20:00");
                 return;
             }
-            if (arg.Args[0].Equals("clear", StringComparison.OrdinalIgnoreCase) || arg.Args[0].Equals("off", StringComparison.OrdinalIgnoreCase))
+            if (args[0].Equals("clear", StringComparison.OrdinalIgnoreCase) || args[0].Equals("off", StringComparison.OrdinalIgnoreCase))
             {
                 fakeUtc = null;
                 CheckWindow();
@@ -1587,8 +1601,8 @@ namespace Oxide.Plugins
                 arg.ReplyWith("Test clock cleared.");
                 return;
             }
-            bool easternWall = arg.Args[0].Equals("eastern", StringComparison.OrdinalIgnoreCase) || arg.Args[0].Equals("et", StringComparison.OrdinalIgnoreCase);
-            string text = easternWall ? string.Join(" ", arg.Args.Skip(1)) : string.Join(" ", arg.Args);
+            bool easternWall = args[0].Equals("eastern", StringComparison.OrdinalIgnoreCase) || args[0].Equals("et", StringComparison.OrdinalIgnoreCase);
+            string text = easternWall ? string.Join(" ", args.Skip(1)) : string.Join(" ", args);
             DateTime parsed;
             if (easternWall)
             {
@@ -1728,7 +1742,7 @@ namespace Oxide.Plugins
             if (arg == null) return;
             // Server console and RCON have no in-game player. F1 still needs IsAdmin or the permission.
             if (!(arg.IsRcon || arg.Connection == null || ConsoleAdmin(arg))) return;
-            arg.ReplyWith(HandleForcePvp(arg.Args));
+            arg.ReplyWith(HandleForcePvp(ConsoleArgs(arg)));
         }
 
         private void CmdNsRaidTest(BasePlayer player, string command, string[] args)
