@@ -11,9 +11,7 @@
         "Radius": 200,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -22,9 +20,7 @@
         "Radius": 145,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -33,9 +29,7 @@
         "Radius": 150,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -44,9 +38,7 @@
         "Radius": 295,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -55,9 +47,7 @@
         "Radius": 165,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -66,9 +56,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -77,9 +65,7 @@
         "Radius": 150,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -88,9 +74,7 @@
         "Radius": 165,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -99,9 +83,7 @@
         "Radius": 115,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -110,9 +92,7 @@
         "Radius": 165,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -121,9 +101,7 @@
         "Radius": 175,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -132,9 +110,7 @@
         "Radius": 205,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -143,9 +119,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -154,9 +128,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -165,9 +137,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -176,9 +146,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -187,9 +155,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -198,9 +164,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -209,9 +173,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -220,9 +182,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -231,9 +191,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -242,9 +200,7 @@
         "Radius": 95,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -253,9 +209,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -264,9 +218,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -275,9 +227,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -286,9 +236,7 @@
         "Radius": 80,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -297,9 +245,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -308,9 +254,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -319,9 +263,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -330,9 +272,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -341,9 +281,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -352,9 +290,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -363,9 +299,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -374,9 +308,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -385,9 +317,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -396,9 +326,7 @@
         "Radius": 135,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -407,9 +335,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -418,9 +344,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -429,9 +353,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -440,9 +362,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -451,9 +371,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -462,9 +380,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -473,9 +389,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -484,9 +398,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -495,9 +407,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -506,9 +416,7 @@
         "Radius": 125,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -517,9 +425,7 @@
         "Radius": 85,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "monumentpvp",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": ""
       },
@@ -528,9 +434,7 @@
         "Radius": 50,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "exclude",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": "exclude"
       },
@@ -539,9 +443,7 @@
         "Radius": 100,
         "Enter Zone Message": "",
         "Leave Zone Message": "",
-        "Zone Flags": [
-          "autolights"
-        ],
+        "Zone Flags": [],
         "TruePVE RuleSet to use if TruePVE is enabled": "exclude",
         "NextGenPVE RuleSet to use if NextGenPVE is enabled": "exclude"
       }
