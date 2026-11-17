@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeInfo", "Nightshade", "1.2.1")]
+    [Info("NightshadeInfo", "Nightshade", "1.2.2")]
     [Description("Nightshade info panel: live status, rules, and Discord.")]
     public class NightshadeInfo : RustPlugin
     {
@@ -759,7 +759,9 @@ namespace Oxide.Plugins
             }
 
             snap.PvpDetail = "Fri 8 PM - Mon 3 AM ET";
-            snap.PvpValue = (weekend ? "Ends in " : "Starts in ") + FormatDur(weekendSeconds);
+            // A negative countdown is the full-server force with no scheduled end.
+            if (weekend && weekendSeconds < 0d) snap.PvpValue = "On";
+            else snap.PvpValue = (weekend ? "Ends in " : "Starts in ") + FormatDur(weekendSeconds);
             double purgeSeconds;
             if (purge)
             {
@@ -796,7 +798,7 @@ namespace Oxide.Plugins
                 string purgeSource = scheduled ? "built-in schedule" : "built-in schedule (not in window)";
                 if (manual) purgeSource = manualSource + (scheduled ? " + built-in schedule" : "");
                 else if (rulesetPurge) purgeSource = "TruePVE ruleset purge" + (scheduled ? " + built-in schedule" : "");
-                Puts("NightshadeInfo status: PvP from " + weekendSource + ". Purge from " + purgeSource + ". Mode " + snap.ModeValue + ".");
+                Puts("NightshadeInfo status: PvP from " + weekendSource + (weekend && weekendSeconds < 0d ? " (full force, no scheduled end)" : "") + ". Purge from " + purgeSource + ". Mode " + snap.ModeValue + ".");
             }
             return snap;
         }

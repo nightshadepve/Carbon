@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace Carbon.Plugins
 {
-    [Info("UnifiedLootProtection", "Nightshade", "1.1.2")]
+    [Info("UnifiedLootProtection", "Nightshade", "1.1.3")]
     [Description("Unified loot protection combining damage-based ownership and TC-based container protection.")]
     public class UnifiedLootProtection : CarbonPlugin
     {
@@ -390,19 +390,30 @@ namespace Carbon.Plugins
         // The real Eastern clock is an additional guard: nrp.faketime modifies
         // NRP's published window, but its damage blocker uses the REAL clock.
         // Never open storage on a weekday just because the test clock is active.
+        // nsraid.pvpweekend is the persisted full-server force. API_IsPvPActive is
+        // true for it, and loot opens the same way it does on the real weekend.
         private bool IsWeekendPvp(BasePlayer player = null)
         {
             var opt = _config?.WeekendPvP;
             if (opt == null || !opt.Enabled) return false;
             if (IsPurgeActive()) return true;
             bool realWeekend = IsEasternWeekendWindow();
-            if (!realWeekend) return false;
+            bool forced = IsFullPvPForced();
+            if (!realWeekend && !forced) return false;
             bool raidActive;
-            if (TryGetRaidWeekendState(out raidActive)) return raidActive;
+            if (TryGetRaidWeekendState(out raidActive)) return raidActive || forced;
+            if (forced) return true;
             // Safe fallback when NRP is absent: require BOTH Eastern weekend time
             // and TruePVE's actual global weekend profile, not a zone mapping.
             return opt.EasternClockFallback &&
                 string.Equals(GetTruePveRuleSet(), opt.WeekendRuleSet, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool IsFullPvPForced()
+        {
+            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded) return false;
+            var value = NightshadeRaidProtection.Call("API_IsFullPvPForced");
+            return value is bool && (bool)value;
         }
 
         private bool SkipEventOwnership(BasePlayer player = null) =>
@@ -1386,9 +1397,10 @@ namespace Carbon.Plugins
                 bool raidActive;
                 string nrp = TryGetRaidWeekendState(out raidActive) ? raidActive.ToString() : "unavailable";
                 bool clock = IsEasternWeekendWindow();
+                bool forced = IsFullPvPForced();
                 bool purge = IsPurgeActive();
                 bool bypass = IsWeekendPvp(player);
-                player.ChatMessage($"<color=#B084FF>Nightshade Access</color> | TruePVE global: {globalRule} | Mapping (diagnostic only): {mapping} | Real ET weekend: {clock} | NRP API: {nrp} | Purge: {purge} | Open raids/loot: {bypass} | Sleeper looting: PROTECTED");
+                player.ChatMessage($"<color=#B084FF>Nightshade Access</color> | TruePVE global: {globalRule} | Mapping (diagnostic only): {mapping} | Real ET weekend: {clock} | Full force: {forced} | NRP API: {nrp} | Purge: {purge} | Open raids/loot: {bypass} | Sleeper looting: PROTECTED");
                 return;
             }
 
