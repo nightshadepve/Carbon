@@ -414,10 +414,92 @@ namespace Oxide.Plugins
             if (scale > 1f) return 1f;
             return scale;
         }
+
+        // One cupboard considered for a hit. BuildingId 0 or a different building is foreign.
+        public struct CupboardVote
+        {
+            public uint BuildingId;
+            public bool Destroyed;
+            public bool PaidShield;
+            public bool OfflineProtected;
+            public bool AttackerAuthorized;
+        }
+
+        public struct HitDecision
+        {
+            public bool Block;
+            public bool Paid;
+        }
+
+        // Only cupboards attached to the hit building can block. A foreign overlap cannot
+        // cancel a real shield or offline protection, and it cannot grant either.
+        // When allowAuthorizedDamage is set, auth on the cupboard that would block skips that cupboard only.
+        public static HitDecision Decide(uint hitBuildingId, bool allowAuthorizedDamage, CupboardVote[] cupboards)
+        {
+            HitDecision decision = new HitDecision();
+            if (hitBuildingId == 0u || cupboards == null) return decision;
+            for (int i = 0; i < cupboards.Length; i++)
+            {
+                CupboardVote vote = cupboards[i];
+                if (vote.Destroyed || vote.BuildingId != hitBuildingId) continue;
+                if (!vote.PaidShield && !vote.OfflineProtected) continue;
+                if (allowAuthorizedDamage && vote.AttackerAuthorized) continue;
+                decision.Block = true;
+                if (vote.PaidShield) decision.Paid = true;
+            }
+            return decision;
+        }
+
+        // Privilege spheres intersect. Radius is the tool cupboard privilege radius.
+        // This is one hop only: callers must not walk from a matched neighbor to its neighbors.
+        public static bool PrivilegeZonesOverlap(float distanceMeters, float radiusMeters)
+        {
+            if (radiusMeters <= 0f || float.IsNaN(distanceMeters) || float.IsInfinity(distanceMeters) || distanceMeters < 0f)
+                return false;
+            return distanceMeters <= radiusMeters * 2f;
+        }
+
+        public static bool SameOwnerOnOverlap(ulong protectedOwnerId, ulong steamIdMinimum, bool authorizedOnOverlap, bool isOverlapOwner)
+        {
+            if (protectedOwnerId < steamIdMinimum) return false;
+            return authorizedOnOverlap || isOverlapOwner;
+        }
+
+        // Direct overlap with a protected cupboard whose owner is also on the hit cupboard.
+        // A shield copies as a full block. Offline protection copies only when the hit cupboard
+        // itself also qualifies, so someone online on it does not inherit the grace.
+        public struct OverlapLink
+        {
+            public bool ZonesOverlap;
+            public bool OwnerOnOverlap;
+            public bool SourceShield;
+            public bool SourceOffline;
+            public bool OverlapOffline;
+            public bool AttackerAuthorizedOnSource;
+        }
+
+        public static HitDecision MatchedOverlap(bool share, bool allowAuthorizedDamage, OverlapLink link)
+        {
+            HitDecision decision = new HitDecision();
+            if (!share || !link.ZonesOverlap || !link.OwnerOnOverlap) return decision;
+            if (link.SourceShield)
+            {
+                if (allowAuthorizedDamage && link.AttackerAuthorizedOnSource) return decision;
+                decision.Block = true;
+                decision.Paid = true;
+                return decision;
+            }
+            if (link.SourceOffline && link.OverlapOffline)
+            {
+                decision.Block = true;
+                decision.Paid = false;
+            }
+            return decision;
+        }
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.0")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.1")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -467,6 +549,7 @@ namespace Oxide.Plugins
             [JsonProperty("Minutes everyone authorized on TC must be offline before auto protection")] public int OfflineGraceMinutes = 30;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
             [JsonProperty("Prevent teammates authorized on TC from damaging their own shielded building")] public bool ProtectFromAuthorizedPlayers = false;
+            [JsonProperty("Share protection with the owner's directly overlapping cupboards")] public bool ShareOverlappingCupboards = true;
             [JsonProperty("Show blocked-hit message to attacker (rate limited)")] public bool NotifyAttacker = true;
             [JsonProperty("Maximum total paid shield time on one TC in hours")] public int MaximumStackedHours = 72;
             [JsonProperty("Drive TruePVE from the Eastern weekend window")] public bool DriveTruePve = true;
@@ -965,6 +1048,96 @@ namespace Oxide.Plugins
                 NoteSeen(player);
         }
 
+        // The building this entity belongs to. Never the nearest overlapping privilege.
+        // A block, door, or cupboard uses its own building id. A loose deployable uses
+        // the building it is parented to, then a nearby block of the base it sits on.
+        private static uint BuildingIdOf(BaseEntity entity)
+        {
+            BaseEntity current = entity;
+            for (int i = 0; current != null && i < 8; i++)
+            {
+                DecayEntity decay = current as DecayEntity;
+                if (decay != null && decay.buildingID != 0u) return decay.buildingID;
+                current = current.GetParentEntity();
+            }
+            DecayEntity root = entity as DecayEntity;
+            if (root != null && !root.IsDestroyed)
+            {
+                BuildingBlock nearby = root.GetNearbyBuildingBlock();
+                if (nearby != null && !nearby.IsDestroyed && nearby.buildingID != 0u)
+                    return nearby.buildingID;
+            }
+            return 0u;
+        }
+
+        // Shield stays on the cupboard and building it was redeemed for. A foreign TC is not passed in.
+        private bool ShieldBlocks(BuildingPrivlidge tc, uint buildingId, DateTime now, DateTime weekendEnd)
+        {
+            if (!settings.PaidShields || tc == null) return false;
+            Shield shield;
+            if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield == null || shield.ExpiresUtcTicks != weekendEnd.Ticks)
+                return false;
+            Account(shield, now);
+            bool active = shield.RemainingSeconds > 0d && shield.BuildingId == buildingId;
+            if (active) PublishShield(shield);
+            return active;
+        }
+
+        // One hop from the hit building's own cupboards. A neighbor that only touches
+        // another neighbor is not included, so protection cannot walk across the map.
+        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd)
+        {
+            NightshadeOfflineGate.HitDecision best = new NightshadeOfflineGate.HitDecision();
+            if (own == null || own.Count == 0) return best;
+            float radius = BuildingPrivlidge.Radius;
+            if (radius <= 0f || float.IsNaN(radius)) radius = 16f;
+            float reach = radius * 2f;
+            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            try
+            {
+                for (int i = 0; i < own.Count; i++)
+                {
+                    BuildingPrivlidge hitTc = own[i];
+                    if (hitTc == null || hitTc.IsDestroyed || hitTc.transform == null) continue;
+                    nearby.Clear();
+                    Vis.Entities(hitTc.transform.position, reach, nearby);
+                    for (int j = 0; j < nearby.Count; j++)
+                    {
+                        BuildingPrivlidge source = nearby[j];
+                        if (source == null || source.IsDestroyed || source.transform == null) continue;
+                        if (source.buildingID == 0u || source.buildingID == hitTc.buildingID) continue;
+                        float distance = Vector3.Distance(hitTc.transform.position, source.transform.position);
+                        if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
+                        bool ownerOn = IsSteamId(source.OwnerID) && (source.OwnerID == hitTc.OwnerID || Authorized(hitTc, source.OwnerID));
+                        if (!NightshadeOfflineGate.SameOwnerOnOverlap(source.OwnerID, SteamIdMin, ownerOn, source.OwnerID == hitTc.OwnerID))
+                            continue;
+                        bool sourceShield = ShieldBlocks(source, source.buildingID, now, weekendEnd);
+                        bool sourceOffline = !sourceShield && OfflineProtected(source, now);
+                        // The overlap cupboard must qualify on its own. An online raider on it blocks the copy.
+                        bool overlapOffline = sourceOffline && OfflineProtected(hitTc, now);
+                        bool attackerOnSource = attacker != 0UL && (attacker == source.OwnerID || Authorized(source, attacker));
+                        NightshadeOfflineGate.OverlapLink link = new NightshadeOfflineGate.OverlapLink();
+                        link.ZonesOverlap = true;
+                        link.OwnerOnOverlap = true;
+                        link.SourceShield = sourceShield;
+                        link.SourceOffline = sourceOffline;
+                        link.OverlapOffline = overlapOffline;
+                        link.AttackerAuthorizedOnSource = attackerOnSource;
+                        NightshadeOfflineGate.HitDecision part = NightshadeOfflineGate.MatchedOverlap(true, allowAuthorized, link);
+                        if (!part.Block) continue;
+                        best.Block = true;
+                        if (part.Paid) best.Paid = true;
+                        if (best.Paid) return best;
+                    }
+                }
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref nearby);
+            }
+            return best;
+        }
+
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hit)
         {
             if (entity == null || hit == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
@@ -975,21 +1148,56 @@ namespace Oxide.Plugins
             bool active;
             Weekend(now, out start, out end, out active);
             if (!active) return null;
-            BuildingPrivlidge tc = entity as BuildingPrivlidge;
-            if (tc == null) tc = entity.GetBuildingPrivilege();
-            if (tc == null || tc.IsDestroyed) return null;
-            // A nearby cupboard must not protect a different building's blocks, doors, or deployables.
-            DecayEntity decay = entity as DecayEntity;
-            if (decay != null && decay.buildingID != 0u && tc.buildingID != 0u && decay.buildingID != tc.buildingID)
+            uint buildingId = BuildingIdOf(entity);
+            if (buildingId == 0u || BuildingManager.server == null) return null;
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+            if (building == null || building.buildingPrivileges == null || building.buildingPrivileges.Count == 0)
                 return null;
             ulong attacker = hit.InitiatorPlayer != null ? hit.InitiatorPlayer.userID :
                 hit.Initiator != null ? hit.Initiator.OwnerID : 0UL;
-            if (!settings.ProtectFromAuthorizedPlayers && attacker != 0UL && Authorized(tc, attacker)) return null;
-            Shield shield = null;
-            bool paid = settings.PaidShields && store.Shields.TryGetValue(CupboardId(tc), out shield) && shield != null && shield.ExpiresUtcTicks == end.Ticks;
-            if (paid) { Account(shield, now); paid = shield.RemainingSeconds > 0d && shield.BuildingId == tc.buildingID; PublishShield(shield); }
-            bool offline = OfflineProtected(tc, now);
-            float reduction = NightshadeOfflineGate.Reduction(paid, offline, settings.OfflineReductionPercent);
+            bool allowAuthorized = !settings.ProtectFromAuthorizedPlayers && attacker != 0UL;
+            NightshadeOfflineGate.CupboardVote[] votes = new NightshadeOfflineGate.CupboardVote[building.buildingPrivileges.Count];
+            List<BuildingPrivlidge> own = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            NightshadeOfflineGate.HitDecision decision;
+            try
+            {
+                int n = 0;
+                foreach (BuildingPrivlidge tc in building.buildingPrivileges)
+                {
+                    if (n >= votes.Length) break;
+                    NightshadeOfflineGate.CupboardVote vote = new NightshadeOfflineGate.CupboardVote();
+                    if (tc == null || tc.IsDestroyed)
+                    {
+                        vote.Destroyed = true;
+                    }
+                    else
+                    {
+                        vote.BuildingId = tc.buildingID;
+                        vote.AttackerAuthorized = attacker != 0UL && Authorized(tc, attacker);
+                        // A foreign building id is recorded and then ignored. It is not read for a shield.
+                        if (tc.buildingID == buildingId && !(allowAuthorized && vote.AttackerAuthorized))
+                        {
+                            vote.PaidShield = ShieldBlocks(tc, buildingId, now, end);
+                            vote.OfflineProtected = OfflineProtected(tc, now);
+                            own.Add(tc);
+                        }
+                        else if (tc.buildingID == buildingId)
+                        {
+                            own.Add(tc);
+                        }
+                    }
+                    votes[n++] = vote;
+                }
+                decision = NightshadeOfflineGate.Decide(buildingId, allowAuthorized, votes);
+                if (!decision.Block && settings.ShareOverlappingCupboards)
+                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, end);
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref own);
+            }
+            if (!decision.Block) return null;
+            float reduction = NightshadeOfflineGate.Reduction(decision.Paid, true, settings.OfflineReductionPercent);
             if (reduction <= 0f) return null;
             hit.damageTypes.ScaleAll(1f - reduction);
             if (settings.NotifyAttacker && hit.InitiatorPlayer != null)
@@ -999,7 +1207,7 @@ namespace Oxide.Plugins
                 if (!notifyThrottle.TryGetValue(id, out last) || Time.realtimeSinceStartup - last > 8f)
                 {
                     notifyThrottle[id] = Time.realtimeSinceStartup;
-                    string blockedMessage = paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.";
+                    string blockedMessage = decision.Paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.";
                     Reply(hit.InitiatorPlayer, blockedMessage);
                 }
             }
