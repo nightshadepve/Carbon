@@ -499,7 +499,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.1")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.2")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -542,11 +542,27 @@ namespace Oxide.Plugins
         private string excavatorStatus = "excavator not checked";
         private string excavatorLogSignature;
 
+        // Offline-protection test switch. Memory only: a reload clears a command override.
+        // The config key below can turn it back on, and it defaults to false.
+        // While on, ONLY the offline-protection damage decision treats the PvP weekend as active.
+        // It does not call CheckWindow, EnsureRuleset, or ApplyExcavator.
+        // TruePVE rulesets and reloads, Giant Excavator speed, paid shields, and API_IsPvPActive
+        // are unchanged by this switch. nrp.faketime still affects only the paths it already did.
+        private bool forceOfflinePvp;
+        private int? forceOfflineGraceMinutes;
+        private float nextForceOfflineWarning;
+        private const int MaxForceGraceMinutes = 10080;
+        private const float ForceOfflineWarningSeconds = 300f;
+
         private class Settings
         {
             [JsonProperty("Enable paid TC raid shields")] public bool PaidShields = true;
             [JsonProperty("Enable automatic offline raid protection during PvP")] public bool OfflineProtection = true;
             [JsonProperty("Minutes everyone authorized on TC must be offline before auto protection")] public int OfflineGraceMinutes = 30;
+            // Dev-server opt-in. False by default and not flipped by nsraid.forcepvp. A true value
+            // enables the same in-memory offline-protection override after each load. It still does
+            // not switch TruePVE or the excavator.
+            [JsonProperty("Force PvP weekend for testing")] public bool ForcePvpWeekendForTesting = false;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
             [JsonProperty("Prevent teammates authorized on TC from damaging their own shielded building")] public bool ProtectFromAuthorizedPlayers = false;
             [JsonProperty("Share protection with the owner's directly overlapping cupboards")] public bool ShareOverlappingCupboards = true;
@@ -597,17 +613,24 @@ namespace Oxide.Plugins
             float excavatorMult = settings.Excavator.SpeedMultiplier;
             if (float.IsNaN(excavatorMult) || float.IsInfinity(excavatorMult) || excavatorMult < 0.01f)
                 settings.Excavator.SpeedMultiplier = NightshadeExcavatorBoost.DefaultSpeedMultiplier;
+            // Command overrides die with the plugin instance. Only the config key survives a reload.
+            forceOfflinePvp = settings.ForcePvpWeekendForTesting;
+            forceOfflineGraceMinutes = null;
+            nextForceOfflineWarning = 0f;
             SaveConfig();
         }
         protected override void SaveConfig() => Config.WriteObject(settings, true);
 
         private void Init()
         {
+            // Registered only. This permission is not granted to any user or group.
             permission.RegisterPermission(PermAdmin, this);
             cmd.AddChatCommand("raidvoucher", this, nameof(RedeemCommand));
             cmd.AddChatCommand("raidshield", this, nameof(StatusCommand));
+            cmd.AddChatCommand("nsraidtest", this, nameof(CmdNsRaidTest));
             cmd.AddConsoleCommand("nrp.faketime", this, nameof(CmdFakeTime));
             cmd.AddConsoleCommand("nrp.window", this, nameof(CmdWindow));
+            cmd.AddConsoleCommand("nsraid.forcepvp", this, nameof(CmdForcePvp));
             try { store = Interface.Oxide.DataFileSystem.ReadObject<Store>(DataPath) ?? new Store(); }
             catch (Exception ex) { throw new Exception("Raid shield data could not be loaded: purchases disabled to prevent lost vouchers. " + ex.Message); }
             if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
@@ -634,6 +657,11 @@ namespace Oxide.Plugins
             rulesTimer?.Destroy();
             shieldTimer?.Destroy();
             fakeUtc = null;
+            if (forceOfflinePvp)
+                PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection cleared on unload.");
+            forceOfflinePvp = false;
+            forceOfflineGraceMinutes = null;
+            nextForceOfflineWarning = 0f;
             Save();
         }
         private void OnNewSave(string filename)
@@ -657,6 +685,7 @@ namespace Oxide.Plugins
             EnsureRuleset();
             rulesTimer = timer.Every(60f, OnReconcileTick);
             Puts("Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM. Giant Excavator uses that same window.");
+            WarnForcedOffline(true);
         }
 
         private void OnPluginLoaded(Plugin plugin)
@@ -697,6 +726,8 @@ namespace Oxide.Plugins
         //     True during Friday 8:00 PM through Monday 3:00 AM America/New_York.
         //     A manual /purge is not included; ask Nightshade Purge Status API_IsPurgeActive.
         //     nrp.faketime and API_SetTestClockUtcTicks are included. API_ClearTestClock returns to the real clock.
+        //     nsraid.forcepvp / /nsraidtest are NOT included. That switch only lets this plugin's
+        //     offline protection treat the weekend as active. It does not change this API.
         // API_HasTestClock() -> bool, API_GetTestClockUtcTicks() -> long (0 when the test clock is off)
         // API_SetTestClockUtcTicks(long utcTicks) -> bool, API_ClearTestClock() -> bool
         //     Memory only. TruePVE.json is not written. The excavator boost follows this clock.
@@ -977,7 +1008,7 @@ namespace Oxide.Plugins
         {
             if (!settings.OfflineProtection || tc == null || tc.authorizedPlayers == null || tc.authorizedPlayers.Count == 0)
                 return false;
-            int grace = settings.OfflineGraceMinutes;
+            int grace = EffectiveOfflineGraceMinutes();
             bool any = false;
             ulong owner = tc.OwnerID;
             bool ownerAuthed = false;
@@ -1085,7 +1116,9 @@ namespace Oxide.Plugins
 
         // One hop from the hit building's own cupboards. A neighbor that only touches
         // another neighbor is not included, so protection cannot walk across the map.
-        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd)
+        // includePaidShields is false only for the offline-protection test switch. A weekday
+        // force-on must not let a queued paid shield start blocking.
+        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd, bool includePaidShields)
         {
             NightshadeOfflineGate.HitDecision best = new NightshadeOfflineGate.HitDecision();
             if (own == null || own.Count == 0) return best;
@@ -1111,7 +1144,7 @@ namespace Oxide.Plugins
                         bool ownerOn = IsSteamId(source.OwnerID) && (source.OwnerID == hitTc.OwnerID || Authorized(hitTc, source.OwnerID));
                         if (!NightshadeOfflineGate.SameOwnerOnOverlap(source.OwnerID, SteamIdMin, ownerOn, source.OwnerID == hitTc.OwnerID))
                             continue;
-                        bool sourceShield = ShieldBlocks(source, source.buildingID, now, weekendEnd);
+                        bool sourceShield = includePaidShields && ShieldBlocks(source, source.buildingID, now, weekendEnd);
                         bool sourceOffline = !sourceShield && OfflineProtected(source, now);
                         // The overlap cupboard must qualify on its own. An online raider on it blocks the copy.
                         bool overlapOffline = sourceOffline && OfflineProtected(hitTc, now);
@@ -1146,8 +1179,11 @@ namespace Oxide.Plugins
             DateTime now = DateTime.UtcNow;
             DateTime start, end;
             bool active;
+            // Real Eastern clock, same as before. nrp.faketime does not open this gate.
             Weekend(now, out start, out end, out active);
-            if (!active) return null;
+            // forceOfflinePvp opens offline protection only. Paid shields still need the real weekend.
+            bool offlineWindow = active || forceOfflinePvp;
+            if (!offlineWindow) return null;
             uint buildingId = BuildingIdOf(entity);
             if (buildingId == 0u || BuildingManager.server == null) return null;
             BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
@@ -1177,7 +1213,8 @@ namespace Oxide.Plugins
                         // A foreign building id is recorded and then ignored. It is not read for a shield.
                         if (tc.buildingID == buildingId && !(allowAuthorized && vote.AttackerAuthorized))
                         {
-                            vote.PaidShield = ShieldBlocks(tc, buildingId, now, end);
+                            if (active)
+                                vote.PaidShield = ShieldBlocks(tc, buildingId, now, end);
                             vote.OfflineProtected = OfflineProtected(tc, now);
                             own.Add(tc);
                         }
@@ -1190,7 +1227,7 @@ namespace Oxide.Plugins
                 }
                 decision = NightshadeOfflineGate.Decide(buildingId, allowAuthorized, votes);
                 if (!decision.Block && settings.ShareOverlappingCupboards)
-                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, end);
+                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, end, active);
             }
             finally
             {
@@ -1250,7 +1287,7 @@ namespace Oxide.Plugins
                 Reply(player, "Offline protection: off.");
                 return;
             }
-            int grace = Math.Max(0, settings.OfflineGraceMinutes);
+            int grace = Math.Max(0, EffectiveOfflineGraceMinutes());
             if (OfflineProtected(tc, DateTime.UtcNow))
                 Reply(player, "Offline protection: on. Everyone authorized has been offline for at least " + grace + " minutes, so damage is reduced.");
             else
@@ -1434,6 +1471,7 @@ namespace Oxide.Plugins
         private void OnReconcileTick()
         {
             TouchConnectedPlayers();
+            WarnForcedOffline(false);
             DateTime start, end;
             bool active;
             Weekend(NowUtc(), out start, out end, out active);
@@ -1590,6 +1628,125 @@ namespace Oxide.Plugins
             if (player.IsAdmin || permission.UserHasPermission(player.UserIDString, PermAdmin)) return true;
             arg.ReplyWith("No permission.");
             return false;
+        }
+
+        // Offline grace while the test switch is on. Off, or on with no minute argument,
+        // this is the configured grace. "nsraid.forcepvp on 1" replaces it until off or reload.
+        private int EffectiveOfflineGraceMinutes()
+        {
+            if (forceOfflinePvp && forceOfflineGraceMinutes.HasValue)
+                return forceOfflineGraceMinutes.Value;
+            return settings.OfflineGraceMinutes;
+        }
+
+        // Server-console warning for as long as the override stays on. Repeated on the
+        // existing 60s tick, but not more than once per ForceOfflineWarningSeconds.
+        private void WarnForcedOffline(bool immediate)
+        {
+            if (!forceOfflinePvp) return;
+            float now = Time.realtimeSinceStartup;
+            if (!immediate && now < nextForceOfflineWarning) return;
+            nextForceOfflineWarning = now + ForceOfflineWarningSeconds;
+            int grace = EffectiveOfflineGraceMinutes();
+            if (grace < 0) grace = 0;
+            DateTime start, end;
+            bool realActive;
+            Weekend(DateTime.UtcNow, out start, out end, out realActive);
+            PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend is ON for offline protection only. Effective grace minutes: "
+                + grace + ". Real weekend: " + (realActive ? "active" : "inactive")
+                + ". TruePVE mode, TruePVE reloads, and Giant Excavator speed are not changed. In memory only. Turn it off with nsraid.forcepvp off.");
+        }
+
+        private string ForcePvpStatus()
+        {
+            DateTime start, end;
+            bool realActive;
+            // Real clock on purpose. nrp.faketime and the force switch must not change this line.
+            Weekend(DateTime.UtcNow, out start, out end, out realActive);
+            int grace = EffectiveOfflineGraceMinutes();
+            if (grace < 0) grace = 0;
+            bool configOn = settings != null && settings.ForcePvpWeekendForTesting;
+            return "Force PvP weekend (offline protection only): " + (forceOfflinePvp ? "ON" : "OFF")
+                + "\nEffective grace minutes: " + grace
+                + "\nReal weekend: " + (realActive ? "active" : "inactive")
+                + "\nTruePVE, excavator speed, and API_IsPvPActive are unchanged. Not saved. A reload clears a command override"
+                + (configOn
+                    ? ". Config \"Force PvP weekend for testing\" is true, so a reload turns it on again."
+                    : " (config key is false).");
+        }
+
+        // Console, RCON, and in-game admins. Does not write config, TruePVE, or excavator state.
+        private string HandleForcePvp(string[] args)
+        {
+            if (args == null || args.Length == 0 || string.IsNullOrEmpty(args[0]))
+                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    /nsraidtest on [graceMinutes] | off | status";
+            string action = args[0];
+            if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length != 1)
+                    return "Usage: nsraid.forcepvp status";
+                return ForcePvpStatus();
+            }
+            if (action.Equals("off", StringComparison.OrdinalIgnoreCase))
+            {
+                if (args.Length != 1)
+                    return "Usage: nsraid.forcepvp off";
+                bool wasOn = forceOfflinePvp;
+                forceOfflinePvp = false;
+                forceOfflineGraceMinutes = null;
+                nextForceOfflineWarning = 0f;
+                if (wasOn)
+                {
+                    string extra = settings != null && settings.ForcePvpWeekendForTesting
+                        ? " Config \"Force PvP weekend for testing\" is still true, so a reload turns this back on."
+                        : "";
+                    PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection is OFF. Offline protection follows the real Eastern weekend again. TruePVE and the Giant Excavator were not changed." + extra);
+                }
+                return ForcePvpStatus();
+            }
+            if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
+                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    /nsraidtest on [graceMinutes] | off | status";
+            if (args.Length > 2)
+                return "Usage: nsraid.forcepvp on [graceMinutes]";
+            int? grace = null;
+            if (args.Length == 2)
+            {
+                int minutes;
+                if (!int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out minutes) || minutes < 0 || minutes > MaxForceGraceMinutes)
+                    return "Grace minutes must be a whole number from 0 to 10080. Example: nsraid.forcepvp on 1";
+                grace = minutes;
+            }
+            forceOfflinePvp = true;
+            forceOfflineGraceMinutes = grace;
+            // Do not call CheckWindow, EnsureRuleset, or ApplyExcavator.
+            WarnForcedOffline(true);
+            return ForcePvpStatus();
+        }
+
+        private void CmdForcePvp(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return;
+            // Server console and RCON have no in-game player. F1 still needs IsAdmin or the permission.
+            if (!(arg.IsRcon || arg.Connection == null || ConsoleAdmin(arg))) return;
+            arg.ReplyWith(HandleForcePvp(arg.Args));
+        }
+
+        private void CmdNsRaidTest(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!player.IsAdmin && !permission.UserHasPermission(player.UserIDString, PermAdmin))
+            {
+                Reply(player, "No permission.");
+                return;
+            }
+            string report = HandleForcePvp(args);
+            // One chat line per fact. A single message with newlines is easy to clip in game.
+            string[] lines = report.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].Length == 0) continue;
+                Reply(player, lines[i]);
+            }
         }
 
         #endregion
