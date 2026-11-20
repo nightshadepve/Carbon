@@ -1,11 +1,10 @@
 // NightshadeLocker
-// Original Nightshade plugin for Carbon 2.0.262.
-// Public behavior notes came from the Codefling UltimateLocker 2.1.5 page.
-// This server's own JSON settings and player-data field names were used for defaults and import.
-// Theme matching follows NightshadeShop's config and date rule. NightshadeInfo supplies the logo URL.
-// UltimateLocker.cs was not opened or used as an implementation source.
+// Original Nightshade plugin for Carbon.
+// Lock, share, and door-closer behavior is aligned with Ultimate Locker 2.1.5.
+// The panel stays the narrow Nightshade layout. UltimateLocker is not modified.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -22,7 +21,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeLocker", "Nightshade", "1.1.1")]
+    [Info("NightshadeLocker", "Nightshade", "1.2.0")]
     [Description("Nightshade locks, automatic lock placement, and automatic closing.")]
     public class NightshadeLocker : RustPlugin
     {
@@ -63,6 +62,7 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, float> openedAt = new Dictionary<ulong, float>();
         private readonly Dictionary<ulong, string> uiPage = new Dictionary<ulong, string>();
         private readonly HashSet<string> commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<int> pending = new HashSet<int>();
 
         #region Config and data
 
@@ -130,6 +130,7 @@ namespace Oxide.Plugins
             public ulong OwnerId;
             public string Provenance = NightshadeLockerRules.ProvenancePaid;
             public string Item = "lock.code";
+            public string Mode = "lock";
             public List<ulong> Shared = new List<ulong>();
         }
 
@@ -303,6 +304,29 @@ namespace Oxide.Plugins
 
         private void OnServerSave() => SaveStore();
 
+        private void OnPluginLoaded(Plugin plugin)
+        {
+            _ = plugin;
+            RefreshConflict(true);
+        }
+
+        private void OnPluginUnloaded(Plugin plugin)
+        {
+            _ = plugin;
+            RefreshConflict(true);
+        }
+
+        private void OnNewSave(string filename)
+        {
+            _ = filename;
+            if (store == null) return;
+            store.Locks.Clear();
+            store.Closers.Clear();
+            openedAt.Clear();
+            SaveStore();
+            Puts("NightshadeLocker cleared placed locks and closers for the new save. Player settings were kept.");
+        }
+
         private void Tick()
         {
             if (!worldReady) return;
@@ -438,9 +462,15 @@ namespace Oxide.Plugins
 
         private static string[] ArgsOf(ConsoleSystem.Arg arg)
         {
-            if (arg == null || arg.Args == null || arg.Args.Length == 0) return new string[0];
-            var copy = new string[arg.Args.Length];
-            for (int i = 0; i < arg.Args.Length; i++) copy[i] = arg.Args[i].ToString();
+            if (arg == null || !arg.HasArgs()) return new string[0];
+            int count = 0;
+            while (arg.HasArgs(count + 1)) count++;
+            var copy = new string[count];
+            for (int i = 0; i < count; i++)
+            {
+                string text = arg.GetString(i);
+                copy[i] = text ?? string.Empty;
+            }
             return copy;
         }
 
@@ -634,38 +664,56 @@ namespace Oxide.Plugins
             var player = plan.GetOwnerPlayer();
             var entity = go.ToBaseEntity();
             if (player == null || entity == null) return;
-            TryAutoLock(player, entity);
-            if (entity is Door) TryAutoCloser(player, entity as Door);
+            QueueAuto(player, entity, entity is Door);
         }
 
         private void OnItemDeployed(Deployer deployer, ItemModDeployable mod, BaseEntity entity)
         {
+            _ = mod;
             if (!worldReady || conflict || deployer == null || entity == null) return;
             var player = deployer.GetOwnerPlayer();
             if (player == null) return;
-            TryAutoLock(player, entity);
+            QueueAuto(player, entity, entity is Door);
         }
 
         private void OnItemDeployed(Deployer deployer, BaseEntity parent, BaseEntity entity)
         {
+            _ = parent;
             if (!worldReady || conflict || deployer == null || entity == null) return;
             var player = deployer.GetOwnerPlayer();
             if (player == null) return;
-            TryAutoLock(player, entity);
+            QueueAuto(player, entity, entity is Door);
         }
 
         private void OnEntitySpawned(BaseVehicle vehicle)
         {
             if (!worldReady || conflict || vehicle == null || vehicle.OwnerID == 0) return;
             var player = BasePlayer.FindByID(vehicle.OwnerID);
-            if (player != null) TryAutoLock(player, vehicle);
+            if (player != null) QueueAuto(player, vehicle, false);
         }
 
         private void OnEntitySpawned(HotAirBalloon balloon)
         {
             if (!worldReady || conflict || balloon == null || balloon.OwnerID == 0) return;
             var player = BasePlayer.FindByID(balloon.OwnerID);
-            if (player != null) TryAutoLock(player, balloon);
+            if (player != null) QueueAuto(player, balloon, false);
+        }
+
+        private void QueueAuto(BasePlayer player, BaseEntity entity, bool closer)
+        {
+            if (player == null || entity == null) return;
+            int token = entity.GetInstanceID();
+            if (!pending.Add(token)) return;
+            ulong user = player.userID;
+            NextTick(() =>
+            {
+                pending.Remove(token);
+                if (!worldReady || conflict || entity == null || entity.IsDestroyed) return;
+                var still = BasePlayer.FindByID(user) ?? BasePlayer.FindSleeping(user);
+                if (still == null) return;
+                TryAutoLock(still, entity);
+                if (closer && entity is Door) TryAutoCloser(still, entity as Door, true);
+            });
         }
 
         private void TryAutoLock(BasePlayer player, BaseEntity entity)
@@ -679,7 +727,8 @@ namespace Oxide.Plugins
                 return;
             var denial = Denial(player, entity, match, pref, true);
             if (denial != null) return;
-            PlaceLock(player, entity, match, pref, false);
+            var result = PlaceLock(player, entity, match, pref, false);
+            if (!string.IsNullOrEmpty(result)) Reply(player, result);
         }
 
         private void PlaceLook(BasePlayer player)
@@ -708,45 +757,44 @@ namespace Oxide.Plugins
                 HasUse = CanUse(player),
                 Known = match != null,
                 CategoryOpen = match != null && CategoryOn(config.LockCategories, match.Category),
-                AlreadyLocked = entity.GetSlot(BaseEntity.Slot.Lock) != null,
+                AlreadyLocked = HasLock(Host(entity)),
                 SkinBlocked = NightshadeLockerRules.SkinBlocked(entity.skinID, config.LockSkinBlacklist),
                 Vehicle = match != null && (match.Category == "vehicles" || match.Category == "naval"),
                 RequirePrivilege = config.RequirePrivilege,
                 HasPrivilege = HasPrivilege(player, entity),
                 RequireUnownedPrivilege = config.RequirePrivilegeUnownedVehicles,
                 Unowned = owner == 0,
-                OwnedByOther = owner != 0 && owner != player.userID && !team,
+                OwnedByOther = owner != 0 && owner != player.userID && !(WantsShare(pref) && team),
                 AllowUnowned = config.AllowUnownedVehicles,
                 AllowOthers = config.AllowOthersVehicles,
                 BypassVehicle = HasPerm(player, PermVehicleBypass),
-                HasItemOrFree = choice.Item != null
+                HasItemOrFree = choice.Item != null,
+                JustPlaced = automatic && owner == 0
             };
-            _ = automatic;
             return NightshadeLockerRules.PlaceDenial(request);
         }
 
         private string PlaceLock(BasePlayer player, BaseEntity entity, NightshadeLockerRules.Match match, NightshadeLockerRules.PlayerPref pref, bool tell)
         {
+            var host = Host(entity);
+            if (host is ModularCar) return PlaceCarLock(player, host as ModularCar, match, pref, tell);
+            if (host is SteeringWheel) return PlaceBoatLock(player, host as SteeringWheel, match, pref, tell);
+            if (host == null || !host.HasSlot(BaseEntity.Slot.Lock)) return "That cannot take a lock.";
             bool freePerm = HasPerm(player, PermFree);
             bool hasCode = HasItem(player, "lock.code");
             bool hasKey = HasItem(player, "lock.key");
             var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
             if (choice.Item == null) return "You need a lock in your inventory.";
+            string pin = EnsurePin(player, pref, choice.Item);
             bool consumed = false;
             if (!choice.Free)
             {
                 if (!TakeItem(player, choice.Item)) return "The lock could not be taken from your inventory.";
                 consumed = true;
             }
-            string pin = pref.Code;
-            if (choice.Item == "lock.code" && !NightshadeLockerRules.PinValid(pin))
-            {
-                pin = NightshadeLockerRules.MakePin(player.userID, DateTime.UtcNow.Ticks);
-                pref.Code = pin;
-            }
             BaseLock created = choice.Item == "lock.key"
-                ? (BaseLock)CreateKeyLock(player, entity)
-                : CreateCodeLock(player, entity, pref, pin);
+                ? (BaseLock)CreateKeyLock(player, host)
+                : CreateCodeLock(player, host, pref, pin);
             if (created == null)
             {
                 if (consumed) ReturnOrOwe(player, choice.Item, 1);
@@ -756,25 +804,49 @@ namespace Oxide.Plugins
             var record = new LockRecord
             {
                 LockId = IdOf(created),
-                ParentId = IdOf(entity),
+                ParentId = IdOf(host),
                 OwnerId = player.userID,
                 Provenance = choice.Free ? NightshadeLockerRules.ProvenanceFree : NightshadeLockerRules.ProvenancePaid,
-                Item = choice.Item
+                Item = choice.Item,
+                Mode = "lock"
             };
             ShareLock(player, created, pref, record);
-            store.Locks[record.LockId.ToString()] = record;
-            if (match != null && (match.Category == "vehicles" || match.Category == "naval"))
-            {
-                bool bypass = HasPerm(player, PermVehicleBypass);
-                bool team = IsWith(player, entity.OwnerID);
-                if (NightshadeLockerRules.MayClaim(entity.OwnerID, player.userID, config.ClaimUnownedVehicles))
-                    entity.OwnerID = player.userID;
-                else if (NightshadeLockerRules.MayReplaceOwner(entity.OwnerID, player.userID, config.ReplaceOtherVehicleOwnership, (config.AllowOthersVehicles || bypass) && !team))
-                    entity.OwnerID = player.userID;
-            }
+            if (record.LockId != 0) store.Locks[record.LockId.ToString()] = record;
+            ClaimVehicle(player, host, match);
             SaveStore();
             _ = tell;
-            return choice.Free ? "A lock was placed without using one from your inventory." : "Lock placed.";
+            return PlacedText(choice, pref, pin);
+        }
+
+        private string EnsurePin(BasePlayer player, NightshadeLockerRules.PlayerPref pref, string item)
+        {
+            string pin = pref.Code;
+            if (item == "lock.code" && !NightshadeLockerRules.PinValid(pin))
+            {
+                pin = NightshadeLockerRules.MakePin(player.userID, DateTime.UtcNow.Ticks);
+                pref.Code = pin;
+            }
+            return pin;
+        }
+
+        private static string PlacedText(NightshadeLockerRules.LockChoice choice, NightshadeLockerRules.PlayerPref pref, string pin)
+        {
+            string message = choice.Free ? "A lock was placed without using one from your inventory." : "Lock placed.";
+            if (choice.Item == "lock.code" && pref != null && !pref.Streamer && NightshadeLockerRules.PinValid(pin))
+                message += " Code " + pin + ".";
+            return message;
+        }
+
+        private void ClaimVehicle(BasePlayer player, BaseEntity entity, NightshadeLockerRules.Match match)
+        {
+            if (player == null || entity == null || match == null) return;
+            if (match.Category != "vehicles" && match.Category != "naval") return;
+            bool bypass = HasPerm(player, PermVehicleBypass);
+            bool team = IsWith(player, entity.OwnerID);
+            if (NightshadeLockerRules.MayClaim(entity.OwnerID, player.userID, config.ClaimUnownedVehicles))
+                entity.OwnerID = player.userID;
+            else if (NightshadeLockerRules.MayReplaceOwner(entity.OwnerID, player.userID, config.ReplaceOtherVehicleOwnership, (config.AllowOthersVehicles || bypass) && !(WantsShare(Pref(player)) && team)))
+                entity.OwnerID = player.userID;
         }
 
         private CodeLock CreateCodeLock(BasePlayer player, BaseEntity entity, NightshadeLockerRules.PlayerPref pref, string pin)
@@ -797,8 +869,7 @@ namespace Oxide.Plugins
             if (codeLock.whitelistPlayers == null) codeLock.whitelistPlayers = new List<ulong>();
             if (!codeLock.whitelistPlayers.Contains(player.userID))
                 codeLock.whitelistPlayers.Add(player.userID);
-            codeLock.SetFlagLocal(BaseEntity.Flags.Locked, true, false);
-            codeLock.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
+            SetLocked(codeLock, true);
             return codeLock;
         }
 
@@ -808,25 +879,150 @@ namespace Oxide.Plugins
             if (keyLock == null) return null;
             keyLock.SetParent(entity, entity.GetSlotAnchorName(BaseEntity.Slot.Lock));
             keyLock.OwnerID = player.userID;
+            keyLock.keyCode = UnityEngine.Random.Range(1, 100000);
+            keyLock.firstKeyCreated = false;
             keyLock.Spawn();
             entity.SetSlot(BaseEntity.Slot.Lock, keyLock);
-            keyLock.SetFlagLocal(BaseEntity.Flags.Locked, true, false);
-            keyLock.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
+            SetLocked(keyLock, true);
             return keyLock;
+        }
+
+        private string PlaceCarLock(BasePlayer player, ModularCar car, NightshadeLockerRules.Match match, NightshadeLockerRules.PlayerPref pref, bool tell)
+        {
+            _ = tell;
+            if (car == null || car.CarLock == null) return "The lock could not be placed.";
+            if (car.CarLock.HasALock) return "That already has a lock.";
+            bool freePerm = HasPerm(player, PermFree);
+            bool hasCode = HasItem(player, "lock.code");
+            bool hasKey = HasItem(player, "lock.key");
+            var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
+            if (choice.Item != "lock.code" && !choice.Free) return "A modular car needs a code lock.";
+            if (choice.Item == null) return "You need a lock in your inventory.";
+            string pin = EnsurePin(player, pref, "lock.code");
+            bool consumed = false;
+            if (!choice.Free)
+            {
+                if (!TakeItem(player, "lock.code")) return "The lock could not be taken from your inventory.";
+                consumed = true;
+            }
+            if (!car.CarLock.TrySetNewCode(pin, player.userID))
+            {
+                if (consumed) ReturnOrOwe(player, "lock.code", 1);
+                return "The lock could not be placed. A paid lock was returned or marked owed.";
+            }
+            using (var flags = car.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
+                flags.Set(ModularCarCodeLock.FLAG_CENTRAL_LOCKING, true);
+            car.CarLock.TryAddPlayer(player.userID);
+            var members = ShareIds(player, pref);
+            for (int i = 0; i < members.Count; i++) car.CarLock.TryAddPlayer(members[i]);
+            car.OwnerID = player.userID;
+            RememberSpecial(car, player.userID, choice, "car", members);
+            ClaimVehicle(player, car, match);
+            SaveStore();
+            return PlacedText(choice, pref, pin);
+        }
+
+        private string PlaceBoatLock(BasePlayer player, SteeringWheel wheel, NightshadeLockerRules.Match match, NightshadeLockerRules.PlayerPref pref, bool tell)
+        {
+            _ = tell;
+            if (wheel == null || wheel.BoatLock == null) return "The lock could not be placed.";
+            if (wheel.BoatLock.HasALock) return "That already has a lock.";
+            bool freePerm = HasPerm(player, PermFree);
+            bool hasCode = HasItem(player, "lock.code");
+            bool hasKey = HasItem(player, "lock.key");
+            var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
+            if (choice.Item == null) return "You need a lock in your inventory.";
+            if (choice.Item != "lock.code" && !choice.Free) return "That boat needs a code lock.";
+            string pin = EnsurePin(player, pref, "lock.code");
+            if (!wheel.BoatLock.IsValidLockCode(pin)) return "Use 4 digits.";
+            bool consumed = false;
+            if (!choice.Free)
+            {
+                if (!TakeItem(player, "lock.code")) return "The lock could not be taken from your inventory.";
+                consumed = true;
+            }
+            if (!wheel.BoatLock.TrySetNewCode(pin, player))
+            {
+                if (consumed) ReturnOrOwe(player, "lock.code", 1);
+                return "The lock could not be placed. A paid lock was returned or marked owed.";
+            }
+            SetLocked(wheel, true);
+            wheel.OwnerID = player.userID;
+            var members = ShareIds(player, pref);
+            ShareBoat(wheel, player, members);
+            RememberSpecial(wheel, player.userID, new NightshadeLockerRules.LockChoice { Item = "lock.code", Free = choice.Free }, "boat", members);
+            ClaimVehicle(player, wheel, match);
+            SaveStore();
+            return PlacedText(new NightshadeLockerRules.LockChoice { Item = "lock.code", Free = choice.Free }, pref, pin);
+        }
+
+        private void RememberSpecial(BaseEntity entity, ulong owner, NightshadeLockerRules.LockChoice choice, string mode, List<ulong> shared)
+        {
+            ulong id = IdOf(entity);
+            if (id == 0) return;
+            store.Locks[id.ToString()] = new LockRecord
+            {
+                LockId = id,
+                ParentId = id,
+                OwnerId = owner,
+                Provenance = choice.Free ? NightshadeLockerRules.ProvenanceFree : NightshadeLockerRules.ProvenancePaid,
+                Item = "lock.code",
+                Mode = mode,
+                Shared = shared ?? new List<ulong>()
+            };
         }
 
         private void ShareLock(BasePlayer player, BaseLock lck, NightshadeLockerRules.PlayerPref pref, LockRecord record)
         {
             var code = lck as CodeLock;
-            if (code == null || code.whitelistPlayers == null) return;
-            if (!WantsShare(pref)) return;
-            var members = TeamIds(player);
-            record.Shared = NightshadeLockerRules.ShareTargets(player.userID, members, true);
+            if (code == null) return;
+            if (code.whitelistPlayers == null) code.whitelistPlayers = new List<ulong>();
+            if (!code.whitelistPlayers.Contains(player.userID)) code.whitelistPlayers.Add(player.userID);
+            record.Shared = ShareIds(player, pref);
             for (int i = 0; i < record.Shared.Count; i++)
             {
                 if (!code.whitelistPlayers.Contains(record.Shared[i]))
                     code.whitelistPlayers.Add(record.Shared[i]);
             }
+            code.SendNetworkUpdate();
+        }
+
+        private List<ulong> ShareIds(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
+        {
+            if (player == null || !WantsShare(pref)) return new List<ulong>();
+            return NightshadeLockerRules.ShareTargets(player.userID, TeamIds(player), true);
+        }
+
+        private List<ulong> MemberIds(ulong ownerId, BasePlayer owner, NightshadeLockerRules.PlayerPref pref)
+        {
+            if (owner != null) return ShareIds(owner, pref);
+            var list = new List<ulong>();
+            if (RelationshipManager.ServerInstance != null)
+            {
+                var team = RelationshipManager.ServerInstance.FindPlayersTeam(ownerId);
+                if (team != null && team.members != null) list.AddRange(team.members);
+            }
+            return NightshadeLockerRules.ShareTargets(ownerId, list, true);
+        }
+
+        private void ShareBoat(SteeringWheel wheel, BasePlayer player, List<ulong> members)
+        {
+            if (wheel == null || wheel.Privilege == null) return;
+            var auth = wheel.Privilege.authorizedPlayers;
+            if (auth == null) return;
+            if (!auth.Contains(player.userID)) auth.Add(player.userID);
+            if (members == null) return;
+            for (int i = 0; i < members.Count; i++)
+                if (!auth.Contains(members[i])) auth.Add(members[i]);
+            wheel.SendNetworkUpdate();
+        }
+
+        private static void SetLocked(BaseEntity entity, bool locked)
+        {
+            if (entity == null) return;
+            using (var flags = entity.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
+                flags.Set(BaseEntity.Flags.Locked, locked);
+            entity.SendNetworkUpdateImmediate();
         }
 
         private ulong ResolveSkin(BasePlayer player, NightshadeLockerRules.PlayerPref pref)
@@ -836,8 +1032,8 @@ namespace Oxide.Plugins
             if (config.FlightSkinId > 0) skin = (ulong)config.FlightSkinId;
             if (skin == 0) skin = DiscoverFlightSkin();
             if (skin == 0) return 0;
+            if (config.SkipDlcCheck || HasPerm(player, PermDlc)) return skin;
             if (OwnsSkin(player, skin)) return skin;
-            if (config.SkipDlcCheck && HasPerm(player, PermDlc)) return skin;
             return 0;
         }
 
@@ -883,8 +1079,23 @@ namespace Oxide.Plugins
         private void OnDoorOpened(Door door, BasePlayer player)
         {
             if (!worldReady || conflict || door == null) return;
+            if (player != null) TryAutoCloser(player, door, false);
+            ArmCloser(door);
+        }
+
+        private object OnDoorAutoClose(BasePlayer player, Door door)
+        {
+            _ = player;
+            if (conflict || door == null) return null;
+            if (door.GetSlot(BaseEntity.Slot.UpperModifier) is DoorCloser) return false;
+            return null;
+        }
+
+        private void ArmCloser(Door door)
+        {
+            if (door == null) return;
+            if (!(door.GetSlot(BaseEntity.Slot.UpperModifier) is DoorCloser)) return;
             openedAt[IdOf(door)] = Time.realtimeSinceStartup;
-            if (player != null) TryAutoCloser(player, door);
         }
 
         private void OnDoorClosed(Door door, BasePlayer player)
@@ -893,10 +1104,11 @@ namespace Oxide.Plugins
             _ = player;
         }
 
-        private void TryAutoCloser(BasePlayer player, Door door)
+        private void TryAutoCloser(BasePlayer player, Door door, bool justBuilt)
         {
             if (player == null || door == null) return;
             if (!HasPerm(player, PermClose) && !IsStaff(player)) return;
+            if (!justBuilt && door.OwnerID != player.userID && !SharedWithOwner(player, door.OwnerID) && !IsStaff(player)) return;
             var pref = Pref(player);
             if (!pref.AutoClose) return;
             string close = NightshadeLockerRules.CloseCategory(door.ShortPrefabName);
@@ -904,7 +1116,9 @@ namespace Oxide.Plugins
             if (!CategoryOn(config.CloseCategories, close) || !pref.CloseOn(close)) return;
             if (NightshadeLockerRules.SkinBlocked(door.skinID, config.CloserSkinBlacklist)) return;
             if (config.RequirePrivilege && !HasPrivilege(player, door)) return;
-            EnsureCloser(player, door, pref.CloseDelay, true);
+            var result = EnsureCloser(player, door, pref.CloseDelay, true);
+            if (justBuilt && !string.IsNullOrEmpty(result)) Reply(player, result);
+            ArmCloser(door);
         }
 
         private void PlaceCloserLook(BasePlayer player)
@@ -1035,14 +1249,16 @@ namespace Oxide.Plugins
             foreach (var pair in openedAt)
             {
                 var entity = Find(pair.Key) as Door;
-                if (entity == null || entity.IsDestroyed || !entity.HasFlag(BaseEntity.Flags.Open))
+                if (entity == null || entity.IsDestroyed || !entity.HasFlag(BaseEntity.Flags.Open) || !(entity.GetSlot(BaseEntity.Slot.UpperModifier) is DoorCloser))
                 {
                     due.Add(pair.Key);
                     continue;
                 }
                 int delay = DelayFor(entity);
                 if (Time.realtimeSinceStartup - pair.Value < delay) continue;
-                entity.SetOpen(false, true);
+                using (var flags = entity.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
+                    flags.Set(BaseEntity.Flags.Open, false);
+                entity.SendNetworkUpdateImmediate();
                 due.Add(pair.Key);
             }
             for (int i = 0; i < due.Count; i++) openedAt.Remove(due[i]);
@@ -1091,12 +1307,21 @@ namespace Oxide.Plugins
             if (!worldReady || conflict || mount == null || player == null) return;
             var pref = Pref(player);
             if (!pref.LockOnDismount || !pref.Auto) return;
-            var host = mount.GetParentEntity() ?? mount;
+            var host = Host(mount.GetParentEntity() ?? mount);
+            var car = host as ModularCar ?? mount.GetComponentInParent<ModularCar>();
+            if (car != null && car.CarLock != null && car.CarLock.HasALock)
+            {
+                if (!CanManage(player, car, null) && car.OwnerID != player.userID) return;
+                using (var flags = car.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
+                    flags.Set(ModularCarCodeLock.FLAG_CENTRAL_LOCKING, true);
+                Reply(player, "The lock was closed.");
+                return;
+            }
             var lck = host.GetSlot(BaseEntity.Slot.Lock) as BaseLock;
             if (lck == null) return;
             if (!CanManage(player, host, lck)) return;
-            lck.SetFlagLocal(BaseEntity.Flags.Locked, true, false);
-            lck.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
+            SetLocked(lck, true);
+            Reply(player, "The lock was closed.");
         }
 
         #endregion
@@ -1144,17 +1369,17 @@ namespace Oxide.Plugins
         private object CanMountEntity(BasePlayer player, BaseMountable mount)
         {
             if (mount == null) return null;
-            var host = mount.GetParentEntity() ?? mount;
-            var denied = Deny(player, host);
-            return denied ?? Deny(player, mount);
+            return Deny(player, Host(mount));
         }
 
         private object CanUseLockedEntity(BasePlayer player, BaseLock lck)
         {
-            if (conflict || lck == null || player == null) return null;
-            if (Bypass(player)) return null;
-            if (lck.GetPlayerLockPermission(player)) return null;
-            return false;
+            if (conflict || lck == null || player == null || !lck.HasFlag(BaseEntity.Flags.Locked)) return null;
+            if (Bypass(player) || Vanished(player)) return true;
+            if (lck.GetPlayerLockPermission(player)) return true;
+            if (lck.OwnerID == player.userID) return true;
+            if (lck is KeyLock && SharedWithOwner(player, lck.OwnerID)) return true;
+            return null;
         }
 
         private object OnOvenToggle(BaseOven oven, BasePlayer player) => Deny(player, oven);
@@ -1207,14 +1432,21 @@ namespace Oxide.Plugins
             return Deny(player, plant.GetParentEntity()) ?? Deny(player, plant);
         }
 
-        private object OnHorseLead(RidableHorse horse, BasePlayer player) => Deny(player, horse);
+        private object OnHorseLead(RidableHorse horse, BasePlayer player)
+        {
+            return PushOrDeny(horse, player);
+        }
 
         private object OnVehiclePush(BaseVehicle vehicle, BasePlayer player)
         {
-            if (conflict || vehicle == null || player == null) return null;
-            var lck = vehicle.GetSlot(BaseEntity.Slot.Lock) as BaseLock;
-            bool locked = lck != null && lck.HasFlag(BaseEntity.Flags.Locked) && !Bypass(player) && !lck.GetPlayerLockPermission(player);
-            if (NightshadeLockerRules.PushAllowed(config.AllowVehiclePush, config.AllowVehiclePushInPrivilege, HasPrivilege(player, vehicle), locked))
+            return PushOrDeny(vehicle, player);
+        }
+
+        private object PushOrDeny(BaseEntity entity, BasePlayer player)
+        {
+            if (conflict || entity == null || player == null) return null;
+            bool locked = Deny(player, entity) != null;
+            if (NightshadeLockerRules.PushAllowed(config.AllowVehiclePush, config.AllowVehiclePushInPrivilege, HasPrivilege(player, entity), locked))
                 return null;
             return false;
         }
@@ -1266,17 +1498,61 @@ namespace Oxide.Plugins
         private object Deny(BasePlayer player, BaseEntity entity)
         {
             if (conflict || player == null || entity == null) return null;
-            var lck = entity as BaseLock ?? entity.GetSlot(BaseEntity.Slot.Lock) as BaseLock;
+            if (Bypass(player) || Vanished(player)) return null;
+            var host = Host(entity);
+            var car = host as ModularCar;
+            if (car != null && car.CarLock != null && car.CarLock.HasALock && car.HasFlag(ModularCarCodeLock.FLAG_CENTRAL_LOCKING))
+            {
+                if (car.OwnerID == player.userID) return null;
+                if (car.CarLock.WhitelistPlayers != null && car.CarLock.WhitelistPlayers.Contains(player.userID)) return null;
+                return false;
+            }
+            var wheel = host as SteeringWheel;
+            if (wheel != null && wheel.BoatLock != null && wheel.BoatLock.HasALock && wheel.HasFlag(BaseEntity.Flags.Locked))
+            {
+                if (BoatAllowed(player, wheel)) return null;
+                return false;
+            }
+            var lck = host as BaseLock ?? host.GetSlot(BaseEntity.Slot.Lock) as BaseLock;
             if (lck == null || !lck.HasFlag(BaseEntity.Flags.Locked)) return null;
-            if (Bypass(player)) return null;
             if (lck.GetPlayerLockPermission(player)) return null;
+            if (lck.OwnerID == player.userID || host.OwnerID == player.userID) return null;
+            if (lck is KeyLock && SharedWithOwner(player, lck.OwnerID != 0 ? lck.OwnerID : host.OwnerID)) return null;
+            var turret = host as AutoTurret;
+            if (turret != null && turret.IsAuthed(player)) return null;
             return false;
+        }
+
+        private bool BoatAllowed(BasePlayer player, SteeringWheel wheel)
+        {
+            if (player == null || wheel == null) return false;
+            if (wheel.OwnerID == player.userID) return true;
+            var auth = wheel.Privilege != null ? wheel.Privilege.authorizedPlayers : null;
+            if (auth != null && auth.Contains(player.userID)) return true;
+            return SharedWithOwner(player, wheel.OwnerID);
         }
 
         private bool Bypass(BasePlayer player)
         {
             if (HasPerm(player, PermForce)) return true;
             return config.AdminBypass && IsStaff(player);
+        }
+
+        private bool Vanished(BasePlayer player)
+        {
+            if (player == null) return false;
+            if (player.limitNetworking) return true;
+            var vanish = plugins.Find("Vanish");
+            if (vanish == null) return false;
+            try
+            {
+                var result = vanish.Call("IsInvisible", player);
+                return result is bool && (bool)result;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private void OnEntityKill(BaseNetworkable entity)
@@ -1288,7 +1564,11 @@ namespace Oxide.Plugins
             if (changed) SaveStore();
         }
 
-        private void OnPlayerConnected(BasePlayer player) => DeliverOwed(player);
+        private void OnPlayerConnected(BasePlayer player)
+        {
+            DeliverOwed(player);
+            if (player != null && !conflict) RefreshShare(player.userID);
+        }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
         {
@@ -1298,26 +1578,261 @@ namespace Oxide.Plugins
             _ = reason;
         }
 
+        private void OnTeamAcceptInvite(RelationshipManager.PlayerTeam team, BasePlayer player)
+        {
+            ulong extra = player != null ? player.userID : 0;
+            NextTick(() => RefreshMembers(team, extra));
+        }
+
+        private object OnTeamLeave(RelationshipManager.PlayerTeam team, BasePlayer player)
+        {
+            ulong extra = player != null ? player.userID : 0;
+            NextTick(() => RefreshMembers(team, extra));
+            return null;
+        }
+
+        private object OnTeamKick(RelationshipManager.PlayerTeam team, BasePlayer leader, ulong target)
+        {
+            _ = leader;
+            NextTick(() => RefreshMembers(team, target));
+            return null;
+        }
+
+        private void OnTeamDisbanded(RelationshipManager.PlayerTeam team)
+        {
+            NextTick(() => RefreshMembers(team, 0));
+        }
+
+        private void OnClanUpdate(string clanName)
+        {
+            _ = clanName;
+            NextTick(RefreshOnlineShares);
+        }
+
+        private void OnClanDestroy(string clanName)
+        {
+            _ = clanName;
+            NextTick(RefreshOnlineShares);
+        }
+
+        private void OnClanMemberGone(string userID, string tag)
+        {
+            _ = tag;
+            ulong id;
+            ulong.TryParse(userID, out id);
+            NextTick(() => RefreshShare(id));
+        }
+
+        private void OnClanMemberGone(ulong playerId, List<ulong> members)
+        {
+            NextTick(() => RefreshIds(members, playerId));
+        }
+
+        private void OnClanMemberGone(string playerId, List<string> members)
+        {
+            ulong id;
+            ulong.TryParse(playerId, out id);
+            NextTick(() => RefreshIds(ParseIds(members), id));
+        }
+
+        private void OnClanMemberGone(string tag, ulong leaving, List<ulong> members)
+        {
+            _ = tag;
+            NextTick(() => RefreshIds(members, leaving));
+        }
+
+        private void OnClanMemberGone(string tag, string leaving, List<string> members)
+        {
+            _ = tag;
+            ulong id;
+            ulong.TryParse(leaving, out id);
+            NextTick(() => RefreshIds(ParseIds(members), id));
+        }
+
+        private void RefreshMembers(RelationshipManager.PlayerTeam team, ulong extra)
+        {
+            var ids = new List<ulong>();
+            if (team != null && team.members != null)
+            {
+                for (int i = 0; i < team.members.Count; i++) ids.Add(team.members[i]);
+            }
+            RefreshIds(ids, extra);
+        }
+
+        private void RefreshIds(IList<ulong> ids, ulong extra)
+        {
+            if (ids != null)
+            {
+                for (int i = 0; i < ids.Count; i++) RefreshShare(ids[i]);
+            }
+            if (extra != 0) RefreshShare(extra);
+        }
+
+        private static List<ulong> ParseIds(IList<string> raw)
+        {
+            var ids = new List<ulong>();
+            if (raw == null) return ids;
+            for (int i = 0; i < raw.Count; i++)
+            {
+                ulong id;
+                if (ulong.TryParse(raw[i], out id)) ids.Add(id);
+            }
+            return ids;
+        }
+
+        private void RefreshOnlineShares()
+        {
+            foreach (var player in BasePlayer.activePlayerList) RefreshShare(player.userID);
+        }
+
+        private void RefreshShare(ulong ownerId)
+        {
+            if (conflict || ownerId == 0 || store == null) return;
+            var owner = FindPlayer(ownerId);
+            NightshadeLockerRules.PlayerPref pref;
+            if (!store.Players.TryGetValue(ownerId.ToString(), out pref) || pref == null) return;
+            bool share = WantsShare(pref);
+            var members = share ? MemberIds(ownerId, owner, pref) : new List<ulong>();
+            foreach (var entity in BaseNetworkable.serverEntities)
+            {
+                var code = entity as CodeLock;
+                if (code != null && OwnsRecord(code, ownerId))
+                {
+                    if (code.whitelistPlayers == null) code.whitelistPlayers = new List<ulong>();
+                    code.whitelistPlayers.Clear();
+                    code.whitelistPlayers.Add(ownerId);
+                    for (int i = 0; i < members.Count; i++)
+                        if (!code.whitelistPlayers.Contains(members[i])) code.whitelistPlayers.Add(members[i]);
+                    code.SendNetworkUpdate();
+                    TouchShare(code, members);
+                    continue;
+                }
+                var car = entity as ModularCar;
+                if (car != null && car.CarLock != null && car.CarLock.HasALock && OwnsRecord(car, ownerId))
+                {
+                    var current = car.CarLock.WhitelistPlayers != null ? car.CarLock.WhitelistPlayers.ToList() : new List<ulong>();
+                    for (int i = 0; i < current.Count; i++)
+                        if (current[i] != ownerId && !members.Contains(current[i])) car.CarLock.TryRemovePlayer(current[i]);
+                    car.CarLock.TryAddPlayer(ownerId);
+                    for (int i = 0; i < members.Count; i++) car.CarLock.TryAddPlayer(members[i]);
+                    TouchShare(car, members);
+                    continue;
+                }
+                var wheel = entity as SteeringWheel;
+                if (wheel != null && wheel.BoatLock != null && wheel.BoatLock.HasALock && OwnsRecord(wheel, ownerId) && wheel.Privilege != null && wheel.Privilege.authorizedPlayers != null)
+                {
+                    wheel.Privilege.authorizedPlayers.Clear();
+                    wheel.Privilege.authorizedPlayers.Add(ownerId);
+                    for (int i = 0; i < members.Count; i++)
+                        if (!wheel.Privilege.authorizedPlayers.Contains(members[i]))
+                            wheel.Privilege.authorizedPlayers.Add(members[i]);
+                    wheel.SendNetworkUpdate();
+                    TouchShare(wheel, members);
+                }
+            }
+            SaveStore();
+        }
+
+        private bool OwnsRecord(BaseEntity entity, ulong ownerId)
+        {
+            LockRecord record;
+            if (entity == null || !store.Locks.TryGetValue(IdOf(entity).ToString(), out record) || record == null) return false;
+            return record.OwnerId == ownerId;
+        }
+
+        private void TouchShare(BaseEntity entity, List<ulong> members)
+        {
+            LockRecord record;
+            string key = IdOf(entity).ToString();
+            if (!store.Locks.TryGetValue(key, out record) || record == null) return;
+            record.Shared = members ?? new List<ulong>();
+        }
+
         #endregion
 
         #region Admin mutations
 
         private void SetLockFlag(BasePlayer player, BaseEntity entity, bool locked)
         {
-            var lck = entity != null ? entity.GetSlot(BaseEntity.Slot.Lock) as BaseLock : null;
+            var host = Host(entity);
+            var car = host as ModularCar;
+            if (car != null && car.CarLock != null && car.CarLock.HasALock)
+            {
+                using (var flags = car.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
+                    flags.Set(ModularCarCodeLock.FLAG_CENTRAL_LOCKING, locked);
+                Reply(player, locked ? "Locked." : "Unlocked.");
+                return;
+            }
+            var wheel = host as SteeringWheel;
+            if (wheel != null && wheel.BoatLock != null && wheel.BoatLock.HasALock)
+            {
+                SetLocked(wheel, locked);
+                Reply(player, locked ? "Locked." : "Unlocked.");
+                return;
+            }
+            var lck = host != null ? host.GetSlot(BaseEntity.Slot.Lock) as BaseLock : null;
             if (lck == null) lck = entity as BaseLock;
             if (lck == null) { Reply(player, "Look at a lock."); return; }
-            lck.SetFlagLocal(BaseEntity.Flags.Locked, locked, false);
-            lck.SendNetworkUpdate(BasePlayer.NetworkQueue.Update);
+            SetLocked(lck, locked);
             Reply(player, locked ? "Locked." : "Unlocked.");
         }
 
         private void RemoveLook(BasePlayer player, bool noRefund)
         {
             var entity = Look(player);
-            var lck = entity is BaseLock ? entity as BaseLock : entity != null ? entity.GetSlot(BaseEntity.Slot.Lock) as BaseLock : null;
+            var host = Host(entity);
+            if (host is ModularCar && RemoveCarLock(player, host as ModularCar, noRefund)) return;
+            if (host is SteeringWheel && RemoveBoatLock(player, host as SteeringWheel, noRefund)) return;
+            var lck = entity is BaseLock ? entity as BaseLock : host != null ? host.GetSlot(BaseEntity.Slot.Lock) as BaseLock : null;
             if (lck == null) { Reply(player, "Look at a lock."); return; }
             if (RemoveLock(player, lck, noRefund)) Reply(player, noRefund ? "Lock removed without returning an item." : "Lock removed.");
+        }
+
+        private bool RemoveCarLock(BasePlayer player, ModularCar car, bool noRefund)
+        {
+            if (car == null || car.CarLock == null || !car.CarLock.HasALock) return false;
+            if (!CanManage(player, car, null) && !IsStaff(player))
+            {
+                Reply(player, "You cannot remove that lock.");
+                return true;
+            }
+            if (!RefundSpecial(player, car, noRefund)) return true;
+            car.CarLock.RemoveLock();
+            store.Locks.Remove(IdOf(car).ToString());
+            SaveStore();
+            Reply(player, noRefund ? "Lock removed without returning an item." : "Lock removed.");
+            return true;
+        }
+
+        private bool RemoveBoatLock(BasePlayer player, SteeringWheel wheel, bool noRefund)
+        {
+            if (wheel == null || wheel.BoatLock == null || !wheel.BoatLock.HasALock) return false;
+            if (!CanManage(player, wheel, null) && !IsStaff(player))
+            {
+                Reply(player, "You cannot remove that lock.");
+                return true;
+            }
+            if (!RefundSpecial(player, wheel, noRefund)) return true;
+            wheel.BoatLock.RemoveLock();
+            SetLocked(wheel, false);
+            store.Locks.Remove(IdOf(wheel).ToString());
+            SaveStore();
+            Reply(player, noRefund ? "Lock removed without returning an item." : "Lock removed.");
+            return true;
+        }
+
+        private bool RefundSpecial(BasePlayer player, BaseEntity entity, bool noRefund)
+        {
+            LockRecord record;
+            store.Locks.TryGetValue(IdOf(entity).ToString(), out record);
+            string prov = noRefund ? NightshadeLockerRules.ProvenanceFree : (record != null ? record.Provenance : NightshadeLockerRules.ProvenancePaid);
+            if (NightshadeLockerRules.IsFree(prov)) return true;
+            if (!ReturnOrOwe(player, "lock.code", 1))
+            {
+                Reply(player, "The lock item could not be returned or dropped, so the lock was left in place.");
+                return false;
+            }
+            return true;
         }
 
         private bool RemoveLock(BasePlayer player, BaseLock lck, bool noRefund)
@@ -1409,7 +1924,8 @@ namespace Oxide.Plugins
                 pref.GuestEnabled = true;
             }
             SaveStore();
-            Reply(player, "Guest code updated.");
+            int updated = ApplyGuest(player.userID, pref.Guest, pref.GuestEnabled);
+            Reply(player, updated > 0 ? "Guest code updated on " + updated + " locks." : "Guest code updated.");
             _ = fromUi;
         }
 
@@ -1456,6 +1972,35 @@ namespace Oxide.Plugins
             return count;
         }
 
+        private int ApplyGuest(ulong owner, string pin, bool enabled)
+        {
+            int count = 0;
+            if (store == null) return 0;
+            foreach (var entity in BaseNetworkable.serverEntities)
+            {
+                var code = entity as CodeLock;
+                if (code == null) continue;
+                LockRecord record;
+                store.Locks.TryGetValue(IdOf(code).ToString(), out record);
+                bool mine = code.OwnerID == owner || (record != null && record.OwnerId == owner);
+                if (!mine) continue;
+                if (enabled && NightshadeLockerRules.PinValid(pin))
+                {
+                    code.guestCode = pin;
+                    code.hasGuestCode = true;
+                }
+                else
+                {
+                    code.guestCode = string.Empty;
+                    code.hasGuestCode = false;
+                    if (code.guestPlayers != null) code.guestPlayers.Clear();
+                }
+                code.SendNetworkUpdate();
+                count++;
+            }
+            return count;
+        }
+
         private void FlagAll(BasePlayer player, string steam, bool locked)
         {
             ulong id = player.userID;
@@ -1469,7 +2014,7 @@ namespace Oxide.Plugins
             {
                 var lck = entity as BaseLock;
                 if (lck == null || lck.OwnerID != id) continue;
-                lck.SetFlagLocal(BaseEntity.Flags.Locked, locked, false);
+                SetLocked(lck, locked);
                 count++;
             }
             Reply(player, (locked ? "Locked " : "Unlocked ") + count + " locks.");
@@ -1592,6 +2137,9 @@ namespace Oxide.Plugins
         private NightshadeLockerRules.Match Match(BaseEntity entity)
         {
             if (entity == null || entity is BasePlayer || entity is BaseLock) return null;
+            if (entity.GetParentEntity() is BasePlayer) return null;
+            if (entity is SteeringWheel)
+                return new NightshadeLockerRules.Match { Category = "naval", Prefab = entity.PrefabName ?? string.Empty };
             string full = entity.PrefabName ?? string.Empty;
             string shortName = entity.ShortPrefabName ?? string.Empty;
             var rule = NightshadeLockerRules.FindRule(full, config.Vehicles, config.Extras);
@@ -1652,9 +2200,10 @@ namespace Oxide.Plugins
         private bool HasPrivilege(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return false;
+            if (player.IsBuildingBlocked()) return false;
             var priv = entity.GetBuildingPrivilege();
             if (priv != null) return priv.IsAuthed(player);
-            return player.CanBuild();
+            return true;
         }
 
         private bool CanManage(BasePlayer player, BaseEntity entity, BaseLock lck)
@@ -1665,7 +2214,8 @@ namespace Oxide.Plugins
             if (entity != null && entity.OwnerID == player.userID) return true;
             var code = lck as CodeLock;
             if (code != null && code.whitelistPlayers != null && code.whitelistPlayers.Contains(player.userID)) return true;
-            return HasPrivilege(player, entity ?? lck);
+            ulong owner = lck != null && lck.OwnerID != 0 ? lck.OwnerID : (entity != null ? entity.OwnerID : 0);
+            return SharedWithOwner(player, owner);
         }
 
         private bool IsWith(BasePlayer player, ulong other)
@@ -1691,24 +2241,61 @@ namespace Oxide.Plugins
             var clans = plugins.Find("Clans");
             if (clans != null)
             {
-                try
+                object raw = null;
+                try { raw = clans.Call("GetClanMembers", player.userID); }
+                catch { raw = null; }
+                if (raw == null)
                 {
-                    var raw = clans.Call("GetClanMembers", player.UserIDString) as List<string>;
-                    if (raw != null)
-                    {
-                        for (int i = 0; i < raw.Count; i++)
-                        {
-                            ulong id;
-                            if (ulong.TryParse(raw[i], out id)) list.Add(id);
-                        }
-                    }
+                    try { raw = clans.Call("GetClanMembers", player.UserIDString); }
+                    catch { raw = null; }
                 }
-                catch
-                {
-                    // Clan plugins differ. The Rust team list still applies.
-                }
+                AddIds(list, raw);
             }
             return list;
+        }
+
+        private static void AddIds(List<ulong> list, object raw)
+        {
+            if (list == null || raw == null || raw is string) return;
+            var enumerable = raw as IEnumerable;
+            if (enumerable == null) return;
+            foreach (var item in enumerable)
+            {
+                if (item == null) continue;
+                ulong id;
+                if (ulong.TryParse(item.ToString(), out id) && id != 0 && !list.Contains(id))
+                    list.Add(id);
+            }
+        }
+
+        private bool SharedWithOwner(BasePlayer player, ulong ownerId)
+        {
+            if (player == null || ownerId == 0 || ownerId == player.userID) return false;
+            NightshadeLockerRules.PlayerPref pref;
+            if (!store.Players.TryGetValue(ownerId.ToString(), out pref) || pref == null || !WantsShare(pref)) return false;
+            return IsWith(player, ownerId);
+        }
+
+        private BaseEntity Host(BaseEntity entity)
+        {
+            if (entity == null) return null;
+            var car = entity as ModularCar ?? entity.GetComponentInParent<ModularCar>();
+            if (car != null) return car;
+            var wheel = entity as SteeringWheel ?? entity.GetComponentInParent<SteeringWheel>();
+            if (wheel == null && !entity.HasSlot(BaseEntity.Slot.Lock))
+                wheel = entity.GetComponentInChildren<SteeringWheel>();
+            if (wheel != null) return wheel;
+            return entity;
+        }
+
+        private static bool HasLock(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            var car = entity as ModularCar;
+            if (car != null && car.CarLock != null && car.CarLock.HasALock) return true;
+            var wheel = entity as SteeringWheel;
+            if (wheel != null && wheel.BoatLock != null && wheel.BoatLock.HasALock) return true;
+            return entity.GetSlot(BaseEntity.Slot.Lock) != null;
         }
 
         private string ProvenanceOf(BaseLock lck)
@@ -1735,9 +2322,18 @@ namespace Oxide.Plugins
         private BaseEntity Look(BasePlayer player)
         {
             if (player == null || player.eyes == null) return null;
-            RaycastHit hit;
-            if (!Physics.Raycast(player.eyes.HeadRay(), out hit, config.UseDistance)) return null;
-            return hit.GetEntity();
+            var hits = Physics.RaycastAll(player.eyes.HeadRay(), config.UseDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            float best = float.MaxValue;
+            BaseEntity found = null;
+            for (int i = 0; i < hits.Length; i++)
+            {
+                var ent = hits[i].GetEntity();
+                if (ent == null || ent == player || ent is BasePlayer) continue;
+                if (hits[i].distance >= best) continue;
+                best = hits[i].distance;
+                found = ent;
+            }
+            return found == null ? null : Host(found);
         }
 
         private static BasePlayer FindPlayer(ulong id)
@@ -2040,8 +2636,30 @@ namespace Oxide.Plugins
                 Label(c, header, "Paused while the other locker is loaded.", 10, palette.DangerText, TextAnchor.MiddleRight, 200, 4, textRight, 18, false);
             float closeSize = 26f;
             float closeBottom = h - NightshadeLockerRules.Layout.Header + (NightshadeLockerRules.Layout.Header - closeSize) * 0.5f;
-            // Last, and a real button: a transparent child under the X never received the click, and the scroll view is an earlier sibling.
-            Button(c, frame, UiCmd + " dismiss", palette.Danger, w - 12f - closeSize, closeBottom, w - 12f, closeBottom + closeSize, "X", 13, palette.DangerText, true);
+            float closeX1 = (w - 12f - closeSize) - (w / 2f);
+            float closeY1 = closeBottom - (h / 2f);
+            float closeX2 = (w - 12f) - (w / 2f);
+            float closeY2 = (closeBottom + closeSize) - (h / 2f);
+            string closeName = CuiHelper.GetGuid();
+            var closeButton = new CuiButtonComponent { Command = UiCmd + " dismiss", Color = Hex(palette.Danger), BlocksRaycast = true };
+            closeButton.Close = UiRoot;
+            c.Add(new CuiElement
+            {
+                Name = closeName,
+                Parent = UiRoot,
+                Components =
+                {
+                    closeButton,
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0.5 0.5",
+                        AnchorMax = "0.5 0.5",
+                        OffsetMin = closeX1.ToString(CultureInfo.InvariantCulture) + " " + closeY1.ToString(CultureInfo.InvariantCulture),
+                        OffsetMax = closeX2.ToString(CultureInfo.InvariantCulture) + " " + closeY2.ToString(CultureInfo.InvariantCulture)
+                    }
+                }
+            });
+            Label(c, closeName, "X", 13, palette.DangerText, TextAnchor.MiddleCenter, 0, 0, closeSize, closeSize, true);
             CuiHelper.AddUi(player, c);
         }
 
@@ -2078,7 +2696,7 @@ namespace Oxide.Plugins
             rows.Add(new Row { Text = "Lock the vehicle when I get off", Command = UiCmd + " toggle dismount", On = pref.LockOnDismount });
             rows.Add(new Row { Text = closePerm ? "Close doors for me" : "Close doors for me  (needs autoclose)", Command = closePerm ? UiCmd + " toggle close" : null, On = pref.AutoClose, Live = closePerm });
             rows.Add(new Row { Kind = "section", Text = "Sharing" });
-            rows.Add(new Row { Text = config.ForceShare.HasValue ? "Team share is set by the server" : "Share new locks with my team", Command = config.ForceShare.HasValue ? null : UiCmd + " toggle share", On = WantsShare(pref), Live = !config.ForceShare.HasValue });
+            rows.Add(new Row { Text = config.ForceShare.HasValue ? "Team share is set by the server" : "Share locks with my team", Command = config.ForceShare.HasValue ? null : UiCmd + " toggle share", On = WantsShare(pref), Live = !config.ForceShare.HasValue });
             rows.Add(new Row { Kind = "section", Text = "Privacy" });
             rows.Add(new Row { Text = "Streamer mode", Command = UiCmd + " toggle stream", On = pref.Streamer });
             rows.Add(new Row { Text = "Flight Control skin when I own it", Command = UiCmd + " toggle skin", On = pref.FlightSkin });
@@ -2147,7 +2765,7 @@ namespace Oxide.Plugins
             rows.Add(new Row { Text = "Guest code on new locks", Command = UiCmd + " toggle guest", On = pref.GuestEnabled });
             rows.Add(new Row { Kind = "field", Text = "Guest", Value = hide ? string.Empty : pref.Guest, Command = UiCmd + " setguest" });
             rows.Add(new Row { Kind = "section", Text = "Apply" });
-            rows.Add(new Row { Text = "Write the saved code onto my locks", Command = UiCmd + " apply", On = true });
+            rows.Add(new Row { Text = "Write this code onto my locks", Command = UiCmd + " apply", On = true });
             return rows;
         }
 
@@ -2177,14 +2795,21 @@ namespace Oxide.Plugins
                         if (HasPerm(player, PermAuto) || IsStaff(player)) pref.Auto = !pref.Auto;
                         break;
                     case "key": pref.KeyFallback = !pref.KeyFallback; break;
-                    case "share": if (!config.ForceShare.HasValue) pref.Share = !pref.Share; break;
+                    case "share":
+                        if (!config.ForceShare.HasValue) pref.Share = !pref.Share;
+                        SaveStore();
+                        RefreshShare(player.userID);
+                        break;
                     case "stream": pref.Streamer = !pref.Streamer; break;
                     case "skin": pref.FlightSkin = !pref.FlightSkin; break;
                     case "dismount": pref.LockOnDismount = !pref.LockOnDismount; break;
                     case "close":
                         if (HasPerm(player, PermClose) || IsStaff(player)) pref.AutoClose = !pref.AutoClose;
                         break;
-                    case "guest": pref.GuestEnabled = !pref.GuestEnabled; break;
+                    case "guest":
+                        pref.GuestEnabled = !pref.GuestEnabled;
+                        ApplyGuest(player.userID, pref.Guest, pref.GuestEnabled);
+                        break;
                 }
             }
             else if (verb == "lock" && args.Length > 1 && CategoryOn(config.LockCategories, args[1]))
@@ -2205,12 +2830,22 @@ namespace Oxide.Plugins
             {
                 if (args[1] == "clear" || args[1].Length == 0) { pref.Guest = string.Empty; pref.GuestEnabled = false; }
                 else if (NightshadeLockerRules.PinValid(args[1])) { pref.Guest = args[1]; pref.GuestEnabled = true; }
-                else Reply(player, "Use 4 digits.");
+                else { Reply(player, "Use 4 digits."); OpenUi(player, page); return; }
+                ApplyGuest(player.userID, pref.Guest, pref.GuestEnabled);
             }
             else if (verb == "apply")
             {
                 if (!NightshadeLockerRules.PinValid(pref.Code)) Reply(player, "Save a 4 digit code first.");
-                else Reply(player, "Updated " + ApplyPin(player.userID, pref.Code, false) + " locks.");
+                else
+                {
+                    int count = ApplyPin(player.userID, pref.Code, false);
+                    ApplyGuest(player.userID, pref.Guest, pref.GuestEnabled);
+                    Reply(player, "Updated " + count + " locks.");
+                }
+            }
+            else
+            {
+                return;
             }
             SaveStore();
             OpenUi(player, page);
@@ -2465,6 +3100,7 @@ namespace Oxide.Plugins
             public bool AllowOthers;
             public bool BypassVehicle;
             public bool HasItemOrFree;
+            public bool JustPlaced;
         }
 
         public struct LockChoice
@@ -2644,10 +3280,15 @@ namespace Oxide.Plugins
                 if (request.Unowned && request.RequireUnownedPrivilege && !request.HasPrivilege && !request.BypassVehicle)
                     return "You need building privilege for that vehicle.";
             }
-            else if (request.RequirePrivilege && !request.HasPrivilege)
-                return "You need building privilege to lock that.";
-            else if (request.OwnedByOther && !request.HasPrivilege)
-                return "You cannot lock another player's entity.";
+            else
+            {
+                if (request.RequirePrivilege && !request.HasPrivilege)
+                    return "You need building privilege to lock that.";
+                if (request.OwnedByOther)
+                    return "You cannot lock another player's entity.";
+                if (request.Unowned && !request.JustPlaced)
+                    return "You cannot lock that.";
+            }
             if (!request.HasItemOrFree) return "You need a lock in your inventory.";
             return null;
         }
