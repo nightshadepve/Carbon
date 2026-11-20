@@ -449,6 +449,14 @@
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
+                      "Text": "• /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend — redeem a raid shield at your TC",
+                      "Tone (body, accent, warn, muted)": "body"
+                    },
+                    {
+                      "Text": "• /raidshield — shield time on the TC you are looking at",
+                      "Tone (body, accent, warn, muted)": "body"
+                    },
+                    {
                       "Text": "• /tug or /tugboat — VIPx tugboat license",
                       "Tone (body, accent, warn, muted)": "body"
                     }
@@ -521,6 +529,10 @@
                   "Lines": [
                     {
                       "Text": "• Placed boxes, furnaces, fridges, lockers, and vending storage are shared with your Rust teammate. TC auth does not open them. Anyone else has to destroy the container. Raid protection stops that damage while it is on. /share can still open one container. A code lock still applies. The PvP weekend and Purge do not open these.",
+                      "Tone (body, accent, warn, muted)": "body"
+                    },
+                    {
+                      "Text": "• Paid raid shields are tokens from /shop. Look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. The timer runs only on the PvP weekend. Unused time carries over.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
@@ -966,6 +978,10 @@
                     },
                     {
                       "Text": "• PvP weekend: Friday 8:00 PM to Monday 3:00 AM Eastern. Raiding is allowed.",
+                      "Tone (body, accent, warn, muted)": "body"
+                    },
+                    {
+                      "Text": "• Paid shield: look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. Time counts down only on that weekend.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
