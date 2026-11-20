@@ -21,7 +21,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeLocker", "Nightshade", "1.2.0")]
+    [Info("NightshadeLocker", "Nightshade", "1.2.1")]
     [Description("Nightshade locks, automatic lock placement, and automatic closing.")]
     public class NightshadeLocker : RustPlugin
     {
@@ -38,6 +38,8 @@ namespace Oxide.Plugins
         private const string UiRoot = "NightshadeLocker";
         private const string UiCmd = "nslock.ui";
         private const string CodePrefab = "assets/prefabs/locks/keypad/lock.code.prefab";
+        private const string PilotPrefab = "assets/prefabs/locks/keypad/skins/codelock_a_pilot/lock.code.a.pilot.prefab";
+        private const string PilotShort = "lock.code.a.pilot";
         private const string KeyPrefab = "assets/prefabs/locks/keylock/lock.key.prefab";
         private const string CloserPrefab = "assets/prefabs/misc/doorcloser/doorcloser.prefab";
         private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
@@ -56,6 +58,11 @@ namespace Oxide.Plugins
         private bool worldReady;
         private bool conflict;
         private bool conflictLogged;
+        private string conflictPlugin = string.Empty;
+        private float nextPauseLog;
+        private readonly HashSet<ulong> toldAutoOff = new HashSet<ulong>();
+        private readonly HashSet<string> toldSkip = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, NightshadeLockerRules.PlayerPref> legacyById = new Dictionary<string, NightshadeLockerRules.PlayerPref>(StringComparer.Ordinal);
         private bool dlcWarned;
         private int tickCount;
         private ulong flightSkin;
@@ -80,6 +87,7 @@ namespace Oxide.Plugins
             [JsonProperty("Window height")] public float WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
             [JsonProperty("Layout version")] public int LayoutVersion = 0;
             [JsonProperty("Plugins that pause entity control while loaded", ObjectCreationHandling = ObjectCreationHandling.Replace)] public List<string> ConflictPlugins = new List<string> { "UltimateLocker" };
+            [JsonProperty("Log automatic lock decisions")] public bool LogAuto = false;
             [JsonProperty("Warn if NightshadeLockPickup is loaded")] public bool WarnLockPickup = true;
             [JsonProperty("Legacy preferences file under the data directory")] public string LegacyDataFile = "UltimateLocker.json";
             [JsonProperty("Require building privilege for structures")] public bool RequirePrivilege = true;
@@ -121,6 +129,7 @@ namespace Oxide.Plugins
             public Dictionary<string, NightshadeLockerRules.PlayerPref> Players = new Dictionary<string, NightshadeLockerRules.PlayerPref>(StringComparer.Ordinal);
             public Dictionary<string, LockRecord> Locks = new Dictionary<string, LockRecord>(StringComparer.Ordinal);
             public Dictionary<string, CloserRecord> Closers = new Dictionary<string, CloserRecord>(StringComparer.Ordinal);
+            public bool LegacyAutoRestored;
         }
 
         private class LockRecord
@@ -228,15 +237,59 @@ namespace Oxide.Plugins
                 pair.Value.SteamId = pair.Key;
                 NightshadeLockerRules.PlayerPref.Normalize(pair.Value, config.DefaultDelay);
             }
+            bool resynced = false;
             if (config.ResyncDefaults)
             {
                 foreach (var pref in store.Players.Values)
                     NightshadeLockerRules.ApplyToggleDefaults(pref, config.Defaults);
                 config.ResyncDefaults = false;
+                store.LegacyAutoRestored = true;
                 SaveStore();
                 SaveConfig();
+                resynced = true;
                 Puts("Player toggles were reset to the current defaults. Pins and owed items were kept. Resync is now off.");
             }
+            try
+            {
+                LoadLegacyCache();
+                if (!resynced) RestoreLegacyAuto();
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLocker could not read the legacy locker preferences. " + ex.Message);
+            }
+        }
+
+        private void LoadLegacyCache()
+        {
+            legacyById.Clear();
+            string path = config.LegacyDataFile;
+            if (string.IsNullOrWhiteSpace(path)) return;
+            if (!Path.IsPathRooted(path)) path = Path.Combine(Interface.Oxide.DataDirectory, path);
+            if (!File.Exists(path)) return;
+            var notes = new List<string>();
+            var incoming = NightshadeLockerRules.ReadLegacy(File.ReadAllText(path), notes);
+            for (int i = 0; i < incoming.Count; i++)
+            {
+                var row = incoming[i];
+                if (row == null || string.IsNullOrEmpty(row.SteamId)) continue;
+                legacyById[row.SteamId] = row;
+            }
+        }
+
+        private void RestoreLegacyAuto()
+        {
+            if (store.LegacyAutoRestored) return;
+            foreach (var pair in legacyById)
+            {
+                NightshadeLockerRules.PlayerPref have;
+                if (!store.Players.TryGetValue(pair.Key, out have) || have == null || pair.Value == null) continue;
+                if (!pair.Value.Auto || have.Auto) continue;
+                have.Auto = true;
+                Puts("NightshadeLocker restored automatic locks for " + pair.Key + ". They were on in Ultimate Locker and off in NightshadeLocker.");
+            }
+            store.LegacyAutoRestored = true;
+            SaveStore();
         }
 
         private void SaveStore()
@@ -284,7 +337,10 @@ namespace Oxide.Plugins
                 PrintWarning("DLC ownership checks are off. Use that only on a creative or test server.");
             }
             ticker = timer.Every(1f, Tick);
-            Puts("NightshadeLocker ready. Players open it with /" + NightshadeLockerRules.PrimaryCommand + ".");
+            if (conflict)
+                Puts("NightshadeLocker is PAUSED. '" + conflictPlugin + "' is loaded, so code locks will not be placed on doors, boxes, lockers, or anything else. Unload that plugin to turn placement back on. NightshadeLocker does not unload it.");
+            else
+                Puts("NightshadeLocker ready. Automatic code locks run when the player has nightshadelocker.autolock and Place locks for me is on. Players open it with /" + NightshadeLockerRules.PrimaryCommand + ".");
         }
 
         private void Unload()
@@ -405,18 +461,21 @@ namespace Oxide.Plugins
                     }
                 }
             }
+            conflictPlugin = found ? which : string.Empty;
             if (found != conflict || announce)
             {
                 conflict = found;
                 if (found && (announce || !conflictLogged))
                 {
                     conflictLogged = true;
-                    PrintWarning("NightshadeLocker will not place, remove, or block locks while '" + which + "' is loaded. Unload that plugin before switching over. NightshadeLocker does not unload it.");
+                    string paused = "NightshadeLocker is PAUSED while '" + which + "' is loaded. Locks will not be placed, removed, or blocked. Unload '" + which + "' before switching over. NightshadeLocker does not unload it.";
+                    PrintWarning(paused);
+                    Puts(paused);
                 }
                 else if (!found && conflictLogged)
                 {
                     conflictLogged = false;
-                    Puts("NightshadeLocker is the only locker plugin loaded. Entity control is on.");
+                    Puts("NightshadeLocker is the only locker plugin loaded. Entity control is on. Automatic code locks are active for players who turned them on.");
                 }
             }
             if (config.WarnLockPickup && plugins.Find("NightshadeLockPickup") != null && announce)
@@ -426,7 +485,11 @@ namespace Oxide.Plugins
         private bool Paused(BasePlayer player, bool tell)
         {
             if (!conflict) return false;
-            if (tell && player != null) Reply(player, "NightshadeLocker is paused because another locker plugin is loaded.");
+            if (tell && player != null)
+            {
+                string name = string.IsNullOrEmpty(conflictPlugin) ? "another locker plugin" : conflictPlugin;
+                Reply(player, "NightshadeLocker is paused because '" + name + "' is loaded.");
+            }
             return true;
         }
 
@@ -581,7 +644,7 @@ namespace Oxide.Plugins
             RefreshConflict(false);
             var theme = LoadPalette();
             return "NightshadeLocker command /" + NightshadeLockerRules.PrimaryCommand
-                + ". Conflict pause: " + (conflict ? "yes" : "no")
+                + ". Conflict pause: " + (conflict ? "yes (" + conflictPlugin + ")" : "no")
                 + ". Theme: " + theme.Name + " (" + theme.Source + ")."
                 + " Players: " + store.Players.Count
                 + ". Tracked locks: " + store.Locks.Count
@@ -610,8 +673,18 @@ namespace Oxide.Plugins
             NightshadeLockerRules.PlayerPref pref;
             if (!store.Players.TryGetValue(id, out pref) || pref == null)
             {
-                pref = NightshadeLockerRules.PlayerPref.CreateDefault();
-                NightshadeLockerRules.ApplyToggleDefaults(pref, config.Defaults);
+                NightshadeLockerRules.PlayerPref legacy;
+                if (legacyById.TryGetValue(id, out legacy) && legacy != null)
+                {
+                    pref = legacy;
+                    legacyById.Remove(id);
+                    Puts("NightshadeLocker copied lock preferences for " + id + " from Ultimate Locker. Automatic locks are " + (pref.Auto ? "on" : "off") + ".");
+                }
+                else
+                {
+                    pref = NightshadeLockerRules.PlayerPref.CreateDefault();
+                    NightshadeLockerRules.ApplyToggleDefaults(pref, config.Defaults);
+                }
                 pref.SteamId = id;
                 pref.CloseDelay = config.DefaultDelay;
                 store.Players[id] = pref;
@@ -660,7 +733,7 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            if (!worldReady || conflict || plan == null || go == null) return;
+            if (!worldReady || plan == null || go == null) return;
             var player = plan.GetOwnerPlayer();
             var entity = go.ToBaseEntity();
             if (player == null || entity == null) return;
@@ -670,7 +743,7 @@ namespace Oxide.Plugins
         private void OnItemDeployed(Deployer deployer, ItemModDeployable mod, BaseEntity entity)
         {
             _ = mod;
-            if (!worldReady || conflict || deployer == null || entity == null) return;
+            if (!worldReady || deployer == null || entity == null) return;
             var player = deployer.GetOwnerPlayer();
             if (player == null) return;
             QueueAuto(player, entity, entity is Door);
@@ -679,7 +752,7 @@ namespace Oxide.Plugins
         private void OnItemDeployed(Deployer deployer, BaseEntity parent, BaseEntity entity)
         {
             _ = parent;
-            if (!worldReady || conflict || deployer == null || entity == null) return;
+            if (!worldReady || deployer == null || entity == null) return;
             var player = deployer.GetOwnerPlayer();
             if (player == null) return;
             QueueAuto(player, entity, entity is Door);
@@ -687,14 +760,14 @@ namespace Oxide.Plugins
 
         private void OnEntitySpawned(BaseVehicle vehicle)
         {
-            if (!worldReady || conflict || vehicle == null || vehicle.OwnerID == 0) return;
+            if (!worldReady || vehicle == null || vehicle.OwnerID == 0) return;
             var player = BasePlayer.FindByID(vehicle.OwnerID);
             if (player != null) QueueAuto(player, vehicle, false);
         }
 
         private void OnEntitySpawned(HotAirBalloon balloon)
         {
-            if (!worldReady || conflict || balloon == null || balloon.OwnerID == 0) return;
+            if (!worldReady || balloon == null || balloon.OwnerID == 0) return;
             var player = BasePlayer.FindByID(balloon.OwnerID);
             if (player != null) QueueAuto(player, balloon, false);
         }
@@ -702,33 +775,108 @@ namespace Oxide.Plugins
         private void QueueAuto(BasePlayer player, BaseEntity entity, bool closer)
         {
             if (player == null || entity == null) return;
+            if (conflict)
+            {
+                NotePaused(entity);
+                return;
+            }
             int token = entity.GetInstanceID();
             if (!pending.Add(token)) return;
             ulong user = player.userID;
+            BasePlayer captured = player;
             NextTick(() =>
             {
                 pending.Remove(token);
-                if (!worldReady || conflict || entity == null || entity.IsDestroyed) return;
-                var still = BasePlayer.FindByID(user) ?? BasePlayer.FindSleeping(user);
-                if (still == null) return;
-                TryAutoLock(still, entity);
-                if (closer && entity is Door) TryAutoCloser(still, entity as Door, true);
+                if (!worldReady || entity == null || entity.IsDestroyed) return;
+                if (conflict)
+                {
+                    NotePaused(entity);
+                    return;
+                }
+                var still = captured;
+                if (still == null || !still.IsConnected)
+                    still = BasePlayer.FindByID(user) ?? BasePlayer.FindSleeping(user);
+                if (still == null)
+                {
+                    NoteAuto(player, "The player was not online a tick after placement, so no lock was added.", false);
+                    return;
+                }
+                try
+                {
+                    TryAutoLock(still, entity);
+                    if (closer && entity is Door) TryAutoCloser(still, entity as Door, true);
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning("NightshadeLocker failed while placing a lock on " + (entity.ShortPrefabName ?? "an entity") + ". " + ex.Message);
+                }
             });
+        }
+
+        private void NotePaused(BaseEntity entity)
+        {
+            float now = Time.realtimeSinceStartup;
+            if (now < nextPauseLog) return;
+            nextPauseLog = now + 15f;
+            string name = string.IsNullOrEmpty(conflictPlugin) ? "another locker plugin" : conflictPlugin;
+            string what = entity != null && !string.IsNullOrEmpty(entity.ShortPrefabName) ? entity.ShortPrefabName : "that entity";
+            Puts("NightshadeLocker is PAUSED because '" + name + "' is loaded. No lock was placed on " + what + ". Unload '" + name + "' to let NightshadeLocker place code locks. This plugin does not unload it.");
+        }
+
+        private void NoteAuto(BasePlayer player, string reason, bool tellPlayer)
+        {
+            if (string.IsNullOrEmpty(reason)) return;
+            bool first = true;
+            if (tellPlayer && player != null)
+                first = toldSkip.Add(player.UserIDString + "\n" + reason);
+            bool log = (config != null && config.LogAuto) || (tellPlayer && first);
+            if (!log) return;
+            string who = player != null ? player.displayName + " (" + player.UserIDString + ")" : "unknown player";
+            Puts("NightshadeLocker did not place a lock for " + who + ". " + reason);
+            if (tellPlayer && first && player != null) Reply(player, reason);
         }
 
         private void TryAutoLock(BasePlayer player, BaseEntity entity)
         {
-            if (!HasPerm(player, PermAuto) && !IsStaff(player)) return;
-            var pref = Pref(player);
-            if (!pref.Auto) return;
-            var match = Match(entity);
-            if (match == null) return;
-            if (!NightshadeLockerRules.AutoWanted(CategoryOn(config.LockCategories, match.Category), pref.Auto, pref.LockOn(match.Category)))
+            if (!HasPerm(player, PermAuto) && !IsStaff(player))
+            {
+                NoteAuto(player, "Missing nightshadelocker.autolock.", false);
                 return;
+            }
+            var pref = Pref(player);
+            if (!pref.Auto)
+            {
+                if (toldAutoOff.Add(player.userID))
+                    Puts("NightshadeLocker: automatic locks are off for " + player.displayName + " (" + player.UserIDString + "). Turn on Place locks for me in /" + NightshadeLockerRules.PrimaryCommand + ". Nothing is placed until then.");
+                NoteAuto(player, "Automatic locks are off for this player.", false);
+                return;
+            }
+            var match = Match(entity);
+            if (match == null)
+            {
+                NoteAuto(player, "Not a lockable entity (" + (entity.ShortPrefabName ?? "unknown") + ").", false);
+                return;
+            }
+            bool serverOn = CategoryOn(config.LockCategories, match.Category);
+            bool playerOn = pref.LockOn(match.Category);
+            if (!NightshadeLockerRules.AutoWanted(serverOn, pref.Auto, playerOn))
+            {
+                string why = !serverOn
+                    ? "The server has locks turned off for " + match.Category + "."
+                    : "Automatic locks are off for " + match.Category + " in your settings.";
+                NoteAuto(player, why, true);
+                return;
+            }
             var denial = Denial(player, entity, match, pref, true);
-            if (denial != null) return;
+            if (denial != null)
+            {
+                NoteAuto(player, denial, denial != "That already has a lock.");
+                return;
+            }
             var result = PlaceLock(player, entity, match, pref, false);
             if (!string.IsNullOrEmpty(result)) Reply(player, result);
+            if (config.LogAuto && !string.IsNullOrEmpty(result))
+                Puts("NightshadeLocker lock result for " + player.displayName + " on " + (entity.ShortPrefabName ?? match.Category) + ": " + result);
         }
 
         private void PlaceLook(BasePlayer player)
@@ -746,7 +894,7 @@ namespace Oxide.Plugins
         private string Denial(BasePlayer player, BaseEntity entity, NightshadeLockerRules.Match match, NightshadeLockerRules.PlayerPref pref, bool automatic)
         {
             bool free = HasPerm(player, PermFree);
-            bool hasCode = HasItem(player, "lock.code");
+            bool hasCode = HasCodeLock(player);
             bool hasKey = HasItem(player, "lock.key");
             var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, free);
             ulong owner = entity.OwnerID;
@@ -781,23 +929,25 @@ namespace Oxide.Plugins
             if (host is SteeringWheel) return PlaceBoatLock(player, host as SteeringWheel, match, pref, tell);
             if (host == null || !host.HasSlot(BaseEntity.Slot.Lock)) return "That cannot take a lock.";
             bool freePerm = HasPerm(player, PermFree);
-            bool hasCode = HasItem(player, "lock.code");
+            bool hasCode = HasCodeLock(player);
             bool hasKey = HasItem(player, "lock.key");
             var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
             if (choice.Item == null) return "You need a lock in your inventory.";
             string pin = EnsurePin(player, pref, choice.Item);
             bool consumed = false;
+            bool pilot = false;
             if (!choice.Free)
             {
-                if (!TakeItem(player, choice.Item)) return "The lock could not be taken from your inventory.";
+                bool took = choice.Item == "lock.code" ? TakeCodeLock(player, out pilot) : TakeItem(player, choice.Item);
+                if (!took) return "The lock could not be taken from your inventory.";
                 consumed = true;
             }
             BaseLock created = choice.Item == "lock.key"
                 ? (BaseLock)CreateKeyLock(player, host)
-                : CreateCodeLock(player, host, pref, pin);
+                : CreateCodeLock(player, host, pref, pin, pilot);
             if (created == null)
             {
-                if (consumed) ReturnOrOwe(player, choice.Item, 1);
+                if (consumed) ReturnOrOwe(player, pilot ? PilotShort : choice.Item, 1);
                 SaveStore();
                 return "The lock could not be placed. A paid lock was returned or marked owed.";
             }
@@ -849,42 +999,106 @@ namespace Oxide.Plugins
                 entity.OwnerID = player.userID;
         }
 
-        private CodeLock CreateCodeLock(BasePlayer player, BaseEntity entity, NightshadeLockerRules.PlayerPref pref, string pin)
+        private CodeLock CreateCodeLock(BasePlayer player, BaseEntity entity, NightshadeLockerRules.PlayerPref pref, string pin, bool pilot)
         {
-            var codeLock = GameManager.server.CreateEntity(CodePrefab, entity.transform.position, entity.transform.rotation) as CodeLock;
+            string prefab = pilot ? PilotPrefab : CodePrefab;
+            var codeLock = GameManager.server.CreateEntity(prefab, entity.transform.position, entity.transform.rotation) as CodeLock;
             if (codeLock == null) return null;
-            ulong skin = ResolveSkin(player, pref);
-            if (skin != 0) codeLock.skinID = skin;
-            codeLock.SetParent(entity, entity.GetSlotAnchorName(BaseEntity.Slot.Lock));
-            codeLock.OwnerID = player.userID;
-            codeLock.code = pin;
-            codeLock.hasCode = true;
-            if (pref.GuestEnabled && NightshadeLockerRules.PinValid(pref.Guest))
+            try
             {
-                codeLock.guestCode = pref.Guest;
-                codeLock.hasGuestCode = true;
+                if (!pilot)
+                {
+                    ulong skin = ResolveSkin(player, pref);
+                    if (skin != 0) codeLock.skinID = skin;
+                }
+                codeLock.OwnerID = player.userID;
+                codeLock.code = pin ?? string.Empty;
+                codeLock.hasCode = NightshadeLockerRules.PinValid(pin);
+                if (pref.GuestEnabled && NightshadeLockerRules.PinValid(pref.Guest))
+                {
+                    codeLock.guestCode = pref.Guest;
+                    codeLock.hasGuestCode = true;
+                }
+                Whitelist(codeLock, player.userID);
+                // Spawn before SetParent. On this build SetParent reads net and sends a network update, and net is null until Spawn.
+                codeLock.Spawn();
+                if (!AttachToSlot(entity, codeLock, BaseEntity.Slot.Lock, "lock"))
+                {
+                    if (!codeLock.IsDestroyed) codeLock.Kill();
+                    return null;
+                }
+                Whitelist(codeLock, player.userID);
+                SetLocked(codeLock, true);
+                codeLock.SendNetworkUpdateImmediate();
+                return codeLock;
             }
-            codeLock.Spawn();
-            entity.SetSlot(BaseEntity.Slot.Lock, codeLock);
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLocker could not create a code lock. " + ex.Message);
+                try { if (codeLock != null && !codeLock.IsDestroyed) codeLock.Kill(); } catch (Exception) { }
+                return null;
+            }
+        }
+
+        private static void Whitelist(CodeLock codeLock, ulong userId)
+        {
+            if (codeLock == null || userId == 0) return;
             if (codeLock.whitelistPlayers == null) codeLock.whitelistPlayers = new List<ulong>();
-            if (!codeLock.whitelistPlayers.Contains(player.userID))
-                codeLock.whitelistPlayers.Add(player.userID);
-            SetLocked(codeLock, true);
-            return codeLock;
+            if (!codeLock.whitelistPlayers.Contains(userId)) codeLock.whitelistPlayers.Add(userId);
+        }
+
+        private static bool AttachToSlot(BaseEntity parent, BaseEntity child, BaseEntity.Slot slot, string fallbackBone)
+        {
+            if (parent == null || child == null) return false;
+            string bone = fallbackBone;
+            try
+            {
+                string named = parent.GetSlotAnchorName(slot);
+                if (!string.IsNullOrEmpty(named)) bone = named;
+            }
+            catch (Exception)
+            {
+                bone = fallbackBone;
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(bone)) child.SetParent(parent, bone);
+                else child.SetParent(parent);
+            }
+            catch (Exception)
+            {
+                try { child.SetParent(parent); }
+                catch (Exception) { return false; }
+            }
+            parent.SetSlot(slot, child);
+            return true;
         }
 
         private KeyLock CreateKeyLock(BasePlayer player, BaseEntity entity)
         {
             var keyLock = GameManager.server.CreateEntity(KeyPrefab, entity.transform.position, entity.transform.rotation) as KeyLock;
             if (keyLock == null) return null;
-            keyLock.SetParent(entity, entity.GetSlotAnchorName(BaseEntity.Slot.Lock));
-            keyLock.OwnerID = player.userID;
-            keyLock.keyCode = UnityEngine.Random.Range(1, 100000);
-            keyLock.firstKeyCreated = false;
-            keyLock.Spawn();
-            entity.SetSlot(BaseEntity.Slot.Lock, keyLock);
-            SetLocked(keyLock, true);
-            return keyLock;
+            try
+            {
+                keyLock.OwnerID = player.userID;
+                keyLock.keyCode = UnityEngine.Random.Range(1, 100000);
+                keyLock.firstKeyCreated = false;
+                keyLock.Spawn();
+                if (!AttachToSlot(entity, keyLock, BaseEntity.Slot.Lock, "lock"))
+                {
+                    if (!keyLock.IsDestroyed) keyLock.Kill();
+                    return null;
+                }
+                SetLocked(keyLock, true);
+                keyLock.SendNetworkUpdateImmediate();
+                return keyLock;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLocker could not create a key lock. " + ex.Message);
+                try { if (keyLock != null && !keyLock.IsDestroyed) keyLock.Kill(); } catch (Exception) { }
+                return null;
+            }
         }
 
         private string PlaceCarLock(BasePlayer player, ModularCar car, NightshadeLockerRules.Match match, NightshadeLockerRules.PlayerPref pref, bool tell)
@@ -893,21 +1107,22 @@ namespace Oxide.Plugins
             if (car == null || car.CarLock == null) return "The lock could not be placed.";
             if (car.CarLock.HasALock) return "That already has a lock.";
             bool freePerm = HasPerm(player, PermFree);
-            bool hasCode = HasItem(player, "lock.code");
+            bool hasCode = HasCodeLock(player);
             bool hasKey = HasItem(player, "lock.key");
             var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
             if (choice.Item != "lock.code" && !choice.Free) return "A modular car needs a code lock.";
             if (choice.Item == null) return "You need a lock in your inventory.";
             string pin = EnsurePin(player, pref, "lock.code");
             bool consumed = false;
+            bool pilot = false;
             if (!choice.Free)
             {
-                if (!TakeItem(player, "lock.code")) return "The lock could not be taken from your inventory.";
+                if (!TakeCodeLock(player, out pilot)) return "The lock could not be taken from your inventory.";
                 consumed = true;
             }
             if (!car.CarLock.TrySetNewCode(pin, player.userID))
             {
-                if (consumed) ReturnOrOwe(player, "lock.code", 1);
+                if (consumed) ReturnOrOwe(player, pilot ? PilotShort : "lock.code", 1);
                 return "The lock could not be placed. A paid lock was returned or marked owed.";
             }
             using (var flags = car.StartSetFlags(BaseEntity.FlagsUpdateMode.SendNetworkUpdate))
@@ -928,7 +1143,7 @@ namespace Oxide.Plugins
             if (wheel == null || wheel.BoatLock == null) return "The lock could not be placed.";
             if (wheel.BoatLock.HasALock) return "That already has a lock.";
             bool freePerm = HasPerm(player, PermFree);
-            bool hasCode = HasItem(player, "lock.code");
+            bool hasCode = HasCodeLock(player);
             bool hasKey = HasItem(player, "lock.key");
             var choice = NightshadeLockerRules.ChooseLock(config.KeyLocksOnly, hasCode, hasKey, pref.KeyFallback, freePerm);
             if (choice.Item == null) return "You need a lock in your inventory.";
@@ -936,14 +1151,15 @@ namespace Oxide.Plugins
             string pin = EnsurePin(player, pref, "lock.code");
             if (!wheel.BoatLock.IsValidLockCode(pin)) return "Use 4 digits.";
             bool consumed = false;
+            bool pilot = false;
             if (!choice.Free)
             {
-                if (!TakeItem(player, "lock.code")) return "The lock could not be taken from your inventory.";
+                if (!TakeCodeLock(player, out pilot)) return "The lock could not be taken from your inventory.";
                 consumed = true;
             }
             if (!wheel.BoatLock.TrySetNewCode(pin, player))
             {
-                if (consumed) ReturnOrOwe(player, "lock.code", 1);
+                if (consumed) ReturnOrOwe(player, pilot ? PilotShort : "lock.code", 1);
                 return "The lock could not be placed. A paid lock was returned or marked owed.";
             }
             SetLocked(wheel, true);
@@ -1184,9 +1400,13 @@ namespace Oxide.Plugins
             }
             closer.delay = delay;
             closer.OwnerID = player.userID;
-            closer.SetParent(door, door.GetSlotAnchorName(BaseEntity.Slot.UpperModifier));
             closer.Spawn();
-            door.SetSlot(BaseEntity.Slot.UpperModifier, closer);
+            if (!AttachToSlot(door, closer, BaseEntity.Slot.UpperModifier, "uppermodifier"))
+            {
+                if (!closer.IsDestroyed) closer.Kill();
+                if (consumed) ReturnOrOwe(player, "door.closer", 1);
+                return "The door closer could not be placed.";
+            }
             RememberCloser(closer, door, player.userID, delay, free ? NightshadeLockerRules.ProvenanceFree : NightshadeLockerRules.ProvenancePaid);
             openedAt[IdOf(door)] = Time.realtimeSinceStartup;
             return free ? "A door closer was placed without using one from your inventory." : "Door closer placed.";
@@ -2049,14 +2269,54 @@ namespace Oxide.Plugins
 
         #region Items
 
+        private static Item FindCarried(BasePlayer player, string shortname)
+        {
+            if (player == null || player.inventory == null || string.IsNullOrEmpty(shortname)) return null;
+            Item item = player.inventory.FindItemByItemID(shortname);
+            if (item != null && item.amount > 0) return item;
+            try
+            {
+                Item bag = player.inventory.GetBackpackWithInventory();
+                if (bag != null && bag.contents != null)
+                {
+                    Item packed = bag.contents.FindItemByItemName(shortname);
+                    if (packed != null && packed.amount > 0) return packed;
+                }
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+            return null;
+        }
+
+        private static bool HasCodeLock(BasePlayer player)
+        {
+            return FindCarried(player, "lock.code") != null || FindCarried(player, PilotShort) != null;
+        }
+
+        private static bool TakeCodeLock(BasePlayer player, out bool pilot)
+        {
+            pilot = false;
+            Item item = FindCarried(player, "lock.code");
+            if (item == null)
+            {
+                item = FindCarried(player, PilotShort);
+                pilot = item != null;
+            }
+            if (item == null || item.amount < 1) return false;
+            item.UseItem(1);
+            return true;
+        }
+
         private static bool HasItem(BasePlayer player, string shortname)
         {
-            return player != null && player.inventory != null && player.inventory.FindItemByItemID(shortname) != null;
+            return FindCarried(player, shortname) != null;
         }
 
         private static bool TakeItem(BasePlayer player, string shortname)
         {
-            var item = player.inventory.FindItemByItemID(shortname);
+            var item = FindCarried(player, shortname);
             if (item == null || item.amount < 1) return false;
             item.UseItem(1);
             return true;

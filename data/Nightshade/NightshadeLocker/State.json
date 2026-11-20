@@ -4,7 +4,7 @@
       "SteamId": "76561198035665693",
       "Code": "0222",
       "Guest": "",
-      "Auto": false,
+      "Auto": true,
       "KeyFallback": false,
       "GuestEnabled": false,
       "Share": true,
@@ -54,5 +54,6 @@
     }
   },
   "Locks": {},
-  "Closers": {}
+  "Closers": {},
+  "LegacyAutoRestored": true
 }

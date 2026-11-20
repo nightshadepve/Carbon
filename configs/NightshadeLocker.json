@@ -17,6 +17,7 @@
   "Plugins that pause entity control while loaded": [
     "UltimateLocker"
   ],
+  "Log automatic lock decisions": false,
   "Warn if NightshadeLockPickup is loaded": true,
   "Legacy preferences file under the data directory": "UltimateLocker.json",
   "Require building privilege for structures": true,
