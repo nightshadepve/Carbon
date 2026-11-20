@@ -1540,6 +1540,8 @@ namespace Oxide.Plugins
                                     L("\u2022 /hordehelp \u2014 Hordes help"),
                                     L("\u2022 /checkfoundations \u2014 Defendable Homes foundations"),
                                     L("\u2022 /raidbuilderinfo \u2014 vetted raidbase builder help"),
+                                    L("\u2022 /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend \u2014 redeem a raid shield at your TC"),
+                                    L("\u2022 /raidshield \u2014 shield time on the TC you are looking at"),
                                     L("\u2022 /tug or /tugboat \u2014 VIPx tugboat license")))
                         }
                     }
@@ -1571,6 +1573,7 @@ namespace Oxide.Plugins
                                     L("\u2022 Your RP on Home comes from ServerRewards. If it does not answer, it shows -.")),
                                 Bk("LOOT PROTECTION",
                                     L("\u2022 Placed boxes, furnaces, fridges, lockers, and vending storage are shared with your Rust teammate. TC auth does not open them. Anyone else has to destroy the container. Raid protection stops that damage while it is on. /share can still open one container. A code lock still applies. The PvP weekend and Purge do not open these."),
+                                    L("\u2022 Paid raid shields are tokens from /shop. Look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. The timer runs only on the PvP weekend. Unused time carries over."),
                                     L("\u2022 Sleeping players stay unlootable all week, including PvP weekend and Purge. Teammates can still loot them."),
                                     L("\u2022 Event loot is open to anyone and is not locked."),
                                     L("\u2022 Hacked crates, supply drops, and heli or Bradley crates from events are public."),
@@ -1700,6 +1703,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Monuments are always PvP.", "warn"),
                                 L("\u2022 Events are always PvP. A dome only appears over an event.", "warn"),
                                 L("\u2022 PvP weekend: Friday 8:00 PM to Monday 3:00 AM Eastern. Raiding is allowed."),
+                                L("\u2022 Paid shield: look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. Time counts down only on that weekend."),
                                 L("\u2022 Purge: Tuesday of wipe week at 2:00 PM Eastern until the Thursday wipe. Raiding is allowed."),
                                 L("\u2022 Outside those, do not attack players or raid bases."),
                                 L("\u2022 Home shows which of PVE, PVP, or PURGE is on right now.")))
