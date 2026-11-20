@@ -512,8 +512,48 @@ namespace Oxide.Plugins
         }
     }
 
+    // Which building a container is protected with.
+    // An attached entity uses its own building id only.
+    // A loose player container uses every cupboard privilege zone that contains it,
+    // and each of those cupboards' own building ids. The nearest cupboard is not preferred.
+    public static class NightshadeRaidTargets
+    {
+        public struct ZoneHit
+        {
+            public uint BuildingId;
+            public float DistanceMeters;
+            public float RadiusMeters;
+        }
+
+        public static uint[] BuildingsForContainer(uint attachedBuildingId, bool loosePlayerContainer, ZoneHit[] zones)
+        {
+            if (attachedBuildingId != 0u)
+                return new[] { attachedBuildingId };
+            if (!loosePlayerContainer || zones == null || zones.Length == 0)
+                return new uint[0];
+            var list = new List<uint>();
+            for (int i = 0; i < zones.Length; i++)
+            {
+                ZoneHit zone = zones[i];
+                if (zone.BuildingId == 0u) continue;
+                if (zone.RadiusMeters <= 0f || float.IsNaN(zone.RadiusMeters) || float.IsInfinity(zone.RadiusMeters)) continue;
+                if (float.IsNaN(zone.DistanceMeters) || float.IsInfinity(zone.DistanceMeters) || zone.DistanceMeters < 0f) continue;
+                if (zone.DistanceMeters > zone.RadiusMeters) continue;
+                bool seen = false;
+                for (int j = 0; j < list.Count; j++)
+                {
+                    if (list[j] != zone.BuildingId) continue;
+                    seen = true;
+                    break;
+                }
+                if (!seen) list.Add(zone.BuildingId);
+            }
+            return list.ToArray();
+        }
+    }
+
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.4")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.5")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -781,6 +821,14 @@ namespace Oxide.Plugins
         // API_GetCupboardShield(ulong cupboardNetId) -> Dictionary
         // API_GetBuildingShield(uint buildingId) -> Dictionary
         //     state "active" | "queued" | "none", seconds (double), tcId (ulong), buildingId (uint)
+        // API_IsEntityProtected(BaseEntity entity, ulong attackerSteamId) -> bool
+        //     True when this plugin would reduce that attacker's damage to the entity.
+        //     Pass 0 for an outsider. A real steam id is cleared only when
+        //     "Prevent teammates authorized on TC from damaging their own shielded building"
+        //     is false and that player is authorized on the cupboard that would block.
+        //     Attached entities use their own building. A player-placed container with no
+        //     building id uses every cupboard zone that contains it, by that cupboard's
+        //     own building, not the nearest tool cupboard.
         //
         // Hooks (not fired for the state already in effect at plugin load):
         // OnNightshadePvPStarted(long startUtcTicks, long endUtcTicks)
@@ -873,6 +921,14 @@ namespace Oxide.Plugins
             if (cupboardNetId == 0UL || !store.Shields.TryGetValue(cupboardNetId, out shield) || shield == null)
                 return NoneShield();
             return Describe(shield);
+        }
+
+        // Outsider (attackerSteamId 0) or a specific attacker. Same decision as the damage hook.
+        [HookMethod("API_IsEntityProtected")]
+        public bool API_IsEntityProtected(BaseEntity entity, ulong attackerSteamId)
+        {
+            bool paid;
+            return ProtectionScale(entity as BaseCombatEntity, attackerSteamId, out paid) > 0f;
         }
 
         [HookMethod("API_GetBuildingShield")]
@@ -1234,11 +1290,12 @@ namespace Oxide.Plugins
             return best;
         }
 
-        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hit)
+        // 0 means this hit is not reduced. Paid shields return 1. Offline protection uses the config percent.
+        // attacker 0 is an outsider, so tool-cupboard authorization cannot clear the block.
+        private float ProtectionScale(BaseCombatEntity entity, ulong attacker, out bool paid)
         {
-            if (entity == null || hit == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
-            // Exclude player/NPC/animal bodies; protect only buildings and their attached deployables.
-            if (entity is BasePlayer) return null;
+            paid = false;
+            if (entity == null || entity is BasePlayer) return 0f;
             DateTime now = DateTime.UtcNow;
             DateTime start, end;
             bool active;
@@ -1247,14 +1304,74 @@ namespace Oxide.Plugins
             // forceOfflinePvp opens offline protection only. The full-server force opens it too.
             // Paid shields still need the real weekend, so a forced weekday cannot drain a voucher.
             bool offlineWindow = active || forceOfflinePvp || forceFullPvp;
-            if (!offlineWindow) return null;
-            uint buildingId = BuildingIdOf(entity);
-            if (buildingId == 0u || BuildingManager.server == null) return null;
+            if (!offlineWindow || BuildingManager.server == null) return 0f;
+
+            uint attached = BuildingIdOf(entity);
+            uint[] buildings = attached != 0u
+                ? NightshadeRaidTargets.BuildingsForContainer(attached, false, null)
+                : IsLoosePlayerContainer(entity) && entity.transform != null
+                    ? NightshadeRaidTargets.BuildingsForContainer(0u, true, ZonesContaining(entity.transform.position))
+                    : new uint[0];
+            float best = 0f;
+            for (int i = 0; i < buildings.Length; i++)
+            {
+                NightshadeOfflineGate.HitDecision decision = DecideBuilding(buildings[i], attacker, now, end, active);
+                if (!decision.Block) continue;
+                float reduction = NightshadeOfflineGate.Reduction(decision.Paid, true, settings.OfflineReductionPercent);
+                if (reduction <= best) continue;
+                best = reduction;
+                paid = decision.Paid;
+            }
+            return best;
+        }
+
+        // Player-placed storage that is not attached to a building. World crates, corpses,
+        // and backpacks are not included. Attached deployables already use BuildingIdOf.
+        private static bool IsLoosePlayerContainer(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            if (entity is BasePlayer || entity is LootContainer || entity is LootableCorpse ||
+                entity is DroppedItemContainer || entity is SupplyDrop || entity is HackableLockedCrate)
+                return false;
+            if (entity.OwnerID < SteamIdMin) return false;
+            return entity is StorageContainer || entity is ContainerIOEntity || entity is WeaponRack;
+        }
+
+        private static NightshadeRaidTargets.ZoneHit[] ZonesContaining(Vector3 position)
+        {
+            float radius = BuildingPrivlidge.Radius;
+            if (radius <= 0f || float.IsNaN(radius)) radius = 16f;
+            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            try
+            {
+                Vis.Entities(position, radius, nearby);
+                var hits = new List<NightshadeRaidTargets.ZoneHit>(nearby.Count);
+                for (int i = 0; i < nearby.Count; i++)
+                {
+                    BuildingPrivlidge tc = nearby[i];
+                    if (tc == null || tc.IsDestroyed || tc.transform == null) continue;
+                    hits.Add(new NightshadeRaidTargets.ZoneHit
+                    {
+                        BuildingId = tc.buildingID,
+                        DistanceMeters = Vector3.Distance(position, tc.transform.position),
+                        RadiusMeters = radius
+                    });
+                }
+                return hits.ToArray();
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref nearby);
+            }
+        }
+
+        private NightshadeOfflineGate.HitDecision DecideBuilding(uint buildingId, ulong attacker, DateTime now, DateTime weekendEnd, bool realWeekendActive)
+        {
+            NightshadeOfflineGate.HitDecision none = new NightshadeOfflineGate.HitDecision();
+            if (buildingId == 0u || BuildingManager.server == null) return none;
             BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
             if (building == null || building.buildingPrivileges == null || building.buildingPrivileges.Count == 0)
-                return null;
-            ulong attacker = hit.InitiatorPlayer != null ? hit.InitiatorPlayer.userID :
-                hit.Initiator != null ? hit.Initiator.OwnerID : 0UL;
+                return none;
             bool allowAuthorized = !settings.ProtectFromAuthorizedPlayers && attacker != 0UL;
             NightshadeOfflineGate.CupboardVote[] votes = new NightshadeOfflineGate.CupboardVote[building.buildingPrivileges.Count];
             List<BuildingPrivlidge> own = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
@@ -1277,8 +1394,8 @@ namespace Oxide.Plugins
                         // A foreign building id is recorded and then ignored. It is not read for a shield.
                         if (tc.buildingID == buildingId && !(allowAuthorized && vote.AttackerAuthorized))
                         {
-                            if (active)
-                                vote.PaidShield = ShieldBlocks(tc, buildingId, now, end);
+                            if (realWeekendActive)
+                                vote.PaidShield = ShieldBlocks(tc, buildingId, now, weekendEnd);
                             vote.OfflineProtected = OfflineProtected(tc, now);
                             own.Add(tc);
                         }
@@ -1291,14 +1408,25 @@ namespace Oxide.Plugins
                 }
                 decision = NightshadeOfflineGate.Decide(buildingId, allowAuthorized, votes);
                 if (!decision.Block && settings.ShareOverlappingCupboards)
-                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, end, active);
+                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, weekendEnd, realWeekendActive);
             }
             finally
             {
                 Facepunch.Pool.FreeUnmanaged(ref own);
             }
-            if (!decision.Block) return null;
-            float reduction = NightshadeOfflineGate.Reduction(decision.Paid, true, settings.OfflineReductionPercent);
+            return decision;
+        }
+
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hit)
+        {
+            if (entity == null || hit == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
+            // Players, NPCs, and animals are not building pieces. Buildings, attached
+            // deployables, and loose player containers inside a protected cupboard zone are.
+            if (entity is BasePlayer) return null;
+            ulong attacker = hit.InitiatorPlayer != null ? hit.InitiatorPlayer.userID :
+                hit.Initiator != null ? hit.Initiator.OwnerID : 0UL;
+            bool paid;
+            float reduction = ProtectionScale(entity, attacker, out paid);
             if (reduction <= 0f) return null;
             hit.damageTypes.ScaleAll(1f - reduction);
             if (settings.NotifyAttacker && hit.InitiatorPlayer != null)
@@ -1308,7 +1436,7 @@ namespace Oxide.Plugins
                 if (!notifyThrottle.TryGetValue(id, out last) || Time.realtimeSinceStartup - last > 8f)
                 {
                     notifyThrottle[id] = Time.realtimeSinceStartup;
-                    string blockedMessage = decision.Paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.";
+                    string blockedMessage = paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.";
                     Reply(hit.InitiatorPlayer, blockedMessage);
                 }
             }
