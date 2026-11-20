@@ -72,7 +72,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_LOOT_TESTS
-    [Info("NightshadeLootProtection", "Nightshade", "1.2.0")]
+    [Info("NightshadeLootProtection", "Nightshade", "1.2.1")]
     [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
     public class NightshadeLootProtection : CarbonPlugin
     {
@@ -160,6 +160,10 @@ namespace Carbon.Plugins
 
             [JsonProperty("WeekendPvP")]
             public WeekendPvPConfig WeekendPvP { get; set; } = new();
+
+            // Off by default. The save-timer cleanup stays silent unless this is true.
+            [JsonProperty("Log cleanup summary")]
+            public bool LogCleanupSummary { get; set; } = false;
         }
 
         private class WeekendPvPConfig
@@ -1597,7 +1601,8 @@ namespace Carbon.Plugins
             foreach (var pos in stalePositions)
                 _npcDeathPositions.Remove(pos);
 
-            Puts("NightshadeLootProtection cleaned " + expired.Count + " expired ownership records. Active: " + _entityOwnership.Count);
+            if (_config != null && _config.LogCleanupSummary)
+                Puts("NightshadeLootProtection cleaned " + expired.Count + " expired ownership records. Active: " + _entityOwnership.Count);
             SaveShareData();
         }
 
