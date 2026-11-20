@@ -60,10 +60,14 @@
     "OvenToggleBlocked": true
   },
   "WeekendPvP": {
-    "Disable UnifiedLootProtection access restrictions during PvP weekend": true,
+    "Disable NightshadeLootProtection access restrictions during PvP weekend": true,
     "Read TruePVE GetPlayerMapping for the active weekend profile": true,
     "Weekend TruePVE ruleset name": "nightshade_pvp_weekend",
     "Use Friday 8 PM - Monday 3 AM Eastern clock fallback when TruePVE mapping is unavailable": true,
-    "Disable Bradley, heli, NPC, hackable crate and supply drop ownership locks": true
+    "Disable Bradley, heli, NPC, hackable crate and supply drop ownership locks": true,
+    "Allow access during active Purge ruleset": true,
+    "TruePVE Purge ruleset name": "purge",
+    "Keep TC authorization restricted during raiding": true,
+    "Open player-placed storage to non-teammates during PvP weekend and Purge": false
   }
 }

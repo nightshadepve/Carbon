@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeInfo", "Nightshade", "1.2.2")]
+    [Info("NightshadeInfo", "Nightshade", "1.2.3")]
     [Description("Nightshade info panel: live status, rules, and Discord.")]
     public class NightshadeInfo : RustPlugin
     {
@@ -1448,7 +1448,7 @@ namespace Oxide.Plugins
                                     L("\u2022 Build for style, defense, roleplay, and deeply suspicious architecture. That part is encouraged.")),
                                 Bk("LOOT & OWNERSHIP",
                                     L("\u2022 Do not take from another player's boxes, furnaces, or TC storage.", "warn"),
-                                    L("\u2022 You, your teammate, TC auth, or someone you /share with can open them."),
+                                    L("\u2022 You and your Rust teammate can open each other's placed boxes, furnaces, fridges, lockers, and vending storage. TC auth does not. A code lock still applies. /share can open one container. Anyone else has to destroy it, and raid protection stops that damage while it is on."),
                                     L("\u2022 Sleeping players cannot be looted, including during PvP weekend and Purge.", "warn"),
                                     L("\u2022 Event loot is open to anyone and is not locked."),
                                     L("\u2022 Hacked crates, supply drops, and heli or Bradley crates from events are public."),
@@ -1570,7 +1570,7 @@ namespace Oxide.Plugins
                                     L("\u2022 There is no separate Black Market currency."),
                                     L("\u2022 Your RP on Home comes from ServerRewards. If it does not answer, it shows -.")),
                                 Bk("LOOT PROTECTION",
-                                    L("\u2022 Boxes, furnaces, and TC storage: you, your teammate, or TC auth. /share opens one container for someone else."),
+                                    L("\u2022 Placed boxes, furnaces, fridges, lockers, and vending storage are shared with your Rust teammate. TC auth does not open them. Anyone else has to destroy the container. Raid protection stops that damage while it is on. /share can still open one container. A code lock still applies. The PvP weekend and Purge do not open these."),
                                     L("\u2022 Sleeping players stay unlootable all week, including PvP weekend and Purge. Teammates can still loot them."),
                                     L("\u2022 Event loot is open to anyone and is not locked."),
                                     L("\u2022 Hacked crates, supply drops, and heli or Bradley crates from events are public."),

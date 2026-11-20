@@ -1,16 +1,80 @@
 using System;
 using System.Collections.Generic;
+#if !NIGHTSHADE_LOOT_TESTS
+using System.IO;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using Oxide.Core.Libraries.Covalence;
 using UnityEngine;
+#endif
 
 namespace Carbon.Plugins
 {
-    [Info("UnifiedLootProtection", "Nightshade", "1.1.3")]
-    [Description("Unified loot protection combining damage-based ownership and TC-based container protection.")]
-    public class UnifiedLootProtection : CarbonPlugin
+    // Open and wipe decisions that do not need the Rust host.
+    public static class NightshadeLootRules
+    {
+        public const ulong SteamIdMin = 76561197960265728UL;
+
+        public static bool IsPlayerSteamId(ulong id)
+        {
+            return id >= SteamIdMin;
+        }
+
+        public struct OpenRequest
+        {
+            public bool Admin;
+            public bool OwnerOrTeammate;
+            public bool ExplicitShare;
+            public bool PlayerPlacedStorage;
+            public bool StorageEnabled;
+            public bool WeekendOrPurge;
+            public bool OpenPlayerStorageOnWeekend;
+            public bool RaidProtectedAgainstOutsiders;
+            public bool FrontUse;
+            public bool ExemptZone;
+        }
+
+        // True means this plugin does not block the open. Code locks are not decided here.
+        public static bool AllowPlayerPlacedOpen(OpenRequest request)
+        {
+            if (!request.PlayerPlacedStorage) return true;
+            if (request.ExemptZone || request.Admin || request.FrontUse) return true;
+            if (!request.StorageEnabled) return true;
+            if (request.OwnerOrTeammate || request.ExplicitShare) return true;
+            if (request.OpenPlayerStorageOnWeekend && request.WeekendOrPurge && !request.RaidProtectedAgainstOutsiders)
+                return true;
+            return false;
+        }
+
+        public static DateTime AsUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Local) return value.ToUniversalTime();
+            if (value.Kind == DateTimeKind.Utc) return value;
+            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        }
+
+        public static bool SaveClockKnown(DateTime saveCreatedUtc)
+        {
+            return saveCreatedUtc.Year >= 2000;
+        }
+
+        // Legacy share and name files are imported only when they belong to this map save.
+        // A file last written before the save was created is a previous wipe and stays out.
+        public static bool ShouldImportLegacy(bool newDataPresent, bool legacyPresent, bool settled, bool saveClockKnown, DateTime legacyWriteUtc, DateTime saveCreated)
+        {
+            if (settled || newDataPresent || !legacyPresent || !saveClockKnown) return false;
+            DateTime created = AsUtc(saveCreated);
+            if (!SaveClockKnown(created)) return false;
+            return AsUtc(legacyWriteUtc) >= created;
+        }
+    }
+
+#if !NIGHTSHADE_LOOT_TESTS
+    [Info("NightshadeLootProtection", "Nightshade", "1.2.0")]
+    [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
+    public class NightshadeLootProtection : CarbonPlugin
     {
         #region Fields
 
@@ -32,10 +96,15 @@ namespace Carbon.Plugins
         // entityNetId -> set of steamIds who have been granted access to that specific entity
         private Dictionary<ulong, HashSet<ulong>> _shareData = new();
 
-        // item UID -> thrower steamId — tracks in-flight supply signals (fixes race condition)
+        // Raid-base zones registered by NightshadeRaidbase. Not saved. Re-registered when a raid starts.
+        private readonly Dictionary<string, ExemptZone> _exemptZones = new(StringComparer.OrdinalIgnoreCase);
+
+        private bool _dataReady;
+
+        // item UID -> thrower steamId  -  tracks in-flight supply signals (fixes race condition)
         private readonly Dictionary<ulong, ulong> _pendingSupplyOwners = new();
 
-        // net IDs of CH47s currently carrying a Bradley drop — immune to damage until cargo drops
+        // net IDs of CH47s currently carrying a Bradley drop  -  immune to damage until cargo drops
         private readonly HashSet<ulong> _immuneCh47s = new();
 
         // Tracks NPC death positions so we can match ownership to the spawned LootableCorpse
@@ -45,7 +114,13 @@ namespace Carbon.Plugins
         // steamId -> last known display name for offline share lookups
         private Dictionary<ulong, string> _knownPlayers = new();
 
-        private const string PermAdmin = "unifiedlootprotection.admin";
+        private const string PermAdmin = "nightshadelootprotection.admin";
+        private const string PermAdminLegacy = "unifiedlootprotection.admin";
+        private const string DataDir = "Nightshade/NightshadeLootProtection";
+        private const string SharesName = "shares";
+        private const string KnownName = "knownplayers";
+        private const string TurretName = "tcturretauth";
+        private const string WipeName = "wipe";
 
         [PluginReference] private Plugin RaidableBases, TruePVE, NightshadeRaidProtection;
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
@@ -89,7 +164,7 @@ namespace Carbon.Plugins
 
         private class WeekendPvPConfig
         {
-            [JsonProperty("Disable UnifiedLootProtection access restrictions during PvP weekend")]
+            [JsonProperty("Disable NightshadeLootProtection access restrictions during PvP weekend")]
             public bool Enabled { get; set; } = true;
 
             [JsonProperty("Read TruePVE GetPlayerMapping for the active weekend profile")]
@@ -112,6 +187,23 @@ namespace Carbon.Plugins
 
             [JsonProperty("Keep TC authorization restricted during raiding")]
             public bool KeepTcAuthProtected { get; set; } = true;
+
+            // Shel's rule. False keeps player-placed containers closed to non-teammates
+            // on the weekend and during Purge. Event loot still follows the flags above.
+            [JsonProperty("Open player-placed storage to non-teammates during PvP weekend and Purge")]
+            public bool OpenPlayerStorageToNonTeammates { get; set; } = false;
+        }
+
+        private class ExemptZone
+        {
+            public Vector3 Center;
+            public float Radius;
+        }
+
+        private class WipeState
+        {
+            public string WipeId;
+            public bool LegacySettled;
         }
 
         private class BradleyConfig
@@ -219,6 +311,7 @@ namespace Carbon.Plugins
 
         protected override void LoadConfig()
         {
+            bool copiedLegacy = TryCopyLegacyConfig();
             base.LoadConfig();
             try
             {
@@ -227,11 +320,58 @@ namespace Carbon.Plugins
                     _config = new PluginConfig();
                 if (_config.WeekendPvP == null)
                     _config.WeekendPvP = new WeekendPvPConfig();
-                // Do not rewrite config or plugin source during every load.
+                ApplyLegacyWeekendKey();
+                // Rewrite once after a legacy copy so the new keys are on disk.
+                // Later loads do not rewrite the config.
+                if (copiedLegacy)
+                    SaveConfig();
             }
             catch
             {
                 LoadDefaultConfig();
+            }
+        }
+
+        private bool TryCopyLegacyConfig()
+        {
+            try
+            {
+                string directory = Interface.Oxide.ConfigDirectory;
+                string neu = Path.Combine(directory, "NightshadeLootProtection.json");
+                string old = Path.Combine(directory, "UnifiedLootProtection.json");
+                if (File.Exists(neu) || !File.Exists(old)) return false;
+                File.Copy(old, neu);
+                Puts("NightshadeLootProtection migrated config: copied UnifiedLootProtection.json to NightshadeLootProtection.json.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not copy UnifiedLootProtection.json: " + ex.Message);
+                return false;
+            }
+        }
+
+        private void ApplyLegacyWeekendKey()
+        {
+            if (_config == null || _config.WeekendPvP == null) return;
+            try
+            {
+                string path = Path.Combine(Interface.Oxide.ConfigDirectory, "NightshadeLootProtection.json");
+                if (!File.Exists(path)) return;
+                JObject root = JObject.Parse(File.ReadAllText(path));
+                JObject weekend = root["WeekendPvP"] as JObject;
+                if (weekend == null) return;
+                const string newEnabled = "Disable NightshadeLootProtection access restrictions during PvP weekend";
+                const string oldEnabled = "Disable UnifiedLootProtection access restrictions during PvP weekend";
+                const string openKey = "Open player-placed storage to non-teammates during PvP weekend and Purge";
+                if (weekend[newEnabled] == null && weekend[oldEnabled] != null && weekend[oldEnabled].Type == JTokenType.Boolean)
+                    _config.WeekendPvP.Enabled = (bool)weekend[oldEnabled];
+                if (weekend[openKey] == null)
+                    _config.WeekendPvP.OpenPlayerStorageToNonTeammates = false;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not read legacy weekend keys: " + ex.Message);
             }
         }
 
@@ -244,35 +384,253 @@ namespace Carbon.Plugins
         private void Init()
         {
             permission.RegisterPermission(PermAdmin, this);
-
-            var stored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, HashSet<ulong>>>("UnifiedLootProtection_shares");
-            if (stored != null) _shareData = stored;
-
-            var knownStored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, string>>("UnifiedLootProtection_knownplayers");
-            if (knownStored != null) _knownPlayers = knownStored;
-
-            Puts($"[UnifiedLootProtection] Loaded share data: {_shareData.Count} entries. Known players: {_knownPlayers.Count}.");
+            MigrateAdminPermission();
+            LoadPersistentData(false);
             if (!_config.StorageProtection.Enabled)
-                PrintWarning("StorageProtection.Enabled is FALSE. Weekday storage will not be protected; enable StorageProtection in UnifiedLootProtection.json.");
-
+                PrintWarning("StorageProtection.Enabled is FALSE. Player-placed storage will not be protected. Enable StorageProtection in NightshadeLootProtection.json.");
         }
 
-        // Called when a player connects — keep known players list up to date
+        private void OnServerInitialized()
+        {
+            LoadPersistentData(true);
+        }
+
+        // Called when a player connects - keep known players list up to date
         private void OnPlayerConnected(BasePlayer player)
         {
-            if (player == null) return;
+            if (player == null || !_dataReady) return;
             _knownPlayers[player.userID] = player.displayName;
             SaveKnownPlayers();
         }
 
+        private void MigrateAdminPermission()
+        {
+            int users = 0;
+            int groups = 0;
+            try
+            {
+                foreach (string user in permission.GetPermissionUsers(PermAdminLegacy) ?? new string[0])
+                {
+                    if (string.IsNullOrEmpty(user)) continue;
+                    string id = user.Split('(')[0].Trim();
+                    if (id.Length == 0 || permission.UserHasPermission(id, PermAdmin)) continue;
+                    permission.GrantUserPermission(id, PermAdmin, this);
+                    users++;
+                }
+                foreach (string group in permission.GetPermissionGroups(PermAdminLegacy) ?? new string[0])
+                {
+                    if (string.IsNullOrEmpty(group) || permission.GroupHasPermission(group, PermAdmin)) continue;
+                    permission.GrantGroupPermission(group, PermAdmin, this);
+                    groups++;
+                }
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not copy unifiedlootprotection.admin grants: " + ex.Message);
+            }
+            Puts("NightshadeLootProtection permissions: copied unifiedlootprotection.admin onto nightshadelootprotection.admin for " + users + " users and " + groups + " groups. Nothing was granted to anyone who did not already have the old permission. The old permission is still accepted.");
+        }
+
+        private bool HasAdminPerm(BasePlayer player)
+        {
+            if (player == null) return false;
+            string id = player.UserIDString;
+            return permission.UserHasPermission(id, PermAdmin) || permission.UserHasPermission(id, PermAdminLegacy);
+        }
+
+        private static string DataFile(string name)
+        {
+            return DataDir + "/" + name;
+        }
+
+        private string DataPath(string name)
+        {
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeLootProtection", name + ".json");
+        }
+
+        private static string LegacyDataPath(string fileName)
+        {
+            return Path.Combine(Interface.Oxide.DataDirectory, fileName);
+        }
+
+        private bool TryReadWipe(out string wipeId, out DateTime saveCreatedUtc)
+        {
+            wipeId = null;
+            saveCreatedUtc = DateTime.MinValue;
+            try
+            {
+                string save = World.SaveFileName;
+                if (string.IsNullOrEmpty(save)) return false;
+                DateTime created = SaveRestore.SaveCreatedTime;
+                saveCreatedUtc = NightshadeLootRules.AsUtc(created);
+                if (!NightshadeLootRules.SaveClockKnown(saveCreatedUtc)) return false;
+                wipeId = save + "|" + World.Seed + "|" + saveCreatedUtc.Ticks;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private WipeState ReadWipeState()
+        {
+            try
+            {
+                if (!File.Exists(DataPath(WipeName))) return null;
+                return Interface.Oxide.DataFileSystem.ReadObject<WipeState>(DataFile(WipeName));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void WriteWipeState(WipeState state)
+        {
+            Interface.Oxide.DataFileSystem.WriteObject(DataFile(WipeName), state);
+        }
+
+        private void LoadPersistentData(bool allowLegacy)
+        {
+            bool haveWipe = TryReadWipe(out string wipeId, out DateTime created);
+            WipeState state = ReadWipeState();
+            if (haveWipe && state != null && !string.IsNullOrEmpty(state.WipeId) && !string.Equals(state.WipeId, wipeId, StringComparison.Ordinal))
+            {
+                string previous = state.WipeId;
+                ClearPerWipeData("load");
+                WriteWipeState(new WipeState { WipeId = wipeId, LegacySettled = true });
+                _shareData = new Dictionary<ulong, HashSet<ulong>>();
+                _knownPlayers = new Dictionary<ulong, string>();
+                _dataReady = true;
+                Puts("NightshadeLootProtection wipe: saved wipe id " + previous + " did not match " + wipeId + ". Cleared shares.json, knownplayers.json, and tcturretauth.json. Config and permission grants were kept. Legacy UnifiedLootProtection data was not imported.");
+                return;
+            }
+
+            bool sharesPresent = File.Exists(DataPath(SharesName));
+            bool knownPresent = File.Exists(DataPath(KnownName));
+            if (sharesPresent || knownPresent)
+            {
+                ReadNewData();
+                if (haveWipe && (state == null || string.IsNullOrEmpty(state.WipeId)))
+                    WriteWipeState(new WipeState { WipeId = wipeId, LegacySettled = true });
+                _dataReady = true;
+                Puts("NightshadeLootProtection loaded share data: " + _shareData.Count + " entries. Known players: " + _knownPlayers.Count + ".");
+                return;
+            }
+
+            if (!allowLegacy)
+                return;
+
+            bool settled = state != null && state.LegacySettled;
+            ImportLegacyData(haveWipe, created, settled);
+            if (haveWipe)
+                WriteWipeState(new WipeState { WipeId = wipeId, LegacySettled = true });
+            _dataReady = true;
+        }
+
+        private void ReadNewData()
+        {
+            if (File.Exists(DataPath(SharesName)))
+            {
+                var stored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, HashSet<ulong>>>(DataFile(SharesName));
+                if (stored != null) _shareData = stored;
+            }
+            if (File.Exists(DataPath(KnownName)))
+            {
+                var knownStored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, string>>(DataFile(KnownName));
+                if (knownStored != null) _knownPlayers = knownStored;
+            }
+        }
+
+        private void ImportLegacyData(bool haveWipe, DateTime saveCreatedUtc, bool settled)
+        {
+            string[] legacy =
+            {
+                "UnifiedLootProtection_shares.json",
+                "UnifiedLootProtection_knownplayers.json",
+                "UnifiedLootProtection_tcturretauth.json"
+            };
+            string[] names = { SharesName, KnownName, TurretName };
+            bool anyLegacy = false;
+            try { Directory.CreateDirectory(Path.GetDirectoryName(DataPath(SharesName))); }
+            catch { /* The data write below reports a real failure. */ }
+            for (int i = 0; i < legacy.Length; i++)
+            {
+                string path = LegacyDataPath(legacy[i]);
+                if (!File.Exists(path))
+                {
+                    Puts("NightshadeLootProtection migration: " + legacy[i] + " was not found.");
+                    continue;
+                }
+                anyLegacy = true;
+                DateTime written = File.GetLastWriteTimeUtc(path);
+                bool import = NightshadeLootRules.ShouldImportLegacy(false, true, settled, haveWipe, written, saveCreatedUtc);
+                if (!import)
+                {
+                    string why = settled
+                        ? "a previous load already settled legacy import"
+                        : !haveWipe
+                            ? "the map save creation time is not available, so old wipe data is not imported"
+                            : "last write " + written.ToString("u") + " is before this map save " + saveCreatedUtc.ToString("u");
+                    Puts("NightshadeLootProtection migration: skipped " + legacy[i] + " (" + why + ").");
+                    continue;
+                }
+                if (names[i] == SharesName)
+                {
+                    var stored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, HashSet<ulong>>>("UnifiedLootProtection_shares");
+                    if (stored != null) _shareData = stored;
+                    SaveShareData();
+                    Puts("NightshadeLootProtection migration: imported " + _shareData.Count + " share entries from UnifiedLootProtection_shares.json for this map save.");
+                }
+                else if (names[i] == KnownName)
+                {
+                    var stored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, string>>("UnifiedLootProtection_knownplayers");
+                    if (stored != null) _knownPlayers = stored;
+                    SaveKnownPlayers();
+                    Puts("NightshadeLootProtection migration: imported " + _knownPlayers.Count + " known players from UnifiedLootProtection_knownplayers.json for this map save.");
+                }
+                else
+                {
+                    File.Copy(path, DataPath(TurretName), true);
+                    Puts("NightshadeLootProtection migration: copied UnifiedLootProtection_tcturretauth.json to data/Nightshade/NightshadeLootProtection/tcturretauth.json.");
+                }
+            }
+            if (!anyLegacy)
+                Puts("NightshadeLootProtection migration: no UnifiedLootProtection data files were found.");
+        }
+
+        private void ClearPerWipeData(string reason)
+        {
+            _shareData = new Dictionary<ulong, HashSet<ulong>>();
+            _knownPlayers = new Dictionary<ulong, string>();
+            _entityOwnership.Clear();
+            _pendingSupplyOwners.Clear();
+            _npcDeathPositions.Clear();
+            _immuneCh47s.Clear();
+            SaveShareData();
+            SaveKnownPlayers();
+            string turret = DataPath(TurretName);
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(turret));
+                File.WriteAllText(turret, "{}\n", new System.Text.UTF8Encoding(false));
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not clear tcturretauth.json: " + ex.Message);
+            }
+            Puts("NightshadeLootProtection wipe (" + reason + "): cleared shares.json, knownplayers.json, and tcturretauth.json. Config and permission grants were kept.");
+        }
+
         private void SaveShareData()
         {
-            Interface.Oxide.DataFileSystem.WriteObject("UnifiedLootProtection_shares", _shareData);
+            Interface.Oxide.DataFileSystem.WriteObject(DataFile(SharesName), _shareData);
         }
 
         private void SaveKnownPlayers()
         {
-            Interface.Oxide.DataFileSystem.WriteObject("UnifiedLootProtection_knownplayers", _knownPlayers);
+            Interface.Oxide.DataFileSystem.WriteObject(DataFile(KnownName), _knownPlayers);
         }
 
         #endregion
@@ -391,7 +749,8 @@ namespace Carbon.Plugins
         // NRP's published window, but its damage blocker uses the REAL clock.
         // Never open storage on a weekday just because the test clock is active.
         // nsraid.pvpweekend is the persisted full-server force. API_IsPvPActive is
-        // true for it, and loot opens the same way it does on the real weekend.
+        // true for it. Event loot follows that window. Player-placed storage stays
+        // closed to non-teammates unless OpenPlayerStorageToNonTeammates is true.
         private bool IsWeekendPvp(BasePlayer player = null)
         {
             var opt = _config?.WeekendPvP;
@@ -463,30 +822,133 @@ namespace Carbon.Plugins
             return false;
         }
 
-        // A protected TC must keep its boxes protected even during open raiding;
-        // NRP 1.1.4 provides a read-only status that covers both PAID and OFFLINE.
+        // Outsiders are blocked when NightshadeRaidProtection would block their damage.
+        // Attacker 0 keeps TC authorization from clearing the block. The raid plugin
+        // uses the container's own building, not the nearest cupboard.
+        private bool IsRaidProtectedAgainstOutsiders(BaseEntity entity)
+        {
+            if (entity == null || NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+                return false;
+            var result = NightshadeRaidProtection.Call("API_IsEntityProtected", entity, 0UL);
+            return result is bool && (bool)result;
+        }
+
         private bool IsLootProtectedByRaidShield(BasePlayer player, BaseEntity entity)
         {
             if (player != null && player.IsAdmin) return false;
-            if (entity == null || !IsStorage(entity) || NightshadeRaidProtection == null ||
-                !NightshadeRaidProtection.IsLoaded) return false;
-            BuildingPrivlidge tc = GetStorageTc(entity);
-            if (tc == null || tc.net == null || tc.IsDestroyed) return false;
-            if (IsPlayerOrTeamOwner(player, entity.OwnerID) || IsPlayerOrTeamOwner(player, tc.OwnerID) ||
-                IsExplicitlyShared(player, entity)) return false;
-            var result = NightshadeRaidProtection.Call("API_IsCupboardLootProtected", tc.net.ID.Value);
-            return result is bool && (bool)result;
+            if (entity == null) return false;
+            if (IsPlayerOrTeamOwner(player, entity.OwnerID) || IsExplicitlyShared(player, entity)) return false;
+            BuildingPrivlidge tc = OwnBuildingCupboard(entity);
+            if (tc != null && IsPlayerOrTeamOwner(player, tc.OwnerID)) return false;
+            return IsRaidProtectedAgainstOutsiders(entity);
+        }
+
+        // Cupboard attached to this entity's own building. Never the nearest overlap.
+        private static BuildingPrivlidge OwnBuildingCupboard(BaseEntity entity)
+        {
+            DecayEntity decay = entity as DecayEntity;
+            if (decay == null || decay.buildingID == 0u || BuildingManager.server == null) return null;
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(decay.buildingID);
+            if (building == null || building.buildingPrivileges == null) return null;
+            for (int i = 0; i < building.buildingPrivileges.Count; i++)
+            {
+                BuildingPrivlidge tc = building.buildingPrivileges[i];
+                if (tc != null && !tc.IsDestroyed && tc.buildingID == decay.buildingID)
+                    return tc;
+            }
+            return null;
+        }
+
+        private bool IsUtilityPublic(BaseEntity entity)
+        {
+            if (entity == null || string.IsNullOrEmpty(entity.ShortPrefabName)) return false;
+            if (entity.ShortPrefabName.Equals("vendingmachine.deployed", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return PublicEntities.Contains(entity.ShortPrefabName);
+        }
+
+        // Player-placed storage: a player steam id owns it, and it is not an event
+        // crate, corpse, backpack, world loot container, or a public utility.
+        private bool IsPlayerPlacedStorage(BaseEntity entity)
+        {
+            if (entity == null || !IsStorage(entity)) return false;
+            if (entity is SupplyDrop || entity is HackableLockedCrate || entity is LootableCorpse ||
+                entity is DroppedItemContainer || entity is LootContainer)
+                return false;
+            if (IsUtilityPublic(entity)) return false;
+            return NightshadeLootRules.IsPlayerSteamId(entity.OwnerID);
+        }
+
+        private bool InExemptZone(BaseEntity entity)
+        {
+            if (entity == null || entity.transform == null || _exemptZones.Count == 0) return false;
+            Vector3 pos = entity.transform.position;
+            foreach (ExemptZone zone in _exemptZones.Values)
+            {
+                if (zone == null || zone.Radius <= 0f) continue;
+                if (Vector3.Distance(pos, zone.Center) <= zone.Radius) return true;
+            }
+            return false;
+        }
+
+        private NightshadeLootRules.OpenRequest BuildOpenRequest(BasePlayer player, BaseEntity entity, bool frontUse, bool? ruleEnabled = null)
+        {
+            return new NightshadeLootRules.OpenRequest
+            {
+                Admin = player != null && player.IsAdmin,
+                OwnerOrTeammate = IsPlayerOrTeamOwner(player, entity != null ? entity.OwnerID : 0UL),
+                ExplicitShare = IsExplicitlyShared(player, entity),
+                PlayerPlacedStorage = true,
+                StorageEnabled = ruleEnabled ?? (_config.StorageProtection != null && _config.StorageProtection.Enabled),
+                WeekendOrPurge = IsWeekendPvp(player),
+                OpenPlayerStorageOnWeekend = _config.WeekendPvP != null && _config.WeekendPvP.OpenPlayerStorageToNonTeammates,
+                RaidProtectedAgainstOutsiders = IsRaidProtectedAgainstOutsiders(entity),
+                FrontUse = frontUse,
+                ExemptZone = InExemptZone(entity) || (entity != null && IsRaidableBase(entity.transform.position))
+            };
+        }
+
+        private object DecidePlayerPlaced(BasePlayer player, BaseEntity entity, bool storageMessage)
+        {
+            NightshadeLootRules.OpenRequest request = BuildOpenRequest(
+                player, entity, IsVendingOpen(player, entity) || IsDropBoxOpen(player, entity));
+            if (NightshadeLootRules.AllowPlayerPlacedOpen(request)) return null;
+            if (player != null && storageMessage && _config.ChatAlerts.StorageBlocked)
+            {
+                if (request.RaidProtectedAgainstOutsiders)
+                    player.ChatMessage("<color=#A04A4A>This container is in a raid-protected base. It cannot be damaged right now.</color>");
+                else
+                    player.ChatMessage("<color=#A04A4A>This container belongs to another player. Teammates can open it. Everyone else has to destroy it.</color>");
+            }
+            return false;
+        }
+
+        [HookMethod("AddExemptZone")]
+        public bool AddExemptZone(string zoneId, Vector3 center, float radius)
+        {
+            if (string.IsNullOrEmpty(zoneId) || radius <= 0f) return false;
+            _exemptZones[zoneId] = new ExemptZone { Center = center, Radius = radius };
+            return true;
+        }
+
+        [HookMethod("RemoveExemptZone")]
+        public bool RemoveExemptZone(string zoneId)
+        {
+            if (string.IsNullOrEmpty(zoneId)) return false;
+            return _exemptZones.Remove(zoneId);
         }
 
         #endregion
 
         #region Damage Tracking
 
+        // Event damage tracking only. This does not block damage to player containers.
+        // NightshadeRaidProtection is what stops damage while a base is protected.
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null) return null;
 
-            // Immune CH47 — cancel all damage until cargo is dropped
+            // Immune CH47 - cancel all damage until cargo is dropped
             // Belt-and-suspenders: add to immune set here in case OnEntitySpawned missed it
             if (entity is CH47Helicopter)
             {
@@ -588,7 +1050,7 @@ namespace Carbon.Plugins
 
         #region Loot Access Control
 
-        // Carbon requires typed overloads — a single BaseEntity signature misses most container types
+        // Carbon requires typed overloads  -  a single BaseEntity signature misses most container types
         private object CanLootEntity(BasePlayer player, StorageContainer container) => CheckLootAccess(player, container);
         private object CanLootEntity(BasePlayer player, ContainerIOEntity container) => CheckLootAccess(player, container);
         private object CanLootEntity(BasePlayer player, LootableCorpse corpse) => CheckLootAccess(player, corpse);
@@ -598,6 +1060,8 @@ namespace Carbon.Plugins
         private object CheckLootAccess(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return null;
+            if (IsPlayerPlacedStorage(entity))
+                return DecidePlayerPlaced(player, entity, true);
             if (IsWeekendPvp(player))
             {
                 if (IsLootProtectedByRaidShield(player, entity))
@@ -704,6 +1168,14 @@ namespace Carbon.Plugins
         {
             if (!_config.WeaponRackProtection.Enabled) return null;
             if (player == null || rack == null) return null;
+            if (NightshadeLootRules.IsPlayerSteamId(rack.OwnerID))
+            {
+                if (NightshadeLootRules.AllowPlayerPlacedOpen(BuildOpenRequest(player, rack, false, true)))
+                    return null;
+                if (_config.ChatAlerts.WeaponRackBlocked)
+                    player.ChatMessage("<color=#A04A4A>This weapon rack belongs to another player. Teammates can open it. Everyone else has to destroy it.</color>");
+                return false;
+            }
             if (IsWeekendPvp(player)) return null;
             if (player.IsAdmin) return null;
 
@@ -725,7 +1197,7 @@ namespace Carbon.Plugins
             return false;
         }
 
-        // CanHackCrate gives us the actual initiating player — no proximity guessing needed
+        // CanHackCrate gives us the actual initiating player  -  no proximity guessing needed
         private void CanHackCrate(BasePlayer player, HackableLockedCrate crate)
         {
             if (!_config.HackableCrate.Enabled) return;
@@ -757,7 +1229,7 @@ namespace Carbon.Plugins
             player.ChatMessage($"<color=#88D66C>Hackable crate locked to you for {_config.HackableCrate.LockForSeconds / 60} minutes.</color>");
         }
 
-        // Fired when a supply signal is thrown — track signal item UID -> thrower
+        // Fired when a supply signal is thrown  -  track signal item UID -> thrower
         private void OnExplosiveDropped(BaseEntity entity, Item item, BasePlayer player)
         {
             if (!_config.SupplyDrop.Enabled) return;
@@ -767,7 +1239,7 @@ namespace Carbon.Plugins
             _pendingSupplyOwners[entity.net.ID.Value] = player.userID;
         }
 
-        // Fired when an NPC corpse spawns — transfer ownership from the NPC death position
+        // Fired when an NPC corpse spawns  -  transfer ownership from the NPC death position
         private void OnEntitySpawned(LootableCorpse corpse)
         {
             if (corpse == null || corpse.playerSteamID.IsSteamId()) return; // skip player corpses
@@ -805,7 +1277,7 @@ namespace Carbon.Plugins
             };
         }
 
-        // Fired when a CH47 spawns — mark all CH47s immune until they drop cargo
+        // Fired when a CH47 spawns  -  mark all CH47s immune until they drop cargo
         // We can't reliably detect Bradley-drop CH47s at spawn time so we protect all of them;
         // regular patrol/transport CH47s don't carry lootable cargo so there's no downside
         private void OnEntitySpawned(CH47Helicopter ch47)
@@ -814,7 +1286,7 @@ namespace Carbon.Plugins
             _immuneCh47s.Add(ch47.net.ID.Value);
         }
 
-        // Fired when a CH47 drops its cargo — lift immunity so it can be engaged normally
+        // Fired when a CH47 drops its cargo  -  lift immunity so it can be engaged normally
         private void OnCh47DropCargo(CH47Helicopter ch47, BaseEntity cargo)
         {
             if (ch47 == null) return;
@@ -828,7 +1300,7 @@ namespace Carbon.Plugins
             if (SkipEventOwnership()) return;
 
             // Match this drop to the signal entity closest to the drop position
-            // that still has a pending owner — find the signal by proximity
+            // that still has a pending owner  -  find the signal by proximity
             ulong ownerId = 0;
             ulong matchedSignalId = 0;
             float closestDist = float.MaxValue;
@@ -847,7 +1319,7 @@ namespace Carbon.Plugins
                 }
             }
 
-            // Fallback: if all signal entities are gone (normal — they despawn), take any pending owner
+            // Fallback: if all signal entities are gone (normal  -  they despawn), take any pending owner
             if (ownerId == 0 && _pendingSupplyOwners.Count > 0)
             {
                 foreach (var kvp in _pendingSupplyOwners)
@@ -923,10 +1395,17 @@ namespace Carbon.Plugins
         #region Vending Machine Protection
 
         // Protects the admin/back panel of vending machines from unauthorized editing
-        // Buying (PlayerInfront) is always allowed — handled by IsVendingOpen in CanLootEntity
+        // Buying (PlayerInfront) is always allowed  -  handled by IsVendingOpen in CanLootEntity
         private object CanAdministerVending(BasePlayer player, VendingMachine machine)
         {
             if (machine == null || player == null) return null;
+            if (IsPlayerPlacedStorage(machine))
+            {
+                object decision = DecidePlayerPlaced(player, machine, false);
+                if (decision != null && _config.ChatAlerts.VendingAdminBlocked)
+                    player.ChatMessage("<color=#A04A4A>You cannot administer this vending machine.</color>");
+                return decision;
+            }
             if (IsWeekendPvp(player)) return null;
             if (player.IsAdmin) return null;
 
@@ -963,11 +1442,18 @@ namespace Carbon.Plugins
         private object CanPickupEntity(BasePlayer player, BaseCombatEntity entity)
         {
             if (entity == null || player == null) return null;
+
+            // Vehicles stay on their own rules. A player-owned storage box still cannot be picked up by a stranger.
+            if (entity is BaseVehicle || entity is BaseVehicleModule) return null;
+            if (IsPlayerPlacedStorage(entity))
+            {
+                object decision = DecidePlayerPlaced(player, entity, false);
+                if (decision != null && _config.ChatAlerts.PickupBlocked)
+                    player.ChatMessage("<color=#A04A4A>You cannot pick up another player's container. Teammates can. Everyone else has to destroy it.</color>");
+                return decision;
+            }
             if (IsWeekendPvp(player)) return null;
             if (player.IsAdmin) return null;
-
-            // Exclude vehicles — fuel/storage interaction should not be blocked by pickup protection
-            if (entity is BaseVehicle || entity is BaseVehicleModule) return null;
 
             // Skip protection inside RaidableBases zones
             if (IsRaidableBase(entity.transform.position)) return null;
@@ -1001,6 +1487,13 @@ namespace Carbon.Plugins
         private object CanToggle(BaseOven oven, BasePlayer player)
         {
             if (oven == null || player == null) return null;
+            if (IsPlayerPlacedStorage(oven))
+            {
+                object decision = DecidePlayerPlaced(player, oven, false);
+                if (decision != null && _config.ChatAlerts.OvenToggleBlocked)
+                    player.ChatMessage("<color=#A04A4A>You cannot toggle another player's oven.</color>");
+                return decision;
+            }
             if (IsWeekendPvp(player)) return null;
             if (player.IsAdmin) return null;
 
@@ -1054,7 +1547,7 @@ namespace Carbon.Plugins
 
         private bool IsAuthorizedOrTeammate(BasePlayer player, BuildingPrivlidge priv)
         {
-            // Direct TC auth only — being a teammate of someone who is authed is NOT sufficient
+            // Direct TC auth only  -  being a teammate of someone who is authed is NOT sufficient
             return priv.IsAuthed(player);
         }
 
@@ -1104,17 +1597,22 @@ namespace Carbon.Plugins
             foreach (var pos in stalePositions)
                 _npcDeathPositions.Remove(pos);
 
-            Puts($"[UnifiedLootProtection] Cleaned {expired.Count} expired ownership records. Active: {_entityOwnership.Count}");
+            Puts("NightshadeLootProtection cleaned " + expired.Count + " expired ownership records. Active: " + _entityOwnership.Count);
             SaveShareData();
         }
 
-        // Called when a new save file is created — i.e. a wipe happened
+        // Rust forced wipe (and any new map save). Clears per-wipe data only.
+        // Config and permission grants stay. Legacy files are not imported again.
         private void OnNewSave(string filename)
         {
-            _shareData.Clear();
-            _entityOwnership.Clear();
-            SaveShareData();
-            Puts("[UnifiedLootProtection] Wipe detected — cleared all share and ownership data.");
+            ClearPerWipeData("OnNewSave");
+            string wipeId = string.IsNullOrEmpty(filename) ? "unknown|pending" : filename + "|pending";
+            DateTime created;
+            if (TryReadWipe(out string id, out _))
+                wipeId = id;
+            WriteWipeState(new WipeState { WipeId = wipeId, LegacySettled = true });
+            _dataReady = true;
+            Puts("NightshadeLootProtection wipe: OnNewSave for '" + (filename ?? "") + "' (wipe id " + wipeId + "). Cleared shares.json, knownplayers.json, and tcturretauth.json. Config and permission grants were kept. Legacy UnifiedLootProtection data will not be imported.");
         }
 
         private void OnEntityKill(BaseNetworkable entity)
@@ -1200,10 +1698,10 @@ namespace Carbon.Plugins
             {
                 player.ChatMessage(
                     "<color=#88D66C>Look at a container and use:</color>\n" +
-                    "<color=#88D66C>/share <playername></color> — Share this container\n" +
-                    "<color=#88D66C>/share remove <playername></color> — Remove their access\n" +
-                    "<color=#88D66C>/share list</color> — See who has access to this container\n" +
-                    "<color=#88D66C>/share clear</color> — Remove all shares from this container");
+                    "<color=#88D66C>/share <playername></color>  -  Share this container\n" +
+                    "<color=#88D66C>/share remove <playername></color>  -  Remove their access\n" +
+                    "<color=#88D66C>/share list</color>  -  See who has access to this container\n" +
+                    "<color=#88D66C>/share clear</color>  -  Remove all shares from this container");
                 return;
             }
 
@@ -1372,9 +1870,10 @@ namespace Carbon.Plugins
         }
 
         [ChatCommand("ulp")]
+        [ChatCommand("nlp")]
         private void CmdUlp(BasePlayer player, string command, string[] args)
         {
-            if (!permission.UserHasPermission(player.UserIDString, PermAdmin))
+            if (!HasAdminPerm(player))
             {
                 player.ChatMessage("<color=#A04A4A>You don't have permission to use this command.</color>");
                 return;
@@ -1383,10 +1882,11 @@ namespace Carbon.Plugins
             if (args.Length == 0)
             {
                 player.ChatMessage(
-                    "<color=#88D66C>/ulp unlock</color> — Remove ownership lock from entity you're looking at\n" +
-                    "<color=#88D66C>/ulp info</color> — Show full ownership info for entity you're looking at\n" +
-                    "<color=#88D66C>/ulp weekend</color> — Show global TruePVE, Purge and raid window status\n" +
-                    "<color=#88D66C>/ulp check [playername]</color> — Audit access to the box you're looking at");
+                    "<color=#88D66C>/nlp unlock</color> - Remove ownership lock from entity you're looking at\n" +
+                    "<color=#88D66C>/nlp info</color> - Show full ownership info for entity you're looking at\n" +
+                    "<color=#88D66C>/nlp weekend</color> - Show global TruePVE, Purge and raid window status\n" +
+                    "<color=#88D66C>/nlp check [playername]</color> - Audit access to the box you're looking at\n" +
+                    "<color=#88D66C>/ulp</color> - Same commands");
                 return;
             }
 
@@ -1400,7 +1900,8 @@ namespace Carbon.Plugins
                 bool forced = IsFullPvPForced();
                 bool purge = IsPurgeActive();
                 bool bypass = IsWeekendPvp(player);
-                player.ChatMessage($"<color=#B084FF>Nightshade Access</color> | TruePVE global: {globalRule} | Mapping (diagnostic only): {mapping} | Real ET weekend: {clock} | Full force: {forced} | NRP API: {nrp} | Purge: {purge} | Open raids/loot: {bypass} | Sleeper looting: PROTECTED");
+                bool openBoxes = _config.WeekendPvP != null && _config.WeekendPvP.OpenPlayerStorageToNonTeammates && bypass;
+                player.ChatMessage($"<color=#B084FF>Nightshade Access</color> | TruePVE global: {globalRule} | Mapping (diagnostic only): {mapping} | Real ET weekend: {clock} | Full force: {forced} | NRP API: {nrp} | Purge: {purge} | Event loot open: {bypass} | Non-team player boxes: {(openBoxes ? "OPEN" : "CLOSED")} | Sleeper looting: PROTECTED | Code locks: ENFORCED");
                 return;
             }
 
@@ -1434,12 +1935,17 @@ namespace Carbon.Plugins
                 }
                 string why;
                 bool weekdayPermit = CanPlayerUseStorage(subject, entity, out why);
-                bool publicExempt = PublicEntities.Contains(entity.ShortPrefabName);
-                BuildingPrivlidge tc = GetStorageTc(entity);
+                bool placed = IsPlayerPlacedStorage(entity);
+                BuildingPrivlidge tc = OwnBuildingCupboard(entity);
                 bool open = IsWeekendPvp(subject);
-                bool raidProtected = open && IsLootProtectedByRaidShield(subject, entity);
-                bool permitted = open ? !raidProtected : publicExempt || !_config.StorageProtection.Enabled || weekdayPermit;
-                player.ChatMessage($"<color=#B084FF>ULP STORAGE CHECK</color> {subject.displayName} | {entity.ShortPrefabName} | Box owner: {entity.OwnerID} | TC owner: {(tc == null ? 0UL : tc.OwnerID)} | Team: {subject.currentTeam} | PvP/Purge: {open} | Shield/ORP: {raidProtected} | Weekday rule: {weekdayPermit} ({why}) | Storage decision: {(permitted ? "ALLOW" : "DENY")}");
+                bool raidProtected = IsRaidProtectedAgainstOutsiders(entity);
+                NightshadeLootRules.OpenRequest request = BuildOpenRequest(subject, entity, IsVendingOpen(subject, entity) || IsDropBoxOpen(subject, entity));
+                bool permitted = placed
+                    ? NightshadeLootRules.AllowPlayerPlacedOpen(request)
+                    : open
+                        ? !IsLootProtectedByRaidShield(subject, entity)
+                        : IsUtilityPublic(entity) || PublicEntities.Contains(entity.ShortPrefabName) || !_config.StorageProtection.Enabled || weekdayPermit;
+                player.ChatMessage($"<color=#B084FF>NLP STORAGE CHECK</color> {subject.displayName} | {entity.ShortPrefabName} | Box owner: {entity.OwnerID} | Own building TC owner: {(tc == null ? 0UL : tc.OwnerID)} | Team: {subject.currentTeam} | Player-placed: {placed} | PvP/Purge: {open} | Outsider raid block: {raidProtected} | Non-team weekend open: {request.OpenPlayerStorageOnWeekend} | Other storage rule: {weekdayPermit} ({why}) | Storage decision: {(permitted ? "ALLOW" : "DENY")} | Code lock: still enforced");
                 return;
             }
 
@@ -1526,4 +2032,5 @@ namespace Carbon.Plugins
 
         #endregion
     }
+#endif
 }

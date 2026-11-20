@@ -200,7 +200,7 @@
                       "Tone (body, accent, warn, muted)": "warn"
                     },
                     {
-                      "Text": "• You, your teammate, TC auth, or someone you /share with can open them.",
+                      "Text": "• You and your Rust teammate can open each other's placed boxes, furnaces, fridges, lockers, and vending storage. TC auth does not. A code lock still applies. /share can open one container. Anyone else has to destroy it, and raid protection stops that damage while it is on.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
@@ -520,7 +520,7 @@
                   "Heading": "LOOT PROTECTION",
                   "Lines": [
                     {
-                      "Text": "• Boxes, furnaces, and TC storage: you, your teammate, or TC auth. /share opens one container for someone else.",
+                      "Text": "• Placed boxes, furnaces, fridges, lockers, and vending storage are shared with your Rust teammate. TC auth does not open them. Anyone else has to destroy the container. Raid protection stops that damage while it is on. /share can still open one container. A code lock still applies. The PvP weekend and Purge do not open these.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
