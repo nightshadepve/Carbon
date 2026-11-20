@@ -189,6 +189,20 @@ namespace Oxide.Plugins
             };
         }
 
+        // The plugin ORs a persisted full-weekend force onto the Eastern window.
+        // The protection-only switch is not an input here.
+        public static bool EffectiveActive(bool scheduledActive, bool fullForce)
+        {
+            return scheduledActive || fullForce;
+        }
+
+        // Faketime must not rewrite TruePVE.json. A persisted full-weekend force uses
+        // the normal write-and-reload path, and only when Decide says the target changed.
+        public static bool SkipRulesetFile(bool fakeTime, bool fullForce)
+        {
+            return fakeTime && !fullForce;
+        }
+
         // Steady state is a compare: no write, no tpve.ruleset, no reload.
         // Write and reload only when the target changed or the file disagrees
         // (stale Default RuleSet, or Schedule.enabled, including after another plugin reloads TruePVE).
@@ -499,7 +513,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.3")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.4")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -554,6 +568,14 @@ namespace Oxide.Plugins
         private const int MaxForceGraceMinutes = 10080;
         private const float ForceOfflineWarningSeconds = 300f;
 
+        // Persisted full-server weekend. While on, the scheduled window is treated as open
+        // everywhere the real weekend is: TruePVE (existing Decide/Apply path, reload only
+        // when the target changes), excavator boost, offline protection, API_IsPvPActive,
+        // and the HUD/info listeners of that API. Paid shields stay on the real clock.
+        // nsraid.forcepvp on does not flip this. nsraid.pvpweekend does, and saves config.
+        private bool forceFullPvp;
+        private float nextFullForceWarning;
+
         private class Settings
         {
             [JsonProperty("Enable paid TC raid shields")] public bool PaidShields = true;
@@ -563,6 +585,9 @@ namespace Oxide.Plugins
             // enables the same in-memory offline-protection override after each load. It still does
             // not switch TruePVE or the excavator.
             [JsonProperty("Force PvP weekend for testing")] public bool ForcePvpWeekendForTesting = false;
+            // Dev-server opt-in. False by default. nsraid.pvpweekend on|off saves this.
+            // A true value makes the whole server follow the PvP weekend until it is turned off.
+            [JsonProperty("Force full PvP weekend")] public bool ForceFullPvpWeekend = false;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
             [JsonProperty("Prevent teammates authorized on TC from damaging their own shielded building")] public bool ProtectFromAuthorizedPlayers = false;
             [JsonProperty("Share protection with the owner's directly overlapping cupboards")] public bool ShareOverlappingCupboards = true;
@@ -613,10 +638,13 @@ namespace Oxide.Plugins
             float excavatorMult = settings.Excavator.SpeedMultiplier;
             if (float.IsNaN(excavatorMult) || float.IsInfinity(excavatorMult) || excavatorMult < 0.01f)
                 settings.Excavator.SpeedMultiplier = NightshadeExcavatorBoost.DefaultSpeedMultiplier;
-            // Command overrides die with the plugin instance. Only the config key survives a reload.
+            // The protection-only override dies with the plugin instance unless its own config key is set.
+            // The full-weekend force is the config key, so a reload keeps it.
             forceOfflinePvp = settings.ForcePvpWeekendForTesting;
             forceOfflineGraceMinutes = null;
             nextForceOfflineWarning = 0f;
+            forceFullPvp = settings.ForceFullPvpWeekend;
+            nextFullForceWarning = 0f;
             SaveConfig();
         }
         protected override void SaveConfig() => Config.WriteObject(settings, true);
@@ -628,9 +656,11 @@ namespace Oxide.Plugins
             cmd.AddChatCommand("raidvoucher", this, nameof(RedeemCommand));
             cmd.AddChatCommand("raidshield", this, nameof(StatusCommand));
             cmd.AddChatCommand("nsraidtest", this, nameof(CmdNsRaidTest));
+            cmd.AddChatCommand("nsraidpvp", this, nameof(CmdNsRaidPvp));
             cmd.AddConsoleCommand("nrp.faketime", this, nameof(CmdFakeTime));
             cmd.AddConsoleCommand("nrp.window", this, nameof(CmdWindow));
             cmd.AddConsoleCommand("nsraid.forcepvp", this, nameof(CmdForcePvp));
+            cmd.AddConsoleCommand("nsraid.pvpweekend", this, nameof(CmdPvpWeekend));
             try { store = Interface.Oxide.DataFileSystem.ReadObject<Store>(DataPath) ?? new Store(); }
             catch (Exception ex) { throw new Exception("Raid shield data could not be loaded: purchases disabled to prevent lost vouchers. " + ex.Message); }
             if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
@@ -686,6 +716,7 @@ namespace Oxide.Plugins
             rulesTimer = timer.Every(60f, OnReconcileTick);
             Puts("Weekend window is America/New_York Friday 8:00 PM through Monday 3:00 AM. Giant Excavator uses that same window.");
             WarnForcedOffline(true);
+            WarnFullForce(true);
         }
 
         private void OnPluginLoaded(Plugin plugin)
@@ -726,8 +757,12 @@ namespace Oxide.Plugins
         //     True during Friday 8:00 PM through Monday 3:00 AM America/New_York.
         //     A manual /purge is not included; ask Nightshade Purge Status API_IsPurgeActive.
         //     nrp.faketime and API_SetTestClockUtcTicks are included. API_ClearTestClock returns to the real clock.
-        //     nsraid.forcepvp / /nsraidtest are NOT included. That switch only lets this plugin's
-        //     offline protection treat the weekend as active. It does not change this API.
+        //     nsraid.pvpweekend (config "Force full PvP weekend") is included. While that force is on
+        //     this returns true even outside the Eastern window.
+        //     nsraid.forcepvp / /nsraidtest without "full" are NOT included. That switch only lets this
+        //     plugin's offline protection treat the weekend as active. It does not change this API.
+        // API_IsFullPvPForced() -> bool
+        //     True only for the persisted full-server force, not for the real window or the test clock.
         // API_HasTestClock() -> bool, API_GetTestClockUtcTicks() -> long (0 when the test clock is off)
         // API_SetTestClockUtcTicks(long utcTicks) -> bool, API_ClearTestClock() -> bool
         //     Memory only. TruePVE.json is not written. The excavator boost follows this clock.
@@ -735,9 +770,13 @@ namespace Oxide.Plugins
         //     The same excavator clause nrp.window prints.
         // API_SecondsUntilPvPChange() -> double
         //     Seconds until the window opens, or until it closes when it is already open.
+        //     -1 while the full-server force is holding PvP open outside the scheduled window
+        //     (there is no Monday end until the force is turned off or the real window opens).
         // API_GetPvPStartUtcTicks() / API_GetPvPEndUtcTicks() -> long (DateTime UTC ticks)
         // API_GetWeekend() -> Dictionary
-        //     active (bool), startUtcTicks (long), endUtcTicks (long), secondsUntilChange (double), ruleset (string)
+        //     active (bool, effective), scheduled (bool), forced (bool), realActive (bool),
+        //     openEnded (bool), startUtcTicks (long), endUtcTicks (long),
+        //     secondsUntilChange (double), ruleset (string)
         // API_GetPlayerShield(BasePlayer) -> Dictionary
         // API_GetCupboardShield(ulong cupboardNetId) -> Dictionary
         // API_GetBuildingShield(uint buildingId) -> Dictionary
@@ -754,18 +793,24 @@ namespace Oxide.Plugins
         public bool API_IsPvPActive()
         {
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
-            return active;
+            bool scheduled;
+            return EffectiveNow(NowUtc(), out start, out end, out scheduled);
+        }
+
+        [HookMethod("API_IsFullPvPForced")]
+        public bool API_IsFullPvPForced()
+        {
+            return forceFullPvp;
         }
 
         [HookMethod("API_SecondsUntilPvPChange")]
         public double API_SecondsUntilPvPChange()
         {
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
-            return SecondsUntilNow(start, end, active);
+            bool scheduled;
+            bool effective = EffectiveNow(NowUtc(), out start, out end, out scheduled);
+            if (effective && !scheduled) return -1d;
+            return SecondsUntilNow(start, end, scheduled);
         }
 
         [HookMethod("API_GetPvPStartUtcTicks")]
@@ -790,15 +835,23 @@ namespace Oxide.Plugins
         public Dictionary<string, object> API_GetWeekend()
         {
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            bool scheduled;
+            bool effective = EffectiveNow(NowUtc(), out start, out end, out scheduled);
+            DateTime realStart, realEnd;
+            bool realActive;
+            Weekend(DateTime.UtcNow, out realStart, out realEnd, out realActive);
+            bool openEnded = effective && !scheduled;
             return new Dictionary<string, object>
             {
-                ["active"] = active,
+                ["active"] = effective,
+                ["scheduled"] = scheduled,
+                ["forced"] = forceFullPvp,
+                ["realActive"] = realActive,
+                ["openEnded"] = openEnded,
                 ["startUtcTicks"] = start.Ticks,
                 ["endUtcTicks"] = end.Ticks,
-                ["secondsUntilChange"] = SecondsUntilNow(start, end, active),
-                ["ruleset"] = active ? settings.PvpRuleset : settings.PveRuleset
+                ["secondsUntilChange"] = openEnded ? -1d : SecondsUntilNow(start, end, scheduled),
+                ["ruleset"] = effective ? settings.PvpRuleset : settings.PveRuleset
             };
         }
 
@@ -863,7 +916,9 @@ namespace Oxide.Plugins
             fakeUtc = utc;
             CheckWindow();
             EnsureRuleset();
-            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. TruePVE.json is not changed. The Giant Excavator boost follows this clock. Clear with API_ClearTestClock or nrp.faketime clear.");
+            PrintWarning(forceFullPvp
+                ? "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. Full PvP weekend force is ON, so the server stays on the PvP weekend. The test clock does not turn that off."
+                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. TruePVE.json is not changed. The Giant Excavator boost follows this clock. Clear with API_ClearTestClock or nrp.faketime clear.");
             return true;
         }
 
@@ -874,7 +929,7 @@ namespace Oxide.Plugins
             fakeUtc = null;
             CheckWindow();
             EnsureRuleset();
-            PrintWarning("PvP test clock cleared via API. The live Eastern window is in use again.");
+            PrintWarning("PvP test clock cleared via API. The live Eastern window is in use again." + FullForceClockNote());
             return true;
         }
 
@@ -890,6 +945,14 @@ namespace Oxide.Plugins
         private void Weekend(DateTime utc, out DateTime startUtc, out DateTime endUtc, out bool active)
         {
             NightshadeWeekendClock.Evaluate(utc, eastern, out startUtc, out endUtc, out active);
+        }
+
+        // scheduled is the clock (real, or nrp.faketime when utc is NowUtc()).
+        // The return value is what the server should behave as.
+        private bool EffectiveNow(DateTime utc, out DateTime startUtc, out DateTime endUtc, out bool scheduled)
+        {
+            Weekend(utc, out startUtc, out endUtc, out scheduled);
+            return NightshadeWeekendClock.EffectiveActive(scheduled, forceFullPvp);
         }
 
         private DateTime ToUtc(DateTime easternWall)
@@ -1181,8 +1244,9 @@ namespace Oxide.Plugins
             bool active;
             // Real Eastern clock, same as before. nrp.faketime does not open this gate.
             Weekend(now, out start, out end, out active);
-            // forceOfflinePvp opens offline protection only. Paid shields still need the real weekend.
-            bool offlineWindow = active || forceOfflinePvp;
+            // forceOfflinePvp opens offline protection only. The full-server force opens it too.
+            // Paid shields still need the real weekend, so a forced weekday cannot drain a voucher.
+            bool offlineWindow = active || forceOfflinePvp || forceFullPvp;
             if (!offlineWindow) return null;
             uint buildingId = BuildingIdOf(entity);
             if (buildingId == 0u || BuildingManager.server == null) return null;
@@ -1259,6 +1323,7 @@ namespace Oxide.Plugins
             bool active;
             Weekend(now, out start, out end, out active);
             if (fakeUtc.HasValue) Reply(player, "Test clock is on. Window checks below are not the live clock. Clear it with nrp.faketime clear.");
+            if (forceFullPvp) Reply(player, "Full PvP weekend force is on. Raiding follows the PvP weekend. Paid shields still follow the real Eastern weekend.");
             Reply(player, active ? "PvP weekend ends in " + Format(end - now) + "." : "PvP weekend starts in " + Format(start - now) + ".");
             BuildingPrivlidge tc = TargetCupboard(player);
             if (tc == null) tc = player.GetBuildingPrivilege();
@@ -1302,8 +1367,8 @@ namespace Oxide.Plugins
         private void CheckWindow()
         {
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            bool scheduled;
+            bool active = EffectiveNow(NowUtc(), out start, out end, out scheduled);
             bool changed = windowReady && active != windowActive;
             windowActive = active;
             windowReady = true;
@@ -1314,7 +1379,10 @@ namespace Oxide.Plugins
                 else Interface.CallHook("OnNightshadePvPEnded", start.Ticks, end.Ticks);
                 EnsureRuleset();
                 RefreshShieldTimer();
-                Puts((active ? "PvP window opened. " : "PvP window closed. ") + FormatEdge(start) + " -> " + FormatEdge(end) + (fakeUtc.HasValue ? " (test clock)" : ""));
+                string when = FormatEdge(start) + " -> " + FormatEdge(end);
+                if (forceFullPvp && !scheduled) when = "full PvP weekend force (scheduled window " + when + ")";
+                else when = when + WindowNote();
+                Puts((active ? "PvP window opened. " : "PvP window closed. ") + when);
             }
             else
             {
@@ -1472,9 +1540,10 @@ namespace Oxide.Plugins
         {
             TouchConnectedPlayers();
             WarnForcedOffline(false);
+            WarnFullForce(false);
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            bool scheduled;
+            bool active = EffectiveNow(NowUtc(), out start, out end, out scheduled);
             if (windowReady && active != windowActive) CheckWindow();
             else
             {
@@ -1495,11 +1564,12 @@ namespace Oxide.Plugins
                 purgeActive = !string.IsNullOrEmpty(purgeRuleset);
             }
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            bool scheduled;
+            bool active = EffectiveNow(NowUtc(), out start, out end, out scheduled);
             string path = Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json");
             NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(path);
-            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Decide(state, appliedRuleset, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset, fakeUtc.HasValue);
+            bool skipFile = NightshadeWeekendClock.SkipRulesetFile(fakeUtc.HasValue, forceFullPvp);
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Decide(state, appliedRuleset, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset, skipFile);
             if (plan.Adopt || (!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand))
             {
                 appliedRuleset.Known = true;
@@ -1529,7 +1599,7 @@ namespace Oxide.Plugins
                         + (result.Wrote ? " (wrote Default RuleSet" + (plan.DisableSchedule ? ", schedule off" : "") + ")" : "")
                         + (result.RanRulesetCommand ? " via tpve.ruleset" : "")
                         + (result.Reloaded ? " and reloaded TruePVE" : "")
-                        + (fakeUtc.HasValue ? " (test clock)" : "")
+                        + WindowNote()
                         + ".");
             }
             finally
@@ -1544,21 +1614,41 @@ namespace Oxide.Plugins
             return local.ToString("ddd MMM d h:mm tt", CultureInfo.InvariantCulture) + " ET";
         }
 
+        private string WindowNote()
+        {
+            if (forceFullPvp) return " (full PvP weekend force)";
+            if (fakeUtc.HasValue) return " (test clock)";
+            return "";
+        }
+
+        private string FullForceClockNote()
+        {
+            if (!forceFullPvp) return "";
+            return " Full PvP weekend force is ON, so the server stays on the PvP weekend. The test clock does not turn that off.";
+        }
+
         private void CmdWindow(ConsoleSystem.Arg arg)
         {
             if (!ConsoleAdmin(arg)) return;
             DateTime start, end;
-            bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            bool scheduled;
+            bool active = EffectiveNow(NowUtc(), out start, out end, out scheduled);
+            DateTime realStart, realEnd;
+            bool realActive;
+            Weekend(DateTime.UtcNow, out realStart, out realEnd, out realActive);
             string purge = PurgeStatus != null && PurgeStatus.IsLoaded ? (PurgeStatus.Call("API_GetActiveRulesetOverride") as string ?? "inactive") : "(purge plugin not loaded)";
             bool purgeActive = purge != "inactive" && purge != "(purge plugin not loaded)";
             NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json"));
             NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Plan(state, purgeActive, purgeActive ? purge : null, active, settings.PvpRuleset, settings.PveRuleset);
             // CurrentRuleSetName is private and not a HookMethod, so Carbon Call cannot read the live ruleset.
             // The file's Default RuleSet is what TruePVE loads and what Info used to treat as purge.
+            double seconds = active && !scheduled ? -1d : SecondsUntilNow(start, end, scheduled);
             arg.ReplyWith("Window " + (active ? "ACTIVE" : "inactive")
+                + " | scheduled " + (scheduled ? "active" : "inactive")
+                + " | full force " + (forceFullPvp ? "ON" : "off")
+                + " | real weekend " + (realActive ? "active" : "inactive")
                 + " | " + FormatEdge(start) + " -> " + FormatEdge(end)
-                + " | seconds " + Math.Ceiling(SecondsUntilNow(start, end, active))
+                + " | seconds " + (seconds < 0d ? "open-ended" : Math.Ceiling(seconds).ToString(CultureInfo.InvariantCulture))
                 + " | target ruleset " + plan.Ruleset
                 + " | file ruleset " + (state.Found ? (string.IsNullOrEmpty(state.Ruleset) ? "(blank)" : state.Ruleset) : "unreadable")
                 + " | schedule " + (state.Found && state.ScheduleEnabled ? "ENABLED" : "off")
@@ -1597,7 +1687,7 @@ namespace Oxide.Plugins
                 fakeUtc = null;
                 CheckWindow();
                 EnsureRuleset();
-                PrintWarning("PvP test clock cleared. The live Eastern window is in use again.");
+                PrintWarning("PvP test clock cleared. The live Eastern window is in use again." + FullForceClockNote());
                 arg.ReplyWith("Test clock cleared.");
                 return;
             }
@@ -1629,7 +1719,9 @@ namespace Oxide.Plugins
             }
             CheckWindow();
             EnsureRuleset();
-            PrintWarning("PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. The Giant Excavator boost follows this clock until nrp.faketime clear.");
+            PrintWarning(forceFullPvp
+                ? "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). Full PvP weekend force is ON, so the server stays on the PvP weekend and TruePVE keeps the normal ruleset path. The test clock does not turn that off. Shield drain still uses the real clock."
+                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. The Giant Excavator boost follows this clock until nrp.faketime clear.");
             arg.ReplyWith("Test clock set to " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ").");
         }
 
@@ -1668,7 +1760,9 @@ namespace Oxide.Plugins
             Weekend(DateTime.UtcNow, out start, out end, out realActive);
             PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend is ON for offline protection only. Effective grace minutes: "
                 + grace + ". Real weekend: " + (realActive ? "active" : "inactive")
-                + ". TruePVE mode, TruePVE reloads, and Giant Excavator speed are not changed. In memory only. Turn it off with nsraid.forcepvp off.");
+                + ". This switch does not change TruePVE mode, TruePVE reloads, or Giant Excavator speed. "
+                + (forceFullPvp ? "Full server force is also ON (nsraid.pvpweekend). " : "In memory only. ")
+                + "Turn it off with nsraid.forcepvp off.");
         }
 
         private string ForcePvpStatus()
@@ -1680,21 +1774,29 @@ namespace Oxide.Plugins
             int grace = EffectiveOfflineGraceMinutes();
             if (grace < 0) grace = 0;
             bool configOn = settings != null && settings.ForcePvpWeekendForTesting;
+            string full = forceFullPvp
+                ? "\nFull server force is ON (nsraid.pvpweekend). That switch does change TruePVE, the excavator, and API_IsPvPActive."
+                : "\nTruePVE, excavator speed, and API_IsPvPActive are unchanged by this protection-only switch. Full server force: nsraid.pvpweekend status.";
             return "Force PvP weekend (offline protection only): " + (forceOfflinePvp ? "ON" : "OFF")
                 + "\nEffective grace minutes: " + grace
                 + "\nReal weekend: " + (realActive ? "active" : "inactive")
-                + "\nTruePVE, excavator speed, and API_IsPvPActive are unchanged. Not saved. A reload clears a command override"
+                + full
+                + "\nThis protection-only switch is not saved. A reload clears a command override"
                 + (configOn
                     ? ". Config \"Force PvP weekend for testing\" is true, so a reload turns it on again."
                     : " (config key is false).");
         }
 
-        // Console, RCON, and in-game admins. Does not write config, TruePVE, or excavator state.
+        // Console, RCON, and in-game admins.
+        // on/off/status is the protection-only switch and does not write config.
+        // "full" is the persisted server-wide force: it saves config and uses the normal TruePVE path.
         private string HandleForcePvp(string[] args)
         {
             if (args == null || args.Length == 0 || string.IsNullOrEmpty(args[0]))
-                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    /nsraidtest on [graceMinutes] | off | status";
+                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    nsraid.forcepvp full on|off|status    or    nsraid.pvpweekend on|off|status";
             string action = args[0];
+            if (action.Equals("full", StringComparison.OrdinalIgnoreCase))
+                return HandleFullPvp(ShiftArgs(args));
             if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
             {
                 if (args.Length != 1)
@@ -1714,12 +1816,12 @@ namespace Oxide.Plugins
                     string extra = settings != null && settings.ForcePvpWeekendForTesting
                         ? " Config \"Force PvP weekend for testing\" is still true, so a reload turns this back on."
                         : "";
-                    PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection is OFF. Offline protection follows the real Eastern weekend again. TruePVE and the Giant Excavator were not changed." + extra);
+                    PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection is OFF. Offline protection follows the real Eastern weekend again. TruePVE and the Giant Excavator were not changed." + extra + (forceFullPvp ? " Full server force is still ON." : ""));
                 }
                 return ForcePvpStatus();
             }
             if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
-                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    /nsraidtest on [graceMinutes] | off | status";
+                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    nsraid.forcepvp full on|off|status    or    nsraid.pvpweekend on|off|status";
             if (args.Length > 2)
                 return "Usage: nsraid.forcepvp on [graceMinutes]";
             int? grace = null;
@@ -1754,6 +1856,39 @@ namespace Oxide.Plugins
                 return;
             }
             string report = HandleForcePvp(args);
+            ReplyLines(player, report);
+        }
+
+        private void CmdPvpWeekend(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return;
+            // Server console and RCON have no in-game player. F1 still needs IsAdmin or the permission.
+            if (!(arg.IsRcon || arg.Connection == null || ConsoleAdmin(arg))) return;
+            arg.ReplyWith(HandleFullPvp(ConsoleArgs(arg)));
+        }
+
+        private void CmdNsRaidPvp(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!player.IsAdmin && !permission.UserHasPermission(player.UserIDString, PermAdmin))
+            {
+                Reply(player, "No permission.");
+                return;
+            }
+            ReplyLines(player, HandleFullPvp(args));
+        }
+
+        private static string[] ShiftArgs(string[] args)
+        {
+            if (args == null || args.Length <= 1) return new string[0];
+            string[] rest = new string[args.Length - 1];
+            for (int i = 1; i < args.Length; i++) rest[i - 1] = args[i];
+            return rest;
+        }
+
+        private static void ReplyLines(BasePlayer player, string report)
+        {
+            if (player == null || report == null) return;
             // One chat line per fact. A single message with newlines is easy to clip in game.
             string[] lines = report.Split('\n');
             for (int i = 0; i < lines.Length; i++)
@@ -1761,6 +1896,112 @@ namespace Oxide.Plugins
                 if (lines[i].Length == 0) continue;
                 Reply(player, lines[i]);
             }
+        }
+
+        private void ApplyFullForce(bool on)
+        {
+            if (settings == null) settings = new Settings();
+            forceFullPvp = on;
+            settings.ForceFullPvpWeekend = on;
+            nextFullForceWarning = 0f;
+            SaveConfig();
+            CheckWindow();
+            EnsureRuleset();
+        }
+
+        private void DescribeTruePve(out bool realActive, out string mode, out string target, out string fileRuleset)
+        {
+            DateTime start, end;
+            bool scheduled;
+            bool effective = EffectiveNow(NowUtc(), out start, out end, out scheduled);
+            Weekend(DateTime.UtcNow, out start, out end, out realActive);
+            string purgeName = null;
+            bool purgeActive = false;
+            if (settings != null && settings.YieldToPurge && PurgeStatus != null && PurgeStatus.IsLoaded)
+            {
+                purgeName = PurgeStatus.Call("API_GetActiveRulesetOverride") as string;
+                purgeActive = !string.IsNullOrEmpty(purgeName);
+            }
+            string pvp = settings != null && !string.IsNullOrEmpty(settings.PvpRuleset) ? settings.PvpRuleset : "nightshade_pvp_weekend";
+            string pve = settings != null && !string.IsNullOrEmpty(settings.PveRuleset) ? settings.PveRuleset : "default";
+            NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json"));
+            NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Plan(state, purgeActive, purgeActive ? purgeName : null, effective, pvp, pve);
+            target = plan.Ruleset ?? "";
+            if (plan.Reason == "purge") mode = "Purge";
+            else if (plan.Reason == "weekend") mode = "PvP";
+            else mode = "PvE";
+            if (!state.Found) fileRuleset = "unreadable";
+            else if (string.IsNullOrEmpty(state.Ruleset)) fileRuleset = "(blank)";
+            else fileRuleset = state.Ruleset;
+        }
+
+        private string FullPvpStatus()
+        {
+            bool realActive;
+            string mode;
+            string target;
+            string fileRuleset;
+            DescribeTruePve(out realActive, out mode, out target, out fileRuleset);
+            DateTime start, end;
+            bool scheduled;
+            bool effective = EffectiveNow(NowUtc(), out start, out end, out scheduled);
+            bool saved = settings != null && settings.ForceFullPvpWeekend;
+            return "Full PvP weekend force: " + (forceFullPvp ? "ON" : "OFF")
+                + "\nReal weekend: " + (realActive ? "active" : "inactive")
+                + "\nEffective TruePVE mode: " + mode + " (" + target + ")"
+                + "\nScheduled window: " + (scheduled ? "active" : "inactive") + " (" + FormatEdge(start) + " -> " + FormatEdge(end) + ")"
+                + "\nEffective weekend: " + (effective ? "active" : "inactive")
+                + "\nConfig \"Force full PvP weekend\": " + (saved ? "true" : "false")
+                + "\nTruePVE file ruleset: " + fileRuleset
+                + "\nTest clock: " + (fakeUtc.HasValue ? "on" : "off")
+                + "\nExcavator: " + (excavatorStatus ?? "excavator not checked")
+                + "\nPaid TC shields follow the real weekend only.";
+        }
+
+        private string HandleFullPvp(string[] args)
+        {
+            if (args == null || args.Length != 1 || string.IsNullOrEmpty(args[0]))
+                return "Usage: nsraid.pvpweekend on | off | status    or    nsraid.forcepvp full on|off|status";
+            string action = args[0];
+            if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
+                return FullPvpStatus();
+            if (action.Equals("off", StringComparison.OrdinalIgnoreCase))
+            {
+                bool wasOn = forceFullPvp;
+                ApplyFullForce(false);
+                if (wasOn)
+                {
+                    bool realActive;
+                    string mode;
+                    string target;
+                    string fileRuleset;
+                    DescribeTruePve(out realActive, out mode, out target, out fileRuleset);
+                    PrintWarning("NightshadeRaidProtection: FULL PvP weekend force is OFF. The Eastern schedule is in use again. Real weekend: "
+                        + (realActive ? "active" : "inactive") + ". Effective TruePVE mode: " + mode + " (" + target + ").");
+                }
+                return FullPvpStatus();
+            }
+            if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
+                return "Usage: nsraid.pvpweekend on | off | status    or    nsraid.forcepvp full on|off|status";
+            ApplyFullForce(true);
+            WarnFullForce(true);
+            return FullPvpStatus();
+        }
+
+        private void WarnFullForce(bool immediate)
+        {
+            if (!forceFullPvp) return;
+            float now = Time.realtimeSinceStartup;
+            if (!immediate && now < nextFullForceWarning) return;
+            nextFullForceWarning = now + ForceOfflineWarningSeconds;
+            bool realActive;
+            string mode;
+            string target;
+            string fileRuleset;
+            DescribeTruePve(out realActive, out mode, out target, out fileRuleset);
+            PrintWarning("NightshadeRaidProtection: FULL PvP weekend force is ON. Real weekend: "
+                + (realActive ? "active" : "inactive") + ". Effective TruePVE mode: " + mode + " (" + target
+                + "). Saved in config \"Force full PvP weekend\". Turn it off with nsraid.pvpweekend off.");
         }
 
         #endregion
@@ -1970,7 +2211,7 @@ namespace Oxide.Plugins
             excavatorStatus = text;
             if (quiet || text == excavatorLogSignature) return;
             excavatorLogSignature = text;
-            Puts(text + (fakeUtc.HasValue ? " (test clock)" : "") + ".");
+            Puts(text + WindowNote() + ".");
         }
 
         private static void CollectExcavatorParts(List<ExcavatorArm> arms, List<DieselEngine> engines)

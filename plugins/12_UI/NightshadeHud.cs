@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.1.1")]
+    [Info("NightshadeHud", "Nightshade", "1.1.2")]
     [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, TC shield, and event labels.")]
     public class NightshadeHud : RustPlugin
     {
@@ -1220,7 +1220,9 @@ namespace Oxide.Plugins
             }
             bool active = CallBool(NightshadeRaidProtection, "API_IsPvPActive");
             double seconds = ToDouble(NightshadeRaidProtection.Call("API_SecondsUntilPvPChange"));
-            text = active ? "PVP \u00B7 ends in " + FormatDur(seconds) : "PvP in " + FormatDur(seconds);
+            // -1 means the full-server force is holding PvP open with no scheduled end.
+            if (active && seconds < 0d) text = "PVP";
+            else text = active ? "PVP \u00B7 ends in " + FormatDur(seconds) : "PvP in " + FormatDur(seconds);
             color = Hex(active ? config.CountdownActive : config.CountdownIdle);
         }
 
