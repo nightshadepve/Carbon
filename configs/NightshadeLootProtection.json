@@ -69,5 +69,6 @@
     "TruePVE Purge ruleset name": "purge",
     "Keep TC authorization restricted during raiding": true,
     "Open player-placed storage to non-teammates during PvP weekend and Purge": false
-  }
+  },
+  "Log cleanup summary": false
 }
