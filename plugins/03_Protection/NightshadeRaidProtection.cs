@@ -476,13 +476,18 @@ namespace Oxide.Plugins
             return decision;
         }
 
-        // Privilege spheres intersect. Radius is the tool cupboard privilege radius.
-        // This is one hop only: callers must not walk from a matched neighbor to its neighbors.
-        public static bool PrivilegeZonesOverlap(float distanceMeters, float radiusMeters)
+        // Closest gap between two buildings' block bounds, in metres (OBB.Distance).
+        // BaseEntity.GetBuildingPrivilege treats a query as inside a block when that gap
+        // is not greater than 16 (the same value as BuildingPrivlidge.Radius). The privilege
+        // volume around a block is that 16m cushion. Two volumes intersect when the gap
+        // between the blocks is at most twice the cushion. One hop only: callers must not
+        // walk from a matched neighbor to its neighbors.
+        public static bool PrivilegeZonesOverlap(float closestBlockGapMeters, float cushionMeters)
         {
-            if (radiusMeters <= 0f || float.IsNaN(distanceMeters) || float.IsInfinity(distanceMeters) || distanceMeters < 0f)
+            if (cushionMeters <= 0f || float.IsNaN(cushionMeters) || float.IsInfinity(cushionMeters)) return false;
+            if (float.IsNaN(closestBlockGapMeters) || float.IsInfinity(closestBlockGapMeters) || closestBlockGapMeters < 0f)
                 return false;
-            return distanceMeters <= radiusMeters * 2f;
+            return closestBlockGapMeters <= cushionMeters * 2f;
         }
 
         public static bool SameOwnerOnOverlap(ulong protectedOwnerId, ulong steamIdMinimum, bool authorizedOnOverlap, bool isOverlapOwner)
@@ -575,8 +580,99 @@ namespace Oxide.Plugins
         }
     }
 
+    // Paid shield time. Seconds drain only while the real Eastern weekend is open,
+    // and only from the front of the queue. A test clock and a forced weekend do not
+    // reach this helper: callers pass the real UTC clock.
+    public static class NightshadeShieldTime
+    {
+        public struct Slice
+        {
+            public ulong BuyerId;
+            public double RemainingSeconds;
+        }
+
+        public static double Total(Slice[] slices, int count)
+        {
+            if (slices == null || count <= 0) return 0d;
+            if (count > slices.Length) count = slices.Length;
+            double total = 0d;
+            for (int i = 0; i < count; i++)
+            {
+                double seconds = slices[i].RemainingSeconds;
+                if (seconds > 0d && !double.IsNaN(seconds) && !double.IsInfinity(seconds)) total += seconds;
+            }
+            return total;
+        }
+
+        // Remove seconds from the front. Spent slices are dropped. Order of the rest is kept.
+        public static int Consume(Slice[] slices, int count, double seconds)
+        {
+            if (slices == null || count <= 0) return 0;
+            if (count > slices.Length) count = slices.Length;
+            if (seconds > 0d && !double.IsNaN(seconds) && !double.IsInfinity(seconds))
+            {
+                for (int i = 0; i < count && seconds > 0d; i++)
+                {
+                    double have = slices[i].RemainingSeconds;
+                    if (have <= 0d || double.IsNaN(have) || double.IsInfinity(have))
+                    {
+                        slices[i].RemainingSeconds = 0d;
+                        continue;
+                    }
+                    double take = have < seconds ? have : seconds;
+                    slices[i].RemainingSeconds = have - take;
+                    seconds -= take;
+                }
+            }
+            int write = 0;
+            for (int i = 0; i < count; i++)
+            {
+                if (slices[i].RemainingSeconds <= 0.0001d) continue;
+                slices[write++] = slices[i];
+            }
+            return write;
+        }
+
+        // Seconds of [from, now) that sit inside Friday 20:00 through Monday 03:00 Eastern.
+        public static double WeekendOverlapSeconds(DateTime fromUtc, DateTime nowUtc, TimeZoneInfo zone)
+        {
+            if (zone == null) zone = TimeZoneInfo.Utc;
+            DateTime cursor = DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc);
+            DateTime endAt = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
+            if (endAt <= cursor) return 0d;
+            double total = 0d;
+            for (int i = 0; i < 64 && cursor < endAt; i++)
+            {
+                DateTime start;
+                DateTime end;
+                bool active;
+                NightshadeWeekendClock.Evaluate(cursor, zone, out start, out end, out active);
+                if (active)
+                {
+                    DateTime sliceEnd = endAt < end ? endAt : end;
+                    if (sliceEnd > cursor) total += (sliceEnd - cursor).TotalSeconds;
+                    if (end <= cursor) break;
+                    cursor = end;
+                    continue;
+                }
+                if (start <= cursor || start >= endAt) break;
+                cursor = start;
+            }
+            return total;
+        }
+
+        // Records saved before the queue stored an expiry. A past expiry is already spent.
+        // No expiry, or an expiry still in the future, keeps the stored seconds.
+        public static bool LegacyStillRunning(long expiresUtcTicks, double remainingSeconds, DateTime nowUtc)
+        {
+            if (remainingSeconds <= 0d || double.IsNaN(remainingSeconds) || double.IsInfinity(remainingSeconds)) return false;
+            if (expiresUtcTicks <= 0L) return true;
+            return expiresUtcTicks > nowUtc.Ticks;
+        }
+    }
+
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.6")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.7")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -663,9 +759,12 @@ namespace Oxide.Plugins
             [JsonProperty("Force full PvP weekend")] public bool ForceFullPvpWeekend = false;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
             [JsonProperty("Prevent teammates authorized on TC from damaging their own shielded building")] public bool ProtectFromAuthorizedPlayers = false;
-            // One switch for both protections. Paid shields cover a neighbor only while the
-            // buyer is on that neighbor's auth list. Offline protection uses the same 32m hop.
+            // One switch for both protections. Paid shields cover a neighbor only while one
+            // of that shield's buyers is on the neighbor's auth list. Offline protection uses
+            // the same one-hop privilege overlap (block bounds, not a 32m TC-center sphere).
             [JsonProperty("Share protection with the owner's directly overlapping cupboards")] public bool ShareOverlappingCupboards = true;
+            // Map wipe destroys every TC. Shields are cleared with the wipe unless this is on.
+            [JsonProperty("Keep paid shields across a map wipe")] public bool KeepPaidShieldsOnWipe = false;
             [JsonProperty("Show blocked-hit message to attacker (rate limited)")] public bool NotifyAttacker = true;
             [JsonProperty("Maximum total paid shield time on one TC in hours")] public int MaximumStackedHours = 72;
             [JsonProperty("Drive TruePVE from the Eastern weekend window")] public bool DriveTruePve = true;
@@ -682,15 +781,25 @@ namespace Oxide.Plugins
             [JsonProperty("KeepYieldPerDiesel")] public bool KeepYieldPerDiesel = true;
         }
 
+        private class ShieldEntry
+        {
+            public ulong BuyerSteamId;
+            public double RemainingSeconds;
+        }
+
         private class Shield
         {
             public ulong CupboardId;
             public uint BuildingId;
-            // Steam id of the player who redeemed the voucher. 0 on shields saved before 1.4.6.
+            // Steam id of the player who redeemed the first voucher. 0 on shields saved before 1.4.6.
+            // Each queue entry has its own buyer. This field is the legacy single buyer.
             public ulong OwnerSteamId;
             public double RemainingSeconds;
             public long LastAccountedTicks;
+            // Set on records saved before 1.4.7. Cleared once the record is a queue.
+            // A past value means the old Monday expiry already spent the shield.
             public long ExpiresUtcTicks;
+            public List<ShieldEntry> Queue;
         }
 
         private struct ScaleResult
@@ -708,9 +817,40 @@ namespace Oxide.Plugins
             // Legacy UID records retained solely for compatibility with previously saved data.
             public HashSet<ulong> LegitimateVoucherUids = new HashSet<ulong>();
             public Dictionary<ulong, long> LastSeenUtcTicks = new Dictionary<ulong, long>();
+            // SaveRestore.SaveCreatedTime ticks from the map this data was last saved with.
+            // Empty until the first load that records it. A later change is a wipe.
+            public string SaveId;
         }
 
         private readonly Dictionary<ulong, float> notifyThrottle = new Dictionary<ulong, float>();
+        // BaseEntity.GetBuildingPrivilege uses a 16m gap against each block's world OBB.
+        private const float OverlapCacheSeconds = 5f;
+        private const float ForeignBlockSlopMeters = 16f;
+        private const float OverlapCellMeters = 16f;
+        private bool wipeNoted;
+
+        private struct BlockVolume
+        {
+            public OBB Box;
+            public float Extent;
+            public int CellX;
+            public int CellZ;
+        }
+
+        private struct OverlapNeighbor
+        {
+            public uint BuildingId;
+            public float ClosestBlockGap;
+        }
+
+        private class OverlapSnapshot
+        {
+            public float BuiltAt;
+            public List<OverlapNeighbor> Neighbors;
+        }
+
+        private readonly Dictionary<uint, OverlapSnapshot> overlapCache = new Dictionary<uint, OverlapSnapshot>();
+        private readonly HashSet<uint> overlapDirty = new HashSet<uint>();
 
         protected override void LoadDefaultConfig() { settings = new Settings(); }
         protected override void LoadConfig()
@@ -786,10 +926,22 @@ namespace Oxide.Plugins
         }
         private void OnNewSave(string filename)
         {
-            store.Shields.Clear();
-            store.LegitimateVoucherUids.Clear();
-            store.LastSeenUtcTicks.Clear();
+            // Paid shields follow the map. TCs are gone after a wipe, so the default is to
+            // clear them here and again on load if the save id changed. The config switch
+            // keeps the balances instead.
+            wipeNoted = true;
+            if (settings == null || !settings.KeepPaidShieldsOnWipe)
+            {
+                if (store.Shields != null) store.Shields.Clear();
+                Puts("Map wipe: paid shields cleared.");
+            }
+            else
+                Puts("Map wipe: paid shields kept because \"Keep paid shields across a map wipe\" is on.");
+            if (store.LegitimateVoucherUids != null) store.LegitimateVoucherUids.Clear();
+            if (store.LastSeenUtcTicks != null) store.LastSeenUtcTicks.Clear();
             published.Clear();
+            overlapCache.Clear();
+            overlapDirty.Clear();
             Save();
         }
         private void OnPlayerDisconnected(BasePlayer player, string reason) => NoteSeen(player);
@@ -797,6 +949,9 @@ namespace Oxide.Plugins
         private void OnServerInitialized()
         {
             TouchConnectedPlayers();
+            ApplyWipeSaveId();
+            MigrateAllShields();
+            Save();
             if (usedZoneFallback)
                 PrintWarning("America/New_York and Eastern Standard Time were unavailable. Using a built-in US Eastern zone (EST/EDT).");
             SeedShieldStates();
@@ -828,8 +983,18 @@ namespace Oxide.Plugins
             if (engine != null) QueueExcavatorApply();
         }
 
+        private void OnEntitySpawned(BuildingBlock block) => MarkOverlapDirty(block);
+        private void OnEntityKill(BuildingBlock block) => MarkOverlapDirty(block);
+        private void OnEntitySpawned(BuildingPrivlidge tc) => MarkOverlapDirty(tc);
+        private void OnEntityBuilt(Planner planner, GameObject go)
+        {
+            if (go == null) return;
+            MarkOverlapDirty(go.GetComponent<BuildingBlock>());
+        }
+
         private void OnEntityKill(BuildingPrivlidge tc)
         {
+            MarkOverlapDirty(tc);
             if (tc == null || tc.net == null) return;
             ulong id = tc.net.ID.Value;
             Shield shield;
@@ -870,15 +1035,19 @@ namespace Oxide.Plugins
         // API_GetPlayerShield(BasePlayer) -> Dictionary
         // API_GetCupboardShield(ulong cupboardNetId) -> Dictionary
         // API_GetBuildingShield(uint buildingId) -> Dictionary
-        //     state "active" | "queued" | "none", seconds (double), tcId (ulong), buildingId (uint)
+        //     state "active" (real weekend, timer running) | "queued" (waiting, time kept) | "none"
+        //     seconds (double, total still stored), tcId (ulong), buildingId (uint),
+        //     draining (bool), secondsUntilDrain (double, 0 while the real weekend is open),
+        //     entries (string, comma-separated seconds, front of the queue first)
         // API_IsEntityProtected(BaseEntity entity, ulong attackerSteamId) -> bool
         //     True when this plugin would reduce that attacker's damage to the entity.
         //     Pass 0 for an outsider. A real steam id is cleared only when
         //     "Prevent teammates authorized on TC from damaging their own shielded building"
         //     is false and that player is authorized on the cupboard that would block.
         //     A paid shield with time left blocks whether or not the Eastern weekend is open.
-        //     The timer still counts down only during that weekend. A shield also covers each
-        //     directly overlapping cupboard (32m, no further hop) while the buyer is authorized there.
+        //     The timer counts down only during the real weekend. Unused seconds carry to the
+        //     next one. A shield also covers each building whose privilege volume overlaps
+        //     this one (one hop, no chain) while any queued buyer's auth is still on that TC.
         //     Attached entities use their own building. A player-placed container with no
         //     building id uses every cupboard zone that contains it, by that cupboard's
         //     own building, not the nearest tool cupboard.
@@ -991,15 +1160,12 @@ namespace Oxide.Plugins
         public Dictionary<string, object> API_GetBuildingShield(uint buildingId)
         {
             if (buildingId == 0u) return NoneShield();
-            DateTime start, end;
-            bool active;
             // Real clock, same as the damage check. A test clock must not hide a live shield.
-            Weekend(DateTime.UtcNow, out start, out end, out active);
             Shield best = null;
             double bestSeconds = 0d;
             foreach (var shield in store.Shields.Values)
             {
-                if (shield == null || shield.BuildingId != buildingId || shield.ExpiresUtcTicks != end.Ticks) continue;
+                if (shield == null || shield.BuildingId != buildingId) continue;
                 Account(shield, DateTime.UtcNow);
                 if (shield.RemainingSeconds <= bestSeconds) continue;
                 best = shield;
@@ -1125,25 +1291,33 @@ namespace Oxide.Plugins
             Shield existing;
             store.Shields.TryGetValue(id, out existing);
             if (existing != null) Account(existing, now);
-            if (existing != null && existing.ExpiresUtcTicks != end.Ticks) existing = null;
-            double remainingWeekend = (end - (active ? now : start)).TotalSeconds;
-            double newSeconds = args[1].Equals("weekend", StringComparison.OrdinalIgnoreCase) ? remainingWeekend :
+            double windowSeconds = (end - (active ? now : start)).TotalSeconds;
+            double newSeconds = args[1].Equals("weekend", StringComparison.OrdinalIgnoreCase) ? windowSeconds :
                 args[1].Equals("24h", StringComparison.OrdinalIgnoreCase) ? 86400d :
                 3600d;
-            if (existing != null && existing.RemainingSeconds > 0d && args[1].Equals("weekend", StringComparison.OrdinalIgnoreCase))
-            { Reply(player, "This TC already has a shield. Use the existing time first; the full-weekend voucher was not consumed."); return; }
-            double combined = (existing == null ? 0d : existing.RemainingSeconds) + newSeconds;
-            if (combined > Math.Max(1, settings.MaximumStackedHours) * 3600d)
+            if (newSeconds <= 0d || double.IsNaN(newSeconds) || double.IsInfinity(newSeconds))
+            { Reply(player, "No PvP weekend shield time is available. Voucher retained."); return; }
+            double already = existing == null ? 0d : Math.Max(0d, existing.RemainingSeconds);
+            if (already + newSeconds > Math.Max(1, settings.MaximumStackedHours) * 3600d)
             { Reply(player, "This would exceed the maximum shield time on this TC. Voucher retained."); return; }
-            Shield previous = existing;
-            Shield shield = new Shield();
+            Shield previous = CloneShield(existing);
+            Shield shield = existing ?? new Shield();
+            if (shield.Queue == null) shield.Queue = new List<ShieldEntry>();
             shield.CupboardId = id;
-            shield.BuildingId = tc.buildingID;
-            shield.OwnerSteamId = previous != null && IsSteamId(previous.OwnerSteamId) ? previous.OwnerSteamId : SteamIdOf(player);
-            shield.ExpiresUtcTicks = end.Ticks;
+            if (tc.buildingID != 0u) shield.BuildingId = tc.buildingID;
+            ulong buyer = SteamIdOf(player);
+            shield.Queue.Add(new ShieldEntry { BuyerSteamId = buyer, RemainingSeconds = newSeconds });
+            if (!IsSteamId(shield.OwnerSteamId)) shield.OwnerSteamId = buyer;
+            shield.ExpiresUtcTicks = 0L;
             shield.LastAccountedTicks = now.Ticks;
-            shield.RemainingSeconds = Math.Min(combined, remainingWeekend);
-            if (shield.RemainingSeconds <= 0d) { Reply(player, "No PvP weekend shield time is available. Voucher retained."); return; }
+            SyncRemaining(shield);
+            if (shield.RemainingSeconds <= 0d)
+            {
+                if (shield.Queue != null && shield.Queue.Count > 0) shield.Queue.RemoveAt(shield.Queue.Count - 1);
+                SyncRemaining(shield);
+                Reply(player, "No PvP weekend shield time is available. Voucher retained.");
+                return;
+            }
 
             // Persist redemption BEFORE removing the in-game item. On persistence failure voucher stays with buyer.
             store.Shields[id] = shield;
@@ -1158,26 +1332,48 @@ namespace Oxide.Plugins
             }
             voucher.UseItem(1);
             PublishShield(shield);
+            string total = Format(TimeSpan.FromSeconds(shield.RemainingSeconds));
+            string added = Format(TimeSpan.FromSeconds(newSeconds));
+            int count = shield.Queue == null ? 0 : shield.Queue.Count;
             Reply(player, active
-                ? "Shield active for this PvP weekend. It blocks raid damage now. Remaining time expires Monday 3 AM Eastern; unused hours are lost."
-                : "Shield is on this TC and blocks raid damage now, including on a forced weekend. The timer counts down only from Friday 8 PM through Monday 3 AM Eastern, and whatever is left expires Monday 3 AM.");
-            Puts("Redeemed " + args[1] + " for TC " + id + " by " + player.UserIDString);
+                ? "Added " + added + " to this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. Unused time carries to the next weekend."
+                : "Queued " + added + " on this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. The timer waits for Friday 8 PM Eastern, and unused time carries over.");
+            Puts("Redeemed " + args[1] + " for TC " + id + " by " + player.UserIDString + " queue " + count);
         }
 
         private void Account(Shield shield, DateTime now)
         {
             if (shield == null) return;
-            if (now.Ticks >= shield.ExpiresUtcTicks) { shield.RemainingSeconds = 0d; shield.LastAccountedTicks = now.Ticks; return; }
-            DateTime from = new DateTime(Math.Min(shield.LastAccountedTicks, now.Ticks), DateTimeKind.Utc);
-            if (from > now) from = now;
-            // Shield hours only drain during the one weekend for which this shield was issued.
-            DateTime start, end;
-            bool active;
-            Weekend(new DateTime(shield.ExpiresUtcTicks, DateTimeKind.Utc).AddSeconds(-1), out start, out end, out active);
-            DateTime a = from > start ? from : start;
-            DateTime b = now < end ? now : end;
-            if (b > a) shield.RemainingSeconds = Math.Max(0d, shield.RemainingSeconds - (b - a).TotalSeconds);
+            MigrateShield(shield, now);
+            if (shield.Queue == null) shield.Queue = new List<ShieldEntry>();
+            if (shield.LastAccountedTicks <= 0L || shield.LastAccountedTicks > now.Ticks)
+            {
+                shield.LastAccountedTicks = now.Ticks;
+                shield.ExpiresUtcTicks = 0L;
+                SyncRemaining(shield);
+                return;
+            }
+            DateTime from = new DateTime(shield.LastAccountedTicks, DateTimeKind.Utc);
+            double drain = NightshadeShieldTime.WeekendOverlapSeconds(from, now, eastern);
+            if (drain > 0d && shield.Queue.Count > 0)
+            {
+                NightshadeShieldTime.Slice[] slices = new NightshadeShieldTime.Slice[shield.Queue.Count];
+                for (int i = 0; i < shield.Queue.Count; i++)
+                {
+                    ShieldEntry entry = shield.Queue[i];
+                    slices[i].BuyerId = entry == null ? 0UL : entry.BuyerSteamId;
+                    slices[i].RemainingSeconds = entry == null ? 0d : entry.RemainingSeconds;
+                }
+                int count = NightshadeShieldTime.Consume(slices, slices.Length, drain);
+                shield.Queue.Clear();
+                for (int i = 0; i < count; i++)
+                {
+                    shield.Queue.Add(new ShieldEntry { BuyerSteamId = slices[i].BuyerId, RemainingSeconds = slices[i].RemainingSeconds });
+                }
+            }
             shield.LastAccountedTicks = now.Ticks;
+            shield.ExpiresUtcTicks = 0L;
+            SyncRemaining(shield);
         }
 
         // Automatic offline protection is not "the owners are offline" and it is not a raid shield.
@@ -1282,11 +1478,11 @@ namespace Oxide.Plugins
         // The shield follows the cupboard net id. A later building merge changes buildingID;
         // the id saved at redeem must not drop the shield. Time still drains only inside the
         // real weekend window, but any time left blocks raid damage immediately.
-        private bool ShieldBlocks(BuildingPrivlidge tc, uint buildingId, DateTime now, DateTime weekendEnd)
+        private bool ShieldBlocks(BuildingPrivlidge tc, uint buildingId, DateTime now)
         {
             if (!settings.PaidShields || tc == null) return false;
             Shield shield;
-            if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield == null || shield.ExpiresUtcTicks != weekendEnd.Ticks)
+            if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield == null)
                 return false;
             Account(shield, now);
             if (shield.RemainingSeconds <= 0d) return false;
@@ -1297,47 +1493,30 @@ namespace Oxide.Plugins
             return true;
         }
 
-        // Buyer recorded at redeem. Shields saved before that fall back to the live TC owner.
-        private ulong ShieldBuyer(BuildingPrivlidge tc)
-        {
-            if (tc == null) return 0UL;
-            Shield shield;
-            if (store.Shields.TryGetValue(CupboardId(tc), out shield) && shield != null && IsSteamId(shield.OwnerSteamId))
-                return shield.OwnerSteamId;
-            return tc.OwnerID;
-        }
-
-        // A neighbor's paid shield covers this cupboard only while that shield's buyer is authorized here.
+        // A neighbor's paid shield covers this cupboard while any queued buyer is authorized here.
         private Shield CoveringNeighborShield(BuildingPrivlidge hitTc)
         {
-            if (!settings.ShareOverlappingCupboards || hitTc == null || hitTc.IsDestroyed || hitTc.transform == null)
+            if (!settings.ShareOverlappingCupboards || hitTc == null || hitTc.IsDestroyed || hitTc.buildingID == 0u)
                 return null;
             DateTime now = DateTime.UtcNow;
-            DateTime start, end;
-            bool active;
-            Weekend(now, out start, out end, out active);
-            float radius = PrivilegeRadius();
-            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
-            try
+            float cushion = PrivilegeRadius();
+            List<OverlapNeighbor> neighbors = NeighborsOf(hitTc.buildingID);
+            for (int i = 0; i < neighbors.Count; i++)
             {
-                Vis.Entities(hitTc.transform.position, radius * 2f, nearby);
-                for (int i = 0; i < nearby.Count; i++)
+                OverlapNeighbor neighbor = neighbors[i];
+                if (!NightshadeOfflineGate.PrivilegeZonesOverlap(neighbor.ClosestBlockGap, cushion)) continue;
+                if (BuildingManager.server == null) return null;
+                BuildingManager.Building other = BuildingManager.server.GetBuilding(neighbor.BuildingId);
+                if (other == null || other.buildingPrivileges == null) continue;
+                foreach (BuildingPrivlidge source in other.buildingPrivileges)
                 {
-                    BuildingPrivlidge source = nearby[i];
-                    if (source == null || source.IsDestroyed || source.transform == null) continue;
+                    if (source == null || source.IsDestroyed) continue;
                     if (source.buildingID == 0u || source.buildingID == hitTc.buildingID) continue;
-                    float distance = Vector3.Distance(hitTc.transform.position, source.transform.position);
-                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
-                    if (!ShieldBlocks(source, source.buildingID, now, end)) continue;
-                    ulong buyer = ShieldBuyer(source);
-                    if (!IsSteamId(buyer) || !Authorized(hitTc, buyer)) continue;
+                    if (!ShieldBlocks(source, source.buildingID, now)) continue;
+                    if (!AnyShieldBuyerAuthed(source, hitTc)) continue;
                     Shield shield;
                     if (store.Shields.TryGetValue(CupboardId(source), out shield)) return shield;
                 }
-            }
-            finally
-            {
-                Facepunch.Pool.FreeUnmanaged(ref nearby);
             }
             return null;
         }
@@ -1349,38 +1528,334 @@ namespace Oxide.Plugins
             return radius;
         }
 
-        // One hop from the hit building's own cupboards. A neighbor that only touches
-        // another neighbor is not included, so protection cannot walk across the map.
-        // A paid shield on the neighbor covers this building only while its buyer is
-        // authorized here. Failing that check does not clear any other shield.
-        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd, bool offlineWindow)
+        private void ApplyWipeSaveId()
         {
-            NightshadeOfflineGate.HitDecision best = new NightshadeOfflineGate.HitDecision();
-            if (!settings.ShareOverlappingCupboards || own == null || own.Count == 0) return best;
-            float radius = PrivilegeRadius();
-            float reach = radius * 2f;
-            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            if (store == null) return;
+            if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
+            string current = CurrentSaveId();
+            bool keep = settings != null && settings.KeepPaidShieldsOnWipe;
+            bool idChanged = !string.IsNullOrEmpty(store.SaveId) && !string.IsNullOrEmpty(current)
+                && !string.Equals(store.SaveId, current, StringComparison.Ordinal);
+            if (!keep && (wipeNoted || idChanged))
+            {
+                if (store.Shields.Count > 0)
+                    Puts("Paid shields cleared because the map save changed.");
+                store.Shields.Clear();
+                published.Clear();
+            }
+            if (!string.IsNullOrEmpty(current)) store.SaveId = current;
+        }
+
+        private static string CurrentSaveId()
+        {
             try
             {
-                for (int i = 0; i < own.Count; i++)
+                long ticks = SaveRestore.SaveCreatedTime.Ticks;
+                if (ticks <= 0L) return null;
+                return ticks.ToString(CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private void MigrateAllShields()
+        {
+            if (store == null || store.Shields == null) return;
+            DateTime now = DateTime.UtcNow;
+            foreach (Shield shield in store.Shields.Values)
+                Account(shield, now);
+        }
+
+        private static void MigrateShield(Shield shield, DateTime now)
+        {
+            if (shield == null || shield.Queue != null) return;
+            shield.Queue = new List<ShieldEntry>();
+            if (NightshadeShieldTime.LegacyStillRunning(shield.ExpiresUtcTicks, shield.RemainingSeconds, now))
+            {
+                shield.Queue.Add(new ShieldEntry
                 {
-                    BuildingPrivlidge hitTc = own[i];
-                    if (hitTc == null || hitTc.IsDestroyed || hitTc.transform == null) continue;
-                    nearby.Clear();
-                    Vis.Entities(hitTc.transform.position, reach, nearby);
-                    for (int j = 0; j < nearby.Count; j++)
+                    BuyerSteamId = shield.OwnerSteamId,
+                    RemainingSeconds = shield.RemainingSeconds
+                });
+            }
+            else
+                shield.RemainingSeconds = 0d;
+            shield.ExpiresUtcTicks = 0L;
+        }
+
+        private void SyncRemaining(Shield shield)
+        {
+            if (shield == null) return;
+            double total = 0d;
+            if (shield.Queue != null)
+            {
+                for (int i = 0; i < shield.Queue.Count; i++)
+                {
+                    ShieldEntry entry = shield.Queue[i];
+                    if (entry == null || entry.RemainingSeconds <= 0d || double.IsNaN(entry.RemainingSeconds)) continue;
+                    total += entry.RemainingSeconds;
+                }
+            }
+            shield.RemainingSeconds = total;
+            if (shield.Queue != null && shield.Queue.Count > 0 && IsSteamId(shield.Queue[0].BuyerSteamId))
+                shield.OwnerSteamId = shield.Queue[0].BuyerSteamId;
+        }
+
+        private static Shield CloneShield(Shield source)
+        {
+            if (source == null) return null;
+            Shield copy = new Shield();
+            copy.CupboardId = source.CupboardId;
+            copy.BuildingId = source.BuildingId;
+            copy.OwnerSteamId = source.OwnerSteamId;
+            copy.RemainingSeconds = source.RemainingSeconds;
+            copy.LastAccountedTicks = source.LastAccountedTicks;
+            copy.ExpiresUtcTicks = source.ExpiresUtcTicks;
+            if (source.Queue == null) return copy;
+            copy.Queue = new List<ShieldEntry>(source.Queue.Count);
+            for (int i = 0; i < source.Queue.Count; i++)
+            {
+                ShieldEntry entry = source.Queue[i];
+                if (entry == null) continue;
+                copy.Queue.Add(new ShieldEntry { BuyerSteamId = entry.BuyerSteamId, RemainingSeconds = entry.RemainingSeconds });
+            }
+            return copy;
+        }
+
+        private static string EntrySeconds(Shield shield)
+        {
+            if (shield == null || shield.Queue == null) return string.Empty;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < shield.Queue.Count; i++)
+            {
+                ShieldEntry entry = shield.Queue[i];
+                if (entry == null || entry.RemainingSeconds <= 0d) continue;
+                if (sb.Length > 0) sb.Append(',');
+                sb.Append(entry.RemainingSeconds.ToString("0.###", CultureInfo.InvariantCulture));
+            }
+            return sb.ToString();
+        }
+
+        private ulong ResolveBuyer(Shield shield, ShieldEntry entry, BuildingPrivlidge tc)
+        {
+            if (entry != null && IsSteamId(entry.BuyerSteamId)) return entry.BuyerSteamId;
+            if (shield != null && IsSteamId(shield.OwnerSteamId)) return shield.OwnerSteamId;
+            return tc != null ? tc.OwnerID : 0UL;
+        }
+
+        private bool AnyShieldBuyerAuthed(BuildingPrivlidge source, BuildingPrivlidge hitTc)
+        {
+            if (source == null || hitTc == null) return false;
+            Shield shield;
+            if (!store.Shields.TryGetValue(CupboardId(source), out shield) || shield == null) return false;
+            Account(shield, DateTime.UtcNow);
+            if (shield.Queue == null) return false;
+            for (int i = 0; i < shield.Queue.Count; i++)
+            {
+                ShieldEntry entry = shield.Queue[i];
+                if (entry == null || entry.RemainingSeconds <= 0d) continue;
+                ulong buyer = ResolveBuyer(shield, entry, source);
+                if (IsSteamId(buyer) && Authorized(hitTc, buyer)) return true;
+            }
+            return false;
+        }
+
+        private void MarkOverlapDirty(DecayEntity ent)
+        {
+            if (ent == null) return;
+            DirtyOverlap(ent.buildingID);
+            DecayEntity captured = ent;
+            NextTick(() =>
+            {
+                if (captured == null || captured.IsDestroyed) return;
+                DirtyOverlap(captured.buildingID);
+            });
+        }
+
+        private void DirtyOverlap(uint buildingId)
+        {
+            if (buildingId == 0u) return;
+            overlapDirty.Add(buildingId);
+            OverlapSnapshot snap;
+            if (overlapCache.TryGetValue(buildingId, out snap) && snap != null && snap.Neighbors != null)
+            {
+                for (int i = 0; i < snap.Neighbors.Count; i++)
+                    overlapDirty.Add(snap.Neighbors[i].BuildingId);
+            }
+            List<uint> reverse = null;
+            foreach (KeyValuePair<uint, OverlapSnapshot> pair in overlapCache)
+            {
+                if (pair.Key == buildingId || pair.Value == null || pair.Value.Neighbors == null) continue;
+                for (int i = 0; i < pair.Value.Neighbors.Count; i++)
+                {
+                    if (pair.Value.Neighbors[i].BuildingId != buildingId) continue;
+                    if (reverse == null) reverse = new List<uint>();
+                    reverse.Add(pair.Key);
+                    break;
+                }
+            }
+            if (reverse == null) return;
+            for (int i = 0; i < reverse.Count; i++) overlapDirty.Add(reverse[i]);
+        }
+
+        private List<OverlapNeighbor> NeighborsOf(uint buildingId)
+        {
+            float now = Time.realtimeSinceStartup;
+            OverlapSnapshot snap;
+            if (buildingId != 0u && overlapCache.TryGetValue(buildingId, out snap) && snap != null && snap.Neighbors != null
+                && !overlapDirty.Contains(buildingId) && now >= snap.BuiltAt && now - snap.BuiltAt < OverlapCacheSeconds)
+                return snap.Neighbors;
+            snap = BuildOverlap(buildingId);
+            if (buildingId != 0u)
+            {
+                overlapCache[buildingId] = snap;
+                overlapDirty.Remove(buildingId);
+            }
+            return snap.Neighbors;
+        }
+
+        // Privilege volumes meet when any block of A and any block of B have
+        // OBB.Distance <= 2 * 16m. That is the same cushion BaseEntity.GetBuildingPrivilege
+        // applies around each building block. The set is cached per building.
+        private OverlapSnapshot BuildOverlap(uint buildingId)
+        {
+            OverlapSnapshot snap = new OverlapSnapshot();
+            snap.BuiltAt = Time.realtimeSinceStartup;
+            snap.Neighbors = new List<OverlapNeighbor>();
+            if (buildingId == 0u || BuildingManager.server == null) return snap;
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+            if (building == null || building.buildingBlocks == null || building.buildingBlocks.Count == 0) return snap;
+            float cushion = PrivilegeRadius();
+            float gapLimit = cushion * 2f;
+            List<BlockVolume> own = new List<BlockVolume>(building.buildingBlocks.Count);
+            Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            float maxExtent = 0f;
+            foreach (BuildingBlock block in building.buildingBlocks)
+            {
+                if (block == null || block.IsDestroyed || block.transform == null) continue;
+                OBB box = block.WorldSpaceBounds();
+                float extent = box.extents.magnitude;
+                if (float.IsNaN(extent) || float.IsInfinity(extent) || extent < 0f) extent = 0f;
+                if (extent > maxExtent) maxExtent = extent;
+                Vector3 pos = box.position;
+                if (pos.x < min.x) min.x = pos.x;
+                if (pos.y < min.y) min.y = pos.y;
+                if (pos.z < min.z) min.z = pos.z;
+                if (pos.x > max.x) max.x = pos.x;
+                if (pos.y > max.y) max.y = pos.y;
+                if (pos.z > max.z) max.z = pos.z;
+                own.Add(new BlockVolume { Box = box, Extent = extent, CellX = CellOf(pos.x), CellZ = CellOf(pos.z) });
+            }
+            if (own.Count == 0) return snap;
+            Dictionary<long, List<int>> grid = new Dictionary<long, List<int>>();
+            for (int i = 0; i < own.Count; i++)
+            {
+                long key = CellKey(own[i].CellX, own[i].CellZ);
+                List<int> bucket;
+                if (!grid.TryGetValue(key, out bucket))
+                {
+                    bucket = new List<int>();
+                    grid[key] = bucket;
+                }
+                bucket.Add(i);
+            }
+            Vector3 center = (min + max) * 0.5f;
+            float radius = Vector3.Distance(center, max) + gapLimit + maxExtent + ForeignBlockSlopMeters;
+            if (float.IsNaN(radius) || float.IsInfinity(radius) || radius < gapLimit) radius = gapLimit + ForeignBlockSlopMeters;
+            List<BuildingBlock> found = Facepunch.Pool.Get<List<BuildingBlock>>();
+            Dictionary<uint, float> best = new Dictionary<uint, float>();
+            try
+            {
+                Vis.Entities(center, radius, found);
+                for (int i = 0; i < found.Count; i++)
+                {
+                    BuildingBlock other = found[i];
+                    if (other == null || other.IsDestroyed || other.transform == null) continue;
+                    uint otherId = other.buildingID;
+                    if (otherId == 0u || otherId == buildingId) continue;
+                    float known;
+                    if (best.TryGetValue(otherId, out known) && known <= 0f) continue;
+                    OBB otherBox = other.WorldSpaceBounds();
+                    float otherExtent = otherBox.extents.magnitude;
+                    if (float.IsNaN(otherExtent) || float.IsInfinity(otherExtent) || otherExtent < 0f) otherExtent = 0f;
+                    float reach = gapLimit + maxExtent + otherExtent;
+                    int cells = (int)Math.Ceiling(reach / OverlapCellMeters);
+                    if (cells < 1) cells = 1;
+                    if (cells > 8) cells = 8;
+                    int cx = CellOf(otherBox.position.x);
+                    int cz = CellOf(otherBox.position.z);
+                    float gap = float.MaxValue;
+                    for (int dx = -cells; dx <= cells && gap > 0f; dx++)
                     {
-                        BuildingPrivlidge source = nearby[j];
-                        if (source == null || source.IsDestroyed || source.transform == null) continue;
+                        for (int dz = -cells; dz <= cells && gap > 0f; dz++)
+                        {
+                            List<int> bucket;
+                            if (!grid.TryGetValue(CellKey(cx + dx, cz + dz), out bucket)) continue;
+                            for (int b = 0; b < bucket.Count; b++)
+                            {
+                                float distance = otherBox.Distance(own[bucket[b]].Box);
+                                if (float.IsNaN(distance) || float.IsInfinity(distance) || distance < 0f) continue;
+                                if (distance < gap) gap = distance;
+                            }
+                        }
+                    }
+                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(gap, cushion)) continue;
+                    if (!best.ContainsKey(otherId) || gap < best[otherId]) best[otherId] = gap;
+                }
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref found);
+            }
+            foreach (KeyValuePair<uint, float> pair in best)
+                snap.Neighbors.Add(new OverlapNeighbor { BuildingId = pair.Key, ClosestBlockGap = pair.Value });
+            snap.Neighbors.Sort(delegate(OverlapNeighbor a, OverlapNeighbor b) { return a.BuildingId.CompareTo(b.BuildingId); });
+            return snap;
+        }
+
+        private static int CellOf(float world)
+        {
+            if (float.IsNaN(world) || float.IsInfinity(world)) return 0;
+            return (int)Math.Floor(world / OverlapCellMeters);
+        }
+
+        private static long CellKey(int x, int z)
+        {
+            return ((long)x << 32) ^ (uint)z;
+        }
+
+        // One hop from the hit building's own cupboards. A neighbor that only touches
+        // another neighbor is not included, so protection cannot walk across the map.
+        // A paid shield on the neighbor covers this building while any of its buyers
+        // is authorized here. Failing that check does not clear any other shield.
+        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, bool offlineWindow)
+        {
+            NightshadeOfflineGate.HitDecision best = new NightshadeOfflineGate.HitDecision();
+            if (!settings.ShareOverlappingCupboards || own == null || own.Count == 0 || BuildingManager.server == null) return best;
+            float cushion = PrivilegeRadius();
+            for (int i = 0; i < own.Count; i++)
+            {
+                BuildingPrivlidge hitTc = own[i];
+                if (hitTc == null || hitTc.IsDestroyed || hitTc.buildingID == 0u) continue;
+                List<OverlapNeighbor> neighbors = NeighborsOf(hitTc.buildingID);
+                for (int n = 0; n < neighbors.Count; n++)
+                {
+                    OverlapNeighbor neighbor = neighbors[n];
+                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(neighbor.ClosestBlockGap, cushion)) continue;
+                    BuildingManager.Building other = BuildingManager.server.GetBuilding(neighbor.BuildingId);
+                    if (other == null || other.buildingPrivileges == null) continue;
+                    foreach (BuildingPrivlidge source in other.buildingPrivileges)
+                    {
+                        if (source == null || source.IsDestroyed) continue;
                         if (source.buildingID == 0u || source.buildingID == hitTc.buildingID) continue;
-                        float distance = Vector3.Distance(hitTc.transform.position, source.transform.position);
-                        if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
-                        ulong buyer = ShieldBuyer(source);
-                        bool buyerAuthed = IsSteamId(buyer) && Authorized(hitTc, buyer);
+                        bool buyerAuthed = AnyShieldBuyerAuthed(source, hitTc);
                         // Live auth list only. Matching owner ids after a deauth does not keep the hop.
                         bool ownerAuthed = IsSteamId(source.OwnerID) && Authorized(hitTc, source.OwnerID);
                         bool ownerLinked = NightshadeOfflineGate.SameOwnerOnOverlap(source.OwnerID, SteamIdMin, ownerAuthed, false);
-                        bool sourceShield = ShieldBlocks(source, source.buildingID, now, weekendEnd);
+                        bool sourceShield = ShieldBlocks(source, source.buildingID, now);
                         bool sourceOffline = offlineWindow && !sourceShield && OfflineProtected(source, now);
                         // The overlap cupboard must qualify on its own. An online player on it blocks the copy.
                         bool overlapOffline = sourceOffline && OfflineProtected(hitTc, now);
@@ -1410,10 +1885,6 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            finally
-            {
-                Facepunch.Pool.FreeUnmanaged(ref nearby);
-            }
             return best;
         }
 
@@ -1439,6 +1910,7 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool active;
             Weekend(now, out start, out end, out active);
+            if (end <= start) active = false;
             bool offlineWindow = active || forceOfflinePvp || forceFullPvp;
 
             uint attached = BuildingIdOf(entity);
@@ -1455,7 +1927,7 @@ namespace Oxide.Plugins
             bool clearedByAuth = false;
             for (int i = 0; i < buildings.Length; i++)
             {
-                NightshadeOfflineGate.HitDecision decision = DecideBuilding(buildings[i], attacker, now, end, offlineWindow);
+                NightshadeOfflineGate.HitDecision decision = DecideBuilding(buildings[i], attacker, now, offlineWindow);
                 if (decision.ClearedByAuth) clearedByAuth = true;
                 if (!decision.Block) continue;
                 float reduction = NightshadeOfflineGate.Reduction(decision.Paid, true, settings.OfflineReductionPercent);
@@ -1535,7 +2007,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private NightshadeOfflineGate.HitDecision DecideBuilding(uint buildingId, ulong attacker, DateTime now, DateTime weekendEnd, bool offlineWindow)
+        private NightshadeOfflineGate.HitDecision DecideBuilding(uint buildingId, ulong attacker, DateTime now, bool offlineWindow)
         {
             NightshadeOfflineGate.HitDecision none = new NightshadeOfflineGate.HitDecision();
             if (buildingId == 0u || BuildingManager.server == null) return none;
@@ -1565,7 +2037,7 @@ namespace Oxide.Plugins
                         // A foreign building id is recorded and then ignored. It cannot cancel a shield.
                         if (tc.buildingID == buildingId)
                         {
-                            vote.PaidShield = ShieldBlocks(tc, buildingId, now, weekendEnd);
+                            vote.PaidShield = ShieldBlocks(tc, buildingId, now);
                             if (offlineWindow)
                                 vote.OfflineProtected = OfflineProtected(tc, now);
                             own.Add(tc);
@@ -1576,7 +2048,7 @@ namespace Oxide.Plugins
                 decision = NightshadeOfflineGate.Decide(buildingId, allowAuthorized, votes);
                 if (!decision.Block)
                 {
-                    NightshadeOfflineGate.HitDecision overlap = MatchDirectOverlaps(own, attacker, allowAuthorized, now, weekendEnd, offlineWindow);
+                    NightshadeOfflineGate.HitDecision overlap = MatchDirectOverlaps(own, attacker, allowAuthorized, now, offlineWindow);
                     if (overlap.Block)
                         decision = overlap;
                     else if (overlap.ClearedByAuth)
@@ -1672,32 +2144,33 @@ namespace Oxide.Plugins
             BuildingPrivlidge tc = TargetCupboard(player);
             if (tc == null) tc = player.GetBuildingPrivilege();
             if (tc == null || !Authorized(tc, player.userID)) { Reply(player, "Look at or stand near an authorized TC to inspect its protection."); return; }
-            Shield shield;
+            Shield shield = null;
             DateTime realStart, realEnd;
             bool realActive;
             Weekend(DateTime.UtcNow, out realStart, out realEnd, out realActive);
-            if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield.ExpiresUtcTicks != realEnd.Ticks)
+            store.Shields.TryGetValue(CupboardId(tc), out shield);
+            Account(shield, DateTime.UtcNow);
+            if (shield == null || shield.RemainingSeconds <= 0d)
             {
                 Shield cover = CoveringNeighborShield(tc);
                 if (cover == null)
-                    Reply(player, "TC paid shield: none for this weekend.");
+                    Reply(player, "TC paid shield: none.");
                 else
                 {
                     Account(cover, DateTime.UtcNow);
-                    Reply(player, "This TC has no shield of its own. Overlapping TC " + cover.CupboardId
-                        + " covers it while buyer " + (IsSteamId(cover.OwnerSteamId) ? cover.OwnerSteamId.ToString() : "the TC owner")
-                        + " stays authorized. " + Format(TimeSpan.FromSeconds(Math.Max(0, cover.RemainingSeconds))) + " left.");
+                    Reply(player, "This TC has no shield of its own. Privilege-overlap TC " + cover.CupboardId
+                        + " covers it while one of its buyers stays authorized. "
+                        + Format(TimeSpan.FromSeconds(Math.Max(0, cover.RemainingSeconds))) + " left. Unused time carries over.");
                 }
                 ReplyOffline(player, tc);
                 return;
             }
-            Account(shield, DateTime.UtcNow);
-            bool blocks = shield.RemainingSeconds > 0d;
-            string label = !blocks ? "TC raid shield expired: " : realActive ? "TC raid shield active: " : "TC raid shield active (timer starts Friday 8 PM Eastern): ";
-            Reply(player, label + Format(TimeSpan.FromSeconds(Math.Max(0, shield.RemainingSeconds))) +
-                ". Unused time expires Monday 3 AM Eastern.");
-            if (blocks && !realActive)
-                Reply(player, "Raid damage is blocked now. Stored hours count down only during the real weekend.");
+            int queued = shield.Queue == null ? 0 : shield.Queue.Count;
+            string label = realActive ? "TC raid shield active: " : "TC raid shield queued: ";
+            Reply(player, label + Format(TimeSpan.FromSeconds(Math.Max(0, shield.RemainingSeconds)))
+                + " across " + queued + " " + (queued == 1 ? "entry" : "entries") + ". Unused time carries to the next weekend.");
+            if (!realActive)
+                Reply(player, "Raid damage is blocked now. Stored time counts down from " + FormatEdge(realStart) + " through " + FormatEdge(realEnd) + ".");
             ReplyOffline(player, tc);
         }
 
@@ -1878,8 +2351,8 @@ namespace Oxide.Plugins
             sb.Append("Building id: ").Append(buildingId).Append('\n');
             float radius = PrivilegeRadius();
             sb.Append("Overlap share: ").Append(settings != null && settings.ShareOverlappingCupboards ? "on" : "off")
-                .Append(" (privilege radius ").Append(Num(radius))
-                .Append("m, center-to-center up to ").Append(Num(radius * 2f))
+                .Append(" (privilege overlap, ").Append(Num(radius))
+                .Append("m around each building block, volumes meet within ").Append(Num(radius * 2f))
                 .Append("m, one hop, no chain)\n");
             if (buildingId == 0u || BuildingManager.server == null)
             {
@@ -1940,31 +2413,48 @@ namespace Oxide.Plugins
                 Shield cover = tc == null ? null : CoveringNeighborShield(tc);
                 if (cover != null)
                 {
-                    ulong buyer = IsSteamId(cover.OwnerSteamId) ? cover.OwnerSteamId : 0UL;
-                    sb.Append("  Covered by overlapping TC ").Append(cover.CupboardId)
-                        .Append(" buyer ").Append(buyer)
+                    Account(cover, now);
+                    sb.Append("  Covered by privilege-overlap TC ").Append(cover.CupboardId)
                         .Append(" remaining ").Append(Math.Max(0d, cover.RemainingSeconds).ToString("0", CultureInfo.InvariantCulture))
-                        .Append("s expires ").Append(FormatEdge(new DateTime(cover.ExpiresUtcTicks, DateTimeKind.Utc)))
-                        .Append('\n');
+                        .Append("s carries over\n");
+                    AppendQueue(sb, cover, realActive);
                 }
                 return;
             }
             Account(shield, now);
-            bool thisWeekend = shield.ExpiresUtcTicks == end.Ticks;
-            bool blocks = settings.PaidShields && thisWeekend && shield.RemainingSeconds > 0d && tc.buildingID != 0u;
-            ulong ownerId = IsSteamId(shield.OwnerSteamId) ? shield.OwnerSteamId : tc.OwnerID;
-            string who = IsSteamId(shield.OwnerSteamId) ? "buyer" : "buyer not recorded, using TC owner";
-            sb.Append("  Paid shield record: owner ").Append(ownerId).Append(" (").Append(who).Append(")")
-                .Append(" TC ").Append(shield.CupboardId)
+            bool blocks = settings.PaidShields && shield.RemainingSeconds > 0d && tc.buildingID != 0u;
+            sb.Append("  Paid shield record: TC ").Append(shield.CupboardId)
                 .Append(" saved building ").Append(shield.BuildingId)
                 .Append(" current building ").Append(tc.buildingID)
-                .Append('\n');
-            sb.Append("  Expires ").Append(FormatEdge(new DateTime(shield.ExpiresUtcTicks, DateTimeKind.Utc)))
-                .Append(" remaining ").Append(Math.Max(0d, shield.RemainingSeconds).ToString("0", CultureInfo.InvariantCulture)).Append("s")
-                .Append(" this weekend ").Append(thisWeekend ? "yes" : "no")
+                .Append(" total ").Append(Math.Max(0d, shield.RemainingSeconds).ToString("0", CultureInfo.InvariantCulture)).Append("s")
                 .Append(" blocks ").Append(blocks ? "yes" : "no")
-                .Append(" timer ").Append(realActive && blocks ? "counting down" : "held until the real weekend")
+                .Append(" timer ").Append(!blocks ? "empty" : realActive ? "counting down until " + FormatEdge(end) : "waiting until " + FormatEdge(start))
                 .Append('\n');
+            AppendQueue(sb, shield, realActive);
+        }
+
+        private void AppendQueue(StringBuilder sb, Shield shield, bool realActive)
+        {
+            if (shield == null || shield.Queue == null || shield.Queue.Count == 0)
+            {
+                sb.Append("  Queue: empty\n");
+                return;
+            }
+            sb.Append("  Queue: ").Append(realActive ? "active" : "waiting").Append('\n');
+            int index = 1;
+            for (int i = 0; i < shield.Queue.Count; i++)
+            {
+                ShieldEntry entry = shield.Queue[i];
+                if (entry == null || entry.RemainingSeconds <= 0d) continue;
+                ulong buyer = ResolveBuyer(shield, entry, null);
+                sb.Append("  Entry ").Append(index)
+                    .Append(" buyer ").Append(buyer)
+                    .Append(" remaining ").Append(entry.RemainingSeconds.ToString("0", CultureInfo.InvariantCulture)).Append("s")
+                    .Append(" (").Append(Format(TimeSpan.FromSeconds(Math.Max(0d, entry.RemainingSeconds)))).Append(")")
+                    .Append(" ").Append(realActive ? "active" : "waiting")
+                    .Append('\n');
+                index++;
+            }
         }
 
         private void AppendAuth(StringBuilder sb, BuildingPrivlidge tc)
@@ -2039,41 +2529,43 @@ namespace Oxide.Plugins
                 return;
             }
             DateTime now = DateTime.UtcNow;
-            DateTime start, end;
-            bool active;
-            Weekend(now, out start, out end, out active);
-            bool shieldOn = ShieldBlocks(source, source.buildingID, now, end);
-            ulong buyer = ShieldBuyer(source);
-            float radius = PrivilegeRadius();
-            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
-            try
+            bool shieldOn = ShieldBlocks(source, source.buildingID, now);
+            float cushion = PrivilegeRadius();
+            if (source.buildingID == 0u || BuildingManager.server == null)
             {
-                Vis.Entities(source.transform.position, radius * 2f, nearby);
-                int shown = 0;
-                for (int i = 0; i < nearby.Count; i++)
+                sb.Append("  Covered TCs: no building id\n");
+                return;
+            }
+            List<OverlapNeighbor> neighbors = NeighborsOf(source.buildingID);
+            int shown = 0;
+            for (int n = 0; n < neighbors.Count; n++)
+            {
+                OverlapNeighbor neighbor = neighbors[n];
+                if (!NightshadeOfflineGate.PrivilegeZonesOverlap(neighbor.ClosestBlockGap, cushion)) continue;
+                BuildingManager.Building otherBuilding = BuildingManager.server.GetBuilding(neighbor.BuildingId);
+                if (otherBuilding == null || otherBuilding.buildingPrivileges == null) continue;
+                foreach (BuildingPrivlidge other in otherBuilding.buildingPrivileges)
                 {
-                    BuildingPrivlidge other = nearby[i];
-                    if (other == null || other.IsDestroyed || other.transform == null) continue;
+                    if (other == null || other.IsDestroyed) continue;
                     if (other.buildingID == 0u || other.buildingID == source.buildingID) continue;
-                    float distance = Vector3.Distance(source.transform.position, other.transform.position);
-                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
                     shown++;
-                    bool authed = IsSteamId(buyer) && Authorized(other, buyer);
+                    float distance = -1f;
+                    if (source.transform != null && other.transform != null)
+                        distance = Vector3.Distance(source.transform.position, other.transform.position);
+                    bool authed = AnyShieldBuyerAuthed(source, other);
                     sb.Append("  Neighbor TC ").Append(CupboardId(other))
                         .Append(" building ").Append(other.buildingID)
-                        .Append(" distance ").Append(distance.ToString("0.0", CultureInfo.InvariantCulture)).Append("m")
-                        .Append(" buyer ").Append(buyer)
+                        .Append(" found by privilege overlap");
+                    if (distance >= 0f)
+                        sb.Append(" distance ").Append(distance.ToString("0.0", CultureInfo.InvariantCulture)).Append("m");
+                    sb.Append(" closest blocks ").Append(neighbor.ClosestBlockGap.ToString("0.0", CultureInfo.InvariantCulture)).Append("m")
                         .Append(" authed ").Append(authed ? "yes" : "no")
                         .Append(" covered ").Append(shieldOn && authed ? "yes" : "no")
                         .Append('\n');
                 }
-                if (shown == 0)
-                    sb.Append("  Covered TCs: no direct neighbor within ").Append(Num(radius * 2f)).Append("m\n");
             }
-            finally
-            {
-                Facepunch.Pool.FreeUnmanaged(ref nearby);
-            }
+            if (shown == 0)
+                sb.Append("  Covered TCs: no privilege overlap (one hop)\n");
         }
 
         private static string Format(TimeSpan t) => ((int)Math.Max(0, t.TotalHours)) + "h " + Math.Max(0, t.Minutes) + "m";
@@ -2193,20 +2685,22 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool active;
             Weekend(DateTime.UtcNow, out start, out end, out active);
-            if (shield.ExpiresUtcTicks != end.Ticks) return NoneShield();
             Account(shield, DateTime.UtcNow);
             double seconds = Math.Max(0d, shield.RemainingSeconds);
             if (seconds <= 0d) return NoneShield();
             // Time left blocks raid damage now, including before Friday 8 PM and during a force.
             // active here is only whether the real weekend is draining the stored seconds.
+            double until = active ? 0d : Math.Max(0d, (start - DateTime.UtcNow).TotalSeconds);
             return new Dictionary<string, object>
             {
-                ["state"] = "active",
+                ["state"] = active ? "active" : "queued",
                 ["seconds"] = seconds,
                 ["tcId"] = shield.CupboardId,
                 ["buildingId"] = shield.BuildingId,
                 ["ownerSteamId"] = shield.OwnerSteamId,
-                ["draining"] = active
+                ["draining"] = active,
+                ["secondsUntilDrain"] = until,
+                ["entries"] = EntrySeconds(shield)
             };
         }
 
