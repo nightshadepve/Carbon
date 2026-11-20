@@ -7,6 +7,7 @@
   "Offline protection damage reduction percent (100 = fully block)": 100,
   "Prevent teammates authorized on TC from damaging their own shielded building": false,
   "Share protection with the owner's directly overlapping cupboards": true,
+  "Keep paid shields across a map wipe": false,
   "Show blocked-hit message to attacker (rate limited)": true,
   "Maximum total paid shield time on one TC in hours": 72,
   "Drive TruePVE from the Eastern weekend window": true,

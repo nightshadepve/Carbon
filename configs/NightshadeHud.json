@@ -51,15 +51,15 @@
   "Oil rig crate radius": 50.0,
   "Events": [
     {
-      "Key": "Bradley",
-      "Label": "BRADLEY",
+      "Key": "PatrolHeli",
+      "Label": "HELI",
       "Enabled": true,
       "Show count": true,
       "Order": 10
     },
     {
-      "Key": "PatrolHeli",
-      "Label": "HELI",
+      "Key": "Bradley",
+      "Label": "BRADLEY",
       "Enabled": true,
       "Show count": true,
       "Order": 20
