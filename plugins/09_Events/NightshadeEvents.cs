@@ -4,6 +4,11 @@
 // data/Nightshade/NightshadeEvents/Store.json. That file is kept across plugin
 // reloads, server restarts, and map wipes. This plugin never deletes it.
 //
+// The panel and "nsevents list" group events into Custom, Vanilla, and Seasonal.
+// Built-in events take their group from the event type (no stored category).
+// A custom event may set Category to "custom" or "seasonal". A missing Category
+// stays in Custom, so older Store.json files load with their schedules unchanged.
+//
 // Vanilla names and prefabs were checked against developer/patched_assemblies/Assembly-CSharp.dll.
 // EventsManager (plugins/09_Events/EventsManager.cs, commands /em and em_spawn) is a separate
 // plugin. This one uses /nsevents and nightshadeevents.admin and does not edit that file.
@@ -21,8 +26,8 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeEvents", "Nightshade", "1.0.0")]
-    [Description("Schedules vanilla and custom events from a compact admin panel.")]
+    [Info("NightshadeEvents", "Nightshade", "1.1.0")]
+    [Description("Schedules vanilla, seasonal, and custom events from a compact admin panel.")]
     public class NightshadeEvents : RustPlugin
     {
         private const string Perm = "nightshadeevents.admin";
@@ -39,10 +44,15 @@ namespace Oxide.Plugins
         private const string SantaPrefab = "assets/prefabs/misc/xmas/sleigh/santasleigh.prefab";
         private const string XmasPrefab = "assets/prefabs/misc/xmas/xmasrefill.prefab";
 
-        private static readonly string[] BuiltinOrder =
+        private static readonly string[] VanillaOrder =
         {
             "heli", "cargo", "chinook", "airdrop", "bradley", "roadbradley", "vendor",
-            "deepsea", "egghunt", "halloween", "christmas", "santa", "satellite"
+            "deepsea", "satellite"
+        };
+
+        private static readonly string[] SeasonalOrder =
+        {
+            "egghunt", "halloween", "christmas", "santa"
         };
 
         private static readonly string[] DayKeys = { "mon", "tue", "wed", "thu", "fri", "sat", "sun" };
@@ -118,6 +128,7 @@ namespace Oxide.Plugins
             [JsonProperty("Commands")] public List<string> Commands = new List<string>();
             [JsonProperty("Schedule key")] public string ScheduleKey = "";
             [JsonProperty("Custom")] public bool Custom;
+            [JsonProperty("Category", NullValueHandling = NullValueHandling.Ignore)] public string Category;
         }
 
         private class HeldSchedule
@@ -334,6 +345,7 @@ namespace Oxide.Plugins
                 if (ev.Announcement == null) ev.Announcement = "";
                 if (ev.Name == null) ev.Name = ev.Id;
                 if (ev.ScheduleKey == null) ev.ScheduleKey = "";
+                if (IsCustomEvent(ev)) ev.Category = CustomCategory(ev.Category);
             }
         }
 
@@ -383,7 +395,8 @@ namespace Oxide.Plugins
                 VanillaAuto = "allow",
                 Announce = seed.Announce,
                 Announcement = seed.Announcement ?? "",
-                Commands = seed.Commands == null ? new List<string>() : new List<string>(seed.Commands)
+                Commands = seed.Commands == null ? new List<string>() : new List<string>(seed.Commands),
+                Category = CustomCategory(seed.Category)
             };
         }
 
@@ -1470,12 +1483,27 @@ namespace Oxide.Plugins
         {
             var lines = new List<string>();
             var events = Ordered();
+            AppendListSection(lines, events, "Custom", "custom", false);
+            AppendListSection(lines, events, "Vanilla", "vanilla", true);
+            AppendListSection(lines, events, "Seasonal", "seasonal", true);
+            return lines.Count == 0 ? "No events saved." : string.Join("\n", lines.ToArray());
+        }
+
+        private void AppendListSection(List<string> lines, List<EventDef> events, string title, string category, bool gap)
+        {
+            if (gap && lines.Count > 0) lines.Add("");
+            lines.Add("[" + title + "]");
+            int count = 0;
             for (int i = 0; i < events.Count; i++)
             {
                 var ev = events[i];
-                lines.Add(ev.Id + " | " + ev.Name + " | " + (ev.Enabled ? "on" : "off") + " | " + NextLabel(ev));
+                if (ev == null || !CategoryOf(ev).Equals(category, StringComparison.OrdinalIgnoreCase)) continue;
+                string row = ev.Id + " | " + ev.Name + " | " + (ev.Enabled ? "on" : "off") + " | " + NextLabel(ev);
+                if (category.Equals("seasonal", StringComparison.OrdinalIgnoreCase) && IsCustomEvent(ev)) row += " | custom";
+                lines.Add(row);
+                count++;
             }
-            return lines.Count == 0 ? "No events saved." : string.Join("\n", lines.ToArray());
+            if (count == 0) lines.Add("(none)");
         }
 
         private string NextText()
@@ -1690,6 +1718,10 @@ namespace Oxide.Plugins
                 case "commands":
                     if (target.Custom) target.Commands = SplitCommands(Rest(args, 2));
                     break;
+                case "group":
+                    if (IsCustomEvent(target) && args.Count > 2)
+                        target.Category = CustomCategory(args[2]);
+                    break;
             }
             if (retime) Retime(target, true);
             if (verb != "edit") SaveStore();
@@ -1726,7 +1758,8 @@ namespace Oxide.Plugins
                 Interval = 4,
                 Announce = true,
                 Announcement = "<color=#E2B968>{event}</color> is starting.",
-                VanillaAuto = "allow"
+                VanillaAuto = "allow",
+                Category = "custom"
             };
         }
 
@@ -1882,7 +1915,7 @@ namespace Oxide.Plugins
             }
             float scrollTop = subY - 6f;
             var events = Ordered();
-            float content = string.IsNullOrEmpty(editId) ? 8f + events.Count * 32f : EditHeight(FindEvent(editId));
+            float content = !string.IsNullOrEmpty(editId) ? EditHeight(FindEvent(editId)) : (storeOk ? ListContentHeight(events) : 40f);
             if (content < 40f) content = 40f;
             string scroll = frame + ".Scroll";
             c.Add(new CuiElement
@@ -1937,20 +1970,49 @@ namespace Oxide.Plugins
                 LabelTop(c, parent, "The data file could not be read, so nothing was overwritten.", 12, palette.DangerText, 8, 8, width - 8, 28, false);
                 return;
             }
-            float y = 6f;
+            float y = 4f;
+            y = DrawSection(c, parent, palette, events, width, y, "CUSTOM", "custom");
+            y = DrawSection(c, parent, palette, events, width, y, "VANILLA", "vanilla");
+            DrawSection(c, parent, palette, events, width, y, "SEASONAL", "seasonal");
+        }
+
+        private float DrawSection(CuiElementContainer c, string parent, Palette palette, List<EventDef> events, float width, float y, string title, string category)
+        {
+            int count = CountCategory(events, category);
+            BoxTop(c, parent, palette.Header, 4, y, width - 8f, 16);
+            BoxTop(c, parent, palette.Accent, 4, y + 16f, width - 8f, 2);
+            LabelTop(c, parent, title, 11, palette.Text, 12, y, 180, y + 16, true);
+            LabelTop(c, parent, count.ToString(CultureInfo.InvariantCulture), 11, palette.SubText, width - 36f, y, width - 12f, y + 16, false);
+            y += 22f;
+            if (count == 0)
+            {
+                LabelTop(c, parent, "None", 11, palette.SubText, 12, y, width - 12f, y + 16, false);
+                return y + 22f;
+            }
             for (int i = 0; i < events.Count; i++)
             {
                 var ev = events[i];
-                BoxTop(c, parent, palette.Card, 4, y, width - 8f, 28);
-                LabelTop(c, parent, ev.Name, 12, palette.Text, 12, y + 2, 168, y + 26, true);
-                string next = NextLabel(ev);
-                LabelTop(c, parent, next, 11, next == "live" ? palette.AccentText : palette.SubText, 168, y + 4, width - 168, y + 24, false);
-                float toggleX = width - 156f;
-                ButtonTop(c, parent, UiCmd + " toggle " + ev.Id, ev.Enabled ? palette.Accent : palette.Button, toggleX, y + 5, 36, 18, ev.Enabled ? "On" : "Off", 10, ev.Enabled ? palette.AccentText : palette.ButtonText);
-                ButtonTop(c, parent, UiCmd + " start " + ev.Id, palette.Button, width - 116f, y + 5, 52, 18, "Start", 10, palette.ButtonText);
-                ButtonTop(c, parent, UiCmd + " edit " + ev.Id, palette.Button, width - 60f, y + 5, 48, 18, "Edit", 10, palette.ButtonText);
-                y += 32f;
+                if (ev == null || !CategoryOf(ev).Equals(category, StringComparison.OrdinalIgnoreCase)) continue;
+                y = DrawEventRow(c, parent, palette, ev, width, y, category);
             }
+            return y + 2f;
+        }
+
+        private float DrawEventRow(CuiElementContainer c, string parent, Palette palette, EventDef ev, float width, float y, string category)
+        {
+            BoxTop(c, parent, palette.Card, 4, y, width - 8f, 28);
+            bool tag = category.Equals("seasonal", StringComparison.OrdinalIgnoreCase) && IsCustomEvent(ev);
+            float nameRight = tag ? 146f : 168f;
+            LabelTop(c, parent, ev.Name, 12, palette.Text, 12, y + 2, nameRight, y + 26, true);
+            if (tag)
+                LabelTop(c, parent, "custom", 10, palette.AccentText, 148, y + 4, 196, y + 24, false);
+            string next = NextLabel(ev);
+            float nextLeft = tag ? 200f : 168f;
+            LabelTop(c, parent, next, 11, next == "live" ? palette.AccentText : palette.SubText, nextLeft, y + 4, width - 168f, y + 24, false);
+            ButtonTop(c, parent, UiCmd + " toggle " + ev.Id, ev.Enabled ? palette.Accent : palette.Button, width - 156f, y + 5, 36, 18, ev.Enabled ? "On" : "Off", 10, ev.Enabled ? palette.AccentText : palette.ButtonText);
+            ButtonTop(c, parent, UiCmd + " start " + ev.Id, palette.Button, width - 116f, y + 5, 52, 18, "Start", 10, palette.ButtonText);
+            ButtonTop(c, parent, UiCmd + " edit " + ev.Id, palette.Button, width - 60f, y + 5, 48, 18, "Edit", 10, palette.ButtonText);
+            return y + 32f;
         }
 
         private void DrawEdit(CuiElementContainer c, string parent, Palette palette, EventDef ev, float width)
@@ -1966,6 +2028,15 @@ namespace Oxide.Plugins
             {
                 LabelTop(c, parent, note, 10, palette.SubText, 8, y, width - 12, y + 28, false);
                 y += 32f;
+            }
+            if (IsCustomEvent(ev))
+            {
+                LabelTop(c, parent, "Group", 10, palette.SubText, 8, y, 70, y + 14, true);
+                y += 16f;
+                bool seasonal = CategoryOf(ev).Equals("seasonal", StringComparison.OrdinalIgnoreCase);
+                ButtonTop(c, parent, UiCmd + " group " + ev.Id + " custom", seasonal ? palette.Button : palette.Accent, 8, y, 88, 20, "Custom", 11, seasonal ? palette.ButtonText : palette.AccentText);
+                ButtonTop(c, parent, UiCmd + " group " + ev.Id + " seasonal", seasonal ? palette.Accent : palette.Button, 100, y, 100, 20, "Seasonal", 11, seasonal ? palette.AccentText : palette.ButtonText);
+                y += 26f;
             }
             LabelTop(c, parent, "Schedule", 10, palette.SubText, 8, y, 120, y + 14, true);
             y += 16f;
@@ -2011,10 +2082,15 @@ namespace Oxide.Plugins
 
         private static float EditHeight(EventDef ev)
         {
-            float h = 360f;
-            if (ev != null && ev.Custom) h += 90f;
-            if (ev != null && KindNote(ev.Kind).Length > 0) h += 32f;
-            return h;
+            bool custom = IsCustomEvent(ev);
+            float y = 8f;
+            if (ev != null && KindNote(ev.Kind).Length > 0) y += 32f;
+            if (custom) y += 42f;
+            y += 16f + 26f + 44f + 16f + 24f + 44f + 44f;
+            if (ev == null || !ev.Custom) y += 42f;
+            y += 24f + 44f;
+            if (ev != null && ev.Custom) y += 44f + 44f;
+            return y + 54f;
         }
 
         private static float Field(CuiElementContainer c, string parent, Palette palette, float width, float y, string label, string value, string command, int limit)
@@ -2101,18 +2177,90 @@ namespace Oxide.Plugins
 
         private static int CompareEvents(EventDef a, EventDef b)
         {
-            int rank = Rank(a).CompareTo(Rank(b));
+            int cat = CategoryRank(CategoryOf(a)).CompareTo(CategoryRank(CategoryOf(b)));
+            if (cat != 0) return cat;
+            int rank = WithinRank(a).CompareTo(WithinRank(b));
             if (rank != 0) return rank;
-            return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            int name = string.Compare(a == null ? "" : a.Name, b == null ? "" : b.Name, StringComparison.OrdinalIgnoreCase);
+            if (name != 0) return name;
+            return string.Compare(a == null ? "" : a.Id, b == null ? "" : b.Id, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static int Rank(EventDef ev)
+        private static float ListContentHeight(List<EventDef> events)
         {
-            if (ev == null) return 500;
-            for (int i = 0; i < BuiltinOrder.Length; i++)
-                if (BuiltinOrder[i].Equals(ev.Id, StringComparison.OrdinalIgnoreCase)) return i;
-            if (ev.Custom) return 100;
+            float y = 4f;
+            y = SectionSpan(y, CountCategory(events, "custom"));
+            y = SectionSpan(y, CountCategory(events, "vanilla"));
+            y = SectionSpan(y, CountCategory(events, "seasonal"));
+            return y + 4f;
+        }
+
+        private static float SectionSpan(float y, int count)
+        {
+            y += 22f;
+            if (count == 0) return y + 22f;
+            return y + count * 32f + 2f;
+        }
+
+        private static int CountCategory(List<EventDef> events, string category)
+        {
+            int count = 0;
+            if (events == null) return 0;
+            for (int i = 0; i < events.Count; i++)
+                if (events[i] != null && CategoryOf(events[i]).Equals(category, StringComparison.OrdinalIgnoreCase)) count++;
+            return count;
+        }
+
+        private static bool IsCustomEvent(EventDef ev)
+        {
+            return ev != null && (ev.Custom || string.Equals(ev.Kind, "custom", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string CustomCategory(string category)
+        {
+            return string.Equals(category, "seasonal", StringComparison.OrdinalIgnoreCase) ? "seasonal" : "custom";
+        }
+
+        private static string CategoryOf(EventDef ev)
+        {
+            if (ev == null) return "vanilla";
+            if (IsCustomEvent(ev))
+                return string.Equals(ev.Category, "seasonal", StringComparison.OrdinalIgnoreCase) ? "seasonal" : "custom";
+            if (Listed(SeasonalOrder, ev.Id) || Listed(SeasonalOrder, ev.Kind)) return "seasonal";
+            return "vanilla";
+        }
+
+        private static int CategoryRank(string category)
+        {
+            if (string.Equals(category, "custom", StringComparison.OrdinalIgnoreCase)) return 0;
+            if (string.Equals(category, "vanilla", StringComparison.OrdinalIgnoreCase)) return 1;
+            return 2;
+        }
+
+        private static int WithinRank(EventDef ev)
+        {
+            if (ev == null) return 900;
+            if (IsCustomEvent(ev)) return 400;
+            int vanilla = ListedAt(VanillaOrder, ev.Id);
+            if (vanilla < 0) vanilla = ListedAt(VanillaOrder, ev.Kind);
+            if (vanilla >= 0) return vanilla;
+            int seasonal = ListedAt(SeasonalOrder, ev.Id);
+            if (seasonal < 0) seasonal = ListedAt(SeasonalOrder, ev.Kind);
+            if (seasonal >= 0) return seasonal;
             return 200;
+        }
+
+        private static bool Listed(string[] ids, string value)
+        {
+            return ListedAt(ids, value) >= 0;
+        }
+
+        private static int ListedAt(string[] ids, string value)
+        {
+            if (ids == null || string.IsNullOrEmpty(value)) return -1;
+            for (int i = 0; i < ids.Length; i++)
+                if (ids[i].Equals(value, StringComparison.OrdinalIgnoreCase)) return i;
+            return -1;
         }
 
         #endregion
