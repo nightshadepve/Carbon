@@ -672,21 +672,24 @@ namespace Oxide.Plugins
     }
 
     // Player voucher names. The shop sells paper tokens; the skin id is the tier.
-    // 6h, 1d, and weekend are the names players redeem. 24h is the old name of the
-    // 1d token (skin 3810324315, 24 hours of shield time). The old 1h paper uses the
-    // same skin as 6h (3810298504). Callers tell them apart by the item name:
-    // a name containing "1 hour" is still 1 hour, and every other paper of that
-    // skin is 6 hours. Weekend length is the Eastern window (end minus start)
-    // unless a positive config hour value is passed in.
+    // Current skins: 6h 3843173236, 1d 3843173835, weekend 3843174471.
+    // Older papers stay redeemable. Skin 3810298504 named like "1 Hour" is 1 hour.
+    // Any other name on that skin is 6 hours. Skin 3810324315 is 1 day (24 hours).
+    // Skin 3810324938 is a weekend. 24h is an old name for the 1d command.
+    // Weekend length is the Eastern window (end minus start) unless a positive
+    // config hour value is passed in.
     public static class NightshadeVoucherTiers
     {
         public const string SixHours = "6h";
         public const string OneDay = "1d";
         public const string Weekend = "weekend";
 
-        public const ulong SkinSixHours = 3810298504UL;
-        public const ulong SkinOneDay = 3810324315UL;
-        public const ulong SkinWeekend = 3810324938UL;
+        public const ulong SkinSixHours = 3843173236UL;
+        public const ulong SkinOneDay = 3843173835UL;
+        public const ulong SkinWeekend = 3843174471UL;
+        public const ulong LegacySkinShort = 3810298504UL;
+        public const ulong LegacySkinDay = 3810324315UL;
+        public const ulong LegacySkinWeekend = 3810324938UL;
 
         public const string OneHour = "1h";
         public const double SixHourSeconds = 21600d;
@@ -712,7 +715,7 @@ namespace Oxide.Plugins
             if (key.Length == 0) return false;
             if (IsLegacyHour(key))
             {
-                tier = Fixed(OneHour, key, SkinSixHours, OneHourSeconds, key != OneHour);
+                tier = Fixed(OneHour, key, LegacySkinShort, OneHourSeconds, key != OneHour);
                 return true;
             }
             if (IsSix(key))
@@ -734,12 +737,29 @@ namespace Oxide.Plugins
             return false;
         }
 
-        // Old shop items are named "Nightshade Raid Shield - 1 Hour" and share the 6h skin.
+        // Old shop items are named "Nightshade Raid Shield - 1 Hour" on LegacySkinShort.
         public static bool LegacyOneHourName(string name)
         {
             if (string.IsNullOrEmpty(name)) return false;
             string text = name.ToLowerInvariant();
             return text.Contains("1 hour") || text.Contains("1hour") || text.Contains("one hour");
+        }
+
+        // Current skins match on id alone. The old short skin still uses the item name.
+        public static bool Matches(ulong skin, string itemName, string tier)
+        {
+            if (tier == SixHours)
+            {
+                if (skin == SkinSixHours) return true;
+                return skin == LegacySkinShort && !LegacyOneHourName(itemName);
+            }
+            if (tier == OneHour)
+                return skin == LegacySkinShort && LegacyOneHourName(itemName);
+            if (tier == OneDay)
+                return skin == SkinOneDay || skin == LegacySkinDay;
+            if (tier == Weekend)
+                return skin == SkinWeekend || skin == LegacySkinWeekend;
+            return false;
         }
 
         public static double WindowSeconds(DateTime startUtc, DateTime endUtc)
@@ -764,7 +784,7 @@ namespace Oxide.Plugins
             Resolved tier;
             if (!TryResolve("6h", out tier) || tier.Tier != SixHours || tier.LegacyName || tier.Seconds != SixHourSeconds || tier.Skin != SkinSixHours)
                 return "6h";
-            if (!TryResolve("1h", out tier) || tier.Tier != OneHour || tier.LegacyName || tier.Skin != SkinSixHours || tier.Seconds != OneHourSeconds)
+            if (!TryResolve("1h", out tier) || tier.Tier != OneHour || tier.LegacyName || tier.Skin != LegacySkinShort || tier.Seconds != OneHourSeconds)
                 return "1h";
             if (!TryResolve("1hour", out tier) || tier.Tier != OneHour || !tier.LegacyName || tier.Seconds != OneHourSeconds)
                 return "1hour";
@@ -797,6 +817,18 @@ namespace Oxide.Plugins
             if (LegacyOneHourName("Nightshade Raid Shield - 6 Hours")) return "six-name";
             if (LegacyOneHourName("Nightshade Raid Shield - 10 Hours")) return "ten-name";
             if (LegacyOneHourName(null) || LegacyOneHourName("")) return "blank-name";
+            if (!Matches(SkinSixHours, "Nightshade Raid Shield - 1 Hour", SixHours)) return "new-6h-name";
+            if (Matches(SkinSixHours, "Nightshade Raid Shield - 1 Hour", OneHour)) return "new-6h-not-1h";
+            if (!Matches(SkinSixHours, null, SixHours)) return "new-6h-blank";
+            if (!Matches(LegacySkinShort, "Nightshade Raid Shield - 1 Hour", OneHour)) return "old-1h";
+            if (Matches(LegacySkinShort, "Nightshade Raid Shield - 1 Hour", SixHours)) return "old-1h-not-6h";
+            if (!Matches(LegacySkinShort, "Nightshade Raid Shield - 6 Hours", SixHours)) return "old-6h";
+            if (Matches(LegacySkinShort, "Nightshade Raid Shield - 6 Hours", OneHour)) return "old-6h-not-1h";
+            if (!Matches(LegacySkinShort, null, SixHours)) return "old-blank-6h";
+            if (!Matches(SkinOneDay, null, OneDay) || !Matches(LegacySkinDay, "Nightshade Raid Shield - 24 Hours", OneDay)) return "day-skins";
+            if (Matches(SkinOneDay, null, SixHours) || Matches(LegacySkinDay, null, Weekend)) return "day-cross";
+            if (!Matches(SkinWeekend, null, Weekend) || !Matches(LegacySkinWeekend, null, Weekend)) return "weekend-skins";
+            if (Matches(SkinWeekend, "1 Hour", OneHour)) return "weekend-name";
             return null;
         }
 
@@ -1508,11 +1540,8 @@ namespace Oxide.Plugins
         private bool VoucherMatches(Item item, NightshadeVoucherTiers.Resolved tier)
         {
             if (item == null || item.info == null) return false;
-            if (item.info.shortname != VoucherShortname || item.skin != tier.Skin) return false;
-            if (tier.Skin != NightshadeVoucherTiers.SkinSixHours) return true;
-            bool legacy = NightshadeVoucherTiers.LegacyOneHourName(item.name);
-            if (tier.Tier == NightshadeVoucherTiers.OneHour) return legacy;
-            return !legacy;
+            if (item.info.shortname != VoucherShortname) return false;
+            return NightshadeVoucherTiers.Matches(item.skin, item.name, tier.Tier);
         }
 
         private Item FindVoucher(BasePlayer player, NightshadeVoucherTiers.Resolved tier)
