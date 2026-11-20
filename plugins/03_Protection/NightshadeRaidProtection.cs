@@ -432,6 +432,7 @@ namespace Oxide.Plugins
         // One cupboard considered for a hit. BuildingId 0 or a different building is foreign.
         public struct CupboardVote
         {
+            public ulong CupboardId;
             public uint BuildingId;
             public bool Destroyed;
             public bool PaidShield;
@@ -443,10 +444,13 @@ namespace Oxide.Plugins
         {
             public bool Block;
             public bool Paid;
+            public bool FromOverlap;
+            public bool ClearedByAuth;
+            public ulong CupboardId;
         }
 
-        // Only cupboards attached to the hit building can block. A foreign overlap cannot
-        // cancel a real shield or offline protection, and it cannot grant either.
+        // Only cupboards attached to the hit building can block on their own.
+        // A foreign cupboard cannot cancel that. Overlap coverage is a separate one-hop check.
         // When allowAuthorizedDamage is set, auth on the cupboard that would block skips that cupboard only.
         public static HitDecision Decide(uint hitBuildingId, bool allowAuthorizedDamage, CupboardVote[] cupboards)
         {
@@ -457,9 +461,17 @@ namespace Oxide.Plugins
                 CupboardVote vote = cupboards[i];
                 if (vote.Destroyed || vote.BuildingId != hitBuildingId) continue;
                 if (!vote.PaidShield && !vote.OfflineProtected) continue;
-                if (allowAuthorizedDamage && vote.AttackerAuthorized) continue;
+                if (allowAuthorizedDamage && vote.AttackerAuthorized)
+                {
+                    decision.ClearedByAuth = true;
+                    continue;
+                }
+                // Keep a paid block over a later offline block so the reason stays on the shield.
+                if (decision.Block && decision.Paid && !vote.PaidShield) continue;
                 decision.Block = true;
-                if (vote.PaidShield) decision.Paid = true;
+                decision.Paid = vote.PaidShield || decision.Paid;
+                decision.FromOverlap = false;
+                decision.CupboardId = vote.CupboardId;
             }
             return decision;
         }
@@ -479,34 +491,45 @@ namespace Oxide.Plugins
             return authorizedOnOverlap || isOverlapOwner;
         }
 
-        // Direct overlap with a protected cupboard whose owner is also on the hit cupboard.
-        // A shield copies as a full block. Offline protection copies only when the hit cupboard
-        // itself also qualifies, so someone online on it does not inherit the grace.
+        // One hop from a protected cupboard to a neighbor whose privilege sphere overlaps it.
+        // Paid shields copy when the buyer is on the neighbor's auth list right now.
+        // Same owner id without that auth entry does not count, and a neighbor that fails
+        // the check cannot clear a shield that already applies.
+        // Offline protection still needs the owner link, and the neighbor must qualify on
+        // its own so someone online there does not inherit the grace.
         public struct OverlapLink
         {
             public bool ZonesOverlap;
             public bool OwnerOnOverlap;
+            public bool BuyerAuthedOnHit;
             public bool SourceShield;
             public bool SourceOffline;
             public bool OverlapOffline;
             public bool AttackerAuthorizedOnSource;
+            public bool AttackerAuthorizedOnHit;
         }
 
         public static HitDecision MatchedOverlap(bool share, bool allowAuthorizedDamage, OverlapLink link)
         {
             HitDecision decision = new HitDecision();
-            if (!share || !link.ZonesOverlap || !link.OwnerOnOverlap) return decision;
-            if (link.SourceShield)
+            if (!share || !link.ZonesOverlap) return decision;
+            if (link.SourceShield && link.BuyerAuthedOnHit)
             {
-                if (allowAuthorizedDamage && link.AttackerAuthorizedOnSource) return decision;
+                if (allowAuthorizedDamage && (link.AttackerAuthorizedOnSource || link.AttackerAuthorizedOnHit))
+                {
+                    decision.ClearedByAuth = true;
+                    return decision;
+                }
                 decision.Block = true;
                 decision.Paid = true;
+                decision.FromOverlap = true;
                 return decision;
             }
-            if (link.SourceOffline && link.OverlapOffline)
+            if (link.OwnerOnOverlap && link.SourceOffline && link.OverlapOffline)
             {
                 decision.Block = true;
                 decision.Paid = false;
+                decision.FromOverlap = true;
             }
             return decision;
         }
@@ -553,7 +576,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.5")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.6")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
@@ -598,10 +621,12 @@ namespace Oxide.Plugins
 
         // Offline-protection test switch. Memory only: a reload clears a command override.
         // The config key below can turn it back on, and it defaults to false.
-        // While on, ONLY the offline-protection damage decision treats the PvP weekend as active.
+        // While on, the offline-protection damage decision treats the PvP weekend as active.
         // It does not call CheckWindow, EnsureRuleset, or ApplyExcavator.
-        // TruePVE rulesets and reloads, Giant Excavator speed, paid shields, and API_IsPvPActive
+        // TruePVE rulesets and reloads, Giant Excavator speed, and API_IsPvPActive
         // are unchanged by this switch. nrp.faketime still affects only the paths it already did.
+        // Paid shields are not gated on this switch. A shield with time left blocks raid damage
+        // on the real clock whether or not the weekend, this switch, or the full-weekend force is on.
         private bool forceOfflinePvp;
         private int? forceOfflineGraceMinutes;
         private float nextForceOfflineWarning;
@@ -611,10 +636,18 @@ namespace Oxide.Plugins
         // Persisted full-server weekend. While on, the scheduled window is treated as open
         // everywhere the real weekend is: TruePVE (existing Decide/Apply path, reload only
         // when the target changes), excavator boost, offline protection, API_IsPvPActive,
-        // and the HUD/info listeners of that API. Paid shields stay on the real clock.
-        // nsraid.forcepvp on does not flip this. nsraid.pvpweekend does, and saves config.
+        // and the HUD/info listeners of that API. Paid-shield time still drains only on the
+        // real Eastern weekend. nsraid.forcepvp on does not flip this. nsraid.pvpweekend does.
         private bool forceFullPvp;
         private float nextFullForceWarning;
+
+        // Admin hit log. Memory only. At most one line per entity every two seconds.
+        private bool debugHits;
+        private readonly Dictionary<ulong, float> debugNext = new Dictionary<ulong, float>();
+        private int scaleFrame = -1;
+        private ulong scaleEntity;
+        private ulong scaleAttacker;
+        private ScaleResult scaleCached;
 
         private class Settings
         {
@@ -630,6 +663,8 @@ namespace Oxide.Plugins
             [JsonProperty("Force full PvP weekend")] public bool ForceFullPvpWeekend = false;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
             [JsonProperty("Prevent teammates authorized on TC from damaging their own shielded building")] public bool ProtectFromAuthorizedPlayers = false;
+            // One switch for both protections. Paid shields cover a neighbor only while the
+            // buyer is on that neighbor's auth list. Offline protection uses the same 32m hop.
             [JsonProperty("Share protection with the owner's directly overlapping cupboards")] public bool ShareOverlappingCupboards = true;
             [JsonProperty("Show blocked-hit message to attacker (rate limited)")] public bool NotifyAttacker = true;
             [JsonProperty("Maximum total paid shield time on one TC in hours")] public int MaximumStackedHours = 72;
@@ -651,9 +686,20 @@ namespace Oxide.Plugins
         {
             public ulong CupboardId;
             public uint BuildingId;
+            // Steam id of the player who redeemed the voucher. 0 on shields saved before 1.4.6.
+            public ulong OwnerSteamId;
             public double RemainingSeconds;
             public long LastAccountedTicks;
             public long ExpiresUtcTicks;
+        }
+
+        private struct ScaleResult
+        {
+            public float Reduction;
+            public bool Paid;
+            public string Reason;
+            public ulong CupboardId;
+            public bool FromOverlap;
         }
 
         private class Store
@@ -697,10 +743,14 @@ namespace Oxide.Plugins
             cmd.AddChatCommand("raidshield", this, nameof(StatusCommand));
             cmd.AddChatCommand("nsraidtest", this, nameof(CmdNsRaidTest));
             cmd.AddChatCommand("nsraidpvp", this, nameof(CmdNsRaidPvp));
+            cmd.AddChatCommand("nsraidwhy", this, nameof(CmdNsRaidWhy));
             cmd.AddConsoleCommand("nrp.faketime", this, nameof(CmdFakeTime));
             cmd.AddConsoleCommand("nrp.window", this, nameof(CmdWindow));
             cmd.AddConsoleCommand("nsraid.forcepvp", this, nameof(CmdForcePvp));
             cmd.AddConsoleCommand("nsraid.pvpweekend", this, nameof(CmdPvpWeekend));
+            cmd.AddConsoleCommand("nsraid.why", this, nameof(CmdWhy));
+            cmd.AddConsoleCommand("nsraid.check", this, nameof(CmdCheck));
+            cmd.AddConsoleCommand("nsraid.debug", this, nameof(CmdDebug));
             try { store = Interface.Oxide.DataFileSystem.ReadObject<Store>(DataPath) ?? new Store(); }
             catch (Exception ex) { throw new Exception("Raid shield data could not be loaded: purchases disabled to prevent lost vouchers. " + ex.Message); }
             if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
@@ -826,6 +876,9 @@ namespace Oxide.Plugins
         //     Pass 0 for an outsider. A real steam id is cleared only when
         //     "Prevent teammates authorized on TC from damaging their own shielded building"
         //     is false and that player is authorized on the cupboard that would block.
+        //     A paid shield with time left blocks whether or not the Eastern weekend is open.
+        //     The timer still counts down only during that weekend. A shield also covers each
+        //     directly overlapping cupboard (32m, no further hop) while the buyer is authorized there.
         //     Attached entities use their own building. A player-placed container with no
         //     building id uses every cupboard zone that contains it, by that cupboard's
         //     own building, not the nearest tool cupboard.
@@ -911,7 +964,11 @@ namespace Oxide.Plugins
             if (player == null) return NoneShield();
             BuildingPrivlidge tc = player.GetBuildingPrivilege();
             if (tc == null) return NoneShield();
-            return API_GetCupboardShield(CupboardId(tc));
+            Dictionary<string, object> own = API_GetCupboardShield(CupboardId(tc));
+            if (own != null && !string.Equals(own["state"] as string, "none", StringComparison.Ordinal))
+                return own;
+            Shield cover = CoveringNeighborShield(tc);
+            return cover == null ? own : Describe(cover);
         }
 
         [HookMethod("API_GetCupboardShield")]
@@ -927,8 +984,7 @@ namespace Oxide.Plugins
         [HookMethod("API_IsEntityProtected")]
         public bool API_IsEntityProtected(BaseEntity entity, ulong attackerSteamId)
         {
-            bool paid;
-            return ProtectionScale(entity as BaseCombatEntity, attackerSteamId, out paid) > 0f;
+            return ComputeProtection(entity as BaseCombatEntity, attackerSteamId).Reduction > 0f;
         }
 
         [HookMethod("API_GetBuildingShield")]
@@ -937,7 +993,8 @@ namespace Oxide.Plugins
             if (buildingId == 0u) return NoneShield();
             DateTime start, end;
             bool active;
-            Weekend(NowUtc(), out start, out end, out active);
+            // Real clock, same as the damage check. A test clock must not hide a live shield.
+            Weekend(DateTime.UtcNow, out start, out end, out active);
             Shield best = null;
             double bestSeconds = 0d;
             foreach (var shield in store.Shields.Values)
@@ -1082,6 +1139,7 @@ namespace Oxide.Plugins
             Shield shield = new Shield();
             shield.CupboardId = id;
             shield.BuildingId = tc.buildingID;
+            shield.OwnerSteamId = previous != null && IsSteamId(previous.OwnerSteamId) ? previous.OwnerSteamId : SteamIdOf(player);
             shield.ExpiresUtcTicks = end.Ticks;
             shield.LastAccountedTicks = now.Ticks;
             shield.RemainingSeconds = Math.Min(combined, remainingWeekend);
@@ -1100,8 +1158,9 @@ namespace Oxide.Plugins
             }
             voucher.UseItem(1);
             PublishShield(shield);
-            Reply(player, active ? "Shield active for this PvP weekend. Remaining protection expires Monday 3 AM Eastern; unused hours are lost." :
-                "Shield queued for Friday at 8 PM Eastern. It does not protect during PvE weekdays. Any unused time expires Monday 3 AM Eastern.");
+            Reply(player, active
+                ? "Shield active for this PvP weekend. It blocks raid damage now. Remaining time expires Monday 3 AM Eastern; unused hours are lost."
+                : "Shield is on this TC and blocks raid damage now, including on a forced weekend. The timer counts down only from Friday 8 PM through Monday 3 AM Eastern, and whatever is left expires Monday 3 AM.");
             Puts("Redeemed " + args[1] + " for TC " + id + " by " + player.UserIDString);
         }
 
@@ -1220,7 +1279,9 @@ namespace Oxide.Plugins
             return 0u;
         }
 
-        // Shield stays on the cupboard and building it was redeemed for. A foreign TC is not passed in.
+        // The shield follows the cupboard net id. A later building merge changes buildingID;
+        // the id saved at redeem must not drop the shield. Time still drains only inside the
+        // real weekend window, but any time left blocks raid damage immediately.
         private bool ShieldBlocks(BuildingPrivlidge tc, uint buildingId, DateTime now, DateTime weekendEnd)
         {
             if (!settings.PaidShields || tc == null) return false;
@@ -1228,21 +1289,75 @@ namespace Oxide.Plugins
             if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield == null || shield.ExpiresUtcTicks != weekendEnd.Ticks)
                 return false;
             Account(shield, now);
-            bool active = shield.RemainingSeconds > 0d && shield.BuildingId == buildingId;
-            if (active) PublishShield(shield);
-            return active;
+            if (shield.RemainingSeconds <= 0d) return false;
+            if (buildingId != 0u && tc.buildingID != 0u && tc.buildingID != buildingId) return false;
+            if (tc.buildingID != 0u && shield.BuildingId != tc.buildingID)
+                shield.BuildingId = tc.buildingID;
+            PublishShield(shield);
+            return true;
+        }
+
+        // Buyer recorded at redeem. Shields saved before that fall back to the live TC owner.
+        private ulong ShieldBuyer(BuildingPrivlidge tc)
+        {
+            if (tc == null) return 0UL;
+            Shield shield;
+            if (store.Shields.TryGetValue(CupboardId(tc), out shield) && shield != null && IsSteamId(shield.OwnerSteamId))
+                return shield.OwnerSteamId;
+            return tc.OwnerID;
+        }
+
+        // A neighbor's paid shield covers this cupboard only while that shield's buyer is authorized here.
+        private Shield CoveringNeighborShield(BuildingPrivlidge hitTc)
+        {
+            if (!settings.ShareOverlappingCupboards || hitTc == null || hitTc.IsDestroyed || hitTc.transform == null)
+                return null;
+            DateTime now = DateTime.UtcNow;
+            DateTime start, end;
+            bool active;
+            Weekend(now, out start, out end, out active);
+            float radius = PrivilegeRadius();
+            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            try
+            {
+                Vis.Entities(hitTc.transform.position, radius * 2f, nearby);
+                for (int i = 0; i < nearby.Count; i++)
+                {
+                    BuildingPrivlidge source = nearby[i];
+                    if (source == null || source.IsDestroyed || source.transform == null) continue;
+                    if (source.buildingID == 0u || source.buildingID == hitTc.buildingID) continue;
+                    float distance = Vector3.Distance(hitTc.transform.position, source.transform.position);
+                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
+                    if (!ShieldBlocks(source, source.buildingID, now, end)) continue;
+                    ulong buyer = ShieldBuyer(source);
+                    if (!IsSteamId(buyer) || !Authorized(hitTc, buyer)) continue;
+                    Shield shield;
+                    if (store.Shields.TryGetValue(CupboardId(source), out shield)) return shield;
+                }
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref nearby);
+            }
+            return null;
+        }
+
+        private static float PrivilegeRadius()
+        {
+            float radius = BuildingPrivlidge.Radius;
+            if (radius <= 0f || float.IsNaN(radius)) radius = 16f;
+            return radius;
         }
 
         // One hop from the hit building's own cupboards. A neighbor that only touches
         // another neighbor is not included, so protection cannot walk across the map.
-        // includePaidShields is false only for the offline-protection test switch. A weekday
-        // force-on must not let a queued paid shield start blocking.
-        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd, bool includePaidShields)
+        // A paid shield on the neighbor covers this building only while its buyer is
+        // authorized here. Failing that check does not clear any other shield.
+        private NightshadeOfflineGate.HitDecision MatchDirectOverlaps(List<BuildingPrivlidge> own, ulong attacker, bool allowAuthorized, DateTime now, DateTime weekendEnd, bool offlineWindow)
         {
             NightshadeOfflineGate.HitDecision best = new NightshadeOfflineGate.HitDecision();
-            if (own == null || own.Count == 0) return best;
-            float radius = BuildingPrivlidge.Radius;
-            if (radius <= 0f || float.IsNaN(radius)) radius = 16f;
+            if (!settings.ShareOverlappingCupboards || own == null || own.Count == 0) return best;
+            float radius = PrivilegeRadius();
             float reach = radius * 2f;
             List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
             try
@@ -1260,25 +1375,37 @@ namespace Oxide.Plugins
                         if (source.buildingID == 0u || source.buildingID == hitTc.buildingID) continue;
                         float distance = Vector3.Distance(hitTc.transform.position, source.transform.position);
                         if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
-                        bool ownerOn = IsSteamId(source.OwnerID) && (source.OwnerID == hitTc.OwnerID || Authorized(hitTc, source.OwnerID));
-                        if (!NightshadeOfflineGate.SameOwnerOnOverlap(source.OwnerID, SteamIdMin, ownerOn, source.OwnerID == hitTc.OwnerID))
-                            continue;
-                        bool sourceShield = includePaidShields && ShieldBlocks(source, source.buildingID, now, weekendEnd);
-                        bool sourceOffline = !sourceShield && OfflineProtected(source, now);
-                        // The overlap cupboard must qualify on its own. An online raider on it blocks the copy.
+                        ulong buyer = ShieldBuyer(source);
+                        bool buyerAuthed = IsSteamId(buyer) && Authorized(hitTc, buyer);
+                        // Live auth list only. Matching owner ids after a deauth does not keep the hop.
+                        bool ownerAuthed = IsSteamId(source.OwnerID) && Authorized(hitTc, source.OwnerID);
+                        bool ownerLinked = NightshadeOfflineGate.SameOwnerOnOverlap(source.OwnerID, SteamIdMin, ownerAuthed, false);
+                        bool sourceShield = ShieldBlocks(source, source.buildingID, now, weekendEnd);
+                        bool sourceOffline = offlineWindow && !sourceShield && OfflineProtected(source, now);
+                        // The overlap cupboard must qualify on its own. An online player on it blocks the copy.
                         bool overlapOffline = sourceOffline && OfflineProtected(hitTc, now);
-                        bool attackerOnSource = attacker != 0UL && (attacker == source.OwnerID || Authorized(source, attacker));
+                        bool attackerOnSource = attacker != 0UL && Authorized(source, attacker);
+                        bool attackerOnHit = attacker != 0UL && Authorized(hitTc, attacker);
                         NightshadeOfflineGate.OverlapLink link = new NightshadeOfflineGate.OverlapLink();
                         link.ZonesOverlap = true;
-                        link.OwnerOnOverlap = true;
+                        link.OwnerOnOverlap = ownerLinked;
+                        link.BuyerAuthedOnHit = buyerAuthed;
                         link.SourceShield = sourceShield;
                         link.SourceOffline = sourceOffline;
                         link.OverlapOffline = overlapOffline;
                         link.AttackerAuthorizedOnSource = attackerOnSource;
+                        link.AttackerAuthorizedOnHit = attackerOnHit;
                         NightshadeOfflineGate.HitDecision part = NightshadeOfflineGate.MatchedOverlap(true, allowAuthorized, link);
-                        if (!part.Block) continue;
+                        if (!part.Block)
+                        {
+                            if (part.ClearedByAuth) best.ClearedByAuth = true;
+                            continue;
+                        }
+                        if (best.Paid && !part.Paid) continue;
                         best.Block = true;
-                        if (part.Paid) best.Paid = true;
+                        best.Paid = part.Paid || best.Paid;
+                        best.FromOverlap = true;
+                        best.CupboardId = CupboardId(source);
                         if (best.Paid) return best;
                     }
                 }
@@ -1290,21 +1417,29 @@ namespace Oxide.Plugins
             return best;
         }
 
-        // 0 means this hit is not reduced. Paid shields return 1. Offline protection uses the config percent.
+        // 0 means this hit is not reduced. Paid shields return 1 whenever time is left.
+        // Offline protection uses the config percent, and only inside the weekend or a force.
         // attacker 0 is an outsider, so tool-cupboard authorization cannot clear the block.
-        private float ProtectionScale(BaseCombatEntity entity, ulong attacker, out bool paid)
+        // The real clock is used on purpose. nrp.faketime does not open or drain a shield.
+        private ScaleResult ComputeProtection(BaseCombatEntity entity, ulong attacker)
         {
-            paid = false;
-            if (entity == null || entity is BasePlayer) return 0f;
+            ScaleResult result = new ScaleResult();
+            result.Reason = "not protected";
+            if (entity == null || entity is BasePlayer)
+            {
+                result.Reason = "not a building";
+                return result;
+            }
+            if (BuildingManager.server == null)
+            {
+                result.Reason = "not protected: building manager is not ready";
+                return result;
+            }
             DateTime now = DateTime.UtcNow;
             DateTime start, end;
             bool active;
-            // Real Eastern clock, same as before. nrp.faketime does not open this gate.
             Weekend(now, out start, out end, out active);
-            // forceOfflinePvp opens offline protection only. The full-server force opens it too.
-            // Paid shields still need the real weekend, so a forced weekday cannot drain a voucher.
             bool offlineWindow = active || forceOfflinePvp || forceFullPvp;
-            if (!offlineWindow || BuildingManager.server == null) return 0f;
 
             uint attached = BuildingIdOf(entity);
             uint[] buildings = attached != 0u
@@ -1312,17 +1447,52 @@ namespace Oxide.Plugins
                 : IsLoosePlayerContainer(entity) && entity.transform != null
                     ? NightshadeRaidTargets.BuildingsForContainer(0u, true, ZonesContaining(entity.transform.position))
                     : new uint[0];
-            float best = 0f;
+            if (buildings.Length == 0)
+            {
+                result.Reason = "not protected: no building id";
+                return result;
+            }
+            bool clearedByAuth = false;
             for (int i = 0; i < buildings.Length; i++)
             {
-                NightshadeOfflineGate.HitDecision decision = DecideBuilding(buildings[i], attacker, now, end, active);
+                NightshadeOfflineGate.HitDecision decision = DecideBuilding(buildings[i], attacker, now, end, offlineWindow);
+                if (decision.ClearedByAuth) clearedByAuth = true;
                 if (!decision.Block) continue;
                 float reduction = NightshadeOfflineGate.Reduction(decision.Paid, true, settings.OfflineReductionPercent);
-                if (reduction <= best) continue;
-                best = reduction;
-                paid = decision.Paid;
+                if (reduction <= result.Reduction) continue;
+                result.Reduction = reduction;
+                result.Paid = decision.Paid;
+                result.FromOverlap = decision.FromOverlap;
+                result.CupboardId = decision.CupboardId;
+                result.Reason = (decision.Paid ? "paid shield on " : "offline protection on ")
+                    + (decision.FromOverlap ? "overlapping TC " : "TC ")
+                    + decision.CupboardId;
             }
-            return best;
+            if (result.Reduction <= 0f)
+            {
+                if (clearedByAuth)
+                    result.Reason = "not protected for this attacker: authorized on the TC, and authorized damage is allowed";
+                else
+                    result.Reason = offlineWindow
+                        ? "not protected: no paid shield with time left, and offline grace is not met"
+                        : "not protected: no paid shield with time left";
+            }
+            return result;
+        }
+
+        // TruePVE calls CanEntityTakeDamage from inside its own damage hook. The same hit
+        // then reaches OnEntityTakeDamage. One result per frame keeps the overlap scan to one pass.
+        private ScaleResult ScaleForHit(BaseCombatEntity entity, ulong attacker)
+        {
+            int frame = Time.frameCount;
+            ulong id = entity != null && entity.net != null ? entity.net.ID.Value : 0UL;
+            if (frame == scaleFrame && id == scaleEntity && attacker == scaleAttacker && id != 0UL)
+                return scaleCached;
+            scaleFrame = frame;
+            scaleEntity = id;
+            scaleAttacker = attacker;
+            scaleCached = ComputeProtection(entity, attacker);
+            return scaleCached;
         }
 
         // Player-placed storage that is not attached to a building. World crates, corpses,
@@ -1365,7 +1535,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private NightshadeOfflineGate.HitDecision DecideBuilding(uint buildingId, ulong attacker, DateTime now, DateTime weekendEnd, bool realWeekendActive)
+        private NightshadeOfflineGate.HitDecision DecideBuilding(uint buildingId, ulong attacker, DateTime now, DateTime weekendEnd, bool offlineWindow)
         {
             NightshadeOfflineGate.HitDecision none = new NightshadeOfflineGate.HitDecision();
             if (buildingId == 0u || BuildingManager.server == null) return none;
@@ -1389,26 +1559,29 @@ namespace Oxide.Plugins
                     }
                     else
                     {
+                        vote.CupboardId = CupboardId(tc);
                         vote.BuildingId = tc.buildingID;
                         vote.AttackerAuthorized = attacker != 0UL && Authorized(tc, attacker);
-                        // A foreign building id is recorded and then ignored. It is not read for a shield.
-                        if (tc.buildingID == buildingId && !(allowAuthorized && vote.AttackerAuthorized))
+                        // A foreign building id is recorded and then ignored. It cannot cancel a shield.
+                        if (tc.buildingID == buildingId)
                         {
-                            if (realWeekendActive)
-                                vote.PaidShield = ShieldBlocks(tc, buildingId, now, weekendEnd);
-                            vote.OfflineProtected = OfflineProtected(tc, now);
-                            own.Add(tc);
-                        }
-                        else if (tc.buildingID == buildingId)
-                        {
+                            vote.PaidShield = ShieldBlocks(tc, buildingId, now, weekendEnd);
+                            if (offlineWindow)
+                                vote.OfflineProtected = OfflineProtected(tc, now);
                             own.Add(tc);
                         }
                     }
                     votes[n++] = vote;
                 }
                 decision = NightshadeOfflineGate.Decide(buildingId, allowAuthorized, votes);
-                if (!decision.Block && settings.ShareOverlappingCupboards)
-                    decision = MatchDirectOverlaps(own, attacker, allowAuthorized, now, weekendEnd, realWeekendActive);
+                if (!decision.Block)
+                {
+                    NightshadeOfflineGate.HitDecision overlap = MatchDirectOverlaps(own, attacker, allowAuthorized, now, weekendEnd, offlineWindow);
+                    if (overlap.Block)
+                        decision = overlap;
+                    else if (overlap.ClearedByAuth)
+                        decision.ClearedByAuth = true;
+                }
             }
             finally
             {
@@ -1417,29 +1590,72 @@ namespace Oxide.Plugins
             return decision;
         }
 
+        private static ulong AttackerId(HitInfo hit)
+        {
+            if (hit == null) return 0UL;
+            if (hit.InitiatorPlayer != null) return SteamIdOf(hit.InitiatorPlayer);
+            if (hit.Initiator != null && hit.Initiator.OwnerID >= SteamIdMin) return hit.Initiator.OwnerID;
+            return 0UL;
+        }
+
+        private void NotifyBlocked(HitInfo hit, bool paid)
+        {
+            if (!settings.NotifyAttacker || hit == null || hit.InitiatorPlayer == null) return;
+            float last;
+            ulong id = SteamIdOf(hit.InitiatorPlayer);
+            if (notifyThrottle.TryGetValue(id, out last) && Time.realtimeSinceStartup - last <= 8f) return;
+            notifyThrottle[id] = Time.realtimeSinceStartup;
+            Reply(hit.InitiatorPlayer, paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.");
+        }
+
+        private void NoteHit(BaseCombatEntity entity, ulong attacker, ScaleResult result)
+        {
+            if (!debugHits || entity == null || entity.net == null) return;
+            float now = Time.realtimeSinceStartup;
+            if (debugNext.Count > 300) debugNext.Clear();
+            float next;
+            ulong id = entity.net.ID.Value;
+            if (debugNext.TryGetValue(id, out next) && now < next) return;
+            debugNext[id] = now + 2f;
+            string name = string.IsNullOrEmpty(entity.ShortPrefabName) ? entity.GetType().Name : entity.ShortPrefabName;
+            Puts("hit " + name + " net " + id
+                + " attacker " + attacker
+                + " reduction " + result.Reduction.ToString("0.##", CultureInfo.InvariantCulture)
+                + " " + (result.Reason ?? ""));
+        }
+
+        // TruePVE asks this before its ruleset. false blocks the hit. null lets TruePVE decide.
+        // Never return true: that would force TruePVE to allow the hit and skip its own rules.
+        // The argument is BaseEntity because TruePVE passes whatever it was given, including non-combat.
+        private object CanEntityTakeDamage(BaseEntity entity, HitInfo hit)
+        {
+            BaseCombatEntity combat = entity as BaseCombatEntity;
+            if (combat == null || hit == null || hit.damageTypes == null) return null;
+            if (hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
+            if (combat is BasePlayer) return null;
+            ulong attacker = AttackerId(hit);
+            ScaleResult result = ScaleForHit(combat, attacker);
+            if (result.Reduction < 1f) return null;
+            NotifyBlocked(hit, result.Paid);
+            NoteHit(combat, attacker, result);
+            return false;
+        }
+
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo hit)
         {
-            if (entity == null || hit == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
+            if (entity == null || hit == null || hit.damageTypes == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
             // Players, NPCs, and animals are not building pieces. Buildings, attached
             // deployables, and loose player containers inside a protected cupboard zone are.
             if (entity is BasePlayer) return null;
-            ulong attacker = hit.InitiatorPlayer != null ? hit.InitiatorPlayer.userID :
-                hit.Initiator != null ? hit.Initiator.OwnerID : 0UL;
-            bool paid;
-            float reduction = ProtectionScale(entity, attacker, out paid);
-            if (reduction <= 0f) return null;
-            hit.damageTypes.ScaleAll(1f - reduction);
-            if (settings.NotifyAttacker && hit.InitiatorPlayer != null)
-            {
-                float last;
-                ulong id = hit.InitiatorPlayer.userID;
-                if (!notifyThrottle.TryGetValue(id, out last) || Time.realtimeSinceStartup - last > 8f)
-                {
-                    notifyThrottle[id] = Time.realtimeSinceStartup;
-                    string blockedMessage = paid ? "Nightshade raid shield blocked this hit." : "Offline protection reduced this hit.";
-                    Reply(hit.InitiatorPlayer, blockedMessage);
-                }
-            }
+            ulong attacker = AttackerId(hit);
+            ScaleResult result = ScaleForHit(entity, attacker);
+            NoteHit(entity, attacker, result);
+            if (result.Reduction <= 0f) return null;
+            hit.damageTypes.ScaleAll(1f - result.Reduction);
+            NotifyBlocked(hit, result.Paid);
+            // A full block must cancel the hit. Scaling to zero and returning null still lets
+            // a later hook, including TruePVE's weekend "anything can hurt anything" ruleset, treat it as a normal hit.
+            if (result.Reduction >= 1f) return true;
             return null;
         }
 
@@ -1451,7 +1667,7 @@ namespace Oxide.Plugins
             bool active;
             Weekend(now, out start, out end, out active);
             if (fakeUtc.HasValue) Reply(player, "Test clock is on. Window checks below are not the live clock. Clear it with nrp.faketime clear.");
-            if (forceFullPvp) Reply(player, "Full PvP weekend force is on. Raiding follows the PvP weekend. Paid shields still follow the real Eastern weekend.");
+            if (forceFullPvp) Reply(player, "Full PvP weekend force is on. Raiding follows the PvP weekend. A paid shield with time left still blocks. Its timer uses the real Eastern weekend.");
             Reply(player, active ? "PvP weekend ends in " + Format(end - now) + "." : "PvP weekend starts in " + Format(start - now) + ".");
             BuildingPrivlidge tc = TargetCupboard(player);
             if (tc == null) tc = player.GetBuildingPrivilege();
@@ -1462,14 +1678,26 @@ namespace Oxide.Plugins
             Weekend(DateTime.UtcNow, out realStart, out realEnd, out realActive);
             if (!store.Shields.TryGetValue(CupboardId(tc), out shield) || shield.ExpiresUtcTicks != realEnd.Ticks)
             {
-                Reply(player, "TC paid shield: none for this weekend.");
+                Shield cover = CoveringNeighborShield(tc);
+                if (cover == null)
+                    Reply(player, "TC paid shield: none for this weekend.");
+                else
+                {
+                    Account(cover, DateTime.UtcNow);
+                    Reply(player, "This TC has no shield of its own. Overlapping TC " + cover.CupboardId
+                        + " covers it while buyer " + (IsSteamId(cover.OwnerSteamId) ? cover.OwnerSteamId.ToString() : "the TC owner")
+                        + " stays authorized. " + Format(TimeSpan.FromSeconds(Math.Max(0, cover.RemainingSeconds))) + " left.");
+                }
                 ReplyOffline(player, tc);
                 return;
             }
             Account(shield, DateTime.UtcNow);
-            bool showActive = realActive && shield.RemainingSeconds > 0d;
-            Reply(player, (showActive ? "TC raid shield active: " : realActive ? "TC raid shield expired: " : "TC raid shield queued: ") + Format(TimeSpan.FromSeconds(Math.Max(0, shield.RemainingSeconds))) +
+            bool blocks = shield.RemainingSeconds > 0d;
+            string label = !blocks ? "TC raid shield expired: " : realActive ? "TC raid shield active: " : "TC raid shield active (timer starts Friday 8 PM Eastern): ";
+            Reply(player, label + Format(TimeSpan.FromSeconds(Math.Max(0, shield.RemainingSeconds))) +
                 ". Unused time expires Monday 3 AM Eastern.");
+            if (blocks && !realActive)
+                Reply(player, "Raid damage is blocked now. Stored hours count down only during the real weekend.");
             ReplyOffline(player, tc);
         }
 
@@ -1485,6 +1713,367 @@ namespace Oxide.Plugins
                 Reply(player, "Offline protection: on. Everyone authorized has been offline for at least " + grace + " minutes, so damage is reduced.");
             else
                 Reply(player, "Offline protection: not active. An offline base with no raid shield takes normal damage until that time has passed.");
+        }
+
+        private bool IsPluginAdmin(BasePlayer player)
+        {
+            return player != null && (player.IsAdmin || permission.UserHasPermission(player.UserIDString, PermAdmin));
+        }
+
+        private void CmdNsRaidWhy(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            if (!IsPluginAdmin(player))
+            {
+                Reply(player, "No permission.");
+                return;
+            }
+            BaseCombatEntity entity = LookTarget(player);
+            ReplyLines(player, entity == null
+                ? "Look at a building piece or deployable and run /nsraidwhy again."
+                : ExplainEntity(entity, SteamIdOf(player)));
+        }
+
+        private void CmdWhy(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !ConsoleAdmin(arg)) return;
+            BasePlayer player = arg.Connection == null ? null : arg.Connection.player as BasePlayer;
+            if (player == null)
+            {
+                arg.ReplyWith("Look at an entity and run nsraid.why from F1, or use nsraid.check x y z.");
+                return;
+            }
+            BaseCombatEntity entity = LookTarget(player);
+            string report = entity == null
+                ? "Look at a building piece or deployable and run nsraid.why again."
+                : ExplainEntity(entity, SteamIdOf(player));
+            arg.ReplyWith(report);
+            ReplyLines(player, report);
+        }
+
+        private void CmdCheck(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !ConsoleAdmin(arg)) return;
+            string[] args = ConsoleArgs(arg);
+            float x, y, z;
+            if (args.Length < 3
+                || !float.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
+                || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)
+                || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out z))
+            {
+                arg.ReplyWith("Usage: nsraid.check <x> <y> <z>");
+                return;
+            }
+            BaseCombatEntity entity = CombatNear(new Vector3(x, y, z));
+            BasePlayer player = arg.Connection == null ? null : arg.Connection.player as BasePlayer;
+            string report = entity == null
+                ? "No building piece or deployable within 3m of "
+                    + x.ToString("0.0", CultureInfo.InvariantCulture) + " "
+                    + y.ToString("0.0", CultureInfo.InvariantCulture) + " "
+                    + z.ToString("0.0", CultureInfo.InvariantCulture) + "."
+                : ExplainEntity(entity, SteamIdOf(player));
+            arg.ReplyWith(report);
+            if (player != null) ReplyLines(player, report);
+        }
+
+        private void CmdDebug(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !ConsoleAdmin(arg)) return;
+            arg.ReplyWith(HandleDebug(ConsoleArgs(arg)));
+        }
+
+        private string HandleDebug(string[] args)
+        {
+            if (args == null || args.Length != 1 || string.IsNullOrEmpty(args[0]))
+                return "Usage: nsraid.debug on | off | status";
+            string action = args[0];
+            if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
+                return "Hit debug log is " + (debugHits ? "ON" : "OFF") + ". Each entity is logged at most once every 2 seconds.";
+            if (action.Equals("off", StringComparison.OrdinalIgnoreCase))
+            {
+                debugHits = false;
+                debugNext.Clear();
+                return "Hit debug log is OFF.";
+            }
+            if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
+                return "Usage: nsraid.debug on | off | status";
+            debugHits = true;
+            return "Hit debug log is ON. Each entity is logged at most once every 2 seconds. Turn it off with nsraid.debug off.";
+        }
+
+        private static BaseCombatEntity LookTarget(BasePlayer player)
+        {
+            if (player == null || player.eyes == null) return null;
+            RaycastHit hit;
+            if (!Physics.Raycast(player.eyes.HeadRay(), out hit, 30f)) return null;
+            BaseEntity entity = hit.GetEntity();
+            if (entity is BasePlayer) return null;
+            return entity as BaseCombatEntity;
+        }
+
+        private static BaseCombatEntity CombatNear(Vector3 pos)
+        {
+            List<BaseCombatEntity> found = Facepunch.Pool.Get<List<BaseCombatEntity>>();
+            try
+            {
+                Vis.Entities(pos, 3f, found);
+                BaseCombatEntity best = null;
+                float bestDist = float.MaxValue;
+                for (int i = 0; i < found.Count; i++)
+                {
+                    BaseCombatEntity entity = found[i];
+                    if (entity == null || entity.IsDestroyed || entity is BasePlayer || entity.transform == null) continue;
+                    float dist = Vector3.Distance(pos, entity.transform.position);
+                    if (dist >= bestDist) continue;
+                    best = entity;
+                    bestDist = dist;
+                }
+                return best;
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref found);
+            }
+        }
+
+        private bool OfflineWindowOpen()
+        {
+            DateTime start, end;
+            bool active;
+            Weekend(DateTime.UtcNow, out start, out end, out active);
+            return active || forceOfflinePvp || forceFullPvp;
+        }
+
+        private string ModeLine()
+        {
+            DateTime start, end;
+            bool real;
+            Weekend(DateTime.UtcNow, out start, out end, out real);
+            int grace = Math.Max(0, EffectiveOfflineGraceMinutes());
+            return "Mode: real weekend " + (real ? "ACTIVE" : "inactive")
+                + " (" + FormatEdge(start) + " -> " + FormatEdge(end) + ")"
+                + " | offline-force " + (forceOfflinePvp ? "ON" : "off")
+                + " grace " + grace + " min"
+                + " | full-force " + (forceFullPvp ? "ON" : "off")
+                + " | paid shields " + (settings != null && settings.PaidShields ? "enabled" : "disabled");
+        }
+
+        private string ExplainEntity(BaseCombatEntity entity, ulong viewer)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.Append(ModeLine()).Append('\n');
+            if (entity == null)
+            {
+                sb.Append("No entity.\n");
+                return sb.ToString();
+            }
+            uint buildingId = BuildingIdOf(entity);
+            string name = string.IsNullOrEmpty(entity.ShortPrefabName) ? entity.GetType().Name : entity.ShortPrefabName;
+            Vector3 pos = entity.transform != null ? entity.transform.position : Vector3.zero;
+            ulong netId = entity.net == null ? 0UL : entity.net.ID.Value;
+            sb.Append("Entity: ").Append(name)
+                .Append(" net ").Append(netId)
+                .Append(" at ").Append(Num(pos.x)).Append(' ').Append(Num(pos.y)).Append(' ').Append(Num(pos.z))
+                .Append('\n');
+            sb.Append("Building id: ").Append(buildingId).Append('\n');
+            float radius = PrivilegeRadius();
+            sb.Append("Overlap share: ").Append(settings != null && settings.ShareOverlappingCupboards ? "on" : "off")
+                .Append(" (privilege radius ").Append(Num(radius))
+                .Append("m, center-to-center up to ").Append(Num(radius * 2f))
+                .Append("m, one hop, no chain)\n");
+            if (buildingId == 0u || BuildingManager.server == null)
+            {
+                sb.Append("No own building. A loose player container is checked against every cupboard zone that contains it.\n");
+            }
+            else
+            {
+                BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+                if (building == null || building.buildingPrivileges == null || building.buildingPrivileges.Count == 0)
+                    sb.Append("Building ").Append(buildingId).Append(" has no tool cupboard.\n");
+                else
+                {
+                    foreach (BuildingPrivlidge tc in building.buildingPrivileges)
+                        AppendCupboard(sb, tc, buildingId);
+                }
+            }
+            ScaleResult outsider = ComputeProtection(entity, 0UL);
+            sb.Append("Outsider: ").Append(outsider.Reduction > 0f ? "PROTECTED yes" : "protected no")
+                .Append(" - ").Append(outsider.Reason ?? "").Append('\n');
+            if (IsSteamId(viewer))
+            {
+                ScaleResult mine = ComputeProtection(entity, viewer);
+                sb.Append("You (").Append(viewer).Append("): ")
+                    .Append(mine.Reduction > 0f ? "PROTECTED yes" : "protected no")
+                    .Append(" - ").Append(mine.Reason ?? "").Append('\n');
+            }
+            return sb.ToString();
+        }
+
+        private void AppendCupboard(StringBuilder sb, BuildingPrivlidge tc, uint hitBuilding)
+        {
+            if (tc == null || tc.IsDestroyed)
+            {
+                sb.Append("Cupboard: missing\n");
+                return;
+            }
+            bool own = tc.buildingID == hitBuilding;
+            sb.Append(own ? "Own TC: " : "Listed TC on another building: ")
+                .Append(CupboardId(tc))
+                .Append(" building ").Append(tc.buildingID)
+                .Append(" owner ").Append(tc.OwnerID)
+                .Append('\n');
+            AppendShieldRecord(sb, tc);
+            AppendAuth(sb, tc);
+            if (own) AppendCoveredNeighbors(sb, tc);
+        }
+
+        private void AppendShieldRecord(StringBuilder sb, BuildingPrivlidge tc)
+        {
+            DateTime now = DateTime.UtcNow;
+            DateTime start, end;
+            bool realActive;
+            Weekend(now, out start, out end, out realActive);
+            Shield shield;
+            if (tc == null || !store.Shields.TryGetValue(CupboardId(tc), out shield) || shield == null)
+            {
+                sb.Append("  Paid shield record: none\n");
+                Shield cover = tc == null ? null : CoveringNeighborShield(tc);
+                if (cover != null)
+                {
+                    ulong buyer = IsSteamId(cover.OwnerSteamId) ? cover.OwnerSteamId : 0UL;
+                    sb.Append("  Covered by overlapping TC ").Append(cover.CupboardId)
+                        .Append(" buyer ").Append(buyer)
+                        .Append(" remaining ").Append(Math.Max(0d, cover.RemainingSeconds).ToString("0", CultureInfo.InvariantCulture))
+                        .Append("s expires ").Append(FormatEdge(new DateTime(cover.ExpiresUtcTicks, DateTimeKind.Utc)))
+                        .Append('\n');
+                }
+                return;
+            }
+            Account(shield, now);
+            bool thisWeekend = shield.ExpiresUtcTicks == end.Ticks;
+            bool blocks = settings.PaidShields && thisWeekend && shield.RemainingSeconds > 0d && tc.buildingID != 0u;
+            ulong ownerId = IsSteamId(shield.OwnerSteamId) ? shield.OwnerSteamId : tc.OwnerID;
+            string who = IsSteamId(shield.OwnerSteamId) ? "buyer" : "buyer not recorded, using TC owner";
+            sb.Append("  Paid shield record: owner ").Append(ownerId).Append(" (").Append(who).Append(")")
+                .Append(" TC ").Append(shield.CupboardId)
+                .Append(" saved building ").Append(shield.BuildingId)
+                .Append(" current building ").Append(tc.buildingID)
+                .Append('\n');
+            sb.Append("  Expires ").Append(FormatEdge(new DateTime(shield.ExpiresUtcTicks, DateTimeKind.Utc)))
+                .Append(" remaining ").Append(Math.Max(0d, shield.RemainingSeconds).ToString("0", CultureInfo.InvariantCulture)).Append("s")
+                .Append(" this weekend ").Append(thisWeekend ? "yes" : "no")
+                .Append(" blocks ").Append(blocks ? "yes" : "no")
+                .Append(" timer ").Append(realActive && blocks ? "counting down" : "held until the real weekend")
+                .Append('\n');
+        }
+
+        private void AppendAuth(StringBuilder sb, BuildingPrivlidge tc)
+        {
+            int grace = Math.Max(0, EffectiveOfflineGraceMinutes());
+            DateTime now = DateTime.UtcNow;
+            sb.Append("  Grace required: ").Append(grace).Append(" min. Offline window: ")
+                .Append(OfflineWindowOpen() ? "open" : "closed").Append('\n');
+            if (tc == null || tc.authorizedPlayers == null || tc.authorizedPlayers.Count == 0)
+            {
+                sb.Append("  Authorized players: none\n");
+                return;
+            }
+            bool any = false;
+            bool ownerListed = false;
+            foreach (ulong id in tc.authorizedPlayers)
+            {
+                if (!IsSteamId(id)) continue;
+                any = true;
+                if (id == tc.OwnerID) ownerListed = true;
+                sb.Append("  ").Append(MemberLine(id, now, grace)).Append('\n');
+            }
+            if (!any) sb.Append("  Authorized players: none with a steam id\n");
+            if (IsSteamId(tc.OwnerID) && !ownerListed)
+                sb.Append("  TC owner ").Append(tc.OwnerID).Append(" is not on the auth list. ").Append(MemberLine(tc.OwnerID, now, grace)).Append('\n');
+        }
+
+        private string MemberLine(ulong id, DateTime now, int grace)
+        {
+            bool online = IsConnectedPlayer(id);
+            float sleepSeconds;
+            bool sleeping = TrySleepingSeconds(id, out sleepSeconds);
+            long ticks;
+            bool hasSeen = store.LastSeenUtcTicks.TryGetValue(id, out ticks);
+            bool enough = NightshadeOfflineGate.OfflineLongEnough(online, sleeping, sleepSeconds, hasSeen, ticks, now, grace);
+            string seen = "no last-seen record";
+            string graceLeft = online ? "grace not started" : "no clock yet, not eligible";
+            if (hasSeen && ticks > 0L)
+            {
+                DateTime when = new DateTime(ticks, DateTimeKind.Utc);
+                double minutes = (now - when).TotalMinutes;
+                if (minutes < 0d) minutes = 0d;
+                seen = "last seen " + FormatEdge(when);
+                if (!online)
+                {
+                    double left = grace - minutes;
+                    graceLeft = left <= 0d ? "last-seen grace met" : "last-seen grace " + left.ToString("0.0", CultureInfo.InvariantCulture) + " min left";
+                }
+            }
+            if (sleeping && !online)
+            {
+                double left = grace - (sleepSeconds / 60d);
+                string sleepGrace = left <= 0d ? "sleeper grace met" : "sleeper grace " + left.ToString("0.0", CultureInfo.InvariantCulture) + " min left";
+                graceLeft = graceLeft + "; " + sleepGrace;
+            }
+            string state = online ? "ONLINE" : "offline";
+            string sleep = sleeping ? "sleeper " + sleepSeconds.ToString("0", CultureInfo.InvariantCulture) + "s" : "no sleeper";
+            string eligible = enough ? "offline long enough" : "not offline long enough";
+            return id.ToString() + " " + state + ", " + sleep + ", " + seen + ", " + graceLeft + ", " + eligible;
+        }
+
+        private void AppendCoveredNeighbors(StringBuilder sb, BuildingPrivlidge source)
+        {
+            if (source == null || source.transform == null)
+            {
+                sb.Append("  Covered TCs: cupboard has no position\n");
+                return;
+            }
+            if (settings == null || !settings.ShareOverlappingCupboards)
+            {
+                sb.Append("  Covered TCs: overlap sharing is off\n");
+                return;
+            }
+            DateTime now = DateTime.UtcNow;
+            DateTime start, end;
+            bool active;
+            Weekend(now, out start, out end, out active);
+            bool shieldOn = ShieldBlocks(source, source.buildingID, now, end);
+            ulong buyer = ShieldBuyer(source);
+            float radius = PrivilegeRadius();
+            List<BuildingPrivlidge> nearby = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            try
+            {
+                Vis.Entities(source.transform.position, radius * 2f, nearby);
+                int shown = 0;
+                for (int i = 0; i < nearby.Count; i++)
+                {
+                    BuildingPrivlidge other = nearby[i];
+                    if (other == null || other.IsDestroyed || other.transform == null) continue;
+                    if (other.buildingID == 0u || other.buildingID == source.buildingID) continue;
+                    float distance = Vector3.Distance(source.transform.position, other.transform.position);
+                    if (!NightshadeOfflineGate.PrivilegeZonesOverlap(distance, radius)) continue;
+                    shown++;
+                    bool authed = IsSteamId(buyer) && Authorized(other, buyer);
+                    sb.Append("  Neighbor TC ").Append(CupboardId(other))
+                        .Append(" building ").Append(other.buildingID)
+                        .Append(" distance ").Append(distance.ToString("0.0", CultureInfo.InvariantCulture)).Append("m")
+                        .Append(" buyer ").Append(buyer)
+                        .Append(" authed ").Append(authed ? "yes" : "no")
+                        .Append(" covered ").Append(shieldOn && authed ? "yes" : "no")
+                        .Append('\n');
+                }
+                if (shown == 0)
+                    sb.Append("  Covered TCs: no direct neighbor within ").Append(Num(radius * 2f)).Append("m\n");
+            }
+            finally
+            {
+                Facepunch.Pool.FreeUnmanaged(ref nearby);
+            }
         }
 
         private static string Format(TimeSpan t) => ((int)Math.Max(0, t.TotalHours)) + "h " + Math.Max(0, t.Minutes) + "m";
@@ -1607,22 +2196,17 @@ namespace Oxide.Plugins
             if (shield.ExpiresUtcTicks != end.Ticks) return NoneShield();
             Account(shield, DateTime.UtcNow);
             double seconds = Math.Max(0d, shield.RemainingSeconds);
-            string state = seconds <= 0d ? "none" : active ? "active" : "queued";
-            // A test clock changes the label other plugins display, without draining stored time.
-            if (fakeUtc.HasValue && state != "none")
-            {
-                DateTime fakeStart, fakeEnd;
-                bool fakeActive;
-                Weekend(fakeUtc.Value, out fakeStart, out fakeEnd, out fakeActive);
-                if (shield.ExpiresUtcTicks == fakeEnd.Ticks || shield.ExpiresUtcTicks == end.Ticks)
-                    state = fakeActive ? "active" : "queued";
-            }
+            if (seconds <= 0d) return NoneShield();
+            // Time left blocks raid damage now, including before Friday 8 PM and during a force.
+            // active here is only whether the real weekend is draining the stored seconds.
             return new Dictionary<string, object>
             {
-                ["state"] = state,
+                ["state"] = "active",
                 ["seconds"] = seconds,
                 ["tcId"] = shield.CupboardId,
-                ["buildingId"] = shield.BuildingId
+                ["buildingId"] = shield.BuildingId,
+                ["ownerSteamId"] = shield.OwnerSteamId,
+                ["draining"] = active
             };
         }
 
@@ -2083,7 +2667,7 @@ namespace Oxide.Plugins
                 + "\nTruePVE file ruleset: " + fileRuleset
                 + "\nTest clock: " + (fakeUtc.HasValue ? "on" : "off")
                 + "\nExcavator: " + (excavatorStatus ?? "excavator not checked")
-                + "\nPaid TC shields follow the real weekend only.";
+                + "\nPaid shields block while they have time left. The timer counts down on the real weekend only.";
         }
 
         private string HandleFullPvp(string[] args)
