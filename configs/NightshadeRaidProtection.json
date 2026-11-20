@@ -10,6 +10,7 @@
   "Keep paid shields across a map wipe": false,
   "Show blocked-hit message to attacker (rate limited)": true,
   "Maximum total paid shield time on one TC in hours": 72,
+  "Weekend voucher hours (0 = full Eastern window)": 0,
   "Drive TruePVE from the Eastern weekend window": true,
   "TruePVE ruleset during the weekend window": "nightshade_pvp_weekend",
   "TruePVE ruleset outside the weekend window": "default",

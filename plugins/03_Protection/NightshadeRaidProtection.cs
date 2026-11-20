@@ -671,23 +671,207 @@ namespace Oxide.Plugins
         }
     }
 
+    // Player voucher names. The shop sells paper tokens; the skin id is the tier.
+    // Current skins: 6h 3843173236, 1d 3843173835, weekend 3843174471.
+    // Older papers stay redeemable. Skin 3810298504 named like "1 Hour" is 1 hour.
+    // Any other name on that skin is 6 hours. Skin 3810324315 is 1 day (24 hours).
+    // Skin 3810324938 is a weekend. 24h is an old name for the 1d command.
+    // Weekend length is the Eastern window (end minus start) unless a positive
+    // config hour value is passed in.
+    public static class NightshadeVoucherTiers
+    {
+        public const string SixHours = "6h";
+        public const string OneDay = "1d";
+        public const string Weekend = "weekend";
+
+        public const ulong SkinSixHours = 3843173236UL;
+        public const ulong SkinOneDay = 3843173835UL;
+        public const ulong SkinWeekend = 3843174471UL;
+        public const ulong LegacySkinShort = 3810298504UL;
+        public const ulong LegacySkinDay = 3810324315UL;
+        public const ulong LegacySkinWeekend = 3810324938UL;
+
+        public const string OneHour = "1h";
+        public const double SixHourSeconds = 21600d;
+        public const double OneHourSeconds = 3600d;
+        public const double OneDaySeconds = 86400d;
+
+        public struct Resolved
+        {
+            public bool Known;
+            public string Tier;
+            public string Input;
+            public ulong Skin;
+            public bool FullWeekend;
+            public double Seconds;
+            public bool LegacyName;
+        }
+
+        public static bool TryResolve(string token, out Resolved tier)
+        {
+            tier = new Resolved();
+            if (string.IsNullOrEmpty(token)) return false;
+            string key = token.Trim().ToLowerInvariant();
+            if (key.Length == 0) return false;
+            if (IsLegacyHour(key))
+            {
+                tier = Fixed(OneHour, key, LegacySkinShort, OneHourSeconds, key != OneHour);
+                return true;
+            }
+            if (IsSix(key))
+            {
+                tier = Fixed(SixHours, key, SkinSixHours, SixHourSeconds, key != SixHours);
+                return true;
+            }
+            if (IsDay(key))
+            {
+                tier = Fixed(OneDay, key, SkinOneDay, OneDaySeconds, key != OneDay);
+                return true;
+            }
+            if (key == Weekend)
+            {
+                tier = Fixed(Weekend, key, SkinWeekend, 0d, false);
+                tier.FullWeekend = true;
+                return true;
+            }
+            return false;
+        }
+
+        // Old shop items are named "Nightshade Raid Shield - 1 Hour" on LegacySkinShort.
+        public static bool LegacyOneHourName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            string text = name.ToLowerInvariant();
+            return text.Contains("1 hour") || text.Contains("1hour") || text.Contains("one hour");
+        }
+
+        // Current skins match on id alone. The old short skin still uses the item name.
+        public static bool Matches(ulong skin, string itemName, string tier)
+        {
+            if (tier == SixHours)
+            {
+                if (skin == SkinSixHours) return true;
+                return skin == LegacySkinShort && !LegacyOneHourName(itemName);
+            }
+            if (tier == OneHour)
+                return skin == LegacySkinShort && LegacyOneHourName(itemName);
+            if (tier == OneDay)
+                return skin == SkinOneDay || skin == LegacySkinDay;
+            if (tier == Weekend)
+                return skin == SkinWeekend || skin == LegacySkinWeekend;
+            return false;
+        }
+
+        public static double WindowSeconds(DateTime startUtc, DateTime endUtc)
+        {
+            double seconds = (endUtc - startUtc).TotalSeconds;
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds <= 0d) return 0d;
+            return seconds;
+        }
+
+        // configuredHours applies only to the weekend tier. Zero or less uses the window.
+        public static double SecondsFor(Resolved tier, DateTime startUtc, DateTime endUtc, double configuredHours)
+        {
+            if (!tier.Known) return 0d;
+            if (!tier.FullWeekend) return tier.Seconds;
+            if (!double.IsNaN(configuredHours) && !double.IsInfinity(configuredHours) && configuredHours > 0d)
+                return configuredHours * 3600d;
+            return WindowSeconds(startUtc, endUtc);
+        }
+
+        public static string Validate()
+        {
+            Resolved tier;
+            if (!TryResolve("6h", out tier) || tier.Tier != SixHours || tier.LegacyName || tier.Seconds != SixHourSeconds || tier.Skin != SkinSixHours)
+                return "6h";
+            if (!TryResolve("1h", out tier) || tier.Tier != OneHour || tier.LegacyName || tier.Skin != LegacySkinShort || tier.Seconds != OneHourSeconds)
+                return "1h";
+            if (!TryResolve("1hour", out tier) || tier.Tier != OneHour || !tier.LegacyName || tier.Seconds != OneHourSeconds)
+                return "1hour";
+            if (!TryResolve("1d", out tier) || tier.Tier != OneDay || tier.LegacyName || tier.Seconds != OneDaySeconds || tier.Skin != SkinOneDay || tier.FullWeekend)
+                return "1d";
+            if (!TryResolve("24h", out tier) || tier.Tier != OneDay || !tier.LegacyName || tier.Seconds != OneDaySeconds)
+                return "24h";
+            if (!TryResolve("24hours", out tier) || tier.Tier != OneDay)
+                return "24hours";
+            if (!TryResolve("weekend", out tier) || tier.Tier != Weekend || !tier.FullWeekend || tier.Skin != SkinWeekend || tier.LegacyName)
+                return "weekend";
+            if (TryResolve("", out tier) || TryResolve("2h", out tier) || TryResolve("redeem", out tier) || TryResolve("7d", out tier))
+                return "reject";
+            if (WindowSeconds(new DateTime(2026, 11, 6, 1, 0, 0, DateTimeKind.Utc), new DateTime(2026, 11, 8, 8, 0, 0, DateTimeKind.Utc)) != 55d * 3600d)
+                return "window";
+            DateTime sample = new DateTime(2026, 11, 6, 1, 0, 0, DateTimeKind.Utc);
+            if (WindowSeconds(sample, sample) != 0d)
+                return "empty-window";
+            Resolved weekend;
+            TryResolve("weekend", out weekend);
+            if (SecondsFor(weekend, sample, sample.AddHours(55), 0d) != 55d * 3600d)
+                return "derived";
+            if (SecondsFor(weekend, sample, sample.AddHours(55), 40d) != 40d * 3600d)
+                return "configured";
+            Resolved six;
+            TryResolve("6h", out six);
+            if (SecondsFor(six, sample, sample.AddHours(55), 40d) != SixHourSeconds)
+                return "fixed";
+            if (LegacyOneHourName("Nightshade Raid Shield - 1 Hour") == false) return "legacy-name";
+            if (LegacyOneHourName("Nightshade Raid Shield - 6 Hours")) return "six-name";
+            if (LegacyOneHourName("Nightshade Raid Shield - 10 Hours")) return "ten-name";
+            if (LegacyOneHourName(null) || LegacyOneHourName("")) return "blank-name";
+            if (!Matches(SkinSixHours, "Nightshade Raid Shield - 1 Hour", SixHours)) return "new-6h-name";
+            if (Matches(SkinSixHours, "Nightshade Raid Shield - 1 Hour", OneHour)) return "new-6h-not-1h";
+            if (!Matches(SkinSixHours, null, SixHours)) return "new-6h-blank";
+            if (!Matches(LegacySkinShort, "Nightshade Raid Shield - 1 Hour", OneHour)) return "old-1h";
+            if (Matches(LegacySkinShort, "Nightshade Raid Shield - 1 Hour", SixHours)) return "old-1h-not-6h";
+            if (!Matches(LegacySkinShort, "Nightshade Raid Shield - 6 Hours", SixHours)) return "old-6h";
+            if (Matches(LegacySkinShort, "Nightshade Raid Shield - 6 Hours", OneHour)) return "old-6h-not-1h";
+            if (!Matches(LegacySkinShort, null, SixHours)) return "old-blank-6h";
+            if (!Matches(SkinOneDay, null, OneDay) || !Matches(LegacySkinDay, "Nightshade Raid Shield - 24 Hours", OneDay)) return "day-skins";
+            if (Matches(SkinOneDay, null, SixHours) || Matches(LegacySkinDay, null, Weekend)) return "day-cross";
+            if (!Matches(SkinWeekend, null, Weekend) || !Matches(LegacySkinWeekend, null, Weekend)) return "weekend-skins";
+            if (Matches(SkinWeekend, "1 Hour", OneHour)) return "weekend-name";
+            return null;
+        }
+
+        private static bool IsLegacyHour(string key)
+        {
+            return key == "1h" || key == "1hr" || key == "1hrs" || key == "1hour" || key == "1hours";
+        }
+
+        private static bool IsSix(string key)
+        {
+            return key == "6h" || key == "6hr" || key == "6hrs" || key == "6hour" || key == "6hours";
+        }
+
+        private static bool IsDay(string key)
+        {
+            return key == "1d" || key == "1day" || key == "24h" || key == "24hr" || key == "24hrs"
+                || key == "24hour" || key == "24hours";
+        }
+
+        private static Resolved Fixed(string name, string input, ulong skin, double seconds, bool legacy)
+        {
+            Resolved tier = new Resolved();
+            tier.Known = true;
+            tier.Tier = name;
+            tier.Input = input;
+            tier.Skin = skin;
+            tier.FullWeekend = false;
+            tier.Seconds = seconds;
+            tier.LegacyName = legacy;
+            return tier;
+        }
+    }
+
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.7")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.8")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
         private const string PermAdmin = "nightshaderaidprotection.admin";
         private const string DataPath = "Nightshade/NightshadeRaidProtection/RaidProtection";
         private const ulong SteamIdMin = 76561197960265728UL;
-        // These IDs identify the three dedicated custom-icon voucher skins.
-        // The shop delivers PAPER items using these IDs. No purchase-registration plugin is needed.
+        // Shop purchases are PAPER items. The skin id is the tier. See NightshadeVoucherTiers.
         private const string VoucherShortname = "paper";
-        private static readonly Dictionary<string, ulong> VoucherSkins = new Dictionary<string, ulong>(StringComparer.OrdinalIgnoreCase)
-        {
-            {"1h", 3810298504UL},
-            {"24h", 3810324315UL},
-            {"weekend", 3810324938UL}
-        };
 
         [PluginReference] private Plugin TruePVE;
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
@@ -767,6 +951,9 @@ namespace Oxide.Plugins
             [JsonProperty("Keep paid shields across a map wipe")] public bool KeepPaidShieldsOnWipe = false;
             [JsonProperty("Show blocked-hit message to attacker (rate limited)")] public bool NotifyAttacker = true;
             [JsonProperty("Maximum total paid shield time on one TC in hours")] public int MaximumStackedHours = 72;
+            // 0 uses the Eastern window length (Friday 8 PM through Monday 3 AM, about 55 hours).
+            // A positive value is the weekend token's shield hours instead of that window.
+            [JsonProperty("Weekend voucher hours (0 = full Eastern window)")] public double WeekendVoucherHours = 0d;
             [JsonProperty("Drive TruePVE from the Eastern weekend window")] public bool DriveTruePve = true;
             [JsonProperty("TruePVE ruleset during the weekend window")] public string PvpRuleset = "nightshade_pvp_weekend";
             [JsonProperty("TruePVE ruleset outside the weekend window")] public string PveRuleset = "default";
@@ -860,6 +1047,8 @@ namespace Oxide.Plugins
             catch (Exception ex) { PrintError("Invalid config; inspect and repair it: " + ex.Message); settings = new Settings(); }
             if (string.IsNullOrEmpty(settings.PvpRuleset)) settings.PvpRuleset = "nightshade_pvp_weekend";
             if (string.IsNullOrEmpty(settings.PveRuleset)) settings.PveRuleset = "default";
+            if (double.IsNaN(settings.WeekendVoucherHours) || double.IsInfinity(settings.WeekendVoucherHours) || settings.WeekendVoucherHours < 0d)
+                settings.WeekendVoucherHours = 0d;
             if (settings.Excavator == null) settings.Excavator = new ExcavatorSettings();
             float excavatorMult = settings.Excavator.SpeedMultiplier;
             if (float.IsNaN(excavatorMult) || float.IsInfinity(excavatorMult) || excavatorMult < 0.01f)
@@ -879,7 +1068,9 @@ namespace Oxide.Plugins
         {
             // Registered only. This permission is not granted to any user or group.
             permission.RegisterPermission(PermAdmin, this);
-            cmd.AddChatCommand("raidvoucher", this, nameof(RedeemCommand));
+            cmd.AddChatCommand("raidredeem", this, nameof(RedeemCommand));
+            cmd.AddChatCommand("raidvoucher", this, nameof(LegacyVoucherCommand));
+            cmd.AddConsoleCommand("raidredeem", this, nameof(ConsoleRedeem));
             cmd.AddChatCommand("raidshield", this, nameof(StatusCommand));
             cmd.AddChatCommand("nsraidtest", this, nameof(CmdNsRaidTest));
             cmd.AddChatCommand("nsraidpvp", this, nameof(CmdNsRaidPvp));
@@ -1260,28 +1451,141 @@ namespace Oxide.Plugins
             return hit.collider.GetComponentInParent<BuildingPrivlidge>();
         }
 
+        // Chat args are string[]. ConsoleSystem.Arg.Args is Facepunch.StringView[] on this host,
+        // so the console entry point reads tokens with HasArgs and GetString.
         private void RedeemCommand(BasePlayer player, string command, string[] args)
         {
             if (player == null) return;
-            if (args == null || args.Length != 2 || !args[0].Equals("redeem", StringComparison.OrdinalIgnoreCase) || !VoucherSkins.ContainsKey(args[1]))
+            if (args == null || args.Length != 1)
             {
-                Reply(player, "Look at your authorized TC and use /raidvoucher redeem 1h | 24h | weekend");
+                ReplyUsage(player);
+                return;
+            }
+            BeginRedeem(player, args[0]);
+        }
+
+        private void LegacyVoucherCommand(BasePlayer player, string command, string[] args)
+        {
+            if (player == null) return;
+            Reply(player, "/raidvoucher was removed. Use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend.");
+            ReplyUsage(player);
+        }
+
+        private void ConsoleRedeem(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return;
+            BasePlayer player = arg.Connection == null ? null : arg.Connection.player as BasePlayer;
+            if (player == null)
+            {
+                arg.ReplyWith("Usage: /raidredeem 6h | 1d | weekend");
+                return;
+            }
+            if (!arg.HasArgs() || arg.HasArgs(2))
+            {
+                ReplyUsage(player);
+                return;
+            }
+            BeginRedeem(player, arg.GetString(0));
+        }
+
+        private void ReplyUsage(BasePlayer player)
+        {
+            Reply(player, "Usage: /raidredeem 6h | 1d | weekend");
+            Reply(player, "Look at an authorized TC. 6h is 6 hours, 1d is 24 hours, weekend is one full PvP weekend. The timer runs only during that weekend. Unused time carries over.");
+            Reply(player, "A paper named 1 Hour still redeems with /raidredeem 1h. A 24h token redeems as 1d.");
+            Reply(player, "Your vouchers: " + VoucherBalance(player) + ".");
+        }
+
+        private string VoucherBalance(BasePlayer player)
+        {
+            string line = "6h x" + CountTier(player, NightshadeVoucherTiers.SixHours).ToString(CultureInfo.InvariantCulture)
+                + ", 1d x" + CountTier(player, NightshadeVoucherTiers.OneDay).ToString(CultureInfo.InvariantCulture)
+                + ", weekend x" + CountTier(player, NightshadeVoucherTiers.Weekend).ToString(CultureInfo.InvariantCulture);
+            int legacy = CountTier(player, NightshadeVoucherTiers.OneHour);
+            if (legacy > 0)
+                line += ". 1h x" + legacy.ToString(CultureInfo.InvariantCulture) + " (use /raidredeem 1h)";
+            return line;
+        }
+
+        private int CountTier(BasePlayer player, string tierName)
+        {
+            NightshadeVoucherTiers.Resolved tier;
+            if (!NightshadeVoucherTiers.TryResolve(tierName, out tier) || player == null || player.inventory == null) return 0;
+            int count = 0;
+            ItemContainer[] containers = VoucherContainers(player);
+            for (int c = 0; c < containers.Length; c++)
+            {
+                ItemContainer container = containers[c];
+                if (container == null || container.itemList == null) continue;
+                for (int i = 0; i < container.itemList.Count; i++)
+                {
+                    Item item = container.itemList[i];
+                    if (!VoucherMatches(item, tier)) continue;
+                    if (item.amount > 0) count += item.amount;
+                }
+            }
+            return count;
+        }
+
+        private static ItemContainer[] VoucherContainers(BasePlayer player)
+        {
+            return new ItemContainer[]
+            {
+                player.inventory.containerMain,
+                player.inventory.containerBelt,
+                player.inventory.containerWear
+            };
+        }
+
+        private bool VoucherMatches(Item item, NightshadeVoucherTiers.Resolved tier)
+        {
+            if (item == null || item.info == null) return false;
+            if (item.info.shortname != VoucherShortname) return false;
+            return NightshadeVoucherTiers.Matches(item.skin, item.name, tier.Tier);
+        }
+
+        private Item FindVoucher(BasePlayer player, NightshadeVoucherTiers.Resolved tier)
+        {
+            if (player == null || player.inventory == null) return null;
+            ItemContainer[] containers = VoucherContainers(player);
+            for (int c = 0; c < containers.Length; c++)
+            {
+                ItemContainer container = containers[c];
+                if (container == null || container.itemList == null) continue;
+                Item found = container.itemList.FirstOrDefault(i => VoucherMatches(i, tier));
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private static string AliasNote(NightshadeVoucherTiers.Resolved tier)
+        {
+            if (!tier.LegacyName || string.IsNullOrEmpty(tier.Input)) return "";
+            if (tier.Tier == NightshadeVoucherTiers.OneDay && tier.Input.StartsWith("24h", StringComparison.Ordinal))
+                return " 24h is the 1d tier.";
+            return "";
+        }
+
+        private void BeginRedeem(BasePlayer player, string token)
+        {
+            NightshadeVoucherTiers.Resolved tier;
+            if (!NightshadeVoucherTiers.TryResolve(token, out tier))
+            {
+                ReplyUsage(player);
                 return;
             }
             if (!settings.PaidShields) { Reply(player, "Voucher redemption is currently disabled."); return; }
             BuildingPrivlidge tc = TargetCupboard(player);
             if (tc == null || !Authorized(tc, player.userID)) { Reply(player, "Look directly at a TC you are authorized on, within 5 metres."); return; }
-            // Validate the carrier AND exact skin. Six-hour and all previous skins are retired.
-            ulong requiredSkin = VoucherSkins[args[1]];
-            Item voucher = null;
-            foreach (var container in new[] { player.inventory.containerMain, player.inventory.containerBelt, player.inventory.containerWear })
+            Item voucher = FindVoucher(player, tier);
+            if (voucher == null)
             {
-                if (container == null) continue;
-                voucher = container.itemList.FirstOrDefault(i => i != null && i.info != null &&
-                    i.info.shortname == VoucherShortname && i.skin == requiredSkin);
-                if (voucher != null) break;
+                Reply(player, "You need the " + tier.Tier + " Nightshade Raid Shield token in your inventory.");
+                if (tier.Tier == NightshadeVoucherTiers.SixHours && CountTier(player, NightshadeVoucherTiers.OneHour) > 0)
+                    Reply(player, "Papers named 1 Hour are still 1 hour. Use /raidredeem 1h.");
+                Reply(player, "Your vouchers: " + VoucherBalance(player) + ".");
+                return;
             }
-            if (voucher == null) { Reply(player, "You need the matching Nightshade Raid Shield Token in your inventory."); return; }
 
             DateTime now = DateTime.UtcNow;
             DateTime start, end;
@@ -1291,10 +1595,7 @@ namespace Oxide.Plugins
             Shield existing;
             store.Shields.TryGetValue(id, out existing);
             if (existing != null) Account(existing, now);
-            double windowSeconds = (end - (active ? now : start)).TotalSeconds;
-            double newSeconds = args[1].Equals("weekend", StringComparison.OrdinalIgnoreCase) ? windowSeconds :
-                args[1].Equals("24h", StringComparison.OrdinalIgnoreCase) ? 86400d :
-                3600d;
+            double newSeconds = NightshadeVoucherTiers.SecondsFor(tier, start, end, settings.WeekendVoucherHours);
             if (newSeconds <= 0d || double.IsNaN(newSeconds) || double.IsInfinity(newSeconds))
             { Reply(player, "No PvP weekend shield time is available. Voucher retained."); return; }
             double already = existing == null ? 0d : Math.Max(0d, existing.RemainingSeconds);
@@ -1335,10 +1636,11 @@ namespace Oxide.Plugins
             string total = Format(TimeSpan.FromSeconds(shield.RemainingSeconds));
             string added = Format(TimeSpan.FromSeconds(newSeconds));
             int count = shield.Queue == null ? 0 : shield.Queue.Count;
+            string note = AliasNote(tier);
             Reply(player, active
-                ? "Added " + added + " to this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. Unused time carries to the next weekend."
-                : "Queued " + added + " on this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. The timer waits for Friday 8 PM Eastern, and unused time carries over.");
-            Puts("Redeemed " + args[1] + " for TC " + id + " by " + player.UserIDString + " queue " + count);
+                ? "Added " + added + " to this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. Unused time carries to the next weekend." + note
+                : "Queued " + added + " on this TC (" + count + " in queue, " + total + " total). It blocks raid damage now. The timer waits for Friday 8 PM Eastern, and unused time carries over." + note);
+            Puts("Redeemed " + tier.Tier + (tier.LegacyName ? " from " + tier.Input : "") + " for TC " + id + " by " + player.UserIDString + " queue " + count);
         }
 
         private void Account(Shield shield, DateTime now)
