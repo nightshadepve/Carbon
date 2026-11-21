@@ -124,11 +124,6 @@
     "RP Per Coin": 1,
     "Minimum Coins Per Transaction": 1,
     "Maximum Coins Per Transaction (0 = no limit)": 0,
-    "Quick Amounts": [
-      1,
-      10,
-      100
-    ],
     "Required Permission (empty = everyone who can open the shop)": "",
     "Log Transactions": true
   },
