@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.4")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.5")]
     [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from one Overlay panel left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
@@ -166,6 +166,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Seconds to keep the panel after the vote ends (0 removes it immediately)")]
             public float ResultHoldSeconds = 6f;
+
+            [JsonProperty(NightshadeVoteDayRules.LogUiDebugKey)]
+            public bool LogUiDebug = false;
 
             [JsonProperty(NightshadeVoteDayRules.ConfigVersionKey)]
             public int ConfigVersion = 0;
@@ -1067,7 +1070,7 @@ namespace Oxide.Plugins
             _warnedRewards = false;
             _warnedEco = false;
             _warnedCurrency = false;
-            Puts("Vote panel config reloaded. Day buy price is " + CostLabel() + ".");
+            LogUiDebug("Vote panel config reloaded. Day buy price is " + CostLabel() + ".");
             RebuildAll();
         }
 
@@ -1086,7 +1089,7 @@ namespace Oxide.Plugins
             _panelOpen = true;
             if (_uiTimer == null) _uiTimer = timer.Every(1f, TickPanel);
             RebuildAll();
-            Puts(PanelSentMessage());
+            LogUiDebug(PanelSentMessage());
         }
 
         private void BeginResultPanel()
@@ -1340,6 +1343,12 @@ namespace Oxide.Plugins
             {
                 PrintWarning("Vote panel could not be shown: " + ex.Message);
             }
+        }
+
+        private void LogUiDebug(string message)
+        {
+            if (_config == null || !_config.LogUiDebug || string.IsNullOrEmpty(message)) return;
+            Puts(message);
         }
 
         private string PanelSentMessage()
@@ -2129,6 +2138,7 @@ namespace Oxide.Plugins
         internal const string OpenRightKey = "Inventory open panel right (px from bottom center)";
         internal const string OpenBottomKey = "Inventory open panel bottom (px)";
         internal const string LogoKey = "Panel logo URL (empty hides the logo)";
+        internal const string LogUiDebugKey = "Log UI debug messages";
         internal const string ConfigVersionKey = "Config version";
         internal const float DefaultHotbarLeft = -204f;
         internal const float DefaultGap = 8f;

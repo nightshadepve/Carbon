@@ -37,5 +37,6 @@
   "Cursor key (firethird, use, reload, none)": "firethird",
   "Panel logo URL (empty hides the logo)": "",
   "Seconds to keep the panel after the vote ends (0 removes it immediately)": 6.0,
+  "Log UI debug messages": false,
   "Config version": 5
 }
