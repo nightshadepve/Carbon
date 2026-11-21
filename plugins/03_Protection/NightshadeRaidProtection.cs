@@ -672,7 +672,10 @@ namespace Oxide.Plugins
     }
 
     // Player voucher names. The shop sells paper tokens; the skin id is the tier.
-    // Current skins: 6h 3843173236, 1d 3843173835, weekend 3843174471.
+    // Current shop skins (data/Nightshade/NightshadeShop/Shop.json):
+    // 6h 3843239199, 1d 3843240692, weekend 3843241106.
+    // The previous shop generation stays redeemable:
+    // 6h 3843173236, 1d 3843173835, weekend 3843174471.
     // Older papers stay redeemable. Skin 3810298504 named like "1 Hour" is 1 hour.
     // Any other name on that skin is 6 hours. Skin 3810324315 is 1 day (24 hours).
     // Skin 3810324938 is a weekend. 24h is an old name for the 1d command.
@@ -684,9 +687,12 @@ namespace Oxide.Plugins
         public const string OneDay = "1d";
         public const string Weekend = "weekend";
 
-        public const ulong SkinSixHours = 3843173236UL;
-        public const ulong SkinOneDay = 3843173835UL;
-        public const ulong SkinWeekend = 3843174471UL;
+        public const ulong SkinSixHours = 3843239199UL;
+        public const ulong SkinOneDay = 3843240692UL;
+        public const ulong SkinWeekend = 3843241106UL;
+        public const ulong PriorSkinSixHours = 3843173236UL;
+        public const ulong PriorSkinOneDay = 3843173835UL;
+        public const ulong PriorSkinWeekend = 3843174471UL;
         public const ulong LegacySkinShort = 3810298504UL;
         public const ulong LegacySkinDay = 3810324315UL;
         public const ulong LegacySkinWeekend = 3810324938UL;
@@ -745,20 +751,20 @@ namespace Oxide.Plugins
             return text.Contains("1 hour") || text.Contains("1hour") || text.Contains("one hour");
         }
 
-        // Current skins match on id alone. The old short skin still uses the item name.
+        // Current and previous shop skins match on id alone. The oldest short skin still uses the item name.
         public static bool Matches(ulong skin, string itemName, string tier)
         {
             if (tier == SixHours)
             {
-                if (skin == SkinSixHours) return true;
+                if (skin == SkinSixHours || skin == PriorSkinSixHours) return true;
                 return skin == LegacySkinShort && !LegacyOneHourName(itemName);
             }
             if (tier == OneHour)
                 return skin == LegacySkinShort && LegacyOneHourName(itemName);
             if (tier == OneDay)
-                return skin == SkinOneDay || skin == LegacySkinDay;
+                return skin == SkinOneDay || skin == PriorSkinOneDay || skin == LegacySkinDay;
             if (tier == Weekend)
-                return skin == SkinWeekend || skin == LegacySkinWeekend;
+                return skin == SkinWeekend || skin == PriorSkinWeekend || skin == LegacySkinWeekend;
             return false;
         }
 
@@ -829,6 +835,14 @@ namespace Oxide.Plugins
             if (Matches(SkinOneDay, null, SixHours) || Matches(LegacySkinDay, null, Weekend)) return "day-cross";
             if (!Matches(SkinWeekend, null, Weekend) || !Matches(LegacySkinWeekend, null, Weekend)) return "weekend-skins";
             if (Matches(SkinWeekend, "1 Hour", OneHour)) return "weekend-name";
+            if (!Matches(SkinWeekend, "", Weekend) || !Matches(PriorSkinWeekend, "Nightshade Raid Shield - Full Weekend", Weekend)) return "weekend-names";
+            if (Matches(SkinWeekend, "", SixHours) || Matches(SkinWeekend, "", OneDay) || Matches(SkinWeekend, "", OneHour)) return "weekend-cross";
+            if (Matches(PriorSkinWeekend, null, SixHours) || Matches(PriorSkinWeekend, null, OneDay)) return "prior-weekend-cross";
+            if (!Matches(SkinSixHours, "", SixHours) || !Matches(PriorSkinSixHours, null, SixHours)) return "six-generations";
+            if (Matches(SkinSixHours, "", OneDay) || Matches(PriorSkinSixHours, "1 Hour", OneHour)) return "six-cross";
+            if (!Matches(SkinOneDay, "", OneDay) || !Matches(PriorSkinOneDay, null, OneDay)) return "day-generations";
+            if (Matches(SkinOneDay, "", Weekend) || Matches(PriorSkinOneDay, null, SixHours)) return "day-generations-cross";
+            if (Matches(0UL, null, Weekend) || Matches(0UL, "", SixHours)) return "blank-skin";
             return null;
         }
 
@@ -863,7 +877,7 @@ namespace Oxide.Plugins
     }
 
 #if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.8")]
+    [Info("NightshadeRaidProtection", "Nightshade", "1.4.9")]
     [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
     public class NightshadeRaidProtection : RustPlugin
     {
