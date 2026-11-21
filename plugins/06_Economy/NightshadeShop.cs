@@ -11,13 +11,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.5.0")]
+    [Info("NightshadeShop", "Nightshade", "1.6.0")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management and an Admin Shop resource exchange")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.5.0";
+        private const string PluginVersion = "1.6.0";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents;
 
@@ -76,7 +76,7 @@ namespace Oxide.Plugins
 
         private class UiState
         {
-            public int Tab;              // 0 = Shop, 1 = Admin Shop (exchange)
+            public int Tab;              // 0 = Shop, 1 = Events, 2 = Admin Shop (exchange)
             public int Cat;
             public bool Admin;
             public int Mult = 1;
@@ -124,6 +124,10 @@ namespace Oxide.Plugins
 
             [JsonProperty("Shop Title")]
             public string Title = "NIGHTSHADE MARKET";
+
+            // Theme taglines stay in config for other plugins. The shop header hides them unless this is turned on.
+            [JsonProperty("Show Theme Tagline In Shop Header")]
+            public bool ShowHeaderTagline = false;
 
             [JsonProperty("Admin Shop Tab Name")]
             public string ExchangeTabName = "ADMIN SHOP";
@@ -417,6 +421,14 @@ namespace Oxide.Plugins
             [JsonProperty("Only Visible During Themes (empty = always)")]
             public List<string> Themes = new List<string>();
 
+            // Null when the key is absent in Shop.json. Missing means shop, until the one-time name migration fills it in.
+            [JsonProperty("Tab (shop|events)", NullValueHandling = NullValueHandling.Ignore)]
+            public string Tab;
+
+            // Null when the key is absent. Missing means visible, until the one-time name migration fills it in.
+            [JsonProperty("Admin mode only (hidden from players)", NullValueHandling = NullValueHandling.Ignore)]
+            public bool? AdminModeOnly;
+
             public List<ShopItem> Items = new List<ShopItem>();
         }
 
@@ -575,6 +587,55 @@ namespace Oxide.Plugins
                 data = DefaultData();
                 SaveData();
             }
+            int migrated = 0;
+            foreach (var cat in data.Categories)
+                if (MigrateCategory(cat)) migrated++;
+            if (migrated > 0)
+            {
+                SaveData();
+                Puts("NightshadeShop migrated " + migrated + " categor" + (migrated == 1 ? "y" : "ies") + " in Shop.json (Events tab and admin-only flags).");
+            }
+        }
+
+        private static readonly string[] EventsTabNames = { "Dungeons", "Raidable Bases", "Heli Signals", "Brad Signals" };
+        private static readonly string[] AdminOnlyNames = { "Christmas", "Halloween" };
+
+        private static bool NameIs(string name, string[] names)
+        {
+            if (string.IsNullOrWhiteSpace(name) || names == null) return false;
+            string trimmed = name.Trim();
+            for (int i = 0; i < names.Length; i++)
+                if (string.Equals(trimmed, names[i], StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        // Fills missing fields only. A stored shop/events value or an explicit false flag is left alone.
+        private static bool MigrateCategory(ShopCategory cat)
+        {
+            if (cat == null) return false;
+            bool changed = false;
+            if (string.IsNullOrWhiteSpace(cat.Tab))
+            {
+                if (NameIs(cat.Name, EventsTabNames)) { cat.Tab = "events"; changed = true; }
+                else if (cat.Tab != null) { cat.Tab = null; changed = true; }
+            }
+            else
+            {
+                string norm = cat.Tab.Trim().Equals("events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
+                if (!string.Equals(cat.Tab, norm, StringComparison.Ordinal)) { cat.Tab = norm; changed = true; }
+            }
+            if (!cat.AdminModeOnly.HasValue && NameIs(cat.Name, AdminOnlyNames))
+            {
+                cat.AdminModeOnly = true;
+                changed = true;
+            }
+            return changed;
+        }
+
+        private static string CategoryTab(ShopCategory cat)
+        {
+            if (cat == null || string.IsNullOrWhiteSpace(cat.Tab)) return "shop";
+            return cat.Tab.Trim().Equals("events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
         }
 
         private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(DataShop, data);
@@ -624,6 +685,7 @@ namespace Oxide.Plugins
                 ["EventAdded"] = "Added {0} to {1}.",
                 ["PickFirst"] = "Pick an item from the list.",
                 ["NoAccess"] = "You don't have access to that listing.",
+                ["HiddenCategory"] = "That category is hidden right now.",
                 ["LimitReached"] = "Can't buy that right now: {0}.",
                 ["NotOwned"] = "You need to own {0} on Steam to buy it here.",
                 ["PickQty"] = "Pick x1, x10 or MAX first, then press CONFIRM.",
@@ -694,10 +756,11 @@ namespace Oxide.Plugins
                 ?? data.Categories.FirstOrDefault(x => string.Equals(x.Name, "Raidable Bases", StringComparison.OrdinalIgnoreCase));
             if (raid == null)
             {
-                raid = new ShopCategory { Name = "Raidable Bases", Icon = config.Events.RbIcon };
+                raid = new ShopCategory { Name = "Raidable Bases", Icon = config.Events.RbIcon, Tab = "events" };
                 data.Categories.Add(raid);
             }
             raid.RaidableTab = true;
+            MigrateCategory(raid);
 
             // Use the plugin's numeric levels, including custom difficulties, when available.
             var modes = new SortedDictionary<int, string>();
@@ -764,7 +827,7 @@ namespace Oxide.Plugins
                 || x.Items.Any(i => i.Type == "dungeon"));
             if (dungeon < 0)
             {
-                data.Categories.Add(new ShopCategory { Name = "Dungeon", Icon = config.Events.DeIcon });
+                data.Categories.Add(new ShopCategory { Name = "Dungeon", Icon = config.Events.DeIcon, Tab = "events" });
                 dungeon = data.Categories.Count - 1;
             }
             data.Categories.Insert(dungeon + 1, raid);
@@ -1001,6 +1064,16 @@ namespace Oxide.Plugins
 
         private bool CanSee(BasePlayer p, string perm) =>
             string.IsNullOrEmpty(perm) || IsAdmin(p) || permission.UserHasPermission(p.UserIDString, perm);
+
+        // Admin-only categories stay hidden, including from buy commands, until that admin turns admin mode on.
+        private bool HiddenFromPlayer(BasePlayer p, ShopCategory cat)
+        {
+            if (cat == null || cat.AdminModeOnly != true) return false;
+            if (p == null || !IsAdmin(p)) return true;
+            UiState s;
+            if (!states.TryGetValue(p.userID, out s) || s == null || !s.Admin) return true;
+            return false;
+        }
 
         private void RegisterPerm(string perm)
         {
@@ -1342,7 +1415,9 @@ namespace Oxide.Plugins
                     if (args.Length < 2) break;
                     string name = args[1];
                     if (data.Categories.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) { SendReply(p, Msg("CategoryExists", p)); return; }
-                    data.Categories.Add(new ShopCategory { Name = name, Icon = args.Length > 2 ? args[2] : "" });
+                    var added = new ShopCategory { Name = name, Icon = args.Length > 2 ? args[2] : "", Tab = "shop" };
+                    MigrateCategory(added);
+                    data.Categories.Add(added);
                     SaveData();
                     SendReply(p, Msg("CategoryAdded", p, name));
                     return;
@@ -1485,8 +1560,9 @@ namespace Oxide.Plugins
         {
             ShopCategory cat;
             var item = FindItem(itemId, out cat);
-            if (item == null || cat == null || !CanSee(p, cat.Permission) || !CanSee(p, item.Permission)
-                || (!InSeason(cat) && !IsAdmin(p))) return;
+            if (item == null || cat == null) return;
+            if (HiddenFromPlayer(p, cat)) { SetStatus(s, Msg("HiddenCategory", p), true); return; }
+            if (!CanSee(p, cat.Permission) || !CanSee(p, item.Permission) || (!InSeason(cat) && !IsAdmin(p))) return;
             s.EditItem = s.EditTrade = 0;
             s.PickTarget = null;
             s.EventMenu = s.DescriptionEdit = false;
@@ -1495,27 +1571,73 @@ namespace Oxide.Plugins
             s.BuyQty = 1;
         }
 
+        // Purchase modal. Description viewport is 68px, about 40% of the previous 162px box.
+        private const int PurchaseDescH = 68;
+        private const int PurchaseIcon = 72;
+        private const int PurchaseDescW = 400;
+        private const int PurchaseDescX = 80;
+
+        private struct PurchaseFrame
+        {
+            public int ModalH;
+            public int IconY;
+            public int DescY;
+            public int QtyY;
+            public int QtyH;
+            public int RowY;
+            public int TypeY;
+            public bool Slider;
+        }
+
+        private static PurchaseFrame PurchaseFrameFor(bool slider)
+        {
+            if (!slider)
+                return new PurchaseFrame { ModalH = 307, IconY = 178, DescY = 102, QtyY = 62, QtyH = 32 };
+            return new PurchaseFrame { ModalH = 381, IconY = 252, DescY = 176, QtyY = 140, QtyH = 26, RowY = 100, TypeY = 62, Slider = true };
+        }
+
+        private string PurchaseTotalRich(BasePlayer p, ShopItem item, int qty, ThemeColors tc)
+        {
+            long cost = (long)Math.Max(0, item.Price) * Math.Max(1, qty);
+            string price = IsEvent(item) && item.ChargedByPlugin && item.PluginPricing ? "PRICED BY EVENT PLUGIN" : cost.ToString("N0") + " RP";
+            string color = Rich(cost > Balance(p) ? tc.Danger : tc.Accent);
+            return "<color=" + color + ">TOTAL: " + price + "</color>";
+        }
+
+        private void DrawQtyLine(CuiElementContainer c, string parent, BasePlayer p, UiState s, ShopItem item, ThemeColors tc, PurchaseFrame frame)
+        {
+            string name = UiModal + ".QtyLine";
+            Box(c, parent, "0 0 0 0", R(16, frame.QtyY, 544, frame.QtyY + frame.QtyH), name);
+            string total = PurchaseTotalRich(p, item, s.BuyQty, tc);
+            string text = frame.Slider
+                ? "QUANTITY: " + s.BuyQty + "  \u2022  " + total + "  \u2022  drag the handle, click the bar, or enter a number"
+                : "QUANTITY: 1  \u2022  This listing is limited to one per purchase.  \u2022  " + total;
+            Label(c, name, text, 11, tc.SubText, TextAnchor.MiddleCenter, Full(), false);
+        }
+
         private void BuildPurchasePopup(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
         {
             ShopCategory cat;
             var item = FindItem(s.BuyItem, out cat);
-            if (item == null) { s.BuyItem = 0; s.BuyToken = null; return; }
-            s.BuyQty = Mathf.Clamp(s.BuyQty, 1, PopupMax(p, item));
-            string box = ModalBox(c, tc, 560, 460, "PURCHASE \u2022 " + ItemLabel(item));
-            ListIcon(c, box, item.Icon, CardIcon(item), IsEvent(item) ? 0 : item.Skin, R(22, 304, 110, 392));
+            if (item == null || HiddenFromPlayer(p, cat)) { s.BuyItem = 0; s.BuyToken = null; return; }
+            int max = PopupMax(p, item);
+            s.BuyQty = Mathf.Clamp(s.BuyQty, 1, max);
+            var frame = PurchaseFrameFor(max > 1);
+            string box = ModalBox(c, tc, 560, frame.ModalH, "PURCHASE \u2022 " + ItemLabel(item));
+            int iconX = PurchaseDescX + (PurchaseDescW - PurchaseIcon) / 2;
+            ListIcon(c, box, item.Icon, CardIcon(item), IsEvent(item) ? 0 : item.Skin, R(iconX, frame.IconY, iconX + PurchaseIcon, frame.IconY + PurchaseIcon));
             string desc = ItemDescription(item);
             if (string.IsNullOrWhiteSpace(desc)) desc = "No additional description has been provided for this item.";
-            int textHeight = Math.Max(162, ((desc.Length + 45) / 46 + desc.Count(ch => ch == '\n')) * 20);
-            string descriptionArea = Scroll(c, box, R(130, 234, 536, 396), 162, textHeight, tc);
-            Label(c, descriptionArea, desc, 14, tc.Text, TextAnchor.UpperLeft, TL(4, 4, 392, textHeight - 8), false);
-            Box(c, box, tc.Panel, R(20, 218, 540, 220));
-            int max = PopupMax(p, item);
-            if (max > 1)
+            int textHeight = Math.Max(PurchaseDescH, ((desc.Length + 41) / 42 + desc.Count(ch => ch == '\n')) * 20);
+            string descriptionArea = Scroll(c, box, R(PurchaseDescX, frame.DescY, PurchaseDescX + PurchaseDescW, frame.DescY + PurchaseDescH), PurchaseDescH, textHeight, tc);
+            Label(c, descriptionArea, desc, 14, tc.Text, TextAnchor.UpperLeft, TL(8, 6, PurchaseDescW - 28, textHeight - 8), false);
+            DrawQtyLine(c, box, p, s, item, tc, frame);
+            if (frame.Slider)
             {
-                Label(c, box, "QUANTITY \u2022 drag the handle, click the bar, or enter a number", 12, tc.SubText, TextAnchor.MiddleCenter, R(20, 168, 540, 198));
-                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Max(1, s.BuyQty - 1)}", tc.Button, R(24, 126, 64, 158), "\u2212", 22, tc.ButtonText);
-                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Min(max, s.BuyQty + 1)}", tc.Button, R(496, 126, 536, 158), "+", 22, tc.ButtonText);
-                string track = Box(c, box, tc.Panel, R(100, 130, 460, 154));
+                int row = frame.RowY;
+                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Max(1, s.BuyQty - 1)}", tc.Button, R(24, row, 64, row + 32), "\u2212", 22, tc.ButtonText);
+                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Min(max, s.BuyQty + 1)}", tc.Button, R(496, row, 536, row + 32), "+", 22, tc.ButtonText);
+                string track = Box(c, box, tc.Panel, R(100, row + 4, 460, row + 28));
                 Box(c, track, tc.Button, R(12, 9, 348, 15));
                 for (int i = 0; i <= 24; i++)
                 {
@@ -1539,25 +1661,13 @@ namespace Oxide.Plugins
                         }
                     }
                 });
-                Label(c, box, "TYPE QTY", 11, tc.SubText, TextAnchor.MiddleRight, R(50, 76, 150, 106));
-                Input(c, box, s.BuyQty.ToString(), $"{UiCmd} buyqty {s.BuyToken}", tc.Card, tc.Text, R(160, 76, 245, 106), 14, 4);
-                Label(c, box, "1\u2013" + max + " purchases \u2022 Enter to apply", 11, tc.SubText, TextAnchor.MiddleLeft, R(258, 76, 530, 106), false);
+                int type = frame.TypeY;
+                Label(c, box, "TYPE QTY", 11, tc.SubText, TextAnchor.MiddleRight, R(50, type, 150, type + 30));
+                Input(c, box, s.BuyQty.ToString(), $"{UiCmd} buyqty {s.BuyToken}", tc.Card, tc.Text, R(160, type, 245, type + 30), 14, 4);
+                Label(c, box, "1\u2013" + max + " purchases \u2022 Enter to apply", 11, tc.SubText, TextAnchor.MiddleLeft, R(258, type, 530, type + 30), false);
             }
-            else
-                Label(c, box, "QUANTITY: 1 \u2022 This listing is limited to one per purchase.", 14, tc.SubText, TextAnchor.MiddleCenter, R(20, 92, 540, 158));
-            DrawPurchaseTotals(c, p, s, item, tc);
             Btn(c, box, $"{UiCmd} buycancel", tc.Button, R(20, 16, 200, 54), "CANCEL", 14, tc.ButtonText);
             Btn(c, box, $"{UiCmd} buyconfirm {s.BuyToken}", tc.Accent, R(216, 16, 540, 54), "CONFIRM PURCHASE", 14, tc.AccentText);
-        }
-
-        private void DrawPurchaseTotals(CuiElementContainer c, BasePlayer p, UiState s, ShopItem item, ThemeColors tc)
-        {
-            string total = UiModal + ".PurchaseTotals";
-            Box(c, UiModal + ".Box", tc.Panel, R(20, 198, 540, 216), total);
-            long cost = (long)Math.Max(0, item.Price) * s.BuyQty;
-            string price = IsEvent(item) && item.ChargedByPlugin && item.PluginPricing ? "PRICED BY EVENT PLUGIN" : $"{cost:N0} RP";
-            string amount = IsEvent(item) || !item.GiveItem ? $"{s.BuyQty:N0} purchase(s)" : $"{s.BuyQty:N0} \u00D7 {item.Amount:N0} = {(long)s.BuyQty * item.Amount:N0} items";
-            Label(c, total, amount + "    \u2022    TOTAL: " + price, 12, cost > Balance(p) ? tc.Danger : tc.Accent, TextAnchor.MiddleCenter, Full());
         }
 
         private void OnCuiDraggableDrag(BasePlayer player, string name, Vector3 position, CommunityEntity.DraggablePositionSendType type)
@@ -1576,9 +1686,9 @@ namespace Oxide.Plugins
             s.BuyQty = Mathf.Clamp(1 + Mathf.RoundToInt(fraction * (max - 1)), 1, max);
             if (Time.realtimeSinceStartup - s.LastQtyDraw < 0.1f) return;
             s.LastQtyDraw = Time.realtimeSinceStartup;
-            CuiHelper.DestroyUi(player, UiModal + ".PurchaseTotals");
+            CuiHelper.DestroyUi(player, UiModal + ".QtyLine");
             var c = new CuiElementContainer();
-            DrawPurchaseTotals(c, player, s, item, ActiveTheme().Colors);
+            DrawQtyLine(c, UiModal + ".Box", player, s, item, ActiveTheme().Colors, PurchaseFrameFor(true));
             CuiHelper.AddUi(player, c);
         }
 
@@ -1626,6 +1736,7 @@ namespace Oxide.Plugins
             var item = FindItem(itemId, out cat);
             if (item == null) { SetStatus(s, Msg("ItemMissing", p), true); return; }
             if (ServerRewards == null) { SetStatus(s, Msg("NoServerRewards", p), true); return; }
+            if (HiddenFromPlayer(p, cat)) { SetStatus(s, Msg("HiddenCategory", p), true); Fx(p, FxDeny); return; }
             if (!CanSee(p, cat.Permission) || !CanSee(p, item.Permission) || (!InSeason(cat) && !IsAdmin(p))) { SetStatus(s, Msg("NoAccess", p), true); Fx(p, FxDeny); return; }
             if (item.GiveItem && item.RequireOwnership && !Owns(p, Def(item.Shortname))) { SetStatus(s, Msg("NotOwned", p, ItemLabel(item)), true); Fx(p, FxDeny); return; }
 
@@ -1898,7 +2009,10 @@ namespace Oxide.Plugins
                 case "tab":
                     s.BuyItem = 0;
                     s.BuyToken = null;
-                    s.Tab = arg.GetInt(1) == 1 && CanExchange(p) ? 1 : 0;
+                    int requested = arg.GetInt(1);
+                    if (requested == 2 && CanExchange(p)) s.Tab = 2;
+                    else if (requested == 1) s.Tab = 1;
+                    else s.Tab = 0;
                     s.EditItem = s.EditTrade = 0;
                     s.TradeCat = TradeTiles;
                     s.Status = "";
@@ -2009,7 +2123,9 @@ namespace Oxide.Plugins
                     string name = Rest(arg, 1);
                     if (string.IsNullOrEmpty(name)) return;
                     if (data.Categories.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) { SetStatus(s, Msg("CategoryExists", p), true); return; }
-                    data.Categories.Add(new ShopCategory { Name = name });
+                    var added = new ShopCategory { Name = name, Tab = s.Tab == 1 ? "events" : "shop" };
+                    MigrateCategory(added);
+                    data.Categories.Add(added);
                     s.Cat = data.Categories.Count - 1;
                     SaveData();
                     SetStatus(s, Msg("CategoryAdded", p, name), false);
@@ -2044,6 +2160,32 @@ namespace Oxide.Plugins
                         .Distinct().ToList();
                     SaveData();
                     SetStatus(s, data.Categories[s.Cat].Themes.Count == 0 ? "Category is now visible all year." : "Category shows during: " + string.Join(", ", data.Categories[s.Cat].Themes), false);
+                    return;
+                }
+                case "cattab":
+                {
+                    if (s.Cat < 0 || s.Cat >= data.Categories.Count) return;
+                    string chosen = arg.GetString(1, "");
+                    if (!string.Equals(chosen, "shop", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(chosen, "events", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SetStatus(s, Msg("BadValue", p), true);
+                        return;
+                    }
+                    string norm = string.Equals(chosen, "events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
+                    data.Categories[s.Cat].Tab = norm;
+                    s.Tab = norm == "events" ? 1 : 0;
+                    SaveData();
+                    SetStatus(s, "Category tab set to " + norm + ".", false);
+                    return;
+                }
+                case "cathidden":
+                {
+                    if (s.Cat < 0 || s.Cat >= data.Categories.Count) return;
+                    var hiddenCat = data.Categories[s.Cat];
+                    hiddenCat.AdminModeOnly = hiddenCat.AdminModeOnly != true;
+                    SaveData();
+                    SetStatus(s, hiddenCat.AdminModeOnly == true ? "Category is hidden from players." : "Category is visible to players.", false);
                     return;
                 }
                 case "caticontext":
@@ -2549,7 +2691,7 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-230 -220", OffsetMax = "230 220" }
                 }
             });
-            Label(ui, UiScrollTest, "NIGHTSHADE SCROLL TEST v1.5.0", 18, "#FFFFFF", TextAnchor.MiddleCenter, R(10, 390, 450, 430));
+            Label(ui, UiScrollTest, "NIGHTSHADE SCROLL TEST v" + PluginVersion, 18, "#FFFFFF", TextAnchor.MiddleCenter, R(10, 390, 450, 430));
             Label(ui, UiScrollTest, "Hover the numbered rows and turn the wheel.", 13, "#DDDDDD", TextAnchor.MiddleCenter, R(10, 355, 450, 390));
             string scrollName = UiScrollTest + ".Native";
             var scroll = new CuiScrollViewComponent
@@ -2624,7 +2766,8 @@ namespace Oxide.Plugins
             var s = S(p);
             bool admin = IsAdmin(p);
             if (!admin) s.Admin = false;
-            if (s.Tab == 1 && !CanExchange(p)) s.Tab = 0;
+            if (s.Tab == 2 && !CanExchange(p)) s.Tab = 0;
+            if (s.Tab < 0 || s.Tab > 2) s.Tab = 0;
 
             var theme = ActiveTheme();
             var tc = theme.Colors;
@@ -2647,7 +2790,12 @@ namespace Oxide.Plugins
             string header = Box(c, UiFrame, tc.Header, R(0, 570, 1100, 620));
             Box(c, UiFrame, tc.Accent, R(0, 566, 1100, 570));
             Icon(c, header, Def(theme.Icon), 0, R(12, 7, 48, 43));
-            Label(c, header, $"{config.Title}   <size=14><color={Rich(tc.Accent)}>{theme.Tagline}</color></size>", 24, tc.Text, TextAnchor.MiddleLeft, R(58, 0, 760, 50));
+            string heading = config.Title ?? "";
+            if (config.ShowHeaderTagline && !string.IsNullOrEmpty(theme.Tagline))
+                heading += "   <size=14><color=" + Rich(tc.Accent) + ">" + theme.Tagline + "</color></size>";
+            Label(c, header, heading, 24, tc.Text, TextAnchor.MiddleLeft, R(58, 0, admin ? 612 : 790, 50));
+            if (admin)
+                Btn(c, header, $"{UiCmd} admin", s.Admin ? tc.Danger : tc.Button, R(622, 8, 790, 42), s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
 
             string balBox = Box(c, header, tc.Card, R(800, 8, 1050, 42));
             Label(c, balBox, "BALANCE", 11, tc.SubText, TextAnchor.MiddleLeft, R(10, 0, 100, 34));
@@ -2656,19 +2804,14 @@ namespace Oxide.Plugins
 
             // Tab bar
             string tabs = Box(c, UiFrame, tc.Panel, R(0, 526, 1100, 566));
-            Btn(c, tabs, $"{UiCmd} tab 0", s.Tab == 0 ? tc.Accent : tc.Button, R(16, 6, 196, 34), "SHOP", 15, s.Tab == 0 ? tc.AccentText : tc.ButtonText);
+            Btn(c, tabs, $"{UiCmd} tab 0", s.Tab == 0 ? tc.Accent : tc.Button, R(16, 6, 170, 34), "SHOP", 15, s.Tab == 0 ? tc.AccentText : tc.ButtonText);
+            Btn(c, tabs, $"{UiCmd} tab 1", s.Tab == 1 ? tc.Accent : tc.Button, R(178, 6, 332, 34), "EVENTS", 15, s.Tab == 1 ? tc.AccentText : tc.ButtonText);
             if (CanExchange(p))
-                Btn(c, tabs, $"{UiCmd} tab 1", s.Tab == 1 ? tc.Accent : tc.Button, R(204, 6, 384, 34), config.ExchangeTabName, 15, s.Tab == 1 ? tc.AccentText : tc.ButtonText);
-
-            if (s.Tab == 0)
-                Label(c, tabs, "SELECT AN ITEM \u2022 REVIEW \u2022 CONFIRM", 12, tc.SubText, TextAnchor.MiddleCenter, R(400, 6, 910, 34), false);
-
-            if (admin)
-                Btn(c, tabs, $"{UiCmd} admin", s.Admin ? tc.Danger : tc.Button, R(930, 6, 1084, 34), s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
+                Btn(c, tabs, $"{UiCmd} tab 2", s.Tab == 2 ? tc.Accent : tc.Button, R(340, 6, 540, 34), config.ExchangeTabName, 15, s.Tab == 2 ? tc.AccentText : tc.ButtonText);
 
             // Content
-            if (s.Tab == 0) BuildShop(c, p, s, tc, bal);
-            else BuildExchange(c, p, s, tc);
+            if (s.Tab == 2) BuildExchange(c, p, s, tc);
+            else BuildShop(c, p, s, tc, bal);
 
             // Footer
             if (!string.IsNullOrEmpty(s.Status))
@@ -2690,9 +2833,15 @@ namespace Oxide.Plugins
 
         private void BuildShop(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc, int bal)
         {
+            string wantTab = s.Tab == 1 ? "events" : "shop";
             var visible = new List<int>();
             for (int i = 0; i < data.Categories.Count; i++)
-                if (CanSee(p, data.Categories[i].Permission) && (InSeason(data.Categories[i]) || IsAdmin(p))) visible.Add(i);
+            {
+                var candidate = data.Categories[i];
+                if (CategoryTab(candidate) != wantTab) continue;
+                if (HiddenFromPlayer(p, candidate)) continue;
+                if (CanSee(p, candidate.Permission) && (InSeason(candidate) || IsAdmin(p))) visible.Add(i);
+            }
             if (visible.Count > 0 && !visible.Contains(s.Cat)) s.Cat = visible[0];
 
             // Sidebar
@@ -2710,8 +2859,10 @@ namespace Oxide.Plugins
                 int count = cat.Items.Count(x => CanSee(p, x.Permission));
                 string b = Btn(c, catScroll, $"{UiCmd} cat {i}", on ? tc.Accent : tc.Button, TL(0, row * 40, 198, 36), null, 0, null);
                 ListIcon(c, b, cat.Icon, null, 0, R(6, 5, 32, 31));
-                string offSeason = InSeason(cat) ? "" : " <size=9>OFF</size>";
-                Label(c, b, $"{cat.Name.ToUpperInvariant()} <size=11>({count})</size>{offSeason}", cat.Name.Length > 12 ? 11 : 14, on ? tc.AccentText : tc.ButtonText, TextAnchor.MiddleLeft, R(40, 0, 170, 36));
+                string marks = "";
+                if (!InSeason(cat)) marks += " <size=9>OFF</size>";
+                if (cat.AdminModeOnly == true) marks += " <size=9>HIDDEN</size>";
+                Label(c, b, $"{cat.Name.ToUpperInvariant()} <size=11>({count})</size>{marks}", cat.Name.Length > 12 || marks.Length > 0 ? 11 : 14, on ? tc.AccentText : tc.ButtonText, TextAnchor.MiddleLeft, R(40, 0, 170, 36));
                 if (s.Admin)
                     Btn(c, catScroll, $"{UiCmd} delcat {i}", tc.Danger, TL(172, row * 40 + 7, 22, 22), "X", 11, tc.DangerText);
             }
@@ -2726,7 +2877,10 @@ namespace Oxide.Plugins
             string grid = Box(c, UiFrame, tc.Panel, R(250, 56, 1084, 510));
             if (visible.Count == 0)
             {
-                Label(c, grid, s.Admin ? "No categories yet. Add one on the left." : "The shop is empty right now.", 18, tc.SubText, TextAnchor.MiddleCenter, Full());
+                string empty = s.Tab == 1
+                    ? (s.Admin ? "No event categories yet. Add one on the left, or move a category here." : "No event listings right now.")
+                    : (s.Admin ? "No categories yet. Add one on the left." : "The shop is empty right now.");
+                Label(c, grid, empty, 18, tc.SubText, TextAnchor.MiddleCenter, Full());
                 return;
             }
 
@@ -2745,6 +2899,12 @@ namespace Oxide.Plugins
                 Input(c, grid, current.Icon, $"{UiCmd} caticontext", tc.Card, tc.Text, R(330, 393, 560, 413), 11);
                 Label(c, grid, "THEMES", 10, tc.SubText, TextAnchor.MiddleLeft, R(568, 393, 614, 413));
                 Input(c, grid, string.Join(", ", current.Themes ?? new List<string>()), $"{UiCmd} catthemes", tc.Card, tc.Text, R(614, 393, 818, 413), 11);
+                string tabNow = CategoryTab(current);
+                Label(c, grid, "TAB", 10, tc.SubText, TextAnchor.MiddleLeft, R(16, 360, 46, 384));
+                Btn(c, grid, $"{UiCmd} cattab shop", tabNow == "shop" ? tc.Accent : tc.Button, R(48, 360, 140, 384), "SHOP", 11, tabNow == "shop" ? tc.AccentText : tc.ButtonText);
+                Btn(c, grid, $"{UiCmd} cattab events", tabNow == "events" ? tc.Accent : tc.Button, R(146, 360, 250, 384), "EVENTS", 11, tabNow == "events" ? tc.AccentText : tc.ButtonText);
+                bool hiddenFlag = current.AdminModeOnly == true;
+                Btn(c, grid, $"{UiCmd} cathidden", hiddenFlag ? tc.Danger : tc.Button, R(266, 360, 520, 384), hiddenFlag ? "HIDDEN FROM PLAYERS: ON" : "HIDDEN FROM PLAYERS: OFF", 11, hiddenFlag ? tc.DangerText : tc.ButtonText);
             }
             else
             {
@@ -2755,7 +2915,8 @@ namespace Oxide.Plugins
             int descriptionH = listings.Any(x => x.ShowDescriptionOnCard && !string.IsNullOrWhiteSpace(ItemDescription(x))) ? 100 : 0;
             int cardH = 176 + descriptionH;
             int rows = (listings.Count + perRow - 1) / perRow;
-            string area = Scroll(c, grid, R(8, 8, 826, 388), 380, rows * (cardH + gap), tc);
+            int gridTop = s.Admin ? 352 : 388;
+            string area = Scroll(c, grid, R(8, 8, 826, gridTop), gridTop - 8, rows * (cardH + gap), tc);
 
             if (listings.Count == 0)
                 Label(c, area, s.Admin ? "No items. Hold an item and click + ADD HELD ITEM." : "Nothing here yet.", 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 150, 810, 40));
