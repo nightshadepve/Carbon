@@ -5,6 +5,7 @@
   ],
   "Require Use Permission (nightshadeshop.use)": false,
   "Shop Title": "NIGHTSHADE MARKET",
+  "Show Theme Tagline In Shop Header": false,
   "Admin Shop Tab Name": "ADMIN SHOP",
   "Admin Shop Tab Subtitle": "Trade your resources for Blood and more.",
   "Admin Shop Tab - Required Permission (empty = everyone)": "",
