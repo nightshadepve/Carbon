@@ -13,13 +13,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.8.0")]
+    [Info("NightshadeShop", "Nightshade", "1.8.1")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, claimable kits, and an RP coin bank")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.8.0";
+        private const string PluginVersion = "1.8.1";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
@@ -40,7 +40,6 @@ namespace Oxide.Plugins
         private const string DataRefunds = "Nightshade/NightshadeShop/Refunds";
         private const string DataKits = "Nightshade/NightshadeShop/Kits";
         private const string DataBankLog = "Nightshade/NightshadeShop/BankLog";
-        private const string DataTheme = "Nightshade/NightshadeShop/Theme";
         private const string VipDailyId = "vip-daily";
         private const string VipxDailyId = "vipx-daily";
         private const string VipFourId = "vip-4day";
@@ -76,7 +75,6 @@ namespace Oxide.Plugins
         private readonly HashSet<ulong> bankBusy = new HashSet<ulong>();
         private BankLogFile bankLog;
         private bool bankLogUnreadable;
-        private ThemeChoice themeChoice;
 
         private const string UiMain = "NShop.Main";
         private const string UiScrollTest = "NShop.ScrollTest";
@@ -466,7 +464,9 @@ namespace Oxide.Plugins
                     config.Bank.QuickAmounts = new List<int> { 1, 10, 100 };
                 config.Bank.QuickAmounts = config.Bank.QuickAmounts.Where(n => n > 0).Distinct().OrderBy(n => n).Take(4).ToList();
                 if (config.Bank.QuickAmounts.Count == 0) config.Bank.QuickAmounts = new List<int> { 1, 10, 100 };
+                bool dropThemeFile = TakeThemeFile();
                 SaveConfig();
+                if (dropThemeFile) DeleteThemeFile();
             }
             catch (Exception e)
             {
@@ -899,7 +899,6 @@ namespace Oxide.Plugins
             RegisterPerm(PermVipPerk);
             RegisterPerm(PermVipXPerk);
             if (config.Bank != null) RegisterPerm(config.Bank.Permission);
-            LoadThemeChoice();
             LoadBankLog();
             EnsureIconsFolder();
             foreach (var c in config.Commands)
@@ -1532,8 +1531,8 @@ namespace Oxide.Plugins
 
         private Theme ActiveTheme()
         {
-            // Data override wins when an admin has picked a theme. NightshadeEvents, NightshadeLocker,
-            // and NightshadeVoteDay do not call this. They read Theme Mode from NightshadeShop.json.
+            // Theme Mode in configs/NightshadeShop.json. NightshadeEvents, NightshadeLocker, and
+            // NightshadeVoteDay read that same key when their own theme mode is Shop.
             string mode = EffectiveThemeMode();
             if (!string.IsNullOrEmpty(mode) && !mode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
             {
@@ -1602,24 +1601,19 @@ namespace Oxide.Plugins
                 case "theme":
                 {
                     if (args.Length < 2) break;
-                    string stored = CanonicalThemeMode(args[1]);
+                    string stored = SetThemeMode(args[1]);
                     if (stored == null)
                     {
                         SendReply(p, Msg("ThemeUnknown", p, string.Join(", ", config.Themes.Select(t => t.Name))));
                         return;
                     }
-                    // Keep the config key so plugins that read NightshadeShop.json still follow this command.
-                    config.ThemeMode = stored;
-                    SaveConfig();
-                    SaveThemeOverride(stored);
                     SendReply(p, Msg("ThemeSet", p, stored, ActiveTheme().Name));
                     return;
                 }
                 case "themes":
                 {
                     var active = ActiveTheme();
-                    string source = themeChoice != null ? "data override" : "config";
-                    SendReply(p, "Themes (mode: " + EffectiveThemeMode() + ", " + source + "):\n" + string.Join("\n",
+                    SendReply(p, "Themes (mode: " + EffectiveThemeMode() + "):\n" + string.Join("\n",
                         config.Themes.Select(t => $"{(t == active ? "> " : "  ")}{t.Name}  {t.From} to {t.To}  (priority {t.Priority})")));
                     return;
                 }
@@ -4763,11 +4757,6 @@ namespace Oxide.Plugins
             }
         }
 
-        private class ThemeChoice
-        {
-            public string Mode = "Auto";
-        }
-
         private class BankLogFile
         {
             public List<BankEntry> Entries = new List<BankEntry>();
@@ -4789,7 +4778,6 @@ namespace Oxide.Plugins
 
         private string EffectiveThemeMode()
         {
-            if (themeChoice != null && !string.IsNullOrWhiteSpace(themeChoice.Mode)) return themeChoice.Mode;
             if (!string.IsNullOrWhiteSpace(config.ThemeMode)) return config.ThemeMode;
             return "Auto";
         }
@@ -4804,40 +4792,63 @@ namespace Oxide.Plugins
             return match == null ? null : match.Name;
         }
 
-        private bool SaveThemeOverride(string mode)
+        // Same write the /shop theme command uses: Theme Mode in configs/NightshadeShop.json.
+        private string SetThemeMode(string mode)
         {
             string stored = CanonicalThemeMode(mode);
-            if (stored == null) return false;
-            themeChoice = new ThemeChoice { Mode = stored };
-            Interface.Oxide.DataFileSystem.WriteObject(DataTheme, themeChoice);
-            return true;
+            if (stored == null) return null;
+            config.ThemeMode = stored;
+            SaveConfig();
+            return stored;
         }
 
-        private void LoadThemeChoice()
+        // 1.8.0 stored the admin dropdown in Theme.json, which only the shop read. A non-Auto
+        // value is copied onto Theme Mode once. The file is then deleted and never read again.
+        private bool TakeThemeFile()
         {
-            themeChoice = null;
             string path = ShopDataPath("Theme.json");
-            if (!File.Exists(path)) return;
+            if (!File.Exists(path)) return false;
             try
             {
-                var loaded = Interface.Oxide.DataFileSystem.ReadObject<ThemeChoice>(DataTheme);
-                string stored = CanonicalThemeMode(loaded == null ? null : loaded.Mode);
-                if (stored == null)
+                var root = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
+                string mode = root.Value<string>("Mode");
+                string stored = CanonicalThemeMode(mode);
+                if (stored != null && !stored.Equals("Auto", StringComparison.OrdinalIgnoreCase))
                 {
-                    PrintWarning("Theme override in data/Nightshade/NightshadeShop/Theme.json is not Auto or a configured theme. The shop is using the config theme mode.");
-                    return;
+                    if (!string.Equals(config.ThemeMode, stored, StringComparison.Ordinal))
+                    {
+                        config.ThemeMode = stored;
+                        Puts("Moved shop theme " + stored + " from data/Nightshade/NightshadeShop/Theme.json into Theme Mode.");
+                    }
                 }
-                themeChoice = new ThemeChoice { Mode = stored };
+                else if (stored == null && !string.IsNullOrWhiteSpace(mode) && !mode.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase))
+                    PrintWarning("Theme.json had \"" + mode.Trim() + "\", which is not Auto or a configured theme. It was not copied.");
+                return true;
             }
             catch (Exception ex)
             {
-                PrintWarning("Theme override could not be read. The shop is using the config theme mode. " + ex.Message);
+                PrintWarning("Theme.json could not be read, so it was left in place and is no longer used. " + ex.Message);
+                return false;
+            }
+        }
+
+        private void DeleteThemeFile()
+        {
+            string path = ShopDataPath("Theme.json");
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Theme.json could not be deleted. The shop uses Theme Mode from the config and ignores that file. " + ex.Message);
             }
         }
 
         private bool ApplyThemeChoice(BasePlayer p, UiState s, string mode)
         {
-            if (!SaveThemeOverride(mode))
+            string stored = SetThemeMode(mode);
+            if (stored == null)
             {
                 string known = config.Themes == null ? "Auto" : string.Join(", ", config.Themes.Select(t => t.Name));
                 string text = Msg("ThemeUnknown", p, known);
@@ -4845,7 +4856,7 @@ namespace Oxide.Plugins
                 SendReply(p, text);
                 return false;
             }
-            string ok = Msg("ThemeSet", p, themeChoice.Mode, ActiveTheme().Name);
+            string ok = Msg("ThemeSet", p, stored, ActiveTheme().Name);
             SetStatus(s, ok, false);
             SendReply(p, ok);
             return true;
