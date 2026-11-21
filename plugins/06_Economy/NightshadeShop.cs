@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using Facepunch;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -63,6 +65,11 @@ namespace Oxide.Plugins
         // Granted to the default_unlocked group by NightshadeDefaultUnlocked. Shop categories use this same permission.
         private const string PermWipeLock = "nightshadeshop.wipelock";
         private const string PermVipPerk = "nightshadeshop.vipperk";
+        private const string PermVipXPerk = "nightshadeshop.vipxperk";
+        private const string DailyKitPng = "VIP_Daily.png";
+        private const string FourDayKitPng = "VIP_4Day.png";
+        private readonly Dictionary<string, uint> localPngCrc = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private const string UiMain = "NShop.Main";
         private const string UiScrollTest = "NShop.ScrollTest";
@@ -730,6 +737,7 @@ namespace Oxide.Plugins
                 else
                     PrintWarning("VIP kit cooldown import did not finish. Kits.json was left unmarked so the next load can retry.");
             }
+            if (ApplyStoredKitDefaults()) changed = true;
             foreach (var kit in kitFile.Kits)
             {
                 if (kit.Items == null) kit.Items = new List<KitStack>();
@@ -811,6 +819,8 @@ namespace Oxide.Plugins
             RegisterListingPerms();
             RegisterPerm(PermWipeLock);
             RegisterPerm(PermVipPerk);
+            RegisterPerm(PermVipXPerk);
+            EnsureIconsFolder();
             foreach (var c in config.Commands)
                 cmd.AddChatCommand(c, this, nameof(ChatShop));
             cmd.AddChatCommand("perks", this, nameof(ChatOpenKits));
@@ -825,6 +835,7 @@ namespace Oxide.Plugins
                 PrintWarning("ServerRewards is not loaded. Purchases and RP trades will fail until it is.");
             EnsureRaidableTab();
             FindPaidItems();
+            PreloadLocalIcons();
             Puts($"NightshadeShop v{PluginVersion} loaded: {data.Categories.Count} categories, {data.Categories.Sum(x => x.Items.Count)} listings, {data.TradeCategories.Count} Admin Shop categories, {data.Exchanges.Count} trades, {kitFile.Kits.Count} kits.");
         }
 
@@ -2892,7 +2903,7 @@ namespace Oxide.Plugins
             c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = def.itemid, SkinId = skin, BlocksRaycast = false }, rect } });
         }
 
-        // Renders a URL image, a workshop skin ID, or an item shortname; falls back to def/skin.
+        // URL, workshop skin ID, item shortname, or a png in data/Nightshade/NightshadeShop/Icons/.
         private void ListIcon(CuiElementContainer c, string parent, string icon, ItemDefinition fallback, ulong fallbackSkin, CuiRectTransformComponent rect)
         {
             if (!string.IsNullOrEmpty(icon))
@@ -2902,14 +2913,26 @@ namespace Oxide.Plugins
                     c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Url = icon, Color = "1 1 1 1", BlocksRaycast = false }, rect } });
                     return;
                 }
-                ulong skinIcon;
-                if (ulong.TryParse(icon, out skinIcon))
+                if (IsLocalPng(icon))
                 {
-                    c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = SkinIconItemId, SkinId = skinIcon, BlocksRaycast = false }, rect } });
-                    return;
+                    uint crc = LocalPngCrc(icon);
+                    if (crc != 0)
+                    {
+                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Png = crc.ToString(CultureInfo.InvariantCulture), Color = "1 1 1 1", BlocksRaycast = false }, rect } });
+                        return;
+                    }
                 }
-                var d = Def(icon);
-                if (d != null) { Icon(c, parent, d, 0, rect); return; }
+                else
+                {
+                    ulong skinIcon;
+                    if (ulong.TryParse(icon, out skinIcon))
+                    {
+                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = SkinIconItemId, SkinId = skinIcon, BlocksRaycast = false }, rect } });
+                        return;
+                    }
+                    var d = Def(icon);
+                    if (d != null) { Icon(c, parent, d, 0, rect); return; }
+                }
             }
             Icon(c, parent, fallback, fallbackSkin, rect);
         }
@@ -3152,7 +3175,7 @@ namespace Oxide.Plugins
                 Label(c, grid, "PERM", 10, tc.SubText, TextAnchor.MiddleLeft, R(16, 393, 48, 413));
                 Input(c, grid, current.Permission, $"{UiCmd} catperm", tc.Card, tc.Text, R(48, 393, 290, 413), 11);
                 Label(c, grid, "ICON", 10, tc.SubText, TextAnchor.MiddleLeft, R(298, 393, 330, 413));
-                Input(c, grid, current.Icon, $"{UiCmd} caticontext", tc.Card, tc.Text, R(330, 393, 560, 413), 11);
+                Input(c, grid, current.Icon, $"{UiCmd} caticontext", tc.Card, tc.Text, R(330, 393, 560, 413), 11, 128);
                 Label(c, grid, "THEMES", 10, tc.SubText, TextAnchor.MiddleLeft, R(568, 393, 614, 413));
                 Input(c, grid, string.Join(", ", current.Themes ?? new List<string>()), $"{UiCmd} catthemes", tc.Card, tc.Text, R(614, 393, 818, 413), 11);
                 string tabNow = CategoryTab(current);
@@ -3543,7 +3566,7 @@ namespace Oxide.Plugins
             Field(c, box, tc, 242, "DAILY LIMIT", item.DailyLimit.ToString(), cmd + " daily", x);
             Field(c, box, tc, 202, "WIPE LIMIT", item.WipeLimit.ToString(), cmd + " wipe", x);
             Field(c, box, tc, 162, "CARD ICON", item.Icon, cmd + " icon", x);
-            Label(c, box, "URL, workshop skin ID or shortname. Empty = item icon.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
+            Label(c, box, "URL, skin ID, shortname, or Icons/file.png. Empty = item icon.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
 
             Label(c, box, "ONE PER PURCHASE", 12, tc.SubText, TextAnchor.MiddleLeft, R(20 + x, 102, 170 + x, 132));
             Btn(c, box, cmd + " one", item.LimitToOne ? tc.Accent : tc.Button, R(175 + x, 102, 275 + x, 132), item.LimitToOne ? "YES" : "NO", 13, item.LimitToOne ? tc.AccentText : tc.ButtonText);
@@ -3669,7 +3692,15 @@ namespace Oxide.Plugins
         private static bool IsVipPerkPerm(string perm) =>
             string.Equals((perm ?? "").Trim(), PermVipPerk, StringComparison.OrdinalIgnoreCase);
 
-        private static string LockLabel(string perm) => IsVipPerkPerm(perm) ? "VIP ONLY" : "LOCKED";
+        private static bool IsVipXPerm(string perm) =>
+            string.Equals((perm ?? "").Trim(), PermVipXPerk, StringComparison.OrdinalIgnoreCase);
+
+        private static string LockLabel(string perm)
+        {
+            if (IsVipPerkPerm(perm)) return "VIP ONLY";
+            if (IsVipXPerm(perm)) return "VIPX ONLY";
+            return "LOCKED";
+        }
 
         private KitClaim ClaimOf(string userId, string kitId, bool create)
         {
@@ -3789,8 +3820,8 @@ namespace Oxide.Plugins
             string perm = (kit.Permission ?? "").Trim();
             if (perm.Length > 0 && !permission.UserHasPermission(p.UserIDString, perm))
             {
-                deny = IsVipPerkPerm(perm)
-                    ? "VIP only. You need " + PermVipPerk + "."
+                deny = IsVipPerkPerm(perm) ? "VIP only. You need " + PermVipPerk + "."
+                    : IsVipXPerm(perm) ? "VIPx only. You need " + PermVipXPerk + "."
                     : "You need " + perm + " to claim this kit.";
                 return false;
             }
@@ -4178,7 +4209,7 @@ namespace Oxide.Plugins
             string preview = Box(c, box, tc.Panel, R(568, 446, 606, 484));
             ListIcon(c, preview, string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon, Def(FirstKitIcon(kit)), 0, R(4, 4, 34, 34));
             Field(c, box, tc, 410, "PERMISSION", kit.Permission, cmd + " perm", 0, 128);
-            Label(c, box, "Empty = anyone who can open Kits. nightshadeshop.vipperk shows VIP ONLY.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 700, 408), false);
+            Label(c, box, "Empty = Kits access. vipperk = VIP ONLY. vipxperk = VIPX ONLY. Icon: URL, skin, shortname, or VIP_Daily.png in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
             Field(c, box, tc, 350, "COOLDOWN (HOURS)", HoursText(kit.CooldownSeconds), cmd + " cooldown");
             Field(c, box, tc, 310, "MAX USES / WIPE", kit.MaxUsesPerWipe.ToString(), cmd + " uses");
             Label(c, box, "0 uses means no wipe cap. Cooldown still applies.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 288, 560, 308), false);
@@ -4215,12 +4246,150 @@ namespace Oxide.Plugins
             Btn(c, box, UiCmd + " done", tc.Accent, R(820, 14, 964, 50), "DONE", 14, tc.AccentText);
         }
 
+        // Switches the four migrated kits off the old item-shortname icons, and points the
+        // VIPx kits at nightshadeshop.vipxperk, only while those icons are still the originals.
+        private bool ApplyStoredKitDefaults()
+        {
+            bool changed = false;
+            changed |= RetargetMigratedKit(VipDailyId, "woodtea.advanced", DailyKitPng, null);
+            changed |= RetargetMigratedKit(VipxDailyId, "healingtea.pure", DailyKitPng, PermVipXPerk);
+            changed |= RetargetMigratedKit(VipFourId, "hazmatsuit", FourDayKitPng, null);
+            changed |= RetargetMigratedKit(VipxFourId, "explosive.timed", FourDayKitPng, PermVipXPerk);
+            return changed;
+        }
+
+        private bool RetargetMigratedKit(string id, string oldIcon, string png, string permIfStillDefault)
+        {
+            var kit = FindKit(id);
+            if (kit == null) return false;
+            string icon = (kit.Icon ?? "").Trim();
+            bool stillDefault = icon.Length == 0 || string.Equals(icon, oldIcon, StringComparison.OrdinalIgnoreCase);
+            if (!stillDefault) return false;
+            bool changed = false;
+            if (!string.Equals(icon, png, StringComparison.OrdinalIgnoreCase))
+            {
+                kit.Icon = png;
+                changed = true;
+            }
+            if (!string.IsNullOrEmpty(permIfStillDefault))
+            {
+                string perm = (kit.Permission ?? "").Trim();
+                if (!string.Equals(perm, permIfStillDefault, StringComparison.OrdinalIgnoreCase))
+                {
+                    kit.Permission = permIfStillDefault;
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        private string IconsDirectory()
+        {
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", "Icons");
+        }
+
+        private void EnsureIconsFolder()
+        {
+            string dir = IconsDirectory();
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+        }
+
+        // "VIP_Daily.png" or "Icons/VIP_Daily.png" both mean a file in the Icons folder.
+        private static string LocalPngName(string icon)
+        {
+            if (string.IsNullOrWhiteSpace(icon)) return null;
+            string text = icon.Trim().Replace('\\', '/');
+            if (text.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+            if (text.StartsWith("Icons/", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring("Icons/".Length);
+            if (text.IndexOf('/') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return null;
+            if (!text.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) return null;
+            return text;
+        }
+
+        private static bool IsLocalPng(string icon) => LocalPngName(icon) != null;
+
+        private uint LocalPngCrc(string icon)
+        {
+            string name = LocalPngName(icon);
+            if (name == null) return 0;
+            uint cached;
+            if (localPngCrc.TryGetValue(name, out cached) && cached != 0)
+                return cached;
+            EnsureIconsFolder();
+            string path = Path.Combine(IconsDirectory(), name);
+            if (!File.Exists(path))
+            {
+                if (localPngWarned.Add(name))
+                    PrintWarning("NightshadeShop icon file missing: " + name + ". Place it in data/Nightshade/NightshadeShop/Icons/. Using the default icon.");
+                return 0;
+            }
+            if (FileStorage.server == null || CommunityEntity.ServerInstance == null)
+                return 0;
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length == 0)
+                {
+                    if (localPngWarned.Add(name))
+                        PrintWarning("NightshadeShop icon file is empty: " + name + ". Using the default icon.");
+                    return 0;
+                }
+                uint crc = FileStorage.server.Store(bytes, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
+                if (crc == 0)
+                {
+                    if (localPngWarned.Add(name))
+                        PrintWarning("NightshadeShop could not store icon " + name + ". Using the default icon.");
+                    return 0;
+                }
+                localPngCrc[name] = crc;
+                return crc;
+            }
+            catch (Exception ex)
+            {
+                if (localPngWarned.Add(name))
+                    PrintWarning("NightshadeShop could not read icon " + name + ": " + ex.Message + ". Using the default icon.");
+                return 0;
+            }
+        }
+
+        private void PreloadLocalIcons()
+        {
+            EnsureIconsFolder();
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (kitFile?.Kits != null)
+                foreach (var kit in kitFile.Kits)
+                    NoteLocalIcon(names, kit.Icon);
+            if (data?.Categories != null)
+            {
+                foreach (var cat in data.Categories)
+                {
+                    NoteLocalIcon(names, cat.Icon);
+                    if (cat.Items == null) continue;
+                    foreach (var item in cat.Items)
+                        NoteLocalIcon(names, item.Icon);
+                }
+            }
+            if (data?.TradeCategories != null)
+                foreach (var trade in data.TradeCategories)
+                    NoteLocalIcon(names, trade.Icon);
+            foreach (var name in names)
+                LocalPngCrc(name);
+        }
+
+        private static void NoteLocalIcon(HashSet<string> names, string icon)
+        {
+            string name = LocalPngName(icon);
+            if (name != null) names.Add(name);
+        }
+
         private bool MigrateVipPerkKits()
         {
-            EnsureMigratedKit(VipDailyId, "VIP Daily Kit", "woodtea.advanced", 86400, DailyVipItems());
-            EnsureMigratedKit(VipxDailyId, "VIPx Daily Kit", "healingtea.pure", 86400, DailyVipxItems());
-            EnsureMigratedKit(VipFourId, "VIP 4-Day Kit", "hazmatsuit", 345600, FourVipItems());
-            EnsureMigratedKit(VipxFourId, "VIPx 4-Day Kit", "explosive.timed", 345600, FourVipxItems());
+            EnsureMigratedKit(VipDailyId, "VIP Daily Kit", DailyKitPng, PermVipPerk, 86400, DailyVipItems());
+            EnsureMigratedKit(VipxDailyId, "VIPx Daily Kit", DailyKitPng, PermVipXPerk, 86400, DailyVipxItems());
+            EnsureMigratedKit(VipFourId, "VIP 4-Day Kit", FourDayKitPng, PermVipPerk, 345600, FourVipItems());
+            EnsureMigratedKit(VipxFourId, "VIPx 4-Day Kit", FourDayKitPng, PermVipXPerk, 345600, FourVipxItems());
             bool daily = ImportCooldownFile("VIPPerks_DailyKit", VipDailyId, VipxDailyId);
             bool four = ImportCooldownFile("VIPPerks_4DayKit", VipFourId, VipxFourId);
             if (daily && four)
@@ -4228,7 +4397,7 @@ namespace Oxide.Plugins
             return daily && four;
         }
 
-        private void EnsureMigratedKit(string id, string name, string icon, int cooldown, KitStack[] items)
+        private void EnsureMigratedKit(string id, string name, string icon, string perm, int cooldown, KitStack[] items)
         {
             if (FindKit(id) != null) return;
             var kit = new KitDef
@@ -4236,7 +4405,7 @@ namespace Oxide.Plugins
                 Id = id,
                 Name = name,
                 Icon = icon,
-                Permission = PermVipPerk,
+                Permission = perm,
                 CooldownSeconds = cooldown,
                 MaxUsesPerWipe = 0,
                 Items = new List<KitStack>(items)

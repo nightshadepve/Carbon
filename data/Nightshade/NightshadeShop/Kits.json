@@ -5,7 +5,7 @@
     {
       "Id": "vip-daily",
       "Name": "VIP Daily Kit",
-      "Icon (URL, skin ID or shortname)": "woodtea.advanced",
+      "Icon (URL, skin ID or shortname)": "VIP_Daily.png",
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
       "Cooldown (seconds)": 86400,
       "Max Uses Per Wipe (0 = no cap)": 0,
@@ -95,8 +95,8 @@
     {
       "Id": "vipx-daily",
       "Name": "VIPx Daily Kit",
-      "Icon (URL, skin ID or shortname)": "healingtea.pure",
-      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
+      "Icon (URL, skin ID or shortname)": "VIP_Daily.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
       "Cooldown (seconds)": 86400,
       "Max Uses Per Wipe (0 = no cap)": 0,
       "Items": [
@@ -160,7 +160,7 @@
     {
       "Id": "vip-4day",
       "Name": "VIP 4-Day Kit",
-      "Icon (URL, skin ID or shortname)": "hazmatsuit",
+      "Icon (URL, skin ID or shortname)": "VIP_4Day.png",
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
       "Cooldown (seconds)": 345600,
       "Max Uses Per Wipe (0 = no cap)": 0,
@@ -210,8 +210,8 @@
     {
       "Id": "vipx-4day",
       "Name": "VIPx 4-Day Kit",
-      "Icon (URL, skin ID or shortname)": "explosive.timed",
-      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
+      "Icon (URL, skin ID or shortname)": "VIP_4Day.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
       "Cooldown (seconds)": 345600,
       "Max Uses Per Wipe (0 = no cap)": 0,
       "Items": [
