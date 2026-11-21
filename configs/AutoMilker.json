@@ -1,0 +1,15 @@
+{
+  "Display name": "Auto Milker",
+  "Skin ID (change this to use a different Workshop skin in inventory)": 3818526915,
+  "Hopper radius (meters, world space, 1-30 — milking and item pickup)": 10.0,
+  "Plugin tick seconds": 5.0,
+  "Per-hopper scan interval seconds": 20.0,
+  "Max cows milked per tick (global)": 4,
+  "Max Auto Milkers per player (1-10)": 1,
+  "Only milk owned cows or cows familiar with the hopper owner": false,
+  "Apply hopper radius to Auto Milker hoppers only (false = all hoppers for item pickup)": true,
+  "Auto-skim refrigerated milk in hopper owner fridges under the same TC (disabled by default)": false,
+  "Fridge skim interval seconds (minimum 60)": 60.0,
+  "Max milk skims per interval (1-4)": 4,
+  "Debug log": false
+}

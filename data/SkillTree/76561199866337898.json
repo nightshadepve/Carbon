@@ -1,10 +1,10 @@
 {
   "name": "DuskyGopher",
-  "xp": 108457.50347892432,
+  "xp": 203489.60415710197,
   "prestige_level": 0,
-  "current_level": 23,
-  "achieved_level": 23,
-  "available_points": 8,
+  "current_level": 31,
+  "achieved_level": 31,
+  "available_points": 0,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Bandage Expert": 1,
@@ -19,7 +19,15 @@
     "Lucky Shot": 5,
     "Drum Mag": 5,
     "Accident Evasion": 5,
-    "Perfect Balance": 5
+    "Perfect Balance": 5,
+    "Amature Miner": 5,
+    "Adept Miner": 5,
+    "Expert Miner": 5,
+    "Efficient Miner": 1,
+    "Stroke of luck": 4,
+    "Amature Woodcutter": 5,
+    "Adept Woodcutter": 5,
+    "Expert Woodcutter": 2
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -31,8 +39,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T02:03:29.926174+00:00",
-  "xp_bonus_pool": 10516.965000000215,
+  "logged_off": "2026-11-17T03:31:46.616065+00:00",
+  "xp_bonus_pool": 24362.282499999994,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -43,7 +51,7 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-13T01:23:20.397641+00:00",
+  "last_xp_loss": "2026-11-17T01:57:53.749117+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -54,5 +62,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 69
+  "GetTotalSkillPoints": 93
 }

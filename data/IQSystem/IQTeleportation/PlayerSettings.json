@@ -1,122 +1,92 @@
 {
+  "76561198375397546": {
+    "useTeleportationHomeFromFriends": true,
+    "autoAcceptTeleportationFriends": false,
+    "useTeleportGMap": true,
+    "firstConnection": "2026-11-18T01:34:18.287178+00:00"
+  },
   "76561198017547177": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-09T16:49:37.929072+00:00"
-  },
-  "76561198839853772": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-09T16:49:37.929817+00:00"
+    "firstConnection": "2026-11-17T16:14:20.990806+00:00"
   },
   "76561199069700597": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-09T16:49:37.929818+00:00"
+    "firstConnection": "2026-11-17T15:03:26.090411+00:00"
   },
   "76561198383506301": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-09T16:49:37.929819+00:00"
+    "firstConnection": "2026-11-17T12:03:00.01106+00:00"
   },
-  "76561198035665693": {
+  "76561199132885452": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-09T16:56:52.341656+00:00"
+    "firstConnection": "2026-11-20T19:00:51.227007+00:00"
   },
-  "76561199866337898": {
+  "76561197997818751": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T01:23:46.805176+00:00"
+    "firstConnection": "2026-11-14T12:03:21.533331+00:00"
   },
-  "76561198375397546": {
+  "76561198292405649": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T02:20:41.833719+00:00"
+    "firstConnection": "2026-11-15T18:44:08.333656+00:00"
   },
-  "76561198345791124": {
+  "76561198051074438": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T02:35:02.051462+00:00"
+    "firstConnection": "2026-11-15T20:03:23.708839+00:00"
   },
-  "76561199235358381": {
+  "76561198770473764": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T02:38:52.50915+00:00"
-  },
-  "76561198267189996": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T02:45:06.55673+00:00"
-  },
-  "76561199649462056": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T16:19:21.365896+00:00"
-  },
-  "76561199213509672": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T16:21:12.99751+00:00"
-  },
-  "76561198999887494": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-10T22:40:28.309941+00:00"
-  },
-  "76561199146317627": {
-    "useTeleportationHomeFromFriends": true,
-    "autoAcceptTeleportationFriends": false,
-    "useTeleportGMap": true,
-    "firstConnection": "2026-11-11T01:36:01.73667+00:00"
+    "firstConnection": "2026-11-16T16:57:24.721338+00:00"
   },
   "76561198101618468": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-11T02:40:52.113605+00:00"
+    "firstConnection": "2026-11-19T14:43:25.250243+00:00"
   },
-  "76561199564217592": {
+  "76561198028960167": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-11T03:08:53.258319+00:00"
+    "firstConnection": "2026-11-19T22:55:03.183136+00:00"
   },
-  "76561199119497727": {
+  "76561198035665693": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-11T07:41:37.589614+00:00"
+    "firstConnection": "2026-11-19T23:10:17.551502+00:00"
   },
-  "76561198994220790": {
+  "76561198769950321": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-12T17:09:16.668311+00:00"
+    "firstConnection": "2026-11-20T01:10:51.772969+00:00"
   },
-  "76561198138332799": {
+  "76561198799369142": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-13T01:49:37.429865+00:00"
+    "firstConnection": "2026-11-20T01:24:04.850369+00:00"
   },
-  "76561199152759612": {
+  "76561199837492600": {
     "useTeleportationHomeFromFriends": true,
     "autoAcceptTeleportationFriends": false,
     "useTeleportGMap": true,
-    "firstConnection": "2026-11-13T11:57:22.210755+00:00"
+    "firstConnection": "2026-11-20T21:55:57.315163+00:00"
   }
 }

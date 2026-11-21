@@ -1,0 +1,7 @@
+[2026-11-15 04:33:27] 2026-11-15 04:33:27 : Initializing DeathNotes plugin
+[2026-11-15 04:33:41] 2026-11-15 04:33:41 : Unloading DeathNotes plugin
+[2026-11-15 04:38:05] 2026-11-15 04:38:05 : Initializing DeathNotes plugin
+[2026-11-15 10:00:43] 2026-11-15 10:00:43 : Unloading DeathNotes plugin
+[2026-11-15 10:01:46] 2026-11-15 10:01:46 : Initializing DeathNotes plugin
+[2026-11-15 18:18:20] 2026-11-15 06:18:20 : Unloading DeathNotes plugin
+[2026-11-15 18:18:20] 2026-11-15 06:18:20 : Initializing DeathNotes plugin

@@ -1,0 +1,1410 @@
+{
+  "Game settings": {
+    "Minimum players required for the event to proceed": 2,
+    "Send a message to the contestants when a player dies?": true,
+    "Minimum respawn time for crates": 30.0,
+    "Maximum respawn time for crates": 90.0,
+    "Attempt to clear old arenas when the plugin loads?": true,
+    "Default lobby time": 300,
+    "Commands to run for each player when the game starts and the gates open. Use {id} in replacement of the players steam id": [],
+    "Commands to run for each player when they leave the game. Use {id} in replacement of the players steam id": [],
+    "Use the NightVision plugin?": true,
+    "Allow players to loot while they are outside of the circle (in the radiation zone)?": false,
+    "Announce when a player joins the event?": true,
+    "Settings to help prevent non-participants from getting to the arena": {
+      "Constantly check to see if non-participants are near the arena? [They will be warned then killed if found]": true,
+      "How often should we check [seconds]": 1.0,
+      "How close can the player get to the arena before they are warned": 50.0,
+      "How many seconds does the player have to leave the arena before they are killed?": 10.0,
+      "Exclude players witht he IsAdmin flag from our checks?": true
+    }
+  },
+  "Event Helper settings": {
+    "Prevent players from entering the arena if they have items on them?": true,
+    "Return the players items back immediately after respawn? (setting false requries the player to use a command to get their items back)": true,
+    "Use EventHelper to schedule the events (recommended)?": true,
+    "If not using EventHelper, how often should we run the event?": 3600.0,
+    "Commands to prevent when a player are at the event": [
+      "kit",
+      "backpack",
+      "backpack.open"
+    ],
+    "Allow players to stay in a team when they join the event? [set to true if using any sort of clans or team management plugin]": false,
+    "A list of items that cannot be taken into the event": [
+      "cassette",
+      "cassette.medium",
+      "cassette.short",
+      "fun.casetterecorder",
+      "boombox"
+    ],
+    "Prevent players who are flagged with the NoEscape plugin from joining the event?": true,
+    "Prevent the double jump plugin?": true,
+    "Command to restore stored items": "sarestore",
+    "Prevent xp loss when dying at the event?": true,
+    "Prevent the player from losing their backpack when dying at the event?": true,
+    "Prevent the player from opening their backpack while at the event?": true,
+    "Prevent buffs from Skill Tree from activating [won't disable monobehaviour buffs]?": true
+  },
+  "Sound settings": {
+    "Sound effect when the game is about to start": "assets/prefabs/missions/effects/mission_victory.prefab",
+    "Sound effect for killing another player": "assets/prefabs/missions/effects/mission_accept.prefab",
+    "Sound effect when a player dies (players to all participants)": "assets/prefabs/npc/m2bradley/effects/maincannonattack.prefab",
+    "Sound when a player redeems a prize": "assets/prefabs/misc/easter/painted eggs/effects/gold_open.prefab",
+    "SoundLibraryApi Settings": {
+      "Use Sound Library API": false,
+      "Custom sound effect for when the game is about to start (Sound Library API File Name)": ""
+    }
+  },
+  "Radiation zone settings": {
+    "Sphere entity colour [Red, Purple, Black, Green]": 1,
+    "How many spheres should we overlap to make it darker [higher number = darker]?": 8,
+    "How many stacks of radiation should players accumulate for each second spent outside of the sphere?": 3,
+    "How many points of radiation should the player accumulate per second while outside of the dome?": 3,
+    "Radiation check interval (seconds)": 1,
+    "Final circle size": 20,
+    "Seconds after game start before the circle spawns": 60,
+    "The size modifier of the circle when it initially spawns [1.0 = the size of the area. 0.5 = half size]": 1.0,
+    "Radiation panel colour [Red Green Blue Alpha][1.0 = full colour]": "0.5 0 0 0.90"
+  },
+  "Bush prefabs": {
+    "Arid": [
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/creosote_bush_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/creosote_bush_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/mormon_tea_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/mormon_tea_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/mormon_tea_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_desert/mormon_tea_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_dry/creosote_bush_dry_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_dry/creosote_bush_dry_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_grass/creosote_bush_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_grass/creosote_bush_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_grass/creosote_bush_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arid_grass/creosote_bush_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-1.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-2.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-3.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-4.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-5.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-6.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_cactus/cactus-7.prefab"
+    ],
+    "Temperate": [
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_spicebush_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_spicebush_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_spicebush_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_spicebush_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_willow_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_willow_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_willow_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_temp/bush_willow_d.prefab"
+    ],
+    "Tundra": [
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_tundra/bush_spicebush_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_tundra/bush_spicebush_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_tundra/bush_spicebush_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_tundra/bush_spicebush_d.prefab"
+    ],
+    "Arctic": [
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic/bush_willow_snow_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic/bush_willow_snow_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic/bush_willow_snow_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic/bush_willow_snow_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic/bush_willow_snow_small_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic_forest/bush_spicebush_a_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic_forest/bush_spicebush_c_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic_forest/bush_willow_snow_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_arctic_forest/bush_willow_snow_b.prefab"
+    ],
+    "Jungle": [
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/monstera_deliciosa_l.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/monstera_deliciosa_m.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/monstera_deliciosa_s.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/monstera_deliciosa_xl.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/heliconia_rostrata_l.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/heliconia_rostrata_m.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/heliconia_rostrata_s.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/heliconia_rostrata_s_short.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/heliconia_rostrata_xs.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/bromeliad_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/bromeliad_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/bromeliad_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_bushes_jungle/bromeliad_d.prefab"
+    ]
+  },
+  "Tree prefabs": {
+    "Arid": [
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_forest/palm_tree_tall_a_entity.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_forest/palm_tree_tall_b_entity.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_beachside/palm_tree_short_a_entity.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_beachside/palm_tree_short_b_entity.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arid_beachside/palm_tree_short_c_entity.prefab"
+    ],
+    "Temperate": [
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_forest_pine/pine_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_forest_pine/pine_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_field_large/oak_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_field_large/oak_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_field_large/oak_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_temp_forest_pine/birch_big_temp.prefab"
+    ],
+    "Tundra": [
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_field_pines/pine_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_field_pines/pine_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_field_pines/pine_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_forest/pine_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_forest/pine_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_forest/pine_dead_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_tundra_forest/pine_dead_b.prefab"
+    ],
+    "Arctic": [
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forest/pine_a_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forest/pine_c_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forest/pine_dead_snow_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forest/pine_dead_snow_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forestside/pine_a_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forestside/pine_b snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forestside/pine_d_snow.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_arctic_forestside/pine_dead_snow_e.prefab"
+    ],
+    "Jungle": [
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/hura_crepitans_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/hura_crepitans_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/hura_crepitans_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/hura_crepitans_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/trumpet_tree_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/trumpet_tree_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/trumpet_tree_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/trumpet_tree_d.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/mauritia_flexuosa_l.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/mauritia_flexuosa_m.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/mauritia_flexuosa_s.prefab",
+      "assets/bundled/prefabs/autospawn/resource/v3_jungle_forest/mauritia_flexuosa_xs.prefab"
+    ]
+  },
+  "Dead log prefabs": {
+    "Arid": [
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_c.prefab"
+    ],
+    "Temperate": [
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_c.prefab"
+    ],
+    "Tundra": [
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_c.prefab"
+    ],
+    "Arctic": [
+      "assets/bundled/prefabs/autospawn/resource/logs_snow/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_snow/dead_log_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_snow/dead_log_a.prefab"
+    ],
+    "Jungle": [
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_dry/dead_log_c.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_a.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_b.prefab",
+      "assets/bundled/prefabs/autospawn/resource/logs_wet/dead_log_c.prefab"
+    ]
+  },
+  "Prize settings": {
+    "How many prizes should the player receive per claim?": 1,
+    "Prizes": [
+      {
+        "shortname": "scrap",
+        "min_quantity": 300,
+        "max_quantity": 600,
+        "skin": 0,
+        "displayName": null,
+        "dropWeight": 100
+      }
+    ],
+    "Economic dollars for winning a match [requires: Economics]": {
+      "min_amount": 0,
+      "max_amount": 0
+    },
+    "Server reward points for winning a match [requires: ServerRewards]": {
+      "min_amount": 2000,
+      "max_amount": 6000
+    },
+    "Skill Tree XP given to the player when they win the event [Requires: SkillTree]": 2000.0,
+    "Automatically award the player with their prize (false means the player must type the /sprize command to redeem their prize)": true,
+    "Participation rewards": {
+      "Provide players with a reward for participating in the event?": false,
+      "Modifiers for dying first [1, 1.0 = the first player to die will receive 1x of a random reward]": {
+        "1": 1.0
+      },
+      "List of participation rewards [The modifier from the dictionary will multiply the amounts when selected].": [
+        {
+          "shortname": "scrap",
+          "min_quantity": 50,
+          "max_quantity": 50,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        }
+      ],
+      "Economics reward [The modifier from the dictionary will multiply the amounts when selected].": 25.0,
+      "Server Reward points reward [The modifier from the dictionary will multiply the amounts when selected].": 25
+    }
+  },
+  "Command settings": {
+    "Command to join an active lobby": "survival",
+    "Command to leave an active lobby": "saleave",
+    "Command to view the scoreboard": "sarank"
+  },
+  "Loot settings": {
+    "PrimitiveLoot": {
+      "Chance for this profile to be selected for the game (weighted system)": 100,
+      "min_items": 2,
+      "max_items": 4,
+      "items": [
+        {
+          "shortname": "attire.hide.pants",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.poncho",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.skirt",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.vest",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.helterneck",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.boots",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "grenade.beancan",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "hat.wolf",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "spear.stone",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "spear.wooden",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.bone",
+          "min_amount": 10,
+          "max_amount": 20,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.fire",
+          "min_amount": 3,
+          "max_amount": 6,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.hv",
+          "min_amount": 5,
+          "max_amount": 12,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.wooden",
+          "min_amount": 5,
+          "max_amount": 20,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "longsword",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "salvaged.sword",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "machete",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bow.compound",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "crossbow",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bow.hunting",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "grenade.f1",
+          "min_amount": 1,
+          "max_amount": 3,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.revolver",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.pistol",
+          "min_amount": 5,
+          "max_amount": 15,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.nailgun",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bandage",
+          "min_amount": 1,
+          "max_amount": 6,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "syringe.medical",
+          "min_amount": 1,
+          "max_amount": 2,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bone.armor.suit",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bone.club",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "deer.skull.mask",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "knife.bone",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.pants",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.jacket",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "hat.boonie",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bucket.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "riot.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.gloves.new",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.headwrap",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.shirt",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.shoes",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.trousers",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "knife.butcher",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "knife.combat",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shotgun.waterpipe",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.handmade.shell",
+          "min_amount": 1,
+          "max_amount": 5,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "stonehatchet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "mace",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "salvaged.cleaver",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rock",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "sickle",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        }
+      ]
+    },
+    "GunLoot": {
+      "Chance for this profile to be selected for the game (weighted system)": 100,
+      "min_items": 2,
+      "max_items": 4,
+      "items": [
+        {
+          "shortname": "weapon.mod.8x.scope",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.small.scope",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "crossbow",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.holosight",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "longsword",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "machete",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.muzzleboost",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.muzzlebrake",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "salvaged.cleaver",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.silencer",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.simplesight",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "tactical.gloves",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "weapon.mod.lasersight",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.shotgun",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.shotgun.fire",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.shotgun.slug",
+          "min_amount": 2,
+          "max_amount": 7,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.grenadelauncher.he",
+          "min_amount": 2,
+          "max_amount": 5,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.rifle",
+          "min_amount": 20,
+          "max_amount": 40,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.rifle.explosive",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.handmade.shell",
+          "min_amount": 10,
+          "max_amount": 20,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.rocket.hv",
+          "min_amount": 1,
+          "max_amount": 2,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.rifle.hv",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.pistol.fire",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.nailgun.nails",
+          "min_amount": 20,
+          "max_amount": 40,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.pistol",
+          "min_amount": 20,
+          "max_amount": 40,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.pistol.hv",
+          "min_amount": 10,
+          "max_amount": 20,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "ammo.rifle.incendiary",
+          "min_amount": 10,
+          "max_amount": 15,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.ak",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.bolt",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.l96",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.lr300",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.m39",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rifle.semiauto",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.eoka",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.m92",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.nailgun",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.python",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.revolver",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pistol.semiauto",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.bone",
+          "min_amount": 10,
+          "max_amount": 40,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.fire",
+          "min_amount": 5,
+          "max_amount": 10,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.hv",
+          "min_amount": 10,
+          "max_amount": 40,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "arrow.wooden",
+          "min_amount": 20,
+          "max_amount": 60,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "jumpsuit.suit.blue",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bone.armor.suit",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "hazmatsuit",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "hazmat.plague",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "roadsign.jacket",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "roadsign.kilt",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.pants",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "wood.armor.jacket",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "deer.skull.mask",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bucket.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "coffeecan.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "heavy.plate.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "riot.helmet",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shotgun.double",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shotgun.pump",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shotgun.spas12",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shotgun.waterpipe",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "smg.2",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "smg.mp5",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "smg.thompson",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "grenade.f1",
+          "min_amount": 2,
+          "max_amount": 5,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "multiplegrenadelauncher",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "grenade.smoke",
+          "min_amount": 1,
+          "max_amount": 2,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "grenade.beancan",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "rocket.launcher",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "jacket",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.gloves.new",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "burlap.gloves",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "roadsign.gloves",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "shoes.boots",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.boots",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.pants",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.poncho",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.skirt",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "attire.hide.vest",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pants",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "pants.shorts",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "hoodie",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "syringe.medical",
+          "min_amount": 1,
+          "max_amount": 3,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "bandage",
+          "min_amount": 3,
+          "max_amount": 6,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "largemedkit",
+          "min_amount": 1,
+          "max_amount": 2,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "metal.plate.torso",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        },
+        {
+          "shortname": "metal.facemask",
+          "min_amount": 1,
+          "max_amount": 1,
+          "skin": 0,
+          "displayName": null,
+          "dropWeight": 100
+        }
+      ]
+    }
+  },
+  "How many delete/spawn actions should we do per game tick when building/removing the arena?": 50,
+  "Anchor settings": {
+    "Player counter anchor [Key: Left/Right, Value: Up/Down]": {
+      "Key": -40.0,
+      "Value": 7.0
+    }
+  },
+  "Notifications settings": {
+    "Notify plugin settings": {
+      "Send notifications using the Notify plugin?": true,
+      "If enabled, send notifications when the event is being advertised?": false,
+      "If enabled, send notifications when the player has items they need to recover?": true,
+      "Notify profile/type": 0
+    },
+    "GUIAnnouncements plugin settings": {
+      "Send announcements using the GUIAnnouncements plugin?": true,
+      "Banner colour - see GUIAnnouncements for colours": "Purple",
+      "Text colour - see GUIAnnouncements for colours": "Yellow",
+      "Position adjustment": 0.0
+    },
+    "ChatNotifications settings": {
+      "Send the SurvivalArenaStartingBeginIn lang message in chat": true,
+      "Send the Cancelled lang message in chat": true,
+      "Send the AnnounceWinner lang message in chat": true,
+      "Send the NobodyWon lang message in chat": true
+    }
+  },
+  "Death feed settings": {
+    "Name colour for death feed": "F27C1B",
+    "How long should a kill stay around for?": 10.0,
+    "Maximum kills on a feed before it starts to overwrite the oldest kills": 6
+  }
+}

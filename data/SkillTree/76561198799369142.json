@@ -1,12 +1,18 @@
 {
   "name": "PinkMelancholy",
-  "xp": 408957.16083619103,
+  "xp": 413929.53554523556,
   "prestige_level": 0,
-  "current_level": 44,
-  "achieved_level": 44,
-  "available_points": 132,
+  "current_level": 45,
+  "achieved_level": 45,
+  "available_points": 110,
   "non_level_related_points_given": 0,
-  "buff_values": {},
+  "buff_values": {
+    "Maintenance": 5,
+    "Scientific Breakthrough": 5,
+    "Supersonic Thrust": 5,
+    "Drum Mag": 5,
+    "Tank Buster": 5
+  },
   "xp_drops": true,
   "xp_hud": true,
   "better_chat_enabled": true,
@@ -17,8 +23,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-08-14T04:19:49.440308+00:00",
-  "xp_bonus_pool": 25000.0,
+  "logged_off": "2026-11-21T08:18:40.211577+00:00",
+  "xp_bonus_pool": 14960.760000000002,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -29,14 +35,16 @@
   "Trap_Spotter_used_time": "2026-09-03T18:12:42.91721+00:00",
   "Loot_Spotter_used_time": "2026-09-03T18:12:42.91721+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-09-03T18:12:42.91721+00:00",
+  "last_xp_loss": "2026-11-21T07:10:33.867989+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
+  "pending_levels": 0,
   "DisabledBuffs": [],
   "presets": null,
   "ignoreWarning": false,
+  "ignoreMaxWarning": false,
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 132
+  "GetTotalSkillPoints": 135
 }

@@ -1,12 +1,20 @@
 {
   "name": "pinnaclepreditor",
-  "xp": 9645.8500227987788,
+  "xp": 63562.930532604762,
   "prestige_level": 0,
-  "current_level": 6,
-  "achieved_level": 6,
-  "available_points": 12,
+  "current_level": 17,
+  "achieved_level": 17,
+  "available_points": 16,
   "non_level_related_points_given": 0,
-  "buff_values": {},
+  "buff_values": {
+    "Amature Miner": 5,
+    "Tea Party": 5,
+    "Bandage Expert": 1,
+    "Primitive Expert": 1,
+    "Thrifty Renovator": 4,
+    "Efficient Miner": 1,
+    "Barrel Smasher": 1
+  },
   "xp_drops": true,
   "xp_hud": true,
   "better_chat_enabled": true,
@@ -17,8 +25,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T01:23:16.083663+00:00",
-  "xp_bonus_pool": 20493.787493294487,
+  "logged_off": "2026-11-18T08:09:14.01824+00:00",
+  "xp_bonus_pool": 24529.975000000024,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -29,7 +37,7 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "0001-01-01T00:00:00",
+  "last_xp_loss": "2026-11-13T21:00:58.733637+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -40,5 +48,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 12
+  "GetTotalSkillPoints": 34
 }

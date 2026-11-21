@@ -13,7 +13,7 @@
     "Permission required to deploy": true,
     "Force deploy on foundation": true,
     "Players can deploy multiple marketplaces": false,
-    "Add vending machines to Marketplaces": false,
+    "Add vending machines to Marketplaces": true,
     "Building privilege required to access vending loot": false,
     "Block all damage to vending machines": true,
     "Vending machine drops loot if destroyed": true,
@@ -52,7 +52,7 @@
     }
   },
   "Destroy Settings": {
-    "Destroy if floor underneath destroyed": true,
+    "Destroy if floor underneath destroyed": false,
     "Drop marketplace on floor if destroyed": true,
     "Lose condition when dropped": false
   },

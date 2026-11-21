@@ -1,10 +1,10 @@
 {
   "name": "RunaObscura",
-  "xp": 62523.709496212861,
+  "xp": 87662.827317071191,
   "prestige_level": 0,
-  "current_level": 17,
-  "achieved_level": 17,
-  "available_points": 9,
+  "current_level": 20,
+  "achieved_level": 20,
+  "available_points": 18,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Looter": 1,
@@ -41,8 +41,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-12T01:51:53.971411+00:00",
-  "xp_bonus_pool": 25000.0,
+  "logged_off": "2026-11-21T03:02:11.574441+00:00",
+  "xp_bonus_pool": 22375.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -53,7 +53,7 @@
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.828027+00:00",
   "Loot_Spotter_used_time": "2026-11-05T19:06:43.828027+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-10T01:38:50.376406+00:00",
+  "last_xp_loss": "2026-11-17T01:56:23.045866+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -64,5 +64,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 51
+  "GetTotalSkillPoints": 60
 }

@@ -1,10 +1,10 @@
 {
   "name": "RKFISHHH",
-  "xp": 476518.45595986012,
+  "xp": 1095659.4330139821,
   "prestige_level": 0,
-  "current_level": 48,
-  "achieved_level": 48,
-  "available_points": 6,
+  "current_level": 73,
+  "achieved_level": 73,
+  "available_points": 27,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Miner": 5,
@@ -26,7 +26,7 @@
     "Rugged Up": 1,
     "Perfect Balance": 5,
     "Fresh Spawn": 1,
-    "Animal Tamer": 3,
+    "Animal Tamer": 5,
     "Maintenance": 5,
     "Defence Research": 2,
     "Supersonic Thrust": 5,
@@ -35,13 +35,26 @@
     "Primitive Expert": 1,
     "Adept Tinkerer": 5,
     "MacGyver": 1,
-    "Expert Tinkerer": 3,
+    "Expert Tinkerer": 5,
     "Fry Cook": 5,
     "Tea Connoisseur": 5,
-    "Fruggal Rationer": 3,
+    "Fruggal Rationer": 5,
     "Burst Of Energy": 1,
     "Drum Mag": 5,
-    "Lucky Shot": 4
+    "Lucky Shot": 5,
+    "Blacksmith": 1,
+    "Quality Crafter": 3,
+    "Assassin": 5,
+    "Vampiric Tendencies": 1,
+    "Amature Woodcutter": 5,
+    "Adept Woodcutter": 5,
+    "Efficient Lumberjack": 1,
+    "Chimney": 5,
+    "Expert Woodcutter": 5,
+    "Instant Woodcutting": 5,
+    "Deforestation": 1,
+    "Guarded": 5,
+    "Mine Sweeper": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -53,8 +66,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T07:06:47.985725+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-21T06:21:40.304418+00:00",
+  "xp_bonus_pool": 5337.5,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
@@ -63,16 +76,22 @@
     },
     "Cooking_Ultimate": {
       "enabled": true
+    },
+    "Combat_Ultimate": {
+      "enabled": true
+    },
+    "Woodcutting_Ultimate": {
+      "enabled": true
     }
   },
   "plant_genes": "gggyyy",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
-  "cooking_ultimate_used_time": "2026-11-13T06:16:01.145728+00:00",
+  "cooking_ultimate_used_time": "2026-11-20T00:35:45.192676+00:00",
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.827519+00:00",
   "Loot_Spotter_used_time": "2026-11-05T19:06:43.82752+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-12T16:22:33.422751+00:00",
+  "last_xp_loss": "2026-11-20T20:15:35.767117+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -83,5 +102,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 144
+  "GetTotalSkillPoints": 219
 }

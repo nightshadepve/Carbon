@@ -1,12 +1,17 @@
 {
   "name": "Ig0twermz",
-  "xp": 5.8749999999999991,
+  "xp": 8766.0250029802319,
   "prestige_level": 0,
-  "current_level": 0,
-  "achieved_level": 0,
-  "available_points": 0,
+  "current_level": 6,
+  "achieved_level": 6,
+  "available_points": 2,
   "non_level_related_points_given": 0,
-  "buff_values": {},
+  "buff_values": {
+    "Looter": 5,
+    "Barrel Smasher": 1,
+    "Loot Magnet": 2,
+    "Lucky Looter": 2
+  },
   "xp_drops": true,
   "xp_hud": true,
   "better_chat_enabled": true,
@@ -17,8 +22,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-11T02:49:49.510098+00:00",
-  "xp_bonus_pool": 24994.125000000004,
+  "logged_off": "2026-11-20T18:09:54.165629+00:00",
+  "xp_bonus_pool": 21206.25,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -40,5 +45,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 0
+  "GetTotalSkillPoints": 12
 }

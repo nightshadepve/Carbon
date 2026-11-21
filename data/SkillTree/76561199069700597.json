@@ -1,10 +1,10 @@
 {
   "name": "Blue",
-  "xp": 348637.9985127743,
+  "xp": 535008.62332527526,
   "prestige_level": 0,
-  "current_level": 41,
-  "achieved_level": 41,
-  "available_points": 58,
+  "current_level": 51,
+  "achieved_level": 51,
+  "available_points": 13,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Miner": 5,
@@ -24,7 +24,25 @@
     "MacGyver": 1,
     "Adept Tinkerer": 5,
     "Blacksmith": 1,
-    "Expert Tinkerer": 5
+    "Expert Tinkerer": 5,
+    "Tea Party": 5,
+    "Glutton": 5,
+    "Fry Cook": 5,
+    "Easily satisfied": 5,
+    "Fruggal Rationer": 5,
+    "Burst Of Energy": 1,
+    "Mine Sweeper": 5,
+    "Strategist": 5,
+    "Blast Suit": 2,
+    "Scavenger's Instinct": 5,
+    "Pressed Explosive": 5,
+    "Perceptive": 1,
+    "Reliable Explosive": 5,
+    "Maintenance": 5,
+    "Tank Buster": 5,
+    "Skybane": 5,
+    "Supersonic Thrust": 1,
+    "Ricochet": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -36,12 +54,15 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T07:13:22.157807+00:00",
-  "xp_bonus_pool": 5000.0,
+  "logged_off": "2026-11-21T08:19:00.83462+00:00",
+  "xp_bonus_pool": 15451.25,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
     "Woodcutting_Ultimate": {
+      "enabled": true
+    },
+    "Cooking_Ultimate": {
       "enabled": true
     }
   },
@@ -49,10 +70,10 @@
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
   "cooking_ultimate_used_time": "0001-01-01T00:00:00",
-  "Trap_Spotter_used_time": "2026-11-05T19:06:43.828067+00:00",
-  "Loot_Spotter_used_time": "2026-11-05T19:06:43.828068+00:00",
+  "Trap_Spotter_used_time": "2026-11-21T06:52:05.97818+00:00",
+  "Loot_Spotter_used_time": "2026-11-18T07:07:18.323849+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-13T01:45:24.754765+00:00",
+  "last_xp_loss": "2026-11-20T04:06:12.720164+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -63,5 +84,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 123
+  "GetTotalSkillPoints": 153
 }

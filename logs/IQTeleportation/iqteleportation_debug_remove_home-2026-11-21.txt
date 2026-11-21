@@ -1,0 +1,1 @@
+[2026-11-21 05:24:37] DELETE HOME DETECTED ENTITY ONE : component.box.scrap.large

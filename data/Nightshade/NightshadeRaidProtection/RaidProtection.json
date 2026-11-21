@@ -2,54 +2,199 @@
   "Shields": {
     "145522": {
       "CupboardId": 145522,
-      "BuildingId": 60,
-      "RemainingSeconds": 24.538622999617427,
-      "LastAccountedTicks": 639298079754613770,
-      "ExpiresUtcTicks": 639298080000000000
+      "BuildingId": 112,
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 0.0,
+      "LastAccountedTicks": 639308583266450180,
+      "ExpiresUtcTicks": 0,
+      "Queue": []
     },
     "151547": {
       "CupboardId": 151547,
       "BuildingId": 3,
-      "RemainingSeconds": 24.53861399993632,
-      "LastAccountedTicks": 639298079754613860,
-      "ExpiresUtcTicks": 639298080000000000
-    },
-    "152520": {
-      "CupboardId": 152520,
-      "BuildingId": 4,
-      "RemainingSeconds": 24.538610000041597,
-      "LastAccountedTicks": 639298079754613900,
-      "ExpiresUtcTicks": 639298080000000000
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 0.0,
+      "LastAccountedTicks": 639308583266450270,
+      "ExpiresUtcTicks": 0,
+      "Queue": []
     },
     "1375628": {
       "CupboardId": 1375628,
-      "BuildingId": 174,
-      "RemainingSeconds": 0.0,
-      "LastAccountedTicks": 639298079754613920,
-      "ExpiresUtcTicks": 639298080000000000
+      "BuildingId": 677,
+      "OwnerSteamId": 76561199069700597,
+      "RemainingSeconds": 159273.35496799962,
+      "LastAccountedTicks": 639308583266450320,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561199069700597,
+          "RemainingSeconds": 159273.35496799962
+        }
+      ]
     },
     "3757113": {
       "CupboardId": 3757113,
       "BuildingId": 428,
-      "RemainingSeconds": 24.538606000020547,
-      "LastAccountedTicks": 639298079754613940,
-      "ExpiresUtcTicks": 639298080000000000
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 47673.3549529999,
+      "LastAccountedTicks": 639308583266450470,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 0,
+          "RemainingSeconds": 47673.3549529999
+        }
+      ]
+    },
+    "3094811": {
+      "CupboardId": 3094811,
+      "BuildingId": 1889,
+      "OwnerSteamId": 76561198035665693,
+      "RemainingSeconds": 69273.354947000364,
+      "LastAccountedTicks": 639308583266450530,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198035665693,
+          "RemainingSeconds": 47673.354947000371
+        },
+        {
+          "BuyerSteamId": 76561198035665693,
+          "RemainingSeconds": 21600.0
+        }
+      ]
+    },
+    "7250863": {
+      "CupboardId": 7250863,
+      "BuildingId": 8,
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 159273.354942,
+      "LastAccountedTicks": 639308583266450580,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 0,
+          "RemainingSeconds": 159273.354942
+        }
+      ]
+    },
+    "2478037": {
+      "CupboardId": 2478037,
+      "BuildingId": 109,
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 0.0,
+      "LastAccountedTicks": 639308583266450630,
+      "ExpiresUtcTicks": 0,
+      "Queue": []
+    },
+    "10714047": {
+      "CupboardId": 10714047,
+      "BuildingId": 1885,
+      "OwnerSteamId": 76561198375397546,
+      "RemainingSeconds": 47673.354933002556,
+      "LastAccountedTicks": 639308583266450670,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198375397546,
+          "RemainingSeconds": 47673.354933002556
+        }
+      ]
+    },
+    "11613922": {
+      "CupboardId": 11613922,
+      "BuildingId": 1182,
+      "OwnerSteamId": 76561198375397546,
+      "RemainingSeconds": 159273.35493000009,
+      "LastAccountedTicks": 639308583266450700,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198375397546,
+          "RemainingSeconds": 159273.35493000009
+        }
+      ]
+    },
+    "9967188": {
+      "CupboardId": 9967188,
+      "BuildingId": 1149,
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 0.0,
+      "LastAccountedTicks": 639308583266450740,
+      "ExpiresUtcTicks": 0,
+      "Queue": []
+    },
+    "3163689": {
+      "CupboardId": 3163689,
+      "BuildingId": 256,
+      "OwnerSteamId": 0,
+      "RemainingSeconds": 159273.35492300006,
+      "LastAccountedTicks": 639308583266450770,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 0,
+          "RemainingSeconds": 159273.35492300006
+        }
+      ]
+    },
+    "22444972": {
+      "CupboardId": 22444972,
+      "BuildingId": 1754,
+      "OwnerSteamId": 76561198017547177,
+      "RemainingSeconds": 159273.35492000269,
+      "LastAccountedTicks": 639308583266450800,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198017547177,
+          "RemainingSeconds": 159273.35492000269
+        }
+      ]
+    },
+    "19437119": {
+      "CupboardId": 19437119,
+      "BuildingId": 1633,
+      "OwnerSteamId": 76561198017547177,
+      "RemainingSeconds": 159273.35491600024,
+      "LastAccountedTicks": 639308583266450840,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198017547177,
+          "RemainingSeconds": 159273.35491600024
+        }
+      ]
+    },
+    "21590967": {
+      "CupboardId": 21590967,
+      "BuildingId": 1881,
+      "OwnerSteamId": 76561198375397546,
+      "RemainingSeconds": 162979.74965900037,
+      "LastAccountedTicks": 639308583266450870,
+      "ExpiresUtcTicks": 0,
+      "Queue": [
+        {
+          "BuyerSteamId": 76561198375397546,
+          "RemainingSeconds": 162979.74965900037
+        }
+      ]
     }
   },
   "LegitimateVoucherUids": [],
   "LastSeenUtcTicks": {
-    "76561198017547177": 639301504079842040,
-    "76561198839853772": 639301323910219930,
-    "76561198383506301": 639301722377954240,
-    "76561199866337898": 639301322099252890,
-    "76561199069700597": 639301508021572140,
-    "76561199132885452": 639297192555247820,
+    "76561198017547177": 639308389003110820,
+    "76561198839853772": 639301967844436440,
+    "76561198383506301": 639305279993254510,
+    "76561199866337898": 639304831066143210,
+    "76561199069700597": 639308459408411370,
+    "76561199132885452": 639307981222134800,
     "76561198981256497": 639295066076435210,
-    "76561198101618468": 639299621895109740,
+    "76561198101618468": 639307949941638720,
     "76561199445215391": 639295122670068890,
     "76561198138332799": 639301340208886840,
-    "76561198035665693": 639300451139685130,
-    "76561199146317627": 639301297960834730,
+    "76561198035665693": 639308269315752800,
+    "76561199146317627": 639305861540159590,
     "76561199588686490": 639296142867979000,
     "76561198753316492": 639296844125285920,
     "76561198361148747": 639296868529331430,
@@ -57,13 +202,22 @@
     "76561198321955807": 639298080858532460,
     "76561199235358381": 639299619181275080,
     "76561198345791124": 639299618242039280,
-    "76561198375397546": 639301584180607320,
-    "76561199649462056": 639301379585244820,
+    "76561198375397546": 639308382908391810,
+    "76561199649462056": 639304379911164100,
     "76561199213509672": 639299245866609100,
     "76561198999887494": 639299472610035420,
     "76561199564217592": 639299634113882270,
     "76561199119497727": 639299798330975720,
     "76561198994220790": 639301001646177890,
-    "76561199152759612": 639301770577601160
-  }
+    "76561199152759612": 639305182430536950,
+    "76561197997818751": 639302571710258040,
+    "76561198292405649": 639306603973452470,
+    "76561198051074438": 639303749682190980,
+    "76561198770473764": 639304450793615750,
+    "76561198028960167": 639308169144847300,
+    "76561198769950321": 639307392978301560,
+    "76561198799369142": 639308459202211580,
+    "76561199837492600": 639308204473392440
+  },
+  "SaveId": "639295024030000000"
 }

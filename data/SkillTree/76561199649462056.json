@@ -1,10 +1,10 @@
 {
   "name": "Gone Fishin",
-  "xp": 57235.833832946315,
+  "xp": 121646.58417827102,
   "prestige_level": 0,
-  "current_level": 16,
-  "achieved_level": 16,
-  "available_points": 19,
+  "current_level": 24,
+  "achieved_level": 24,
+  "available_points": 3,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Barrel Smasher": 1,
@@ -14,11 +14,23 @@
     "Stroke of luck": 1,
     "Bandage Expert": 1,
     "Revitalization": 5,
-    "Looter": 4,
+    "Looter": 5,
     "Lucky Looter": 1,
     "Exposed Radiation": 5,
-    "Adept Miner": 2,
-    "Maintenance": 1
+    "Adept Miner": 5,
+    "Maintenance": 1,
+    "Expert Miner": 5,
+    "Refiner": 5,
+    "Amature Woodcutter": 5,
+    "Component Luck": 2,
+    "Electronics Luck": 1,
+    "Efficient Recycling": 3,
+    "Mine Sweeper": 5,
+    "Primitive Expert": 1,
+    "Thrifty Renovator": 3,
+    "Amature Tinkerer": 2,
+    "MacGyver": 1,
+    "Adept Tinkerer": 3
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -30,8 +42,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T03:39:18.524754+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-16T14:59:51.118575+00:00",
+  "xp_bonus_pool": 21643.084999999879,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -42,7 +54,7 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-12T17:52:20.900496+00:00",
+  "last_xp_loss": "2026-11-14T02:23:08.796121+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -53,5 +65,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 48
+  "GetTotalSkillPoints": 72
 }
