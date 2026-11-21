@@ -1530,8 +1530,8 @@ namespace Oxide.Plugins
                                 Bk("PROGRESSION",
                                     L("\u2022 /shop or /store \u2014 the RP shop"),
                                     L("\u2022 /skills, /skilltree, /st \u2014 Skill Tree"),
-                                    L("\u2022 /perks \u2014 VIP kit status"),
-                                    L("\u2022 /perks daily and /perks 4day \u2014 claim VIP kits")),
+                                    L("\u2022 /perks \u2014 open the shop Kits tab"),
+                                    L("\u2022 /perks daily and /perks 4day \u2014 open the shop Kits tab")),
                                 Bk("SKINS, LOOT, HELP",
                                     L("\u2022 /skin, /skincraft, /skinitem, /skininv, /skinauto, /skinbase"),
                                     L("\u2022 /skinrequest <WorkshopID> \u2014 request a Workshop skin"),
@@ -1743,7 +1743,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Hackable crates unlock in 2.5 minutes."),
                                 L("\u2022 No decay on personal boats and tugboats."),
                                 L("\u2022 4-module car chassis access in the RP shop."),
-                                L("\u2022 Claimable tool kits in the VIP shop. /perks daily and /perks 4day."),
+                                L("\u2022 Claim VIP kits from the shop Kits tab."),
                                 L("\u2022 Medium raids: 12h after wipe (default 24h)."),
                                 L("\u2022 Hard raids: 48h after wipe (default 72h)."),
                                 L("\u2022 Expert raids: 96h after wipe (default 120h)."),
@@ -1764,7 +1764,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Hackable crates unlock in 60 seconds."),
                                 L("\u2022 No decay on personal boats and tugboats."),
                                 L("\u2022 4-module car chassis access in the RP shop."),
-                                L("\u2022 VIPx shop tools, plus /perks daily and /perks 4day."),
+                                L("\u2022 VIPx shop tools. Claim kits from the shop Kits tab."),
                                 L("\u2022 Same early raids as VIP: Medium 12h, Hard 48h, Expert 96h, Nightmare 144h.")))
                         }
                     },

@@ -76,34 +76,7 @@
       }
     ],
     "List of server buttons by permissions - [ You can only configure parameters - Text, Command, Color, Font ]": {
-      "xfastbuttons.vip1": [
-        {
-          "Text": "VIP DAILY",
-          "Command": "chat.say \"/perks daily\"",
-          "Color": "1 0 0.4 0.7",
-          "Font": "robotocondensed-regular.ttf",
-          "Individual": false,
-          "Parent": null,
-          "Image": null,
-          "AnchorMinXY": null,
-          "AnchorMaxXY": null,
-          "OffsetMinXY": null,
-          "OffsetMaxXY": null
-        },
-        {
-          "Text": "VIP 4DAY",
-          "Command": "chat.say \"/perks 4day\"",
-          "Color": "1 0 0.4 0.7",
-          "Font": "robotocondensed-regular.ttf",
-          "Individual": false,
-          "Parent": null,
-          "Image": null,
-          "AnchorMinXY": null,
-          "AnchorMaxXY": null,
-          "OffsetMinXY": null,
-          "OffsetMaxXY": null
-        }
-      ]
+      "xfastbuttons.vip1": []
     },
     "List of individual server buttons - [ You can configure all parameters ]": [],
     "List of individual server buttons by permissions - [ You can configure all parameters ]": {
