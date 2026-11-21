@@ -16,13 +16,12 @@ using System.Text;
 using UnityEngine;
 namespace Oxide.Plugins
 {
-    [Info("extendedindustrial", "bmgjet", "1.2.6")]
+    [Info("extendedindustrial", "bmgjet", "1.2.8")]
     [Description("Adds Industrial Adapter To Other Deployables")]
     class extendedindustrial : RustPlugin
     {
         public static extendedindustrial plugin;
         private List<CuiElement> cuiElementList = new List<CuiElement>();
-        private static List<ulong> recyclers = new List<ulong>();
 
         //Permissions
         private string permPlace = "extendedindustrial.place"; // players can place a adapater on what they are looking at if they have permission for that entity
@@ -133,7 +132,12 @@ namespace Oxide.Plugins
 
         void Unload()
         {
-            foreach (BasePlayer player in BasePlayer.activePlayerList) { CuiHelper.DestroyUi(player, "EIO"); } //Remove any CUI
+            foreach (BasePlayer player in BasePlayer.activePlayerList)
+            {
+                CuiHelper.DestroyUi(player, "EIO"); //Remove any CUI
+                AdapterPlacer AP = player.GetComponent<AdapterPlacer>();
+                if (AP != null) { UnityEngine.Object.Destroy(AP); } //Remove placer component
+            }
             plugin = null;
         }
 
@@ -143,7 +147,12 @@ namespace Oxide.Plugins
         private object CanPickupEntity(BasePlayer player, BaseCombatEntity baseent)
         {
             if (baseent is IndustrialStorageAdaptor && baseent.skinID == 12345678901) { return false; }  //Blocks picking up adapters with this set skinid
-            foreach (BaseEntity be in baseent.children) { if (be is IndustrialStorageAdaptor) { player.inventory.GiveItem(ItemManager.CreateByItemID(-1049172752)); } break; } //Return any storage Adapters that were attached
+            if (player == null) { return null; }
+            foreach (BaseEntity be in baseent.children)
+            {
+                //Return any hand placed storage adapters that were attached (auto attached ones are protected and not refunded)
+                if (be is IndustrialStorageAdaptor && be.skinID != 12345678901) { player.inventory.GiveItem(ItemManager.CreateByItemID(-1049172752)); break; }
+            }
             return null;
         }
 
@@ -154,8 +163,9 @@ namespace Oxide.Plugins
         private void OnEntitySpawned(BaseCombatEntity baseent)
         {
             //Catch the spawn and add parts on targeted bits if player has the permission
+            if (baseent.OwnerID == 0 || baseent is IndustrialStorageAdaptor) { return; } //Dont target server entitys or our own adapters
             string pid = baseent.OwnerID.ToString(); //Convert to string once
-            if (baseent.OwnerID != 0 && permission.UserHasPermission(pid, permAttach)) { Attach(pid, baseent, true, false); } //Dont target server entitys or players with out attach perm
+            if (permission.UserHasPermission(pid, permAttach)) { Attach(pid, baseent, true, false); } //Dont target players with out attach perm
         }
 
         private void OnActiveItemChanged(BasePlayer __instance)
@@ -223,9 +233,9 @@ namespace Oxide.Plugins
                         bool spawn = true;
                         if (c is StorageContainer)
                         {
-                            foreach (IndustrialStorageAdaptor sa in c.children) //Make sure it doesnt already have an adapter
+                            foreach (BaseEntity sa in c.children) //Make sure it doesnt already have an adapter
                             {
-                                if (sa != null)
+                                if (sa is IndustrialStorageAdaptor)
                                 {
                                     spawn = false;
                                     break;
@@ -249,14 +259,11 @@ namespace Oxide.Plugins
         #endregion
 
         #region Methods
-        private BaseEntity FindEntity(Ray ray)
+        private BaseEntity FindEntity(Ray ray, float distance = 6f)
         {
             //Ray cast to find BaseEntity
             RaycastHit hit;
-            var raycast = Physics.Raycast(ray, out hit, 6, -1);
-            BaseEntity entity = raycast ? hit.GetEntity() : null;
-            if (entity == null) { return null; }
-            return entity;
+            return Physics.Raycast(ray, out hit, distance, -1) ? hit.GetEntity() : null;
         }
 
         private bool Attach(string pid, BaseEntity baseent, bool protect, bool checkonly)
@@ -278,7 +285,7 @@ namespace Oxide.Plugins
             }
             else if (baseent is ChickenCoop && HasPermission(pid, permChickenCoop)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(-.65f, 1.3f, -1.2f), protect); } return true; }
             else if (baseent is Beehive && HasPermission(pid, permBeeHive)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(0f, 1.38f, 0f), protect); } return true; }
-            else if (baseent is StashContainer && HasPermission(pid, permStash)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(0f, 0f, 0f), protect); } baseent.skinID = 1111111111; return true; }
+            else if (baseent is StashContainer && HasPermission(pid, permStash)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(0f, 0f, 0f), protect); baseent.skinID = 1111111111; } return true; }
             else if (baseent is FlameTurret && HasPermission(pid, permFlameTurret)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(0f, 0f, 0f), protect); } return true; }
             else if (baseent is GunTrap && HasPermission(pid, permGunTrap)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 0, 0), new Vector3(0f, 0f, 0f), protect); } return true; }
             else if (baseent is SnowMachine && HasPermission(pid, permSnowMachine)) { if (!checkonly) { SpawnPart(baseent, Quaternion.Euler(0, 90, 0), new Vector3(0f, 0f, -.5f), protect); } return true; }
@@ -327,22 +334,29 @@ namespace Oxide.Plugins
         {
             foreach (BaseEntity baseEntity in stash.children) //Adjust adapter on hidden stash actions
             {
-                if (baseEntity is IndustrialStorageAdaptor)
+                IndustrialStorageAdaptor adapter = baseEntity as IndustrialStorageAdaptor;
+                if (adapter != null)
                 {
-                    IndustrialStorageAdaptor adapter = baseEntity as IndustrialStorageAdaptor;
                     adapter.SetFlagLocal(BaseEntity.Flags.Reserved8, true, true);
-                    adapter.transform.localPosition = new Vector3(0f, (stash.IsHidden() ? -0.3f : 0f), 0f);
-                    baseEntity.SendNetworkUpdateImmediate();
+                    adapter.transform.localPosition = new Vector3(0f, (hide ? -0.3f : 0f), 0f);
+                    adapter.SendNetworkUpdateImmediate();
                     return;
                 }
             }
         }
 
+        private bool HasAdapter(BaseEntity be)
+        {
+            //Other children (plants, animals etc) shouldnt block placement, only an existing adapter should
+            foreach (BaseEntity c in be.children) { if (c is IndustrialStorageAdaptor) { return true; } }
+            return false;
+        }
+
         private BaseEntity CanPlace(BasePlayer player, BaseEntity be, bool protect, bool checkonly)
         {
             if (be == null) { return null; } //No entity passed
-            if (be.children.Count == 0 && plugin.Attach(player.UserIDString, be, protect, checkonly)) { return be; } //Attach to passed entity
-            foreach (BaseEntity b in be.children) { if (b.children.Count == 0 && plugin.Attach(player.UserIDString, b, protect, checkonly)) { return b; } } //Attach to a child of passed entity
+            if (!HasAdapter(be) && Attach(player.UserIDString, be, protect, checkonly)) { return be; } //Attach to passed entity
+            foreach (BaseEntity b in be.children) { if (!HasAdapter(b) && Attach(player.UserIDString, b, protect, checkonly)) { return b; } } //Attach to a child of passed entity
             return null; //Nothing valid found
         }
 
@@ -350,6 +364,7 @@ namespace Oxide.Plugins
         {
             //Spawns in parts of the quarry
             BaseEntity baseent = GameManager.server.CreateEntity(adapter, parent.transform.position, parent.transform.rotation);
+            if (baseent == null) { return null; }
             baseent.OwnerID = parent.OwnerID;
             if (protect) { baseent.skinID = 12345678901; }//Set a skinid we use to check for modded adapters.
             baseent.Spawn();
@@ -360,8 +375,8 @@ namespace Oxide.Plugins
             //Parent it to base entity
             baseent.SetParent(parent, true, true);
             //Adjust offset positions
-            if (rotoffset != Quaternion.Euler(0, 0, 0)) { baseent.transform.rotation = baseent.transform.rotation * rotoffset; }
-            if (posoffset != new Vector3(0, 0, 0)) { baseent.transform.localPosition = posoffset; }
+            if (rotoffset != Quaternion.identity) { baseent.transform.rotation = baseent.transform.rotation * rotoffset; }
+            if (posoffset != Vector3.zero) { baseent.transform.localPosition = posoffset; }
             baseent.SendNetworkUpdateImmediate();
             return baseent;
         }
@@ -374,16 +389,6 @@ namespace Oxide.Plugins
             timer.Once(time, () => player?.SendConsoleCommand("gametip.hidegametip")); //Remove tip after delay
         }
 
-        private BaseEntity FindBaseEntity(Ray ray)
-        {
-            //Ray cast to find BaseEntity
-            RaycastHit hit;
-            var raycast = Physics.Raycast(ray, out hit, 3, -1);
-            BaseEntity entity = raycast ? hit.GetEntity() : null;
-            if (entity != null) { return entity; }
-            return null;
-        }
-
         private Vector2i SlotsMod(BaseEntity entity, Vector2i defaultvalue, bool input)
         {
             //Lets adapter pull from other slots
@@ -394,6 +399,7 @@ namespace Oxide.Plugins
                     case 4160694184: case 1906669538: case 1348425051: case 1748062128: case 110576239: return new Vector2i(0, 1);//CampFire SkullFirepit Cauldron Hobo FirePlace
                     case 2409469892: return new Vector2i(0, 3); //BBQ
                     case 1729604075: return new Vector2i(0, 5); //Recycler
+                    case 1921897480: return new Vector2i(0, 4); //Composter    
                 }
             }
             else
@@ -403,6 +409,7 @@ namespace Oxide.Plugins
                     case 4160694184: case 1906669538: case 1348425051: case 1748062128: case 110576239: return new Vector2i(2, 3);//CampFire SkullFirepit Cauldron Hobo FirePlace
                     case 2409469892: return new Vector2i(4, 7); //BBQ
                     case 1729604075: return new Vector2i(6, 11); //Recycler
+                    case 1921897480: return new Vector2i(0, 7); //Composter    
                 }
             }
             return defaultvalue;
@@ -420,7 +427,9 @@ namespace Oxide.Plugins
                     var storage = __instance.cachedParent as StorageContainer;
                     if(storage != null)
                     {
-                       var itembox = storage.inventory.Drop("assets/prefabs/misc/item drop/item_drop.prefab", storage.GetDropPosition(), storage.Transform.rotation, 0);
+                        if (storage.inventory == null || storage.inventory.itemList.Count == 0) { return; } //Nothing to eject
+                        var itembox = storage.inventory.Drop("assets/prefabs/misc/item drop/item_drop.prefab", storage.GetDropPosition(), storage.Transform.rotation, 0);
+                        if (itembox == null) { return; }
                         itembox.SetFlagLocal(BaseEntity.Flags.Reserved1, true);
                         itembox.SetFlagLocal(BaseEntity.Flags.Reserved3, true);
                     }
@@ -455,13 +464,6 @@ namespace Oxide.Plugins
                                 __instance.cachedContainer = __result;
                                 return false;
                             }
-                            ItemContainer itemContainer = __instance.cachedParent.GetComponent<ItemContainer>();
-                            if (itemContainer != null)
-                            {
-                                __result = itemContainer;
-                                __instance.cachedContainer = __result;
-                                return false;
-                            }
                         }
                     }
                     __result = __instance.cachedContainer;
@@ -484,9 +486,9 @@ namespace Oxide.Plugins
                     if (__instance.cachedParent != null)
                     {
                         __result = plugin.SlotsMod(__instance.cachedParent, __result, true);
-                        if (__instance.cachedParent is Recycler recycler && recycler != null && !recycler.IsOn())
+                        if (__instance.cachedParent is Recycler recycler && !recycler.IsOn() && recycler.HasRecyclable()) //Cheap checks first, the permission lookup allocates
                         {
-                            if (plugin.permission.UserHasPermission(recycler.OwnerID.ToString(), plugin.permAutoRecycle) && recycler.HasRecyclable())
+                            if (plugin.permission.UserHasPermission(recycler.OwnerID.ToString(), plugin.permAutoRecycle))
                             {
                                 recycler.StartRecycling();
                             }
@@ -526,11 +528,11 @@ namespace Oxide.Plugins
             {
                 try //Try and catch incase something in the future changes to prevent null references
                 {
-                    if (player == null || plugin == null || player?.GetActiveItem().info.itemid != -1049172752) { Destroy(this); }  //Destroy component when conditions are no longer meet
+                    if (player == null || plugin == null || player.GetActiveItem()?.info?.itemid != -1049172752) { Destroy(this); }  //Destroy component when conditions are no longer meet
                     else if (player.serverInput.WasJustReleased(BUTTON.FIRE_PRIMARY)) //Catch mouse fire button
                     {
                         if (player.IsBuildingBlocked() && !player.IsAdmin) { plugin.CreateTip(plugin.message(player, "BuildingBlocked"), player); return; } //Check player isnt building blocked
-                        if (plugin.CanPlace(player, plugin.FindBaseEntity(player.eyes.HeadRay()), false, false) != null)//Find ent player is looking at
+                        if (plugin.CanPlace(player, plugin.FindEntity(player.eyes.HeadRay(), 3f), false, false) != null)//Find ent player is looking at
                         {
                             Effect.server.Run(plugin.deployed, player.PivotPoint(), player.transform.up, null, true);
                             player.inventory.Take(null, -1049172752, 1); //Remove adapter from player inventory if it attached
@@ -541,7 +543,7 @@ namespace Oxide.Plugins
                     if (Time.time >= UIDelay) //Delay UI Updates
                     {
                         UIDelay = Time.time + 1f; //Only check for updates every sec (fixedupdate runs 50hz)
-                        if (plugin.CanPlace(player, plugin.FindBaseEntity(player.eyes.HeadRay()), false, true) != null && plugin.cuiElementList.Count > 0) { if (!CUIed) { CuiHelper.AddUi(player, plugin.cuiElementList); CUIed = true; } }//Send CUI if they dont have it already
+                        if (plugin.CanPlace(player, plugin.FindEntity(player.eyes.HeadRay(), 3f), false, true) != null && plugin.cuiElementList.Count > 0) { if (!CUIed) { CuiHelper.AddUi(player, plugin.cuiElementList); CUIed = true; } }//Send CUI if they dont have it already
                         else { if (CUIed) { CuiHelper.DestroyUi(player, "EIO"); CUIed = false; } } //Remove CUI
                     }
                 }
