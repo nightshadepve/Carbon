@@ -72,7 +72,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_LOOT_TESTS
-    [Info("NightshadeLootProtection", "Nightshade", "1.2.1")]
+    [Info("NightshadeLootProtection", "Nightshade", "1.3.0")]
     [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
     public class NightshadeLootProtection : CarbonPlugin
     {
@@ -113,6 +113,11 @@ namespace Carbon.Plugins
 
         // steamId -> last known display name for offline share lookups
         private Dictionary<ulong, string> _knownPlayers = new();
+
+        // Auto turret net id -> steam ids this plugin added from the covering TC.
+        // Manual turret authorization is not stored here, so a TC deauth does not remove it.
+        private readonly Dictionary<ulong, List<ulong>> _turretSync = new Dictionary<ulong, List<ulong>>();
+        private bool _turretSyncDirty;
 
         private const string PermAdmin = "nightshadelootprotection.admin";
         private const string PermAdminLegacy = "unifiedlootprotection.admin";
@@ -161,9 +166,27 @@ namespace Carbon.Plugins
             [JsonProperty("WeekendPvP")]
             public WeekendPvPConfig WeekendPvP { get; set; } = new();
 
+            [JsonProperty("TrapTeamSafety")]
+            public TrapTeamSafetyConfig TrapTeamSafety { get; set; } = new();
+
+            [JsonProperty("TurretTcAuth")]
+            public TurretTcAuthConfig TurretTcAuth { get; set; } = new();
+
             // Off by default. The save-timer cleanup stays silent unless this is true.
             [JsonProperty("Log cleanup summary")]
             public bool LogCleanupSummary { get; set; } = false;
+        }
+
+        private class TrapTeamSafetyConfig
+        {
+            // Owner, that owner's Rust team, and players authorized on the covering TC.
+            public bool Enabled { get; set; } = true;
+        }
+
+        private class TurretTcAuthConfig
+        {
+            // Players authorized on the TC that covers an auto turret are authorized on that turret.
+            public bool Enabled { get; set; } = true;
         }
 
         private class WeekendPvPConfig
@@ -324,6 +347,10 @@ namespace Carbon.Plugins
                     _config = new PluginConfig();
                 if (_config.WeekendPvP == null)
                     _config.WeekendPvP = new WeekendPvPConfig();
+                if (_config.TrapTeamSafety == null)
+                    _config.TrapTeamSafety = new TrapTeamSafetyConfig();
+                if (_config.TurretTcAuth == null)
+                    _config.TurretTcAuth = new TurretTcAuthConfig();
                 ApplyLegacyWeekendKey();
                 // Rewrite once after a legacy copy so the new keys are on disk.
                 // Later loads do not rewrite the config.
@@ -397,6 +424,15 @@ namespace Carbon.Plugins
         private void OnServerInitialized()
         {
             LoadPersistentData(true);
+            try
+            {
+                if (SyncAllAutoTurrets())
+                    SaveTurretSync();
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not sync turret authorization: " + ex.Message);
+            }
         }
 
         // Called when a player connects - keep known players list up to date
@@ -545,6 +581,7 @@ namespace Carbon.Plugins
                 var knownStored = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, string>>(DataFile(KnownName));
                 if (knownStored != null) _knownPlayers = knownStored;
             }
+            ReadTurretSync();
         }
 
         private void ImportLegacyData(bool haveWipe, DateTime saveCreatedUtc, bool settled)
@@ -602,12 +639,15 @@ namespace Carbon.Plugins
             }
             if (!anyLegacy)
                 Puts("NightshadeLootProtection migration: no UnifiedLootProtection data files were found.");
+            ReadTurretSync();
         }
 
         private void ClearPerWipeData(string reason)
         {
             _shareData = new Dictionary<ulong, HashSet<ulong>>();
             _knownPlayers = new Dictionary<ulong, string>();
+            _turretSync.Clear();
+            _turretSyncDirty = false;
             _entityOwnership.Clear();
             _pendingSupplyOwners.Clear();
             _npcDeathPositions.Clear();
@@ -635,6 +675,44 @@ namespace Carbon.Plugins
         private void SaveKnownPlayers()
         {
             Interface.Oxide.DataFileSystem.WriteObject(DataFile(KnownName), _knownPlayers);
+        }
+
+        private class TurretSyncFile
+        {
+            public Dictionary<ulong, List<ulong>> Turrets = new Dictionary<ulong, List<ulong>>();
+        }
+
+        private void ReadTurretSync()
+        {
+            _turretSync.Clear();
+            _turretSyncDirty = false;
+            try
+            {
+                if (!File.Exists(DataPath(TurretName))) return;
+                TurretSyncFile stored = Interface.Oxide.DataFileSystem.ReadObject<TurretSyncFile>(DataFile(TurretName));
+                if (stored == null || stored.Turrets == null) return;
+                foreach (KeyValuePair<ulong, List<ulong>> pair in stored.Turrets)
+                {
+                    if (pair.Key == 0UL || pair.Value == null || pair.Value.Count == 0) continue;
+                    _turretSync[pair.Key] = pair.Value;
+                }
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not read tcturretauth.json: " + ex.Message);
+            }
+        }
+
+        private void SaveTurretSync()
+        {
+            TurretSyncFile file = new TurretSyncFile();
+            foreach (KeyValuePair<ulong, List<ulong>> pair in _turretSync)
+            {
+                if (pair.Value == null || pair.Value.Count == 0) continue;
+                file.Turrets[pair.Key] = pair.Value;
+            }
+            Interface.Oxide.DataFileSystem.WriteObject(DataFile(TurretName), file);
+            _turretSyncDirty = false;
         }
 
         #endregion
@@ -944,6 +1022,320 @@ namespace Carbon.Plugins
 
         #endregion
 
+        #region Base trap safety and turret TC auth
+
+        // TruePVE asks CanEntityTakeDamage before its own rules. false blocks that hit.
+        // null leaves the hit to TruePVE. true would force TruePVE to allow it and skip its rules.
+        // OnEntityTakeDamage still returns true for a full cancel: a zeroed hit that returns null
+        // can be treated as a normal hit by a later hook, including a weekend "anything can hurt anything" ruleset.
+        // CanEntityBeTargeted false tells TruePVE not to target. true would force it to allow the target.
+        // CanEntityTrapTrigger false tells TruePVE not to spring the trap. true would force the trap to spring.
+        // OnTurretTarget and OnTrapTrigger return true to cancel the vanilla action, and null to leave it alone.
+        // CanBeTargeted on an auto turret returns false for one candidate. ObjectVisible is per target,
+        // so the scan keeps looking for someone else. It never returns true, because that skips the line-of-sight check.
+        // Flame turrets and shotgun traps treat a bool from CanBeTargeted as the result of the whole
+        // CheckTrigger pass, so a false there would make the trap ignore enemies while a friendly is inside.
+        // Those two stay on OnEntityEnter plus the damage hook.
+
+        private bool TrapSafetyOn
+        {
+            get { return _config != null && _config.TrapTeamSafety != null && _config.TrapTeamSafety.Enabled; }
+        }
+
+        private bool TurretTcOn
+        {
+            get { return _config != null && _config.TurretTcAuth != null && _config.TurretTcAuth.Enabled; }
+        }
+
+        private static bool IsRealPlayer(BasePlayer player)
+        {
+            return player != null && !player.IsNpc && NightshadeLootRules.IsPlayerSteamId(player.userID);
+        }
+
+        // SAM sites and NPC safe-zone turrets are not base traps.
+        private static bool IsPlayerTrap(BaseEntity entity)
+        {
+            if (entity == null || entity is SamSite || entity is NPCAutoTurret) return false;
+            if (entity is AutoTurret || entity is FlameTurret || entity is GunTrap || entity is Landmine || entity is BearTrap)
+                return true;
+            string name = entity.ShortPrefabName;
+            if (string.IsNullOrEmpty(name)) return false;
+            return name.Equals("spikes.floor", StringComparison.OrdinalIgnoreCase)
+                || name.Equals("spikes.trap", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsOwnerOrTrapTeam(BasePlayer player, ulong ownerId)
+        {
+            if (!IsRealPlayer(player) || ownerId == 0UL) return false;
+            if (player.userID == ownerId) return true;
+            if (player.currentTeam == 0UL || RelationshipManager.ServerInstance == null) return false;
+            RelationshipManager.PlayerTeam team = RelationshipManager.ServerInstance.FindTeam(player.currentTeam);
+            return team != null && team.members != null && team.members.Contains(ownerId);
+        }
+
+        private static bool IsCoveringTcAuthed(BasePlayer player, BaseEntity entity)
+        {
+            if (!IsRealPlayer(player) || entity == null) return false;
+            BuildingPrivlidge tc = entity.GetBuildingPrivilege();
+            return tc != null && !tc.IsDestroyed && tc.IsAuthed(player);
+        }
+
+        private bool IsTrapFriendly(BasePlayer player, BaseEntity trap)
+        {
+            if (!IsRealPlayer(player) || !IsPlayerTrap(trap)) return false;
+            bool team = IsOwnerOrTrapTeam(player, trap.OwnerID);
+            bool tc = IsCoveringTcAuthed(player, trap);
+            if (TrapSafetyOn && (team || tc)) return true;
+            return TurretTcOn && trap is AutoTurret && tc;
+        }
+
+        private static BaseEntity FindTrap(BaseEntity entity, int depth)
+        {
+            if (entity == null || depth > 4) return null;
+            if (IsPlayerTrap(entity)) return entity;
+            BaseEntity viaCreator = FindTrap(entity.creatorEntity, depth + 1);
+            if (viaCreator != null) return viaCreator;
+            return FindTrap(entity.GetParentEntity(), depth + 1);
+        }
+
+        private static BaseEntity ResolveTrap(HitInfo info)
+        {
+            if (info == null) return null;
+            BaseEntity found = FindTrap(info.Initiator, 0);
+            if (found != null) return found;
+            found = FindTrap(info.WeaponPrefab, 0);
+            if (found != null) return found;
+            return FindTrap(info.Weapon as BaseEntity, 0);
+        }
+
+        private bool ShouldBlockTrapDamage(BaseEntity victim, HitInfo info)
+        {
+            BasePlayer player = victim as BasePlayer;
+            if (!IsRealPlayer(player)) return false;
+            BaseEntity trap = ResolveTrap(info);
+            return trap != null && IsTrapFriendly(player, trap);
+        }
+
+        private void DropTurretIfAiming(BaseEntity trap, BasePlayer player)
+        {
+            AutoTurret turret = trap as AutoTurret;
+            if (turret == null || player == null || turret.target != player) return;
+            turret.SetTarget(null);
+        }
+
+        private object SpareTarget(BasePlayer player, BaseEntity trap)
+        {
+            if (!IsTrapFriendly(player, trap)) return null;
+            DropTurretIfAiming(trap, player);
+            return false;
+        }
+
+        private object CanBeTargeted(BaseCombatEntity target, AutoTurret turret)
+        {
+            return SpareTarget(target as BasePlayer, turret);
+        }
+
+        private object OnTurretTarget(AutoTurret turret, BasePlayer target)
+        {
+            if (!IsTrapFriendly(target, turret)) return null;
+            DropTurretIfAiming(turret, target);
+            return true;
+        }
+
+        private object OnTrapTrigger(BaseTrap trap, GameObject go)
+        {
+            if (go == null) return null;
+            BasePlayer player = go.GetComponent<BasePlayer>();
+            if (!IsTrapFriendly(player, trap)) return null;
+            return true;
+        }
+
+        private object OnEntityEnter(TriggerBase trigger, BasePlayer player)
+        {
+            if (trigger == null || trigger.gameObject == null) return null;
+            BaseEntity trap = trigger.gameObject.ToBaseEntity();
+            if (!IsTrapFriendly(player, trap)) return null;
+            return true;
+        }
+
+        // TruePVE calls these from inside its own targeting and trap hooks.
+        private object CanEntityBeTargeted(BasePlayer target, BaseEntity entity)
+        {
+            if (!IsTrapFriendly(target, entity)) return null;
+            DropTurretIfAiming(entity, target);
+            return false;
+        }
+
+        private object CanEntityTrapTrigger(BaseTrap trap, BasePlayer player)
+        {
+            if (!IsTrapFriendly(player, trap)) return null;
+            return false;
+        }
+
+        private object CanEntityTakeDamage(BaseEntity entity, HitInfo info)
+        {
+            if (!ShouldBlockTrapDamage(entity, info)) return null;
+            return false;
+        }
+
+        // A code lock on the turret opens for a player authorized on the covering TC.
+        // null leaves every other lock to its own check. true is the allow override.
+        private object CanUseLockedEntity(BasePlayer player, BaseLock baseLock)
+        {
+            if (!TurretTcOn || player == null || baseLock == null) return null;
+            AutoTurret turret = baseLock.GetParentEntity() as AutoTurret;
+            if (turret == null || turret is NPCAutoTurret) return null;
+            if (!IsCoveringTcAuthed(player, turret)) return null;
+            return true;
+        }
+
+        private bool SyncTurret(AutoTurret turret)
+        {
+            if (turret == null || turret.IsDestroyed || turret.net == null || turret is NPCAutoTurret) return false;
+            if (turret.authorizedPlayers == null) return false;
+
+            ulong id = turret.net.ID.Value;
+            List<ulong> synced;
+            if (!_turretSync.TryGetValue(id, out synced) || synced == null)
+                synced = new List<ulong>();
+
+            BuildingPrivlidge tc = TurretTcOn ? turret.GetBuildingPrivilege() : null;
+            HashSet<ulong> wanted = new HashSet<ulong>();
+            if (TurretTcOn && tc != null && !tc.IsDestroyed && tc.authorizedPlayers != null)
+            {
+                foreach (ulong userId in tc.authorizedPlayers)
+                {
+                    if (userId != 0UL) wanted.Add(userId);
+                }
+            }
+
+            bool changed = false;
+            for (int i = synced.Count - 1; i >= 0; i--)
+            {
+                ulong userId = synced[i];
+                if (wanted.Contains(userId)) continue;
+                turret.authorizedPlayers.Remove(userId);
+                synced.RemoveAt(i);
+                changed = true;
+            }
+
+            if (TurretTcOn)
+            {
+                foreach (ulong userId in wanted)
+                {
+                    if (turret.authorizedPlayers.Contains(userId)) continue;
+                    if (turret.AtMaxAuthCapacity()) break;
+                    turret.authorizedPlayers.Add(userId);
+                    if (!synced.Contains(userId)) synced.Add(userId);
+                    changed = true;
+                }
+            }
+
+            if (synced.Count == 0) _turretSync.Remove(id);
+            else _turretSync[id] = synced;
+            if (!changed) return false;
+
+            turret.authDirty = true;
+            turret.UpdateMaxAuthCapacity();
+            turret.SendNetworkUpdate();
+            if (turret.target is BasePlayer aimed && turret.IsAuthed(aimed))
+                turret.SetTarget(null);
+            _turretSyncDirty = true;
+            return true;
+        }
+
+        private bool SyncPrivilegeTurrets(BuildingPrivlidge privilege)
+        {
+            bool changed = false;
+            if (privilege != null && privilege.buildingID != 0u && BuildingManager.server != null)
+            {
+                BuildingManager.Building building = BuildingManager.server.GetBuilding(privilege.buildingID);
+                if (building != null && building.decayEntities != null)
+                {
+                    foreach (DecayEntity decay in building.decayEntities)
+                    {
+                        AutoTurret turret = decay as AutoTurret;
+                        if (turret != null && SyncTurret(turret)) changed = true;
+                    }
+                }
+            }
+            if (privilege == null || privilege.transform == null) return changed;
+            float radius = BuildingPrivlidge.Radius;
+            if (radius < 16f || float.IsNaN(radius)) radius = 30f;
+            List<AutoTurret> found = new List<AutoTurret>();
+            Vis.Entities(privilege.transform.position, radius, found);
+            for (int i = 0; i < found.Count; i++)
+            {
+                if (SyncTurret(found[i])) changed = true;
+            }
+            return changed;
+        }
+
+        private bool SyncAllAutoTurrets()
+        {
+            bool changed = false;
+            HashSet<ulong> live = new HashSet<ulong>();
+            if (BaseNetworkable.serverEntities != null)
+            {
+                foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
+                {
+                    AutoTurret turret = net as AutoTurret;
+                    if (turret == null || turret.IsDestroyed || turret.net == null || turret is NPCAutoTurret) continue;
+                    live.Add(turret.net.ID.Value);
+                    if (SyncTurret(turret)) changed = true;
+                }
+            }
+            List<ulong> stale = new List<ulong>();
+            foreach (ulong id in _turretSync.Keys)
+            {
+                if (!live.Contains(id)) stale.Add(id);
+            }
+            for (int i = 0; i < stale.Count; i++)
+            {
+                _turretSync.Remove(stale[i]);
+                changed = true;
+            }
+            if (changed) _turretSyncDirty = true;
+            return changed;
+        }
+
+        private void ScheduleTurretSync(BuildingPrivlidge privilege)
+        {
+            if (privilege == null) return;
+            NextTick(() =>
+            {
+                if (privilege == null || privilege.IsDestroyed) return;
+                try
+                {
+                    if (SyncPrivilegeTurrets(privilege))
+                        SaveTurretSync();
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning("NightshadeLootProtection could not sync turret authorization: " + ex.Message);
+                }
+            });
+        }
+
+        private void OnEntitySpawned(AutoTurret turret)
+        {
+            if (turret == null) return;
+            NextTick(() =>
+            {
+                try
+                {
+                    if (SyncTurret(turret))
+                        SaveTurretSync();
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning("NightshadeLootProtection could not sync turret authorization: " + ex.Message);
+                }
+            });
+        }
+
+        #endregion
+
         #region Damage Tracking
 
         // Event damage tracking only. This does not block damage to player containers.
@@ -958,6 +1350,15 @@ namespace Carbon.Plugins
             {
                 _immuneCh47s.Add(entity.net.ID.Value);
                 info.damageTypes.ScaleAll(0f);
+                return true;
+            }
+
+            if (ShouldBlockTrapDamage(entity, info))
+            {
+                if (info.damageTypes != null) info.damageTypes.ScaleAll(0f);
+                info.HitEntity = null;
+                info.DoHitEffects = false;
+                DropTurretIfAiming(ResolveTrap(info), entity as BasePlayer);
                 return true;
             }
 
@@ -1366,6 +1767,7 @@ namespace Carbon.Plugins
         // Prevents strangers from authorizing themselves on your tool cupboard
         private object OnCupboardAuthorize(BuildingPrivlidge privilege, BasePlayer player)
         {
+            ScheduleTurretSync(privilege);
             if (privilege == null || player == null) return null;
             // Keep TC authorization protected during raid windows by default.
             // Letting an attacker authorize on a TC could defeat offline protection.
@@ -1392,6 +1794,16 @@ namespace Carbon.Plugins
             if (_config.ChatAlerts.TCAuthBlocked)
                 player.ChatMessage("<color=#A04A4A>You are not authorized to use this tool cupboard.</color>");
             return false;
+        }
+
+        private void OnCupboardDeauthorize(BuildingPrivlidge privilege, BasePlayer player)
+        {
+            ScheduleTurretSync(privilege);
+        }
+
+        private void OnCupboardClearList(BuildingPrivlidge privilege, BasePlayer player)
+        {
+            ScheduleTurretSync(privilege);
         }
 
         #endregion
@@ -1604,6 +2016,15 @@ namespace Carbon.Plugins
             if (_config != null && _config.LogCleanupSummary)
                 Puts("NightshadeLootProtection cleaned " + expired.Count + " expired ownership records. Active: " + _entityOwnership.Count);
             SaveShareData();
+            try
+            {
+                if (SyncAllAutoTurrets() || _turretSyncDirty)
+                    SaveTurretSync();
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("NightshadeLootProtection could not sync turret authorization: " + ex.Message);
+            }
         }
 
         // Rust forced wipe (and any new map save). Clears per-wipe data only.
@@ -1628,6 +2049,8 @@ namespace Carbon.Plugins
             _shareData.Remove(uid);           // FIX 1: clean up shares when entity is destroyed
             _immuneCh47s.Remove(uid);         // clean up CH47 immunity if it dies mid-flight
             _pendingSupplyOwners.Remove(uid); // clean up any signal that was destroyed before landing
+            if (_turretSync.Remove(uid))
+                _turretSyncDirty = true;
         }
 
         #endregion
