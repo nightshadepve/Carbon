@@ -26,7 +26,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeEvents", "Nightshade", "1.1.0")]
+    [Info("NightshadeEvents", "Nightshade", "1.1.1")]
     [Description("Schedules vanilla, seasonal, and custom events from a compact admin panel.")]
     public class NightshadeEvents : RustPlugin
     {
@@ -135,6 +135,7 @@ namespace Oxide.Plugins
         {
             public EventSchedule Schedule;
             public bool WasEnabled;
+            public bool TimerPaused;
         }
 
         private class Palette
@@ -830,6 +831,37 @@ namespace Oxide.Plugins
 
         private bool IsSuppressed(string id) => IsSuppressed(FindEvent(id));
 
+        // The airfield Call Chinook terminal looks this schedule up in
+        // EventSchedule.enabledEvents and then calls Trigger(). Disabling the
+        // behaviour removes it from that list, so the terminal never spawns the
+        // locked crate. Leave it enabled and stop only the repeating timer.
+        private static bool KeepsTrigger(string id)
+        {
+            return id != null && id.Equals("chinook", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void PauseScheduleTimer(EventSchedule schedule)
+        {
+            if (schedule == null) return;
+            if (!schedule.enabled) schedule.enabled = true;
+            schedule.CancelInvoke(schedule.RunSchedule);
+        }
+
+        private static void ResumeScheduleTimer(EventSchedule schedule)
+        {
+            if (schedule == null || !schedule.enabled) return;
+            schedule.CancelInvoke(schedule.RunSchedule);
+            schedule.InvokeRepeating(schedule.RunSchedule, 1f, 1f);
+        }
+
+        private void HoldChinookTimer()
+        {
+            List<EventSchedule> list;
+            if (!boundSchedules.TryGetValue("chinook", out list) || list == null) return;
+            for (int i = 0; i < list.Count; i++)
+                PauseScheduleTimer(list[i]);
+        }
+
         private void ApplySuppression()
         {
             if (!storeOk) return;
@@ -850,10 +882,16 @@ namespace Oxide.Plugins
                             held = new HeldSchedule { Schedule = schedule, WasEnabled = schedule.enabled };
                             heldSchedules[sid] = held;
                         }
-                        if (schedule.enabled) schedule.enabled = false;
+                        if (KeepsTrigger(pair.Key))
+                        {
+                            PauseScheduleTimer(schedule);
+                            held.TimerPaused = true;
+                        }
+                        else if (schedule.enabled) schedule.enabled = false;
                     }
                     else if (heldSchedules.TryGetValue(sid, out held))
                     {
+                        if (held.TimerPaused && held.WasEnabled) ResumeScheduleTimer(schedule);
                         schedule.enabled = held.WasEnabled;
                         heldSchedules.Remove(sid);
                     }
@@ -954,7 +992,9 @@ namespace Oxide.Plugins
             foreach (var pair in heldSchedules)
             {
                 var schedule = pair.Value.Schedule;
-                if (schedule != null) schedule.enabled = pair.Value.WasEnabled;
+                if (schedule == null) continue;
+                if (pair.Value.TimerPaused && pair.Value.WasEnabled) ResumeScheduleTimer(schedule);
+                schedule.enabled = pair.Value.WasEnabled;
             }
             heldSchedules.Clear();
             if (store == null) return;
@@ -971,7 +1011,7 @@ namespace Oxide.Plugins
             if (schedule == null) return null;
             string id;
             if (!scheduleOwner.TryGetValue(schedule.GetInstanceID(), out id)) return null;
-            if (IsSuppressed(id)) return true;
+            if (IsSuppressed(id) && !KeepsTrigger(id)) return true;
             return null;
         }
 
@@ -998,6 +1038,7 @@ namespace Oxide.Plugins
         private void Tick()
         {
             if (!storeOk || store.Events == null) return;
+            if (IsSuppressed("chinook")) HoldChinookTimer();
             if (IsSuppressed("deepsea")) HoldDeepSea();
             ApplyHalloween();
             ApplyChristmas();
@@ -2160,6 +2201,7 @@ namespace Oxide.Plugins
                 case "christmas": return "Stays on after a start until you disable this event. Unload restores the convar.";
                 case "bradley": return "Launch Site only. Automatic respawn stays off while vanilla auto is blocked.";
                 case "roadbradley": return "Needs the road Bradley schedule on this map.";
+                case "chinook": return "Vanilla timer stays paused. An airfield call can still launch the chinook.";
                 case "cargo": return "The schedule is paused. The cargo event convar stays on so our ship still runs.";
                 default: return "";
             }
