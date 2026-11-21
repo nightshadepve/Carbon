@@ -13,13 +13,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.7.2")]
-    [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, and claimable kits")]
+    [Info("NightshadeShop", "Nightshade", "1.8.0")]
+    [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, claimable kits, and an RP coin bank")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.7.2";
+        private const string PluginVersion = "1.8.0";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
@@ -39,6 +39,8 @@ namespace Oxide.Plugins
         private bool serverReady;
         private const string DataRefunds = "Nightshade/NightshadeShop/Refunds";
         private const string DataKits = "Nightshade/NightshadeShop/Kits";
+        private const string DataBankLog = "Nightshade/NightshadeShop/BankLog";
+        private const string DataTheme = "Nightshade/NightshadeShop/Theme";
         private const string VipDailyId = "vip-daily";
         private const string VipxDailyId = "vipx-daily";
         private const string VipFourId = "vip-4day";
@@ -71,6 +73,10 @@ namespace Oxide.Plugins
         private readonly HashSet<string> localPngQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool imageLibraryWarned;
+        private readonly HashSet<ulong> bankBusy = new HashSet<ulong>();
+        private BankLogFile bankLog;
+        private bool bankLogUnreadable;
+        private ThemeChoice themeChoice;
 
         private const string UiMain = "NShop.Main";
         private const string UiScrollTest = "NShop.ScrollTest";
@@ -130,6 +136,12 @@ namespace Oxide.Plugins
             public string KitShort = "";
             public string KitAmt = "1";
             public string KitSkin = "0";
+
+            // Bank is a header view, not one of the equal-width tabs.
+            public bool BankOpen;
+            public bool ThemeMenu;
+            public int BankDeposit = 1;
+            public int BankWithdraw = 1;
         }
 
         #endregion
@@ -187,8 +199,46 @@ namespace Oxide.Plugins
             [JsonProperty("Event Listings")]
             public EventSettings Events = new EventSettings();
 
+            [JsonProperty("Bank")]
+            public BankSettings Bank = new BankSettings();
+
             [JsonProperty("Themes")]
             public List<Theme> Themes = new List<Theme>();
+        }
+
+        private class BankSettings
+        {
+            [JsonProperty("Enabled")]
+            public bool Enabled = true;
+
+            // Owner-confirmed RP coin: paper with this workshop skin. Plain paper (skin 0) does not match.
+            [JsonProperty("Coin Item Shortname")]
+            public string CoinShortname = "paper";
+
+            [JsonProperty("Coin Skin ID")]
+            public ulong CoinSkin = 3843525164UL;
+
+            [JsonProperty("Coin Display Name")]
+            public string CoinName = "RP Coin";
+
+            [JsonProperty("RP Per Coin")]
+            public int RpPerCoin = 1;
+
+            [JsonProperty("Minimum Coins Per Transaction")]
+            public int MinCoins = 1;
+
+            [JsonProperty("Maximum Coins Per Transaction (0 = no limit)")]
+            public int MaxCoins;
+
+            [JsonProperty("Quick Amounts", ObjectCreationHandling = ObjectCreationHandling.Replace)]
+            public List<int> QuickAmounts = new List<int> { 1, 10, 100 };
+
+            // Empty matches the shop: everyone who can open the shop. Set nightshadeshop.bank to require a permission that is not granted here.
+            [JsonProperty("Required Permission (empty = everyone who can open the shop)")]
+            public string Permission = "";
+
+            [JsonProperty("Log Transactions")]
+            public bool Log = true;
         }
 
         private class EventSettings
@@ -401,6 +451,21 @@ namespace Oxide.Plugins
                 config.Multipliers = config.Multipliers.Where(m => m > 0).Distinct().OrderBy(m => m).ToList();
                 config.Commands = config.Commands.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim().ToLowerInvariant()).Distinct().ToList();
                 if (config.Events == null) config.Events = new EventSettings();
+                if (config.Bank == null) config.Bank = new BankSettings();
+                if (config.Bank.RpPerCoin < 1) config.Bank.RpPerCoin = 1;
+                if (config.Bank.MinCoins < 1) config.Bank.MinCoins = 1;
+                if (config.Bank.MaxCoins < 0) config.Bank.MaxCoins = 0;
+                if (config.Bank.MaxCoins > 0 && config.Bank.MinCoins > config.Bank.MaxCoins) config.Bank.MaxCoins = config.Bank.MinCoins;
+                if (config.Bank.CoinShortname == null) config.Bank.CoinShortname = "";
+                if (config.Bank.CoinName == null) config.Bank.CoinName = "RP Coin";
+                if (config.Bank.Permission == null) config.Bank.Permission = "";
+                config.Bank.CoinShortname = config.Bank.CoinShortname.Trim();
+                config.Bank.CoinName = config.Bank.CoinName.Trim();
+                config.Bank.Permission = config.Bank.Permission.Trim();
+                if (config.Bank.QuickAmounts == null || config.Bank.QuickAmounts.Count == 0)
+                    config.Bank.QuickAmounts = new List<int> { 1, 10, 100 };
+                config.Bank.QuickAmounts = config.Bank.QuickAmounts.Where(n => n > 0).Distinct().OrderBy(n => n).Take(4).ToList();
+                if (config.Bank.QuickAmounts.Count == 0) config.Bank.QuickAmounts = new List<int> { 1, 10, 100 };
                 SaveConfig();
             }
             catch (Exception e)
@@ -791,6 +856,18 @@ namespace Oxide.Plugins
                 ["NotOwned"] = "You need to own {0} on Steam to buy it here.",
                 ["PickQty"] = "Pick x1, x10 or MAX first, then press CONFIRM.",
                 ["TradeNeed"] = "You need {0} {1} for that (you have {2}).",
+                ["BankDeposited"] = "Deposited {0} {1} for {2} RP. Balance: {3} RP.",
+                ["BankWithdrawn"] = "Withdrew {0} {1} for {2} RP. Balance: {3} RP.",
+                ["BankNoCoins"] = "You don't have that many {0} (you have {1}).",
+                ["BankNeedRp"] = "You need {0} RP to withdraw that (you have {1}).",
+                ["BankNoSpace"] = "Not enough inventory space for {0} {1}.",
+                ["BankNotConfigured"] = "The RP coin is not set up yet. An admin has to set the coin shortname and skin ID.",
+                ["BankNoPermission"] = "You don't have permission to use the bank.",
+                ["BankFailed"] = "The bank could not finish that, so it was rolled back.",
+                ["BankNoRewards"] = "Server Rewards is not loaded, so the bank is unavailable.",
+                ["BankBusy"] = "Wait for the bank action to finish.",
+                ["BankRange"] = "That amount has to stay between {0} and {1}.",
+                ["BankOverflow"] = "That many coins would not fit in an RP balance.",
                 ["Help"] = "Shop admin commands:\n/{0} theme <name|auto>\n/{0} themes\n/{0} addcat <name> [iconShortname]\n/{0} delcat <name|index>\n/{0} add <category|index> <price> [amount] (uses held item)\n/{0} remove <itemId>\n/{0} trade <inShortname> <inAmount> <outShortname> <outAmount>\n/{0} deltrade <tradeId>\nUse 'rp' as a shortname for Server Rewards points."
             }, this);
         }
@@ -821,6 +898,9 @@ namespace Oxide.Plugins
             RegisterPerm(PermWipeLock);
             RegisterPerm(PermVipPerk);
             RegisterPerm(PermVipXPerk);
+            if (config.Bank != null) RegisterPerm(config.Bank.Permission);
+            LoadThemeChoice();
+            LoadBankLog();
             EnsureIconsFolder();
             foreach (var c in config.Commands)
                 cmd.AddChatCommand(c, this, nameof(ChatShop));
@@ -838,6 +918,9 @@ namespace Oxide.Plugins
             FindPaidItems();
             PreloadLocalIcons();
             Puts($"NightshadeShop v{PluginVersion} loaded: {data.Categories.Count} categories, {data.Categories.Sum(x => x.Items.Count)} listings, {data.TradeCategories.Count} Admin Shop categories, {data.Exchanges.Count} trades, {kitFile.Kits.Count} kits.");
+            ItemDefinition coinDef;
+            if (config.Bank != null && config.Bank.Enabled && !CoinReady(out coinDef))
+                PrintWarning("NightshadeShop bank coin shortname is not a game item. The default is paper with skin 3843525164.");
         }
 
         private void OnPluginLoaded(Plugin plugin)
@@ -1449,9 +1532,12 @@ namespace Oxide.Plugins
 
         private Theme ActiveTheme()
         {
-            if (!string.IsNullOrEmpty(config.ThemeMode) && !config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+            // Data override wins when an admin has picked a theme. NightshadeEvents, NightshadeLocker,
+            // and NightshadeVoteDay do not call this. They read Theme Mode from NightshadeShop.json.
+            string mode = EffectiveThemeMode();
+            if (!string.IsNullOrEmpty(mode) && !mode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
             {
-                var forced = config.Themes.FirstOrDefault(x => string.Equals(x.Name, config.ThemeMode, StringComparison.OrdinalIgnoreCase));
+                var forced = config.Themes.FirstOrDefault(x => string.Equals(x.Name, mode, StringComparison.OrdinalIgnoreCase));
                 if (forced != null) return forced;
             }
 
@@ -1516,22 +1602,24 @@ namespace Oxide.Plugins
                 case "theme":
                 {
                     if (args.Length < 2) break;
-                    string mode = args[1];
-                    if (!mode.Equals("auto", StringComparison.OrdinalIgnoreCase) &&
-                        !config.Themes.Any(t => string.Equals(t.Name, mode, StringComparison.OrdinalIgnoreCase)))
+                    string stored = CanonicalThemeMode(args[1]);
+                    if (stored == null)
                     {
                         SendReply(p, Msg("ThemeUnknown", p, string.Join(", ", config.Themes.Select(t => t.Name))));
                         return;
                     }
-                    config.ThemeMode = mode.Equals("auto", StringComparison.OrdinalIgnoreCase) ? "Auto" : mode;
+                    // Keep the config key so plugins that read NightshadeShop.json still follow this command.
+                    config.ThemeMode = stored;
                     SaveConfig();
-                    SendReply(p, Msg("ThemeSet", p, config.ThemeMode, ActiveTheme().Name));
+                    SaveThemeOverride(stored);
+                    SendReply(p, Msg("ThemeSet", p, stored, ActiveTheme().Name));
                     return;
                 }
                 case "themes":
                 {
                     var active = ActiveTheme();
-                    SendReply(p, "Themes (mode: " + config.ThemeMode + "):\n" + string.Join("\n",
+                    string source = themeChoice != null ? "data override" : "config";
+                    SendReply(p, "Themes (mode: " + EffectiveThemeMode() + ", " + source + "):\n" + string.Join("\n",
                         config.Themes.Select(t => $"{(t == active ? "> " : "  ")}{t.Name}  {t.From} to {t.To}  (priority {t.Priority})")));
                     return;
                 }
@@ -2133,6 +2221,8 @@ namespace Oxide.Plugins
                     CuiHelper.DestroyUi(p, UiMain);
                     return;
                 case "tab":
+                    s.BankOpen = false;
+                    s.ThemeMenu = false;
                     s.BuyItem = 0;
                     s.BuyToken = null;
                     int requested = arg.GetInt(1);
@@ -2227,10 +2317,33 @@ namespace Oxide.Plugins
                 case "admin":
                     if (!admin) return;
                     s.Admin = !s.Admin;
+                    s.ThemeMenu = false;
                     s.EditItem = s.EditTrade = 0;
                     s.EditKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
+                    break;
+                case "bank":
+                    if (!CanUseBank(p)) { SetStatus(s, Msg("BankNoPermission", p), true); break; }
+                    OpenBank(s);
+                    break;
+                case "bankn":
+                    if (!CanUseBank(p) || arg.Args == null || arg.Args.Length < 4) return;
+                    OpenBank(s);
+                    AdjustBankAmount(s, arg.GetString(1), arg.GetString(2), arg.GetInt(3));
+                    break;
+                case "bankgo":
+                    if (!CanUseBank(p)) return;
+                    OpenBank(s);
+                    RunBank(p, s, arg.GetString(1), arg.GetString(2, ""));
+                    break;
+                case "thememenu":
+                    if (!admin || !s.Admin) return;
+                    s.ThemeMenu = !s.ThemeMenu;
+                    break;
+                case "themepick":
+                    if (!admin || !s.Admin) return;
+                    if (ApplyThemeChoice(p, s, Rest(arg, 1))) s.ThemeMenu = false;
                     break;
                 default:
                     if (!admin || !s.Admin) return;
@@ -3055,6 +3168,8 @@ namespace Oxide.Plugins
             if (s.Tab == 3 && !CanExchange(p)) s.Tab = 0;
             if (s.Tab == 2 && !CanSeeKits(p)) s.Tab = 0;
             if (s.Tab < 0 || s.Tab > 3) s.Tab = 0;
+            if (!CanUseBank(p)) s.BankOpen = false;
+            if (!admin || !s.Admin) s.ThemeMenu = false;
 
             var theme = ActiveTheme();
             var tc = theme.Colors;
@@ -3073,36 +3188,27 @@ namespace Oxide.Plugins
                 Components = { Img(tc.Background), new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-550 -310", OffsetMax = "550 310" } }
             });
 
-            // Header
+            // Header. BANK and the admin theme control live here, not in the equal-width tab bar.
             string header = Box(c, UiFrame, tc.Header, R(0, 570, 1100, 620));
             Box(c, UiFrame, tc.Accent, R(0, 566, 1100, 570));
-            Icon(c, header, Def(theme.Icon), 0, R(12, 7, 48, 43));
-            string heading = config.Title ?? "";
-            if (config.ShowHeaderTagline && !string.IsNullOrEmpty(theme.Tagline))
-                heading += "   <size=14><color=" + Rich(tc.Accent) + ">" + theme.Tagline + "</color></size>";
-            Label(c, header, heading, 24, tc.Text, TextAnchor.MiddleLeft, R(58, 0, admin ? 612 : 790, 50));
-            if (admin)
-                Btn(c, header, $"{UiCmd} admin", s.Admin ? tc.Danger : tc.Button, R(622, 8, 790, 42), s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
-
-            string balBox = Box(c, header, tc.Card, R(800, 8, 1050, 42));
-            Label(c, balBox, "BALANCE", 11, tc.SubText, TextAnchor.MiddleLeft, R(10, 0, 100, 34));
-            Label(c, balBox, ServerRewards == null ? "N/A" : $"{bal:N0} <color={Rich(tc.Accent)}>RP</color>", 18, tc.Text, TextAnchor.MiddleRight, R(90, 0, 240, 34));
-            Btn(c, header, $"{UiCmd} close", tc.Danger, R(1058, 9, 1090, 41), "X", 16, tc.DangerText);
+            DrawShopHeader(c, header, p, s, tc, theme, admin, bal);
 
             // Tab bar. Width is split evenly across whichever tabs this player can see.
             string tabs = Box(c, UiFrame, tc.Panel, R(0, 526, 1100, 566));
             DrawTopTabs(c, tabs, p, s, tc);
 
-            // Content. 0 shop, 1 events, 2 kits, 3 admin shop.
-            if (s.Tab == 3) BuildExchange(c, p, s, tc);
+            // Content. 0 shop, 1 events, 2 kits, 3 admin shop. Bank replaces that content without becoming a tab.
+            if (s.BankOpen) BuildBank(c, p, s, tc, bal);
+            else if (s.Tab == 3) BuildExchange(c, p, s, tc);
             else if (s.Tab == 2) BuildKits(c, p, s, tc);
             else BuildShop(c, p, s, tc, bal);
 
             // Footer
             if (!string.IsNullOrEmpty(s.Status))
                 Label(c, UiFrame, s.Status, 13, s.StatusBad ? tc.Danger : tc.Accent, TextAnchor.MiddleLeft, R(18, 10, 800, 44));
-            string modeText = config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase) ? "AUTO" : "LOCKED";
+            string modeText = EffectiveThemeMode().Equals("Auto", StringComparison.OrdinalIgnoreCase) ? "AUTO" : "LOCKED";
             Label(c, UiFrame, $"v{PluginVersion}   THEME: {theme.Name.ToUpperInvariant()} ({modeText})", 11, tc.SubText, TextAnchor.MiddleRight, R(800, 10, 1084, 44));
+            if (s.ThemeMenu && admin && s.Admin) DrawThemeMenu(c, p, s, tc);
 
             // Editors
             if (s.BuyItem != 0) BuildPurchasePopup(c, p, s, tc);
@@ -4040,7 +4146,7 @@ namespace Oxide.Plugins
             for (int i = 0; i < count; i++)
             {
                 int w = width + (i < extra ? 1 : 0);
-                bool on = s.Tab == entries[i].Key;
+                bool on = !s.BankOpen && s.Tab == entries[i].Key;
                 Btn(c, parent, UiCmd + " tab " + entries[i].Key, on ? tc.Accent : tc.Button, R(x, 6, x + w, 34), entries[i].Value, 15, on ? tc.AccentText : tc.ButtonText);
                 x += w + gap;
             }
@@ -4518,6 +4624,594 @@ namespace Oxide.Plugins
             StackItem("supply.signal", 1, 2920175997UL), StackItem("diesel_barrel", 5, 0), StackItem("keycard_green", 1, 0),
             StackItem("keycard_blue", 1, 0), StackItem("supply.signal", 2, 0), StackItem("syringe.medical", 40, 0)
         };
+
+        #endregion
+
+        #region Bank
+
+        private struct ShopHeaderLayout
+        {
+            public int TitleRight;
+            public int TitleSize;
+            public bool AdminButton;
+            public int AdminL, AdminR;
+            public bool ThemeButton;
+            public int ThemeL, ThemeR;
+            public int BalL, BalR;
+            public bool BankButton;
+            public int BankL, BankR;
+        }
+
+        private ShopHeaderLayout MakeHeaderLayout(bool isAdmin, bool adminMode, bool showBank)
+        {
+            var layout = new ShopHeaderLayout();
+            bool theme = isAdmin && adminMode;
+            if (!showBank && !theme)
+            {
+                layout.TitleRight = isAdmin ? 612 : 790;
+                layout.TitleSize = 24;
+                layout.AdminButton = isAdmin;
+                layout.AdminL = 622;
+                layout.AdminR = 790;
+                layout.BalL = 800;
+                layout.BalR = 1050;
+                return layout;
+            }
+
+            int right = 1050;
+            const int gap = 8;
+            if (showBank)
+            {
+                layout.BankButton = true;
+                layout.BankR = right;
+                layout.BankL = right - 100;
+                right = layout.BankL - gap;
+            }
+            layout.BalR = right;
+            layout.BalL = right - 236;
+            right = layout.BalL - gap;
+            if (isAdmin)
+            {
+                layout.AdminButton = true;
+                layout.AdminR = right;
+                layout.AdminL = right - 168;
+                right = layout.AdminL - gap;
+            }
+            if (theme)
+            {
+                layout.ThemeButton = true;
+                layout.ThemeR = right;
+                layout.ThemeL = right - 168;
+                right = layout.ThemeL - gap;
+            }
+            layout.TitleRight = Math.Max(220, right);
+            layout.TitleSize = layout.TitleRight - 58 < 360 ? 18 : 24;
+            return layout;
+        }
+
+        private void DrawShopHeader(CuiElementContainer c, string header, BasePlayer p, UiState s, ThemeColors tc, Theme theme, bool admin, int bal)
+        {
+            var layout = MakeHeaderLayout(admin, s.Admin, CanUseBank(p));
+            Icon(c, header, Def(theme.Icon), 0, R(12, 7, 48, 43));
+            string heading = config.Title ?? "";
+            if (config.ShowHeaderTagline && !string.IsNullOrEmpty(theme.Tagline))
+                heading += "   <size=14><color=" + Rich(tc.Accent) + ">" + theme.Tagline + "</color></size>";
+            Label(c, header, heading, layout.TitleSize, tc.Text, TextAnchor.MiddleLeft, R(58, 0, layout.TitleRight, 50));
+
+            if (layout.ThemeButton)
+            {
+                string modeLabel = EffectiveThemeMode();
+                if (!modeLabel.Equals("Auto", StringComparison.OrdinalIgnoreCase)) modeLabel = modeLabel.ToUpperInvariant();
+                else modeLabel = "AUTO";
+                if (modeLabel.Length > 12) modeLabel = modeLabel.Substring(0, 11) + ".";
+                Btn(c, header, UiCmd + " thememenu", s.ThemeMenu ? tc.Accent : tc.Button, R(layout.ThemeL, 8, layout.ThemeR, 42),
+                    "THEME: " + modeLabel, 11, s.ThemeMenu ? tc.AccentText : tc.ButtonText);
+            }
+            if (layout.AdminButton)
+                Btn(c, header, UiCmd + " admin", s.Admin ? tc.Danger : tc.Button, R(layout.AdminL, 8, layout.AdminR, 42),
+                    s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
+
+            int balW = layout.BalR - layout.BalL;
+            string balBox = Box(c, header, tc.Card, R(layout.BalL, 8, layout.BalR, 42));
+            Label(c, balBox, "BALANCE", 11, tc.SubText, TextAnchor.MiddleLeft, R(10, 0, 84, 34));
+            Label(c, balBox, ServerRewards == null ? "N/A" : bal.ToString("N0") + " <color=" + Rich(tc.Accent) + ">RP</color>", 16, tc.Text, TextAnchor.MiddleRight, R(78, 0, balW - 8, 34));
+
+            if (layout.BankButton)
+                Btn(c, header, UiCmd + " bank", s.BankOpen ? tc.Accent : tc.Button, R(layout.BankL, 8, layout.BankR, 42),
+                    "BANK", 15, s.BankOpen ? tc.AccentText : tc.ButtonText);
+            Btn(c, header, UiCmd + " close", tc.Danger, R(1058, 9, 1090, 41), "X", 16, tc.DangerText);
+        }
+
+        private void DrawThemeMenu(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            var layout = MakeHeaderLayout(true, true, CanUseBank(p));
+            int themes = 0;
+            if (config.Themes != null)
+                for (int i = 0; i < config.Themes.Count; i++)
+                    if (config.Themes[i] != null && !string.IsNullOrEmpty(config.Themes[i].Name)) themes++;
+            int rows = 1 + themes;
+            const int rowH = 28;
+            const int gap = 4;
+            int height = 16 + rows * rowH + Math.Max(0, rows - 1) * gap;
+            int top = 560;
+            int bottom = Math.Max(56, top - height);
+            int right = layout.ThemeR;
+            int left = Math.Max(12, right - 300);
+            int menuH = top - bottom;
+            string menu = Box(c, UiFrame, tc.Header, R(left, bottom, right, top));
+            Btn(c, menu, UiCmd + " thememenu", tc.Header, Full(), null, 0, null);
+            Box(c, menu, tc.Accent, R(0, menuH - 2, right - left, menuH));
+            string current = EffectiveThemeMode();
+            int rowTop = menuH - 8;
+            int innerW = right - left - 16;
+            bool autoOn = current.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+            Btn(c, menu, UiCmd + " themepick Auto", autoOn ? tc.Accent : tc.Button, R(8, rowTop - rowH, 8 + innerW, rowTop),
+                "AUTO", 12, autoOn ? tc.AccentText : tc.ButtonText);
+            rowTop -= rowH + gap;
+            if (config.Themes == null) return;
+            for (int i = 0; i < config.Themes.Count; i++)
+            {
+                var theme = config.Themes[i];
+                if (theme == null || string.IsNullOrEmpty(theme.Name) || rowTop - rowH < 6) continue;
+                bool on = string.Equals(theme.Name, current, StringComparison.OrdinalIgnoreCase);
+                string text = theme.Name.ToUpperInvariant();
+                if (!string.IsNullOrEmpty(theme.Tagline)) text += " - " + theme.Tagline;
+                string safe = theme.Name.Replace("\"", "").Replace("\r", " ").Replace("\n", " ");
+                Btn(c, menu, UiCmd + " themepick " + safe, on ? tc.Accent : tc.Button, R(8, rowTop - rowH, 8 + innerW, rowTop),
+                    text, 12, on ? tc.AccentText : tc.ButtonText);
+                rowTop -= rowH + gap;
+            }
+        }
+
+        private class ThemeChoice
+        {
+            public string Mode = "Auto";
+        }
+
+        private class BankLogFile
+        {
+            public List<BankEntry> Entries = new List<BankEntry>();
+        }
+
+        private class BankEntry
+        {
+            public string Time;
+            public string UserId;
+            public string Name;
+            public string Action;
+            public int Coins;
+            public int Rp;
+            public int Balance;
+        }
+
+        private static string ShopDataPath(string fileName) =>
+            Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", fileName);
+
+        private string EffectiveThemeMode()
+        {
+            if (themeChoice != null && !string.IsNullOrWhiteSpace(themeChoice.Mode)) return themeChoice.Mode;
+            if (!string.IsNullOrWhiteSpace(config.ThemeMode)) return config.ThemeMode;
+            return "Auto";
+        }
+
+        private string CanonicalThemeMode(string mode)
+        {
+            if (string.IsNullOrWhiteSpace(mode)) return null;
+            if (mode.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase)) return "Auto";
+            if (config?.Themes == null) return null;
+            string trimmed = mode.Trim();
+            var match = config.Themes.FirstOrDefault(t => t != null && string.Equals(t.Name, trimmed, StringComparison.OrdinalIgnoreCase));
+            return match == null ? null : match.Name;
+        }
+
+        private bool SaveThemeOverride(string mode)
+        {
+            string stored = CanonicalThemeMode(mode);
+            if (stored == null) return false;
+            themeChoice = new ThemeChoice { Mode = stored };
+            Interface.Oxide.DataFileSystem.WriteObject(DataTheme, themeChoice);
+            return true;
+        }
+
+        private void LoadThemeChoice()
+        {
+            themeChoice = null;
+            string path = ShopDataPath("Theme.json");
+            if (!File.Exists(path)) return;
+            try
+            {
+                var loaded = Interface.Oxide.DataFileSystem.ReadObject<ThemeChoice>(DataTheme);
+                string stored = CanonicalThemeMode(loaded == null ? null : loaded.Mode);
+                if (stored == null)
+                {
+                    PrintWarning("Theme override in data/Nightshade/NightshadeShop/Theme.json is not Auto or a configured theme. The shop is using the config theme mode.");
+                    return;
+                }
+                themeChoice = new ThemeChoice { Mode = stored };
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Theme override could not be read. The shop is using the config theme mode. " + ex.Message);
+            }
+        }
+
+        private bool ApplyThemeChoice(BasePlayer p, UiState s, string mode)
+        {
+            if (!SaveThemeOverride(mode))
+            {
+                string known = config.Themes == null ? "Auto" : string.Join(", ", config.Themes.Select(t => t.Name));
+                string text = Msg("ThemeUnknown", p, known);
+                SetStatus(s, text, true);
+                SendReply(p, text);
+                return false;
+            }
+            string ok = Msg("ThemeSet", p, themeChoice.Mode, ActiveTheme().Name);
+            SetStatus(s, ok, false);
+            SendReply(p, ok);
+            return true;
+        }
+
+        private void LoadBankLog()
+        {
+            bankLog = new BankLogFile();
+            bankLogUnreadable = false;
+            string path = ShopDataPath("BankLog.json");
+            if (!File.Exists(path)) return;
+            try
+            {
+                var loaded = Interface.Oxide.DataFileSystem.ReadObject<BankLogFile>(DataBankLog);
+                if (loaded?.Entries != null) bankLog = loaded;
+            }
+            catch (Exception ex)
+            {
+                bankLogUnreadable = true;
+                PrintWarning("Bank log could not be read, so new bank transactions will not overwrite it. " + ex.Message);
+            }
+        }
+
+        private void AppendBankLog(BasePlayer p, string action, int coins, int rp, int balance)
+        {
+            if (config.Bank == null || !config.Bank.Log || bankLogUnreadable) return;
+            if (bankLog == null) bankLog = new BankLogFile();
+            if (bankLog.Entries == null) bankLog.Entries = new List<BankEntry>();
+            bankLog.Entries.Add(new BankEntry
+            {
+                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                UserId = p.UserIDString,
+                Name = p.displayName,
+                Action = action,
+                Coins = coins,
+                Rp = rp,
+                Balance = balance
+            });
+            if (bankLog.Entries.Count > 200)
+                bankLog.Entries.RemoveRange(0, bankLog.Entries.Count - 200);
+            Interface.Oxide.DataFileSystem.WriteObject(DataBankLog, bankLog);
+        }
+
+        private bool CanUseBank(BasePlayer p)
+        {
+            if (p == null || config.Bank == null || !config.Bank.Enabled || !CanUse(p)) return false;
+            return string.IsNullOrEmpty(config.Bank.Permission) || IsAdmin(p) || permission.UserHasPermission(p.UserIDString, config.Bank.Permission);
+        }
+
+        private bool CoinReady(out ItemDefinition def)
+        {
+            def = null;
+            if (config.Bank == null || string.IsNullOrWhiteSpace(config.Bank.CoinShortname)) return false;
+            def = Def(config.Bank.CoinShortname);
+            return def != null;
+        }
+
+        private string CoinItemName()
+        {
+            if (config.Bank == null || string.IsNullOrWhiteSpace(config.Bank.CoinName)) return "";
+            return config.Bank.CoinName.Trim();
+        }
+
+        private string CoinLabel(ItemDefinition def)
+        {
+            string named = CoinItemName();
+            if (!string.IsNullOrEmpty(named)) return named;
+            return def != null ? def.displayName.english : "coin";
+        }
+
+        private static void OpenBank(UiState s)
+        {
+            s.BankOpen = true;
+            s.ThemeMenu = false;
+            s.BuyItem = 0;
+            s.BuyToken = null;
+            s.DescriptionEdit = false;
+            s.EditItem = s.EditTrade = 0;
+            s.EditKitId = null;
+            s.PickTarget = null;
+            s.EventMenu = false;
+            s.Status = "";
+        }
+
+        private int ClampBankAmount(int amount)
+        {
+            int min = Math.Max(1, config.Bank.MinCoins);
+            int max = config.Bank.MaxCoins > 0 ? config.Bank.MaxCoins : 100000;
+            if (amount < min) return min;
+            if (amount > max) return max;
+            return amount;
+        }
+
+        private void AdjustBankAmount(UiState s, string side, string direction, int step)
+        {
+            if (step < 1) return;
+            bool deposit = !string.Equals(side, "wd", StringComparison.OrdinalIgnoreCase);
+            int current = deposit ? s.BankDeposit : s.BankWithdraw;
+            if (current < 1) current = config.Bank.MinCoins;
+            int delta = string.Equals(direction, "sub", StringComparison.OrdinalIgnoreCase) ? -step : step;
+            long next = (long)current + delta;
+            if (next > int.MaxValue) next = int.MaxValue;
+            if (next < 1) next = 1;
+            int clamped = ClampBankAmount((int)next);
+            if (deposit) s.BankDeposit = clamped;
+            else s.BankWithdraw = clamped;
+        }
+
+        private int BankQty(UiState s, bool deposit)
+        {
+            int raw = deposit ? s.BankDeposit : s.BankWithdraw;
+            return ClampBankAmount(raw < 1 ? config.Bank.MinCoins : raw);
+        }
+
+        private bool TryCoinRp(int coins, out int rp)
+        {
+            rp = 0;
+            if (coins < 1 || config.Bank == null || config.Bank.RpPerCoin < 1) return false;
+            long total = (long)coins * config.Bank.RpPerCoin;
+            if (total < 1 || total > int.MaxValue) return false;
+            rp = (int)total;
+            return true;
+        }
+
+        private int TakeCoins(BasePlayer p, ItemDefinition def, ulong skin, int amount)
+        {
+            int left = amount;
+            var containers = new[] { p.inventory.containerMain, p.inventory.containerBelt };
+            for (int c = 0; c < containers.Length && left > 0; c++)
+            {
+                var list = containers[c]?.itemList;
+                if (list == null) continue;
+                foreach (var it in list.ToList())
+                {
+                    if (left <= 0) break;
+                    if (it == null || it.info != def || it.skin != skin) continue;
+                    int take = Math.Min(it.amount, left);
+                    it.UseItem(take);
+                    left -= take;
+                }
+            }
+            return amount - left;
+        }
+
+        private int CoinCapacity(BasePlayer p, ItemDefinition def, ulong skin, string itemName)
+        {
+            if (p?.inventory == null || def == null) return 0;
+            int stack = Math.Max(1, def.stackable);
+            string wanted = itemName ?? "";
+            int room = 0;
+            var containers = new[] { p.inventory.containerMain, p.inventory.containerBelt };
+            for (int i = 0; i < containers.Length; i++)
+            {
+                var cont = containers[i];
+                if (cont == null) continue;
+                int used = cont.itemList == null ? 0 : cont.itemList.Count;
+                room += Math.Max(0, cont.capacity - used) * stack;
+                if (cont.itemList == null) continue;
+                for (int n = 0; n < cont.itemList.Count; n++)
+                {
+                    var it = cont.itemList[n];
+                    if (it == null || it.info != def || it.skin != skin) continue;
+                    if (!string.Equals(it.name ?? "", wanted, StringComparison.Ordinal)) continue;
+                    if (it.amount < stack) room += stack - it.amount;
+                }
+            }
+            return room;
+        }
+
+        private bool ReturnCoins(BasePlayer p, ItemDefinition def, ulong skin, int amount, string itemName)
+        {
+            if (amount < 1) return true;
+            if (TryDeliverItems(p, def, skin, amount, false, itemName)) return true;
+            PrintWarning("Bank could not put " + amount + " " + def.shortname + " back into " + p.UserIDString + "'s inventory. Giving them with a drop fallback.");
+            GiveItems(p, def, skin, amount, false, itemName);
+            return false;
+        }
+
+        private void RunBank(BasePlayer p, UiState s, string side, string mode)
+        {
+            if (string.Equals(side, "wd", StringComparison.OrdinalIgnoreCase)) DoBankWithdraw(p, s);
+            else DoBankDeposit(p, s, string.Equals(mode, "all", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void BankTell(BasePlayer p, UiState s, string key, bool bad, params object[] args)
+        {
+            string text = Msg(key, p, args);
+            SetStatus(s, text, bad);
+            SendReply(p, text);
+            Fx(p, bad ? FxDeny : FxTrade);
+        }
+
+        private void DoBankDeposit(BasePlayer p, UiState s, bool all)
+        {
+            if (!bankBusy.Add(p.userID)) { BankTell(p, s, "BankBusy", true); return; }
+            try
+            {
+                ItemDefinition def;
+                if (!CoinReady(out def)) { BankTell(p, s, "BankNotConfigured", true); return; }
+                if (ServerRewards == null) { BankTell(p, s, "BankNoRewards", true); return; }
+                int min = Math.Max(1, config.Bank.MinCoins);
+                int max = config.Bank.MaxCoins;
+                int have = CountItems(p, def, config.Bank.CoinSkin);
+                int amount = all ? have : BankQty(s, true);
+                if (max > 0 && amount > max) amount = max;
+                if (have < min || amount > have)
+                {
+                    BankTell(p, s, "BankNoCoins", true, CoinLabel(def), have.ToString("N0", CultureInfo.InvariantCulture));
+                    return;
+                }
+                if (amount < min)
+                {
+                    BankTell(p, s, "BankRange", true, min.ToString("N0", CultureInfo.InvariantCulture), max > 0 ? max.ToString("N0", CultureInfo.InvariantCulture) : "100000");
+                    return;
+                }
+                int rp;
+                if (!TryCoinRp(amount, out rp)) { BankTell(p, s, "BankOverflow", true); return; }
+
+                int removed = TakeCoins(p, def, config.Bank.CoinSkin, amount);
+                if (removed != amount)
+                {
+                    if (removed > 0) ReturnCoins(p, def, config.Bank.CoinSkin, removed, CoinItemName());
+                    BankTell(p, s, "BankNoCoins", true, CoinLabel(def), CountItems(p, def, config.Bank.CoinSkin).ToString("N0"));
+                    return;
+                }
+                if (!AddRP(p.userID, rp))
+                {
+                    ReturnCoins(p, def, config.Bank.CoinSkin, removed, CoinItemName());
+                    BankTell(p, s, "BankFailed", true);
+                    return;
+                }
+                int balance = Balance(p);
+                AppendBankLog(p, "deposit", amount, rp, balance);
+                BankTell(p, s, "BankDeposited", false, amount.ToString("N0"), CoinLabel(def), rp.ToString("N0"), balance.ToString("N0"));
+            }
+            finally { bankBusy.Remove(p.userID); }
+        }
+
+        private void DoBankWithdraw(BasePlayer p, UiState s)
+        {
+            if (!bankBusy.Add(p.userID)) { BankTell(p, s, "BankBusy", true); return; }
+            try
+            {
+                ItemDefinition def;
+                if (!CoinReady(out def)) { BankTell(p, s, "BankNotConfigured", true); return; }
+                if (ServerRewards == null) { BankTell(p, s, "BankNoRewards", true); return; }
+                int amount = BankQty(s, false);
+                int min = Math.Max(1, config.Bank.MinCoins);
+                int max = config.Bank.MaxCoins;
+                if (amount < min || (max > 0 && amount > max))
+                {
+                    BankTell(p, s, "BankRange", true, min.ToString("N0"), max > 0 ? max.ToString("N0") : "100000");
+                    return;
+                }
+                int rp;
+                if (!TryCoinRp(amount, out rp)) { BankTell(p, s, "BankOverflow", true); return; }
+                int have = Balance(p);
+                if (have < rp) { BankTell(p, s, "BankNeedRp", true, rp.ToString("N0"), have.ToString("N0")); return; }
+                string itemName = CoinItemName();
+                if (CoinCapacity(p, def, config.Bank.CoinSkin, itemName) < amount)
+                {
+                    BankTell(p, s, "BankNoSpace", true, amount.ToString("N0"), CoinLabel(def));
+                    return;
+                }
+                if (!TakeRP(p.userID, rp)) { BankTell(p, s, "BankNeedRp", true, rp.ToString("N0"), Balance(p).ToString("N0")); return; }
+                if (!TryDeliverItems(p, def, config.Bank.CoinSkin, amount, false, itemName))
+                {
+                    if (!AddRP(p.userID, rp))
+                    {
+                        var refund = new PendingRefund
+                        {
+                            UserId = p.userID, UserName = p.displayName, Amount = rp,
+                            Label = "bank withdraw", RefundDue = true
+                        };
+                        pendingRefunds.Add(refund);
+                        SaveRefunds();
+                        Refund(refund);
+                    }
+                    BankTell(p, s, "BankFailed", true);
+                    return;
+                }
+                int balance = Balance(p);
+                AppendBankLog(p, "withdraw", amount, rp, balance);
+                BankTell(p, s, "BankWithdrawn", false, amount.ToString("N0"), CoinLabel(def), rp.ToString("N0"), balance.ToString("N0"));
+            }
+            finally { bankBusy.Remove(p.userID); }
+        }
+
+        private void BuildBank(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc, int bal)
+        {
+            string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
+            ItemDefinition def;
+            bool ready = CoinReady(out def);
+            Label(c, panel, "BANK", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 410, 240, 446));
+            string subtitle = !ready
+                ? "Coin Item Shortname is not a game item. The default RP coin is paper with skin 3843525164."
+                : config.Bank.CoinSkin == 0
+                    ? "Skin ID is 0, so only unskinned " + def.shortname + " counts. Set Coin Skin ID to the real RP coin before using this."
+                    : "Deposits accept " + def.shortname + " with skin " + config.Bank.CoinSkin.ToString(CultureInfo.InvariantCulture) + " only. Other skins stay in your inventory.";
+            Label(c, panel, subtitle, 12, tc.SubText, TextAnchor.MiddleLeft, R(16, 378, 1048, 410), false);
+
+            int coins = ready ? CountItems(p, def, config.Bank.CoinSkin) : 0;
+            string rate = ready ? config.Bank.RpPerCoin.ToString("N0") + " RP / coin" : "Not configured";
+            DrawBankStat(c, panel, tc, 16, "RP BALANCE", ServerRewards == null ? "N/A" : bal.ToString("N0"));
+            DrawBankStat(c, panel, tc, 366, "COINS ON YOU", ready ? coins.ToString("N0") : "-");
+            DrawBankStat(c, panel, tc, 716, "RATE", rate);
+
+            if (!ready || ServerRewards == null)
+            {
+                string note = !ready ? Msg("BankNotConfigured", p) : Msg("BankNoRewards", p);
+                Label(c, panel, note, 16, tc.SubText, TextAnchor.MiddleCenter, R(40, 80, 1028, 300));
+                return;
+            }
+
+            int depositQty = BankQty(s, true);
+            int withdrawQty = BankQty(s, false);
+            int depositRp;
+            int withdrawRp;
+            TryCoinRp(depositQty, out depositRp);
+            TryCoinRp(withdrawQty, out withdrawRp);
+            DrawBankSide(c, panel, tc, true, 16, depositQty, depositRp, coins, CoinLabel(def));
+            DrawBankSide(c, panel, tc, false, 540, withdrawQty, withdrawRp, bal, CoinLabel(def));
+        }
+
+        private void DrawBankStat(CuiElementContainer c, string panel, ThemeColors tc, int x, string title, string value)
+        {
+            string box = Box(c, panel, tc.Card, R(x, 328, x + 334, 370));
+            Label(c, box, title, 11, tc.SubText, TextAnchor.MiddleLeft, R(12, 0, 140, 42));
+            Label(c, box, value, 16, tc.Text, TextAnchor.MiddleRight, R(140, 0, 322, 42));
+        }
+
+        private void DrawBankSide(CuiElementContainer c, string panel, ThemeColors tc, bool deposit, int x, int qty, int rp, int have, string label)
+        {
+            string card = Box(c, panel, tc.Card, R(x, 16, x + 508, 316));
+            ItemDefinition def;
+            CoinReady(out def);
+            if (def != null) Icon(c, card, def, config.Bank.CoinSkin, R(16, 258, 52, 294));
+            Label(c, card, deposit ? "DEPOSIT" : "WITHDRAW", 18, tc.Text, TextAnchor.MiddleLeft, R(60, 258, 300, 296));
+            Label(c, card, qty.ToString("N0") + "  " + label, 18, tc.Text, TextAnchor.MiddleLeft, R(16, 214, 492, 254));
+            string hint = deposit
+                ? "Pays " + rp.ToString("N0") + " RP. You have " + have.ToString("N0") + "."
+                : "Costs " + rp.ToString("N0") + " RP. You have " + have.ToString("N0") + " RP.";
+            Label(c, card, hint, 12, tc.SubText, TextAnchor.MiddleLeft, R(16, 188, 492, 212), false);
+
+            var steps = config.Bank.QuickAmounts;
+            int buttons = Math.Max(1, steps.Count);
+            int gap = 8;
+            int width = (476 - gap * (buttons - 1)) / buttons;
+            string side = deposit ? "dep" : "wd";
+            for (int i = 0; i < buttons; i++)
+            {
+                int bx = 16 + i * (width + gap);
+                int step = steps[i];
+                Btn(c, card, UiCmd + " bankn " + side + " add " + step.ToString(CultureInfo.InvariantCulture), tc.Button, R(bx, 140, bx + width, 176),
+                    "+" + step.ToString("N0", CultureInfo.InvariantCulture), 14, tc.ButtonText);
+                Btn(c, card, UiCmd + " bankn " + side + " sub " + step.ToString(CultureInfo.InvariantCulture), tc.Button, R(bx, 96, bx + width, 132),
+                    "-" + step.ToString("N0", CultureInfo.InvariantCulture), 14, tc.ButtonText);
+            }
+            if (deposit)
+            {
+                Btn(c, card, UiCmd + " bankgo dep", tc.Accent, R(16, 20, 248, 76), "DEPOSIT " + qty.ToString("N0"), 14, tc.AccentText);
+                Btn(c, card, UiCmd + " bankgo dep all", tc.Button, R(260, 20, 492, 76), "DEPOSIT ALL", 14, tc.ButtonText);
+            }
+            else
+                Btn(c, card, UiCmd + " bankgo wd", tc.Accent, R(16, 20, 492, 76), "WITHDRAW " + qty.ToString("N0"), 14, tc.AccentText);
+        }
 
         #endregion
     }
