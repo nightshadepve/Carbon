@@ -13,13 +13,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.7.1")]
+    [Info("NightshadeShop", "Nightshade", "1.7.2")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, and claimable kits")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.7.1";
+        private const string PluginVersion = "1.7.2";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
@@ -3774,17 +3774,6 @@ namespace Oxide.Plugins
             return hours.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
-        private string KitStatusText(BasePlayer p, KitDef kit)
-        {
-            double left = CooldownLeft(p, kit);
-            string cool = left <= 0 ? "Ready" : "Cooldown " + FormatSpan(left);
-            string uses = kit.MaxUsesPerWipe <= 0
-                ? "No wipe cap"
-                : "Uses " + UsesRemaining(p, kit) + "/" + kit.MaxUsesPerWipe;
-            string perm = string.IsNullOrWhiteSpace(kit.Permission) ? "Anyone with Kits access" : kit.Permission.Trim();
-            return cool + "  |  " + uses + "  |  " + perm;
-        }
-
         private bool HasKitPerm(BasePlayer p, KitDef kit)
         {
             if (p == null || kit == null) return false;
@@ -4061,14 +4050,14 @@ namespace Oxide.Plugins
         {
             string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
             Label(c, panel, "KITS", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 414, 200, 446));
-            Label(c, panel, "Open while wipe unlock (default_unlocked) is active.", 12, tc.SubText, TextAnchor.MiddleLeft, R(16, 392, 780, 414), false);
             if (s.Admin)
                 Btn(c, panel, UiCmd + " kitnew", tc.Accent, R(900, 414, 1052, 444), "+ NEW KIT", 13, tc.AccentText);
 
             var list = kitFile?.Kits ?? new List<KitDef>();
             const int rowH = 156;
             const int gap = 8;
-            string area = Scroll(c, panel, R(8, 8, 1060, 386), 378, Math.Max(1, list.Count) * (rowH + gap), tc);
+            const int viewTop = 406;
+            string area = Scroll(c, panel, R(8, 8, 1060, viewTop), viewTop - 8, Math.Max(1, list.Count) * (rowH + gap), tc);
             if (list.Count == 0)
             {
                 Label(c, area, s.Admin ? "No kits yet. Click + NEW KIT." : "No kits right now.", 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 150, 1040, 40));
@@ -4081,17 +4070,28 @@ namespace Oxide.Plugins
         private void DrawKitCard(CuiElementContainer c, string parent, BasePlayer p, UiState s, ThemeColors tc, KitDef kit, int y, int height)
         {
             const int width = 1040;
+            // Left-middle point anchor plus equal pixel offsets. Equal anchor spans are
+            // wider than they are tall on a 16:9 screen, which stretches the square kit art.
+            const int iconSize = 120;
+            const int iconLeft = 16;
             string row = Box(c, parent, tc.Card, TL(0, y, width, height));
             string icon = string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon;
-            string iconBg = Box(c, row, tc.Panel, R(12, 30, 116, 134));
-            ListIcon(c, iconBg, icon, Def(FirstKitIcon(kit)), 0, R(6, 6, 98, 98));
+            string iconBg = Box(c, row, tc.Panel, new CuiRectTransformComponent
+            {
+                AnchorMin = "0 0.5",
+                AnchorMax = "0 0.5",
+                OffsetMin = $"{iconLeft} {-iconSize / 2}",
+                OffsetMax = $"{iconLeft + iconSize} {iconSize / 2}"
+            });
+            const int inset = 4;
+            ListIcon(c, iconBg, icon, Def(FirstKitIcon(kit)), 0, R(inset, inset, iconSize - inset, iconSize - inset));
 
             bool admin = s.Admin;
+            int textX = iconLeft + iconSize + 14;
             int textRight = admin ? 750 : 876;
-            Label(c, row, string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant(), 16, tc.Text, TextAnchor.MiddleLeft, R(128, 124, textRight, 148));
-            Label(c, row, KitStatusText(p, kit), 11, tc.SubText, TextAnchor.MiddleLeft, R(128, 102, textRight, 124), false);
+            Label(c, row, string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant(), 16, tc.Text, TextAnchor.MiddleLeft, R(textX, 96, textRight, 122));
 
-            DrawKitContents(c, row, tc, kit.Items, 128, 10, textRight - 128, 88);
+            DrawKitContents(c, row, tc, kit.Items, textX, 6, textRight - textX, 84);
 
             bool allowed = HasKitPerm(p, kit);
             double left = CooldownLeft(p, kit);
@@ -4106,12 +4106,14 @@ namespace Oxide.Plugins
             else if (left > 0)
             {
                 string wait = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
-                Label(c, wait, "COOLDOWN", 12, tc.SubText, TextAnchor.MiddleCenter, Full());
+                int bw = claimR - claimX;
+                Label(c, wait, "COOLDOWN", 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 23, bw - 2, 42));
+                Label(c, wait, FormatSpan(left).ToUpperInvariant(), 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 2, bw - 2, 21));
             }
             else if (uses <= 0)
             {
                 string none = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
-                Label(c, none, "NO USES", 12, tc.SubText, TextAnchor.MiddleCenter, Full());
+                Label(c, none, "LIMIT REACHED", 11, tc.SubText, TextAnchor.MiddleCenter, Full());
             }
             else
                 Btn(c, row, UiCmd + " kitclaim " + kit.Id, tc.Accent, R(claimX, 48, claimR, 92), "CLAIM", 14, tc.AccentText);
