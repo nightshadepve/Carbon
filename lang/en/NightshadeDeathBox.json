@@ -1,0 +1,16 @@
+{
+  "Prefix": "<color=#c9b27c>[Death Box]</color> ",
+  "StoredOne": "Your loot is in a protected box at {0}. /deathbox lists it.",
+  "StoredMany": "Your loot is in {0} protected boxes at {1}. /deathbox lists them.",
+  "Blocked": "This death box belongs to {0}.",
+  "Break": "You cannot break this death box.",
+  "None": "You have no death boxes.",
+  "NoPerm": "You do not have permission to use death boxes.",
+  "Header": "Your death boxes:",
+  "AdminHeader": "Death boxes for {0}:",
+  "Line": "{0}. {1} - {2} items - {3}",
+  "More": "... and {0} more. Stand at a box to loot it.",
+  "Expired": "A death box of yours reached its time limit and was removed.",
+  "NotAdmin": "You need the nightshadedeathbox.admin permission to look up another player.",
+  "BadId": "Usage: /deathbox   or   /deathbox <steamid>"
+}
