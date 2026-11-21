@@ -13,15 +13,15 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.7.0")]
+    [Info("NightshadeShop", "Nightshade", "1.7.1")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, and claimable kits")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.7.0";
+        private const string PluginVersion = "1.7.1";
 
-        [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents;
+        [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
         private static readonly string[] RbDifficulties = { "EASY", "MEDIUM", "HARD", "EXPERT", "NIGHTMARE" };
         private const int PickPerRow = 10, PickRows = 4, PickPerPage = PickPerRow * PickRows;
@@ -68,8 +68,9 @@ namespace Oxide.Plugins
         private const string PermVipXPerk = "nightshadeshop.vipxperk";
         private const string DailyKitPng = "VIP_Daily.png";
         private const string FourDayKitPng = "VIP_4Day.png";
-        private readonly Dictionary<string, uint> localPngCrc = new Dictionary<string, uint>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> localPngQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool imageLibraryWarned;
 
         private const string UiMain = "NShop.Main";
         private const string UiScrollTest = "NShop.ScrollTest";
@@ -855,6 +856,12 @@ namespace Oxide.Plugins
                     if (unloading) return;
                     foreach (var refund in pendingRefunds.Where(r => r.RefundDue).ToList()) Refund(refund);
                 });
+            }
+            else if (plugin.Name == "ImageLibrary")
+            {
+                ImageLibrary = plugin;
+                localPngQueued.Clear();
+                if (serverReady) NextTick(() => { if (!unloading) PreloadLocalIcons(); });
             }
         }
 
@@ -2915,10 +2922,10 @@ namespace Oxide.Plugins
                 }
                 if (IsLocalPng(icon))
                 {
-                    uint crc = LocalPngCrc(icon);
-                    if (crc != 0)
+                    string png = LocalPngId(icon);
+                    if (!string.IsNullOrEmpty(png))
                     {
-                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Png = crc.ToString(CultureInfo.InvariantCulture), Color = "1 1 1 1", BlocksRaycast = false }, rect } });
+                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Png = png, Color = "1 1 1 1", BlocksRaycast = false }, rect } });
                         return;
                     }
                 }
@@ -4310,47 +4317,59 @@ namespace Oxide.Plugins
 
         private static bool IsLocalPng(string icon) => LocalPngName(icon) != null;
 
-        private uint LocalPngCrc(string icon)
+        // ImageLibrary stores the png and GetImage returns the id drawn by CuiRawImageComponent.Png.
+        // The same Call form is used by NightshadeInfo and ServerRewards (file:// for a data-folder png).
+        private string LocalPngId(string icon)
         {
             string name = LocalPngName(icon);
-            if (name == null) return 0;
-            uint cached;
-            if (localPngCrc.TryGetValue(name, out cached) && cached != 0)
-                return cached;
+            if (name == null) return null;
+            if (!ImageLibraryReady()) return null;
+            if (!localPngQueued.Contains(name))
+                QueueLocalPng(name);
+            object stored = ImageLibrary.Call("HasImage", name, 0UL);
+            if (!(stored is bool) || !(bool)stored) return null;
+            string png = ImageLibrary.Call<string>("GetImage", name, 0UL);
+            if (string.IsNullOrEmpty(png) || png == "0") return null;
+            return png;
+        }
+
+        private bool ImageLibraryReady()
+        {
+            if (ImageLibrary != null && ImageLibrary.IsLoaded) return true;
+            if (!imageLibraryWarned)
+            {
+                imageLibraryWarned = true;
+                PrintWarning("ImageLibrary is not loaded. Local shop icons will use the default icon.");
+            }
+            return false;
+        }
+
+        private void QueueLocalPng(string name)
+        {
             EnsureIconsFolder();
             string path = Path.Combine(IconsDirectory(), name);
             if (!File.Exists(path))
             {
                 if (localPngWarned.Add(name))
                     PrintWarning("NightshadeShop icon file missing: " + name + ". Place it in data/Nightshade/NightshadeShop/Icons/. Using the default icon.");
-                return 0;
+                return;
             }
-            if (FileStorage.server == null || CommunityEntity.ServerInstance == null)
-                return 0;
             try
             {
-                byte[] bytes = File.ReadAllBytes(path);
-                if (bytes == null || bytes.Length == 0)
+                if (new FileInfo(path).Length <= 0)
                 {
                     if (localPngWarned.Add(name))
                         PrintWarning("NightshadeShop icon file is empty: " + name + ". Using the default icon.");
-                    return 0;
+                    return;
                 }
-                uint crc = FileStorage.server.Store(bytes, FileStorage.Type.png, CommunityEntity.ServerInstance.net.ID);
-                if (crc == 0)
-                {
-                    if (localPngWarned.Add(name))
-                        PrintWarning("NightshadeShop could not store icon " + name + ". Using the default icon.");
-                    return 0;
-                }
-                localPngCrc[name] = crc;
-                return crc;
+                string url = Path.Combine("file://" + Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", "Icons", name);
+                ImageLibrary.Call("AddImage", url, name, 0UL);
+                localPngQueued.Add(name);
             }
             catch (Exception ex)
             {
                 if (localPngWarned.Add(name))
                     PrintWarning("NightshadeShop could not read icon " + name + ": " + ex.Message + ". Using the default icon.");
-                return 0;
             }
         }
 
@@ -4375,7 +4394,7 @@ namespace Oxide.Plugins
                 foreach (var trade in data.TradeCategories)
                     NoteLocalIcon(names, trade.Icon);
             foreach (var name in names)
-                LocalPngCrc(name);
+                LocalPngId(name);
         }
 
         private static void NoteLocalIcon(HashSet<string> names, string icon)
