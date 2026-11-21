@@ -1,0 +1,21 @@
+{
+  "Enabled": true,
+  "Only During PvP Weekend": true,
+  "Allow Team To Loot": true,
+  "Map Marker": true,
+  "Max Lifetime Hours": 0.0,
+  "Remove protected boxes after the owner empties them": true,
+  "Convert disconnected sleepers": true,
+  "Convert connected sleeping players": true,
+  "Convert awake players": true,
+  "Protect suicide deaths": false,
+  "Skip safe zone deaths": true,
+  "Skip event and raid zone deaths": true,
+  "Convert separately dropped Backpacks plugin bags": true,
+  "Force Backpacks plugin bags to drop on death (overrides keep-on-death)": true,
+  "Maximum 48-slot boxes per death": 5,
+  "Vertical spawn offset in meters": 0.06,
+  "Box spacing meters": 0.75,
+  "Log successful conversions": true,
+  "Log backpack conversion diagnostics": false
+}
