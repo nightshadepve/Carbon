@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeDeathBox", "Nightshade", "1.0.0")]
+    [Info("NightshadeDeathBox", "Nightshade", "1.0.1")]
     [Description("Puts a player's death loot in owner-only containers during the PvP weekend.")]
     public class NightshadeDeathBox : RustPlugin
     {
@@ -220,7 +220,7 @@ namespace Oxide.Plugins
             else RebindWorld();
             _worldReady = true;
             _maintainTimer = timer.Every(60f, Maintain);
-            Puts("NightshadeDeathBox 1.0.0. New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
+            Puts("NightshadeDeathBox 1.0.1. New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
         }
 
         private void Unload()
@@ -608,7 +608,8 @@ namespace Oxide.Plugins
             int moved = MoveItems(session, items);
             if (moved > 0 && IsEmptyCorpse(corpse))
             {
-                corpse.dropsLoot = false;
+                // DoServerDestroy spawns item_drop_backpack unless blockBagDrop is set.
+                corpse.blockBagDrop = true;
                 corpse.Kill();
             }
             else if (!IsEmptyCorpse(corpse))
@@ -642,7 +643,7 @@ namespace Oxide.Plugins
             {
                 if (!_config.ConvertSeparateBackpacks) return;
                 BasePlayer player = FindPlayer(ownerId);
-                string skip;
+                string skip = null;
                 if (player == null || !ShouldConvert(player, null, out skip))
                 {
                     if (_config.LogBackpackDiagnostics)
@@ -725,7 +726,6 @@ namespace Oxide.Plugins
             int moved = MoveItems(session, items);
             if (IsEmpty(source.inventory))
             {
-                source.dropsLoot = false;
                 source.Kill();
             }
             else
@@ -795,7 +795,6 @@ namespace Oxide.Plugins
             box.OwnerID = session.UserId;
             box.skinID = MarkerSkin;
             box.enableSaving = true;
-            box.dropsLoot = false;
             box.inventory = new ItemContainer();
             box.inventory.ServerInitialize(null, BoxSlots);
             box.inventory.GiveUID();
@@ -847,13 +846,12 @@ namespace Oxide.Plugins
                 drop.OwnerID = session.UserId;
                 drop.skinID = MarkerSkin;
                 drop.enableSaving = true;
-                drop.dropsLoot = false;
                 if (drop.inventory != null) drop.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
             }
             else
             {
                 entity.OwnerID = session.UserId;
-                entity.dropsLoot = false;
+                SuppressDestroyLoot(entity);
             }
             BoxRecord record = new BoxRecord
             {
@@ -997,7 +995,7 @@ namespace Oxide.Plugins
             if (!_config.RemoveWhenEmpty || entity == null || entity.IsDestroyed) return;
             if (!IsTracked(entity)) return;
             if (!EntityEmpty(entity)) return;
-            entity.dropsLoot = false;
+            SuppressDestroyLoot(entity);
             entity.Kill();
         }
 
@@ -1084,7 +1082,7 @@ namespace Oxide.Plugins
                 BoxRecord record;
                 bool expired = lifeHours > 0d && !EntityEmpty(entity);
                 if (expired && TryRecord(entity, out record)) expiredOwners.Add(record.OwnerId);
-                entity.dropsLoot = false;
+                SuppressDestroyLoot(entity);
                 entity.Kill();
             }
             foreach (ulong ownerId in expiredOwners)
@@ -1105,6 +1103,14 @@ namespace Oxide.Plugins
             {
                 if (_recent[i].Until < Time.realtimeSinceStartup) _recent.RemoveAt(i);
             }
+        }
+
+        // LootableCorpse.DoServerDestroy drops containers as a backpack unless blockBagDrop
+        // is set. DroppedItemContainer has no dropsLoot field; DoServerDestroy frees its inventory.
+        private static void SuppressDestroyLoot(BaseEntity entity)
+        {
+            LootableCorpse corpse = entity as LootableCorpse;
+            if (corpse != null) corpse.blockBagDrop = true;
         }
 
         private static void HoldDrop(DroppedItemContainer container)
@@ -1185,7 +1191,6 @@ namespace Oxide.Plugins
             }
             for (int i = 0; i < kill.Count; i++)
             {
-                kill[i].dropsLoot = false;
                 kill[i].Kill();
             }
             if (kill.Count > 0) Puts("Removed " + kill.Count + " death boxes left on the new map.");
@@ -1243,7 +1248,6 @@ namespace Oxide.Plugins
                 record.Z = container.transform.position.z;
                 if (record.OwnerId == 0UL) record.OwnerId = container.playerSteamID != 0UL ? container.playerSteamID : container.OwnerID;
                 _byNet[record.NetId] = record;
-                container.dropsLoot = false;
                 container.enableSaving = true;
                 HoldDrop(container);
                 StripGroundWatch(container);
