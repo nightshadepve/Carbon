@@ -72,7 +72,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_LOOT_TESTS
-    [Info("NightshadeLootProtection", "Nightshade", "1.3.0")]
+    [Info("NightshadeLootProtection", "Nightshade", "1.3.1")]
     [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
     public class NightshadeLootProtection : CarbonPlugin
     {
@@ -127,7 +127,7 @@ namespace Carbon.Plugins
         private const string TurretName = "tcturretauth";
         private const string WipeName = "wipe";
 
-        [PluginReference] private Plugin RaidableBases, TruePVE, NightshadeRaidProtection;
+        [PluginReference] private Plugin RaidableBases, TruePVE, NightshadeRaidProtection, NightshadeDeathBox;
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
 
         #endregion
@@ -949,6 +949,21 @@ namespace Carbon.Plugins
             return PublicEntities.Contains(entity.ShortPrefabName);
         }
 
+        // Death boxes are not normal player storage. CanLootEntity non-null aborts the open.
+        private bool IsNightshadeDeathBox(BaseEntity entity)
+        {
+            if (entity == null || NightshadeDeathBox == null || !NightshadeDeathBox.IsLoaded) return false;
+            try
+            {
+                object value = NightshadeDeathBox.Call("API_IsNightshadeDeathBox", entity);
+                return value is bool && (bool)value;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         // Player-placed storage: a player steam id owns it, and it is not an event
         // crate, corpse, backpack, world loot container, or a public utility.
         private bool IsPlayerPlacedStorage(BaseEntity entity)
@@ -1465,6 +1480,9 @@ namespace Carbon.Plugins
         private object CheckLootAccess(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return null;
+            // NightshadeDeathBox owns these containers. Any non-null CanLootEntity
+            // result aborts PlayerOpenLoot, so this plugin must not add a false.
+            if (IsNightshadeDeathBox(entity)) return null;
             if (IsPlayerPlacedStorage(entity))
                 return DecidePlayerPlaced(player, entity, true);
             if (IsWeekendPvp(player))
@@ -1858,6 +1876,7 @@ namespace Carbon.Plugins
         private object CanPickupEntity(BasePlayer player, BaseCombatEntity entity)
         {
             if (entity == null || player == null) return null;
+            if (IsNightshadeDeathBox(entity)) return null;
 
             // Vehicles stay on their own rules. A player-owned storage box still cannot be picked up by a stranger.
             if (entity is BaseVehicle || entity is BaseVehicleModule) return null;

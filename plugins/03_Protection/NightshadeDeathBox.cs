@@ -10,22 +10,30 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeDeathBox", "Nightshade", "1.0.1")]
+    [Info("NightshadeDeathBox", "Nightshade", "1.0.2")]
     [Description("Puts a player's death loot in owner-only containers during the PvP weekend.")]
     public class NightshadeDeathBox : RustPlugin
     {
-        // Spawned 48-slot item_drop_backpack containers, not a wooden box and not the
-        // PlayerCorpse. NightshadeLootProtection 1.3.0 returns null (no opinion) for
-        // DroppedItemContainer and LootableCorpse, including while "Disable
-        // NightshadeLootProtection access restrictions during PvP weekend" is on.
-        // A player-owned wooden box is player-placed storage: that plugin returns
-        // false for anyone who is not the owner, the team, or a server admin, and
-        // the last non-null CanLootEntity result wins. That false would block
-        // nightshadedeathbox.admin and can block the owner after the weekend when
-        // the box sits in someone else's tool cupboard. These backpacks avoid that.
-        // ResetRemovalTime keeps them from despawning while they still have items.
-        // RestoreUponDeath removes the items it will give back before the corpse is
-        // filled, so only what actually lands in the corpse or a Backpacks bag is moved.
+        // Default container is a saved 48-slot item_drop_backpack. It looks like the
+        // vanilla death bag. "Container Prefab" can be a storage entity such as
+        // assets/prefabs/deployable/large wood storage/box.wooden.large.prefab or
+        // assets/prefabs/deployable/small stash/small_stash_deployed.prefab.
+        // Carbon's CanLootEntity patch on PlayerOpenLoot treats any non-null hook
+        // result as "do not open". Returning true does not mean allow. This plugin
+        // returns null to allow and false to deny. NightshadeLootProtection would
+        // otherwise return false for a player-owned wooden box when the looter is
+        // not the owner, the team, or a server admin (nightshadedeathbox.admin is
+        // not enough). Load order puts that false last. Loot protection 1.3.1
+        // returns null when API_IsNightshadeDeathBox is true, so this plugin's
+        // null/false is the only opinion. needsBuildingPrivilegeToUse is cleared
+        // on storage containers so another player's tool cupboard does not block
+        // the owner. The marker skin is not a workshop skin; the model stays the
+        // prefab default.
+        // ResetRemovalTime keeps backpacks from despawning while they still have
+        // items. Storage prefabs have their Decay component removed instead.
+        // RestoreUponDeath removes the items it will give back before the corpse
+        // is filled, so only what actually lands in the corpse or a Backpacks bag
+        // is moved. CreateCorpse copies that inventory before OnPlayerCorpseSpawned.
 
         private const string PermUse = "nightshadedeathbox.use";
         private const string PermAdmin = "nightshadedeathbox.admin";
@@ -38,6 +46,7 @@ namespace Oxide.Plugins
         private const int BoxSlots = 48;
         private const float HoldSeconds = 86400f;
         private const float PendingSeconds = 8f;
+        private const int DecisionLimit = 20;
         private const string RaidbaseZonePrefix = "nightshade_raidbase";
 
         private PluginConfig _config;
@@ -55,6 +64,7 @@ namespace Oxide.Plugins
         private readonly List<RecentSource> _recent = new List<RecentSource>();
         private readonly HashSet<ulong> _announce = new HashSet<ulong>();
         private readonly Dictionary<ulong, float> _nextTell = new Dictionary<ulong, float>();
+        private readonly List<DeathDecision> _decisions = new List<DeathDecision>();
 
         [PluginReference] private Plugin NightshadeRaidProtection;
         [PluginReference] private Plugin Backpacks;
@@ -84,6 +94,8 @@ namespace Oxide.Plugins
             [JsonProperty("Box spacing meters")] public float BoxSpacing = 0.75f;
             [JsonProperty("Log successful conversions")] public bool LogConversions = true;
             [JsonProperty("Log backpack conversion diagnostics")] public bool LogBackpackDiagnostics = false;
+            [JsonProperty("Debug Logging")] public bool DebugLogging = true;
+            [JsonProperty("Container Prefab")] public string ContainerPrefab = BackpackPrefab;
         }
 
         private class Store
@@ -112,7 +124,34 @@ namespace Oxide.Plugins
             public Vector3 Position;
             public long GroupId;
             public int Spawned;
+            public int ItemsMoved;
             public float Until;
+            public DeathDecision Decision;
+            public List<ulong> CreatedNets = new List<ulong>();
+            public List<VanillaMark> Vanilla = new List<VanillaMark>();
+        }
+
+        private class VanillaMark
+        {
+            public ulong NetId;
+            public string Kind;
+        }
+
+        private class DeathDecision
+        {
+            public string AtUtc;
+            public ulong UserId;
+            public string Name;
+            public string Place;
+            public bool PvpActive;
+            public string PvpDetail;
+            public bool HasPermission;
+            public string Reason;
+            public int ItemsMoved;
+            public int BoxCount;
+            public string Created;
+            public string Vanilla;
+            public bool Logged;
         }
 
         private class RecentSource
@@ -147,6 +186,8 @@ namespace Oxide.Plugins
             if (float.IsNaN(_config.MaxLifetimeHours) || _config.MaxLifetimeHours < 0f) _config.MaxLifetimeHours = 0f;
             if (float.IsNaN(_config.VerticalOffset)) _config.VerticalOffset = 0.06f;
             if (float.IsNaN(_config.BoxSpacing) || _config.BoxSpacing < 0.2f) _config.BoxSpacing = 0.75f;
+            if (string.IsNullOrWhiteSpace(_config.ContainerPrefab)) _config.ContainerPrefab = BackpackPrefab;
+            else _config.ContainerPrefab = _config.ContainerPrefab.Trim();
             SaveConfig();
         }
 
@@ -211,6 +252,7 @@ namespace Oxide.Plugins
             LoadData();
             cmd.AddChatCommand("deathbox", this, nameof(CmdDeathBoxChat));
             cmd.AddConsoleCommand("deathbox", this, nameof(CmdDeathBoxConsole));
+            cmd.AddConsoleCommand("nsdeathbox.status", this, nameof(CmdStatusConsole));
         }
 
         private void OnServerInitialized()
@@ -220,7 +262,10 @@ namespace Oxide.Plugins
             else RebindWorld();
             _worldReady = true;
             _maintainTimer = timer.Every(60f, Maintain);
-            Puts("NightshadeDeathBox 1.0.1. New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
+            WarnMissingDefaultPermission();
+            Puts("NightshadeDeathBox 1.0.2. Debug logging is " + (_config.DebugLogging ? "on" : "off")
+                + ". Container prefab: " + ContainerPrefabPath()
+                + ". New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
         }
 
         private void Unload()
@@ -248,6 +293,13 @@ namespace Oxide.Plugins
             _nextGroup = 1;
             SaveData();
             Puts("Map wipe: death boxes cleared.");
+        }
+
+        // BasePlayer.Die calls this hook before BaseCombatEntity.Die. The method stays
+        // void: any non-null OnPlayerDeath result makes Carbon skip the rest of Die.
+        private void OnPlayerDeath(BasePlayer player, HitInfo info)
+        {
+            HandleDeath(player, info);
         }
 
         private void OnEntityDeath(BasePlayer player, HitInfo info)
@@ -301,9 +353,20 @@ namespace Oxide.Plugins
             return LootDecision(player, container);
         }
 
+        private object CanLootEntity(BasePlayer player, StorageContainer container)
+        {
+            return LootDecision(player, container);
+        }
+
         private object CanLootEntity(BasePlayer player, LootableCorpse corpse)
         {
             return LootDecision(player, corpse);
+        }
+
+        [HookMethod("API_IsNightshadeDeathBox")]
+        public bool API_IsNightshadeDeathBox(BaseEntity entity)
+        {
+            return IsTracked(entity);
         }
 
         private void OnLootEntity(BasePlayer player, BaseEntity entity)
@@ -401,73 +464,110 @@ namespace Oxide.Plugins
 
         private void HandleDeath(BasePlayer player, HitInfo info)
         {
-            if (!_worldReady || player == null || player.IsDestroyed || player.IsNpc || !player.userID.IsSteamId()) return;
+            if (player == null || player.IsNpc || !player.userID.IsSteamId()) return;
             PendingDeath existing;
             if (_pending.TryGetValue(player.userID, out existing) && existing != null && existing.Until >= Time.realtimeSinceStartup)
                 return;
 
-            string skip;
-            if (!ShouldConvert(player, info, out skip))
+            DeathDecision decision = new DeathDecision
             {
-                if (skip != null && _config.LogConversions) Puts("Skipped " + player.displayName + " (" + player.userID + "): " + skip);
+                UserId = player.userID,
+                Name = string.IsNullOrEmpty(player.displayName) ? player.userID.ToString() : player.displayName,
+                Place = FormatPos(player.transform.position)
+            };
+            if (!_worldReady || player.IsDestroyed)
+            {
+                decision.Reason = !_worldReady ? "plugin not ready" : "player entity already destroyed";
+                decision.PvpDetail = "not checked";
+                HoldDecision(player.userID, decision);
+                return;
+            }
+
+            if (!ShouldConvert(player, info, decision))
+            {
+                if (decision.Reason != "missing nightshadedeathbox.use" && decision.Reason != "pvp weekend inactive" && decision.Reason != "plugin disabled" && _config.LogConversions && !_config.DebugLogging)
+                    Puts("Skipped " + decision.Name + " (" + decision.UserId + "): " + decision.Reason);
+                HoldDecision(player.userID, decision);
                 return;
             }
 
             PendingDeath session = new PendingDeath
             {
                 UserId = player.userID,
-                Name = string.IsNullOrEmpty(player.displayName) ? player.userID.ToString() : player.displayName,
+                Name = decision.Name,
                 Position = player.transform.position,
                 GroupId = NextGroup(),
                 Spawned = 0,
-                Until = Time.realtimeSinceStartup + PendingSeconds
+                ItemsMoved = 0,
+                Until = Time.realtimeSinceStartup + PendingSeconds,
+                Decision = decision
             };
             _pending[player.userID] = session;
             if (_config.ForceBackpackDrop) ForceBackpack(player, session);
             ulong ownerId = player.userID;
-            // Next tick: a corpse or bag that spawned before this hook is populated by now.
+            // CreateCorpse has already copied the inventory when OnPlayerCorpseSpawned
+            // runs. NextTick still catches a bag that spawned before this hook.
             NextTick(() => DrainRecent(ownerId));
+            timer.Once(PendingSeconds, () => CloseDeath(ownerId));
         }
 
-        // null skip means "do not log" (permission, feature off, NPC already filtered).
-        private bool ShouldConvert(BasePlayer player, HitInfo info, out string skip)
+        // Every false path sets decision.Reason. Permission and the weekend gate used
+        // to leave the reason null, which produced no console line at all.
+        private bool ShouldConvert(BasePlayer player, HitInfo info, DeathDecision decision)
         {
-            skip = null;
-            if (_config == null || !_config.Enabled) return false;
-            if (_config.OnlyDuringPvpWeekend && !IsPvPWeekend()) return false;
-            if (!permission.UserHasPermission(player.UserIDString, PermUse)) return false;
+            string pvpDetail;
+            bool pvp = QueryPvp(out pvpDetail);
+            decision.PvpActive = pvp;
+            decision.PvpDetail = pvpDetail;
+            decision.HasPermission = permission.UserHasPermission(player.UserIDString, PermUse);
+            if (_config == null || !_config.Enabled)
+            {
+                decision.Reason = "plugin disabled";
+                return false;
+            }
+            if (_config.OnlyDuringPvpWeekend && !pvp)
+            {
+                decision.Reason = "pvp weekend inactive";
+                return false;
+            }
+            if (!decision.HasPermission)
+            {
+                decision.Reason = "missing nightshadedeathbox.use";
+                return false;
+            }
 
             bool sleeping = player.IsSleeping();
             bool connected = player.IsConnected;
             if (sleeping && !connected)
             {
-                if (!_config.ConvertDisconnectedSleepers) { skip = "disconnected sleeper"; return false; }
+                if (!_config.ConvertDisconnectedSleepers) { decision.Reason = "disconnected sleeper"; return false; }
             }
             else if (sleeping)
             {
-                if (!_config.ConvertConnectedSleepers) { skip = "connected sleeper"; return false; }
+                if (!_config.ConvertConnectedSleepers) { decision.Reason = "connected sleeper"; return false; }
             }
             else if (!_config.ConvertAwakePlayers)
             {
-                skip = "awake player";
+                decision.Reason = "awake player";
                 return false;
             }
 
             if (!_config.ProtectSuicideDeaths && IsExplicitSuicide(player, info))
             {
-                skip = "explicit suicide";
+                decision.Reason = "explicit suicide";
                 return false;
             }
             if (_config.SkipSafeZones && player.InSafeZone())
             {
-                skip = "safe zone";
+                decision.Reason = "safe zone";
                 return false;
             }
             if (_config.SkipEventZones && InEventZone(player, player.transform.position))
             {
-                skip = "event or raid zone";
+                decision.Reason = "event or raid zone";
                 return false;
             }
+            decision.Reason = "accepted";
             return true;
         }
 
@@ -483,10 +583,12 @@ namespace Oxide.Plugins
             return initiator == null || initiator == player;
         }
 
-        private bool IsPvPWeekend()
+        private bool QueryPvp(out string detail)
         {
+            detail = "not checked";
             if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
             {
+                detail = "NightshadeRaidProtection not loaded";
                 if (!_raidWarned)
                 {
                     _raidWarned = true;
@@ -497,10 +599,18 @@ namespace Oxide.Plugins
             try
             {
                 object value = NightshadeRaidProtection.Call("API_IsPvPActive");
-                return value is bool && (bool)value;
+                if (value is bool)
+                {
+                    bool active = (bool)value;
+                    detail = active ? "API true" : "API false";
+                    return active;
+                }
+                detail = value == null ? "API returned null" : "API returned " + value.GetType().Name;
+                return false;
             }
             catch (Exception ex)
             {
+                detail = "API failed: " + ex.Message;
                 PrintWarning("API_IsPvPActive failed: " + ex.Message);
                 return false;
             }
@@ -602,8 +712,20 @@ namespace Oxide.Plugins
             PendingDeath session;
             if (!_pending.TryGetValue(corpse.playerSteamID, out session) || session == null || session.Until < Time.realtimeSinceStartup)
                 return;
-            if (corpse.containers == null) return;
+            if (corpse.containers == null)
+            {
+                NoteVanilla(session, corpse, "corpse with no containers");
+                return;
+            }
+            if (IsEmptyCorpse(corpse))
+            {
+                // Do not mark the corpse seen. TakeFrom has normally already run, but a
+                // later pass can still move items if they land after this tick.
+                NoteVanilla(session, corpse, "empty corpse");
+                return;
+            }
             if (!_seenSources.Add(corpse.net.ID.Value)) return;
+            ForgetVanilla(session, corpse.net.ID.Value);
             List<Item> items = TakeCorpseItems(corpse);
             int moved = MoveItems(session, items);
             if (moved > 0 && IsEmptyCorpse(corpse))
@@ -618,6 +740,10 @@ namespace Oxide.Plugins
                 TrackOverflow(session, corpse);
                 HoldCorpse(corpse);
             }
+            else
+            {
+                NoteVanilla(session, corpse, "corpse");
+            }
             FinishAbsorb(session, moved, "corpse");
         }
 
@@ -630,8 +756,15 @@ namespace Oxide.Plugins
             PendingDeath session;
             if (!_pending.TryGetValue(container.playerSteamID, out session) || session == null || session.Until < Time.realtimeSinceStartup)
                 return;
+            if (IsEmpty(container.inventory))
+            {
+                NoteVanilla(session, container, "empty vanilla backpack");
+                return;
+            }
             if (!_seenSources.Add(container.net.ID.Value)) return;
+            ForgetVanilla(session, container.net.ID.Value);
             int moved = AbsorbSource(session, container);
+            if (moved <= 0) NoteVanilla(session, container, "vanilla backpack");
             FinishAbsorb(session, moved, "vanilla backpack");
         }
 
@@ -643,11 +776,16 @@ namespace Oxide.Plugins
             {
                 if (!_config.ConvertSeparateBackpacks) return;
                 BasePlayer player = FindPlayer(ownerId);
-                string skip = null;
-                if (player == null || !ShouldConvert(player, null, out skip))
+                DeathDecision separate = new DeathDecision
+                {
+                    UserId = ownerId,
+                    Name = player == null || string.IsNullOrEmpty(player.displayName) ? ownerId.ToString() : player.displayName,
+                    Place = player == null ? "unknown" : FormatPos(player.transform.position)
+                };
+                if (player == null || !ShouldConvert(player, null, separate))
                 {
                     if (_config.LogBackpackDiagnostics)
-                        Puts("Separate backpack for " + ownerId + " was not converted" + (skip == null ? "." : ": " + skip));
+                        Puts("Separate backpack for " + ownerId + " was not converted" + (player == null ? "." : ": " + separate.Reason));
                     return;
                 }
                 Vector3 where = player.transform.position;
@@ -744,94 +882,141 @@ namespace Oxide.Plugins
             {
                 Item item = items[i];
                 if (item == null) continue;
-                DroppedItemContainer box = FindOpenBox(session);
+                BaseEntity box = FindOpenBox(session);
                 if (box == null)
                 {
                     if (session.Spawned >= _config.MaxBoxesPerDeath) break;
                     box = SpawnBox(session);
                 }
-                if (box == null || box.inventory == null) break;
-                if (!item.MoveToContainer(box.inventory))
+                ItemContainer inventory = InventoryOf(box);
+                if (box == null || inventory == null) break;
+                if (!item.MoveToContainer(inventory))
                 {
                     if (session.Spawned >= _config.MaxBoxesPerDeath) break;
-                    DroppedItemContainer next = SpawnBox(session);
-                    if (next == null || next.inventory == null || !item.MoveToContainer(next.inventory))
+                    BaseEntity next = SpawnBox(session);
+                    ItemContainer nextInventory = InventoryOf(next);
+                    if (next == null || nextInventory == null || !item.MoveToContainer(nextInventory))
                         break;
                 }
                 moved++;
             }
+            session.ItemsMoved += moved;
             return moved;
         }
 
-        private DroppedItemContainer FindOpenBox(PendingDeath session)
+        private BaseEntity FindOpenBox(PendingDeath session)
         {
             foreach (BoxRecord record in _byNet.Values)
             {
                 if (record.GroupId != session.GroupId) continue;
-                DroppedItemContainer box = FindDrop(record.NetId);
-                if (box == null || box.inventory == null) continue;
-                int count = box.inventory.itemList == null ? 0 : box.inventory.itemList.Count;
-                if (count < box.inventory.capacity) return box;
+                BaseEntity box = FindEntity(record.NetId);
+                ItemContainer inventory = InventoryOf(box);
+                if (box == null || inventory == null) continue;
+                int count = inventory.itemList == null ? 0 : inventory.itemList.Count;
+                if (count < inventory.capacity) return box;
             }
             return null;
         }
 
-        private DroppedItemContainer SpawnBox(PendingDeath session)
+        private BaseEntity SpawnBox(PendingDeath session)
         {
+            string prefab = ContainerPrefabPath();
             Vector3 position = Grounded(session.Position, session.Spawned);
             Quaternion rotation = Quaternion.Euler(0f, (session.Spawned * 35f) % 360f, 0f);
-            BaseEntity entity = GameManager.server.CreateEntity(BackpackPrefab, position, rotation);
-            DroppedItemContainer box = entity as DroppedItemContainer;
-            if (box == null)
+            BaseEntity entity = GameManager.server.CreateEntity(prefab, position, rotation);
+            if (entity == null)
             {
-                if (entity != null) entity.Kill();
-                PrintWarning("Could not spawn a death box for " + session.UserId + ".");
+                PrintWarning("Could not spawn a death box for " + session.UserId + " from " + prefab + ".");
                 return null;
             }
 
-            box.lootPanelName = LootPanel;
-            box.playerName = TrimName(session.Name) + NameSuffix;
-            box.playerSteamID = session.UserId;
-            box.OwnerID = session.UserId;
-            box.skinID = MarkerSkin;
-            box.enableSaving = true;
-            box.inventory = new ItemContainer();
-            box.inventory.ServerInitialize(null, BoxSlots);
-            box.inventory.GiveUID();
-            box.inventory.entityOwner = box;
-            box.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
-            StripGroundWatch(box);
-            box.Spawn();
-            if (box.inventory != null)
+            DroppedItemContainer drop = entity as DroppedItemContainer;
+            StorageContainer storage = entity as StorageContainer;
+            if (drop == null && storage == null)
             {
-                box.inventory.entityOwner = box;
-                if (box.inventory.capacity < BoxSlots) box.inventory.capacity = BoxSlots;
-                box.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
+                entity.Kill();
+                PrintWarning("Death box prefab is not a dropped backpack or a storage container: " + prefab);
+                return null;
             }
-            HoldDrop(box);
 
-            if (box.net == null)
+            if (drop != null)
             {
-                box.Kill();
+                drop.lootPanelName = LootPanel;
+                drop.playerName = TrimName(session.Name) + NameSuffix;
+                drop.playerSteamID = session.UserId;
+                drop.inventory = new ItemContainer();
+                drop.inventory.ServerInitialize(null, BoxSlots);
+                drop.inventory.GiveUID();
+                drop.inventory.entityOwner = drop;
+                drop.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
+            }
+            else
+            {
+                storage.inventorySlots = BoxSlots;
+                storage.dropsLoot = false;
+                storage.isLockable = false;
+                storage.isMonitorable = false;
+                storage.needsBuildingPrivilegeToUse = false;
+                storage.requireAuthIfNotLocked = false;
+                storage.canBeDemolished = false;
+                storage.pickup.enabled = false;
+            }
+
+            entity.OwnerID = session.UserId;
+            entity.skinID = MarkerSkin;
+            entity.enableSaving = true;
+            StripGroundWatch(entity);
+            if (storage != null)
+            {
+                Decay decay = storage.GetComponent<Decay>();
+                if (decay != null) UnityEngine.Object.Destroy(decay);
+            }
+            entity.Spawn();
+
+            if (drop != null && drop.inventory != null)
+            {
+                drop.inventory.entityOwner = drop;
+                if (drop.inventory.capacity < BoxSlots) drop.inventory.capacity = BoxSlots;
+                drop.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
+                HoldDrop(drop);
+            }
+            if (storage != null)
+            {
+                storage.dropsLoot = false;
+                storage.pickup.enabled = false;
+                if (storage.inventory != null)
+                {
+                    storage.inventory.entityOwner = storage;
+                    if (storage.inventory.capacity < BoxSlots) storage.inventory.capacity = BoxSlots;
+                    storage.inventory.SetFlag(ItemContainer.Flag.NoItemInput, true);
+                }
+                StashContainer stash = storage as StashContainer;
+                if (stash != null && stash.IsHidden()) stash.SetHidden(false);
+            }
+
+            if (entity.net == null)
+            {
+                entity.Kill();
                 PrintWarning("Death box spawned without a net id for " + session.UserId + ".");
                 return null;
             }
 
             BoxRecord record = new BoxRecord
             {
-                NetId = box.net.ID.Value,
+                NetId = entity.net.ID.Value,
                 OwnerId = session.UserId,
                 OwnerName = session.Name,
-                X = box.transform.position.x,
-                Y = box.transform.position.y,
-                Z = box.transform.position.z,
+                X = entity.transform.position.x,
+                Y = entity.transform.position.y,
+                Z = entity.transform.position.z,
                 CreatedUtcTicks = DateTime.UtcNow.Ticks,
                 GroupId = session.GroupId
             };
             _byNet[record.NetId] = record;
             session.Spawned++;
-            EnsureMarker(session, box.transform.position);
-            return box;
+            NoteCreated(session, entity);
+            EnsureMarker(session, entity.transform.position);
+            return entity;
         }
 
         private void TrackOverflow(PendingDeath session, BaseEntity entity)
@@ -865,7 +1050,8 @@ namespace Oxide.Plugins
                 GroupId = session.GroupId
             };
             _byNet[record.NetId] = record;
-            if (_config.LogConversions)
+            NoteCreated(session, entity);
+            if (_config.LogConversions && !_config.DebugLogging)
                 Puts("Death box cap (" + _config.MaxBoxesPerDeath + ") hit for " + session.UserId + ". Leftover container kept private.");
         }
 
@@ -876,7 +1062,7 @@ namespace Oxide.Plugins
             BasePlayer online = FindPlayer(session.UserId);
             if (online != null && online.IsConnected && !online.IsDead()) Announce(online);
             SaveData();
-            if (_config.LogConversions)
+            if (_config.LogConversions && (session.Decision == null || !_config.DebugLogging))
                 Puts("Stored " + moved + " items for " + session.Name + " (" + session.UserId + ") from " + kind + " at " + GridOf(session.Position) + ".");
         }
 
@@ -984,10 +1170,25 @@ namespace Oxide.Plugins
 
         private static bool IsOurPrefab(DroppedItemContainer container)
         {
-            if (container == null) return false;
-            if (container.skinID == MarkerSkin) return true;
-            string name = container.playerName;
+            return IsMarked(container);
+        }
+
+        private static bool IsMarked(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            if (entity.skinID == MarkerSkin) return true;
+            DroppedItemContainer drop = entity as DroppedItemContainer;
+            if (drop == null) return false;
+            string name = drop.playerName;
             return !string.IsNullOrEmpty(name) && name.EndsWith(NameSuffix, StringComparison.Ordinal);
+        }
+
+        private static ulong MarkedOwner(BaseEntity entity)
+        {
+            if (entity == null) return 0UL;
+            DroppedItemContainer drop = entity as DroppedItemContainer;
+            if (drop != null && drop.playerSteamID != 0UL) return drop.playerSteamID;
+            return entity.OwnerID;
         }
 
         private void TryRemoveIfEmpty(BaseEntity entity)
@@ -1053,6 +1254,13 @@ namespace Oxide.Plugins
                 DroppedItemContainer drop = entity as DroppedItemContainer;
                 if (drop != null) HoldDrop(drop);
                 else HoldCorpse(entity as LootableCorpse);
+                StorageContainer storage = entity as StorageContainer;
+                if (storage != null)
+                {
+                    storage.dropsLoot = false;
+                    StashContainer stash = storage as StashContainer;
+                    if (stash != null && stash.IsHidden()) stash.SetHidden(false);
+                }
 
                 if (_config.RemoveWhenEmpty && EntityEmpty(entity))
                 {
@@ -1096,7 +1304,7 @@ namespace Oxide.Plugins
             {
                 if (pair.Value == null || pair.Value.Until < Time.realtimeSinceStartup) stalePending.Add(pair.Key);
             }
-            for (int i = 0; i < stalePending.Count; i++) _pending.Remove(stalePending[i]);
+            for (int i = 0; i < stalePending.Count; i++) CloseDeath(stalePending[i]);
             if (missing.Count > 0 || remove.Count > 0) SaveData();
             if (_seenSources.Count > 4000) _seenSources.Clear();
             for (int i = _recent.Count - 1; i >= 0; i--)
@@ -1111,6 +1319,8 @@ namespace Oxide.Plugins
         {
             LootableCorpse corpse = entity as LootableCorpse;
             if (corpse != null) corpse.blockBagDrop = true;
+            StorageContainer storage = entity as StorageContainer;
+            if (storage != null) storage.dropsLoot = false;
         }
 
         private static void HoldDrop(DroppedItemContainer container)
@@ -1185,9 +1395,10 @@ namespace Oxide.Plugins
             List<BaseEntity> kill = new List<BaseEntity>();
             foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
             {
-                DroppedItemContainer container = net as DroppedItemContainer;
-                if (container == null || container.IsDestroyed) continue;
-                if (IsOurPrefab(container)) kill.Add(container);
+                BaseEntity entity = net as BaseEntity;
+                if (entity == null || entity.IsDestroyed) continue;
+                if (!(entity is DroppedItemContainer) && !(entity is StorageContainer)) continue;
+                if (IsMarked(entity)) kill.Add(entity);
             }
             for (int i = 0; i < kill.Count; i++)
             {
@@ -1212,13 +1423,14 @@ namespace Oxide.Plugins
 
         private void RebindWorld()
         {
-            List<DroppedItemContainer> found = new List<DroppedItemContainer>();
+            List<BaseEntity> found = new List<BaseEntity>();
             foreach (BaseNetworkable net in BaseNetworkable.serverEntities)
             {
-                DroppedItemContainer container = net as DroppedItemContainer;
-                if (container == null || container.IsDestroyed || container.net == null) continue;
-                if (!IsOurPrefab(container)) continue;
-                found.Add(container);
+                BaseEntity entity = net as BaseEntity;
+                if (entity == null || entity.IsDestroyed || entity.net == null) continue;
+                if (!(entity is DroppedItemContainer) && !(entity is StorageContainer)) continue;
+                if (!IsMarked(entity)) continue;
+                found.Add(entity);
             }
 
             List<BoxRecord> unused = new List<BoxRecord>();
@@ -1238,7 +1450,7 @@ namespace Oxide.Plugins
             _byNet.Clear();
             for (int i = 0; i < found.Count; i++)
             {
-                DroppedItemContainer container = found[i];
+                BaseEntity container = found[i];
                 BoxRecord record = TakeMatch(container, unused);
                 if (record == null) record = Adopt(container);
                 if (record == null) continue;
@@ -1246,10 +1458,20 @@ namespace Oxide.Plugins
                 record.X = container.transform.position.x;
                 record.Y = container.transform.position.y;
                 record.Z = container.transform.position.z;
-                if (record.OwnerId == 0UL) record.OwnerId = container.playerSteamID != 0UL ? container.playerSteamID : container.OwnerID;
+                if (record.OwnerId == 0UL) record.OwnerId = MarkedOwner(container);
                 _byNet[record.NetId] = record;
                 container.enableSaving = true;
-                HoldDrop(container);
+                DroppedItemContainer drop = container as DroppedItemContainer;
+                if (drop != null) HoldDrop(drop);
+                StorageContainer storage = container as StorageContainer;
+                if (storage != null)
+                {
+                    storage.dropsLoot = false;
+                    storage.needsBuildingPrivilegeToUse = false;
+                    storage.pickup.enabled = false;
+                    Decay decay = storage.GetComponent<Decay>();
+                    if (decay != null) UnityEngine.Object.Destroy(decay);
+                }
                 StripGroundWatch(container);
             }
             if (unused.Count > 0)
@@ -1259,7 +1481,7 @@ namespace Oxide.Plugins
             Puts("Rebound " + _byNet.Count + " death boxes.");
         }
 
-        private static BoxRecord TakeMatch(DroppedItemContainer container, List<BoxRecord> unused)
+        private static BoxRecord TakeMatch(BaseEntity container, List<BoxRecord> unused)
         {
             ulong netId = container.net.ID.Value;
             for (int i = 0; i < unused.Count; i++)
@@ -1269,7 +1491,7 @@ namespace Oxide.Plugins
                 unused.RemoveAt(i);
                 return exact;
             }
-            ulong owner = container.playerSteamID != 0UL ? container.playerSteamID : container.OwnerID;
+            ulong owner = MarkedOwner(container);
             Vector3 position = container.transform.position;
             int best = -1;
             float bestDistance = 3f;
@@ -1290,11 +1512,12 @@ namespace Oxide.Plugins
             return match;
         }
 
-        private BoxRecord Adopt(DroppedItemContainer container)
+        private BoxRecord Adopt(BaseEntity container)
         {
-            ulong owner = container.playerSteamID != 0UL ? container.playerSteamID : container.OwnerID;
+            ulong owner = MarkedOwner(container);
             if (owner == 0UL) return null;
-            string name = container.playerName;
+            DroppedItemContainer drop = container as DroppedItemContainer;
+            string name = drop == null ? null : drop.playerName;
             if (!string.IsNullOrEmpty(name) && name.EndsWith(NameSuffix, StringComparison.Ordinal))
                 name = name.Substring(0, name.Length - NameSuffix.Length);
             if (string.IsNullOrEmpty(name)) name = owner.ToString();
@@ -1425,6 +1648,11 @@ namespace Oxide.Plugins
 
         private void CmdDeathBoxChat(BasePlayer player, string command, string[] args)
         {
+            if (args != null && args.Length > 0 && args[0].Equals("debug", StringComparison.OrdinalIgnoreCase))
+            {
+                ReplyStatus(player, null);
+                return;
+            }
             string who = args != null && args.Length > 0 ? args[0] : null;
             ShowList(player, who);
         }
@@ -1432,14 +1660,25 @@ namespace Oxide.Plugins
         private void CmdDeathBoxConsole(ConsoleSystem.Arg arg)
         {
             if (arg == null) return;
+            if (arg.HasArgs() && string.Equals(arg.GetString(0), "debug", StringComparison.OrdinalIgnoreCase))
+            {
+                ReplyStatus(arg.Player(), arg);
+                return;
+            }
             BasePlayer player = arg.Player();
             if (player == null)
             {
-                arg.ReplyWith("Use /deathbox in chat.");
+                arg.ReplyWith("Use /deathbox in chat, or nsdeathbox.status for the last deaths.");
                 return;
             }
             string who = arg.HasArgs() ? arg.GetString(0) : null;
             ShowList(player, who);
+        }
+
+        private void CmdStatusConsole(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return;
+            ReplyStatus(arg.Player(), arg);
         }
 
         private void ShowList(BasePlayer player, string who)
@@ -1531,6 +1770,218 @@ namespace Oxide.Plugins
             if (age.TotalHours < 1d) return Math.Floor(age.TotalMinutes).ToString(CultureInfo.InvariantCulture) + "m ago";
             if (age.TotalDays < 2d) return Math.Floor(age.TotalHours).ToString(CultureInfo.InvariantCulture) + "h ago";
             return Math.Floor(age.TotalDays).ToString(CultureInfo.InvariantCulture) + "d ago";
+        }
+
+        #endregion
+
+        #region Decisions
+
+        private void HoldDecision(ulong userId, DeathDecision decision)
+        {
+            PendingDeath holder = new PendingDeath
+            {
+                UserId = userId,
+                Name = decision.Name,
+                Until = Time.realtimeSinceStartup + PendingSeconds,
+                Decision = decision
+            };
+            _pending[userId] = holder;
+            PushDecision(decision);
+            timer.Once(PendingSeconds, () =>
+            {
+                PendingDeath current;
+                if (_pending.TryGetValue(userId, out current) && current != null && current.Decision != null && current.Decision.Logged)
+                    _pending.Remove(userId);
+            });
+        }
+
+        private void CloseDeath(ulong userId)
+        {
+            PendingDeath session;
+            if (!_pending.TryGetValue(userId, out session) || session == null) return;
+            _pending.Remove(userId);
+            DeathDecision decision = session.Decision;
+            if (decision == null || decision.Logged) return;
+            decision.ItemsMoved = session.ItemsMoved;
+            decision.BoxCount = session.CreatedNets.Count;
+            decision.Created = DescribeNets(session.CreatedNets);
+            decision.Vanilla = DescribeVanilla(session);
+            if (session.CreatedNets.Count > 0) decision.Reason = "protected";
+            else if (decision.Reason == "accepted") decision.Reason = "no protected container";
+            PushDecision(decision);
+        }
+
+        private void PushDecision(DeathDecision decision)
+        {
+            if (decision == null || decision.Logged) return;
+            decision.Logged = true;
+            decision.AtUtc = DateTime.UtcNow.ToString("u", CultureInfo.InvariantCulture);
+            _decisions.Insert(0, decision);
+            while (_decisions.Count > DecisionLimit) _decisions.RemoveAt(_decisions.Count - 1);
+            if (_config != null && _config.DebugLogging) Puts(FormatDecision(decision));
+        }
+
+        private void NoteCreated(PendingDeath session, BaseEntity entity)
+        {
+            if (session == null || entity == null || entity.net == null) return;
+            ulong netId = entity.net.ID.Value;
+            if (!session.CreatedNets.Contains(netId)) session.CreatedNets.Add(netId);
+            ForgetVanilla(session, netId);
+        }
+
+        private static void NoteVanilla(PendingDeath session, BaseEntity entity, string kind)
+        {
+            if (session == null || entity == null || entity.net == null) return;
+            ulong netId = entity.net.ID.Value;
+            if (session.CreatedNets.Contains(netId)) return;
+            for (int i = 0; i < session.Vanilla.Count; i++)
+            {
+                if (session.Vanilla[i].NetId == netId) return;
+            }
+            session.Vanilla.Add(new VanillaMark { NetId = netId, Kind = kind });
+        }
+
+        private static void ForgetVanilla(PendingDeath session, ulong netId)
+        {
+            if (session == null) return;
+            for (int i = session.Vanilla.Count - 1; i >= 0; i--)
+            {
+                if (session.Vanilla[i].NetId == netId) session.Vanilla.RemoveAt(i);
+            }
+        }
+
+        private string DescribeNets(List<ulong> nets)
+        {
+            if (nets == null || nets.Count == 0) return "none";
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < nets.Count; i++)
+            {
+                if (i > 0) builder.Append("; ");
+                builder.Append(DescribeEntity(nets[i], null));
+            }
+            return builder.ToString();
+        }
+
+        private string DescribeVanilla(PendingDeath session)
+        {
+            if (session == null || session.Vanilla.Count == 0) return "none";
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < session.Vanilla.Count; i++)
+            {
+                if (i > 0) builder.Append("; ");
+                VanillaMark mark = session.Vanilla[i];
+                builder.Append(DescribeEntity(mark.NetId, mark.Kind));
+            }
+            return builder.ToString();
+        }
+
+        private string DescribeEntity(ulong netId, string kind)
+        {
+            BaseEntity entity = FindEntity(netId);
+            string prefix = string.IsNullOrEmpty(kind) ? "net " : kind + " net ";
+            string id = netId.ToString(CultureInfo.InvariantCulture);
+            if (entity == null || entity.IsDestroyed)
+                return prefix + id + " (gone)";
+            return prefix + id + " at " + FormatPos(entity.transform.position)
+                + " " + entity.ShortPrefabName + " (" + CountItems(entity).ToString(CultureInfo.InvariantCulture) + " items)";
+        }
+
+        private static string FormatDecision(DeathDecision decision)
+        {
+            string pvp = decision.PvpActive ? "yes" : "no";
+            string perm = decision.HasPermission ? "yes" : "no";
+            string tail;
+            if (decision.Reason == "protected")
+            {
+                string boxes = decision.BoxCount.ToString(CultureInfo.InvariantCulture);
+                string noun = decision.BoxCount == 1 ? "container" : "containers";
+                tail = "protected " + decision.ItemsMoved.ToString(CultureInfo.InvariantCulture)
+                    + " items in " + boxes + " " + noun + ": " + decision.Created + ". Vanilla left: " + decision.Vanilla + ".";
+            }
+            else
+            {
+                string vanilla = string.IsNullOrEmpty(decision.Vanilla) || decision.Vanilla == "none"
+                    ? "Loot left vanilla."
+                    : "Loot left vanilla: " + decision.Vanilla + ".";
+                tail = "skipped (" + decision.Reason + "). " + vanilla;
+            }
+            return decision.Name + " (" + decision.UserId.ToString(CultureInfo.InvariantCulture) + ") at " + decision.Place
+                + ": pvp=" + pvp + " (" + decision.PvpDetail + ") perm=" + perm + " -> " + tail;
+        }
+
+        private void ReplyStatus(BasePlayer player, ConsoleSystem.Arg arg)
+        {
+            if (player != null && !player.IsAdmin && !permission.UserHasPermission(player.UserIDString, PermAdmin))
+            {
+                string denied = "You need nightshadedeathbox.admin to read death box decisions.";
+                if (arg != null) arg.ReplyWith(denied);
+                else if (player != null) player.ChatMessage(Msg("Prefix", player.UserIDString) + denied);
+                return;
+            }
+            string text = StatusText();
+            if (arg != null) arg.ReplyWith(text);
+            else if (player != null) player.ChatMessage(text);
+        }
+
+        private string StatusText()
+        {
+            string pvpDetail;
+            bool pvp = QueryPvp(out pvpDetail);
+            bool granted = false;
+            try { granted = permission.GroupHasPermission("default", PermUse); }
+            catch { granted = false; }
+            StringBuilder builder = new StringBuilder();
+            builder.Append("NightshadeDeathBox 1.0.2");
+            builder.Append("\ncontainer prefab: ").Append(ContainerPrefabPath());
+            builder.Append("\ndefault group nightshadedeathbox.use: ").Append(granted ? "yes" : "NO");
+            builder.Append("\npvp active: ").Append(pvp ? "yes" : "no").Append(" (").Append(pvpDetail).Append(")");
+            builder.Append("\ntracked containers: ").Append(_byNet.Count.ToString(CultureInfo.InvariantCulture));
+            builder.Append("\ndebug logging: ").Append(_config != null && _config.DebugLogging ? "on" : "off");
+            builder.Append("\nlast deaths (newest first):");
+            if (_decisions.Count == 0) builder.Append("\n(none since this load)");
+            for (int i = 0; i < _decisions.Count; i++)
+            {
+                DeathDecision decision = _decisions[i];
+                builder.Append("\n").Append((i + 1).ToString(CultureInfo.InvariantCulture)).Append(". ");
+                builder.Append(decision.AtUtc).Append(" ").Append(FormatDecision(decision));
+            }
+            return builder.ToString();
+        }
+
+        private void WarnMissingDefaultPermission()
+        {
+            bool granted;
+            try { granted = permission.GroupHasPermission("default", PermUse); }
+            catch (Exception ex)
+            {
+                PrintWarning("Could not read the default group's permissions: " + ex.Message);
+                return;
+            }
+            if (granted) return;
+            PrintWarning("The default group does not have nightshadedeathbox.use. Deaths for players without that permission are skipped and no protected container is created. Grant it with: c.grant group default nightshadedeathbox.use");
+        }
+
+        private string ContainerPrefabPath()
+        {
+            if (_config == null || string.IsNullOrWhiteSpace(_config.ContainerPrefab)) return BackpackPrefab;
+            return _config.ContainerPrefab.Trim();
+        }
+
+        private static string FormatPos(Vector3 position)
+        {
+            return "(" + position.x.ToString("0.00", CultureInfo.InvariantCulture)
+                + ", " + position.y.ToString("0.00", CultureInfo.InvariantCulture)
+                + ", " + position.z.ToString("0.00", CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static ItemContainer InventoryOf(BaseEntity entity)
+        {
+            if (entity == null || entity.IsDestroyed) return null;
+            DroppedItemContainer drop = entity as DroppedItemContainer;
+            if (drop != null) return drop.inventory;
+            StorageContainer storage = entity as StorageContainer;
+            if (storage != null) return storage.inventory;
+            return null;
         }
 
         #endregion
