@@ -83,7 +83,7 @@
     "Add a marker on the player’s G-Map after setting a home (true = yes / false = no)": true,
     "Permissions for setting home points": {
       "Block setting a home point during raid block (true = yes / false = no)": true,
-      "Allow setting home points on tugboats (true = yes / false = no)": true,
+      "Allow setting home points on tugboats (true = yes / false = no)": false,
       "Allow setting home points on homemade boats (true - yes / false - no)": true,
       "Allow setting home points in apartments (true = yes / false = no)": false,
       "Allow setting home points only when building privilege is present (true = yes / false = no)": true,
