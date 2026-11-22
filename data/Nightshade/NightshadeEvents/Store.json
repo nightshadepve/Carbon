@@ -290,7 +290,73 @@
       "Announce": true,
       "Announcement": "<color=#E2B968>{event}</color> is starting.",
       "Commands": [
-        "stormstart start"
+        "startstorm start"
+      ],
+      "Schedule key": "",
+      "Custom": true,
+      "Category": "custom"
+    },
+    {
+      "Id": "convoy",
+      "Name": "Convoy",
+      "Kind": "custom",
+      "Enabled": true,
+      "Mode (minutes, hours, or clock)": "hours",
+      "Interval": 4,
+      "Times (HH:MM, clock mode)": [],
+      "Days (mon-sun, empty means every day)": [],
+      "Jitter minutes": 15,
+      "Min players": 1,
+      "Vanilla auto (default, allow, or block)": "allow",
+      "Announce": true,
+      "Announcement": "<color=#E2B968>Convoy</color> is on the road.",
+      "Commands": [
+        "convoystart"
+      ],
+      "Schedule key": "",
+      "Custom": true,
+      "Category": "custom"
+    },
+    {
+      "Id": "armoredtrain",
+      "Name": "Armored Train",
+      "Kind": "custom",
+      "Enabled": true,
+      "Mode (minutes, hours, or clock)": "hours",
+      "Interval": 4,
+      "Times (HH:MM, clock mode)": [],
+      "Days (mon-sun, empty means every day)": [],
+      "Jitter minutes": 20,
+      "Min players": 1,
+      "Vanilla auto (default, allow, or block)": "allow",
+      "Announce": true,
+      "Announcement": "<color=#E2B968>Armored train</color> is on the rails.",
+      "Commands": [
+        "atrainstart"
+      ],
+      "Schedule key": "",
+      "Custom": true,
+      "Category": "custom"
+    },
+    {
+      "Id": "survivalarena",
+      "Name": "Survival Arena",
+      "Kind": "custom",
+      "Enabled": true,
+      "Mode (minutes, hours, or clock)": "clock",
+      "Interval": 12,
+      "Times (HH:MM, clock mode)": [
+        "10:00",
+        "20:00"
+      ],
+      "Days (mon-sun, empty means every day)": [],
+      "Jitter minutes": 0,
+      "Min players": 1,
+      "Vanilla auto (default, allow, or block)": "allow",
+      "Announce": true,
+      "Announcement": "<color=#E2B968>Survival Arena</color> is open (primitive). Join with /survival.",
+      "Commands": [
+        "startarena 0 0 World_2_0_Arena PrimitiveLoot"
       ],
       "Schedule key": "",
       "Custom": true,

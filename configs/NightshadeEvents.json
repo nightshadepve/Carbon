@@ -3,6 +3,7 @@
   "Disable vanilla automatic events": true,
   "Missed events after downtime (skip or once)": "skip",
   "Minutes to wait for min players before skipping a due event": 180,
+  "Minimum minutes between scheduled event starts": 5,
   "Schedule check seconds": 15,
   "Theme mode (Shop, Auto, or a theme name)": "Shop",
   "Theme source config file": "NightshadeShop.json",
