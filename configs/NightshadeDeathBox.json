@@ -17,5 +17,6 @@
   "Vertical spawn offset in meters": 0.06,
   "Box spacing meters": 0.75,
   "Log successful conversions": true,
-  "Log backpack conversion diagnostics": false
+  "Log backpack conversion diagnostics": false,
+  "Debug Logging": false
 }
