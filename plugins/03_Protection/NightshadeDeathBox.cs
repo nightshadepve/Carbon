@@ -20,7 +20,11 @@ namespace Oxide.Plugins
         // assets/prefabs/deployable/small stash/small_stash_deployed.prefab.
         // Carbon's CanLootEntity patch on PlayerOpenLoot treats any non-null hook
         // result as "do not open". Returning true does not mean allow. This plugin
-        // returns null to allow and false to deny. NightshadeLootProtection would
+        // returns null to allow and true to deny. TruePVE 2.4.4 uses that same
+        // true when "Prevent non-ally from looting backpacks" is on, and only
+        // looks at DroppedItemContainer.playerSteamID. A zero id makes TruePVE
+        // return null, so owner, team, and admin are not blocked by it and the
+        // two plugins do not disagree. NightshadeLootProtection would
         // otherwise return false for a player-owned wooden box when the looter is
         // not the owner, the team, or a server admin (nightshadedeathbox.admin is
         // not enough). Load order puts that false last. Loot protection 1.3.1
@@ -943,7 +947,7 @@ namespace Oxide.Plugins
             {
                 drop.lootPanelName = LootPanel;
                 drop.playerName = TrimName(session.Name) + NameSuffix;
-                drop.playerSteamID = session.UserId;
+                drop.playerSteamID = 0UL;
                 drop.inventory = new ItemContainer();
                 drop.inventory.ServerInitialize(null, BoxSlots);
                 drop.inventory.GiveUID();
@@ -1014,6 +1018,7 @@ namespace Oxide.Plugins
             };
             _byNet[record.NetId] = record;
             session.Spawned++;
+            ReleaseTruePveClaim(entity);
             NoteCreated(session, entity);
             EnsureMarker(session, entity.transform.position);
             return entity;
@@ -1027,7 +1032,7 @@ namespace Oxide.Plugins
             if (drop != null)
             {
                 drop.playerName = TrimName(session.Name) + NameSuffix;
-                drop.playerSteamID = session.UserId;
+                drop.playerSteamID = 0UL;
                 drop.OwnerID = session.UserId;
                 drop.skinID = MarkerSkin;
                 drop.enableSaving = true;
@@ -1037,6 +1042,7 @@ namespace Oxide.Plugins
             {
                 entity.OwnerID = session.UserId;
                 SuppressDestroyLoot(entity);
+                ReleaseTruePveClaim(entity);
             }
             BoxRecord record = new BoxRecord
             {
@@ -1109,13 +1115,35 @@ namespace Oxide.Plugins
 
         #region Protection
 
+        // null lets the open continue. true cancels it. false would also cancel,
+        // but TruePVE returns true for the same deny and Carbon treats the two
+        // boxed values as a hook conflict.
         private object LootDecision(BasePlayer player, BaseEntity entity)
         {
             BoxRecord record;
             if (!TryRecord(entity, out record)) return null;
             if (player != null && CanAccess(player, record)) return null;
             if (player != null) Tell(player, "Blocked", record.OwnerName);
-            return false;
+            return true;
+        }
+
+        // TruePVE.CanLootEntity(DroppedItemContainer) passes playerSteamID into
+        // isPlayerProtected. Zero is not a steam id, so TruePVE returns null.
+        private static void ReleaseTruePveClaim(BaseEntity entity)
+        {
+            if (entity == null || entity.IsDestroyed) return;
+            DroppedItemContainer drop = entity as DroppedItemContainer;
+            if (drop != null && drop.playerSteamID != 0UL)
+            {
+                drop.playerSteamID = 0UL;
+                drop.SendNetworkUpdate();
+            }
+            LootableCorpse corpse = entity as LootableCorpse;
+            if (corpse != null && corpse.playerSteamID != 0UL)
+            {
+                corpse.playerSteamID = 0UL;
+                corpse.SendNetworkUpdate();
+            }
         }
 
         private bool CanAccess(BasePlayer player, BoxRecord record)
@@ -1251,6 +1279,7 @@ namespace Oxide.Plugins
                     missing.Add(pair.Key);
                     continue;
                 }
+                ReleaseTruePveClaim(entity);
                 DroppedItemContainer drop = entity as DroppedItemContainer;
                 if (drop != null) HoldDrop(drop);
                 else HoldCorpse(entity as LootableCorpse);
@@ -1461,6 +1490,7 @@ namespace Oxide.Plugins
                 if (record.OwnerId == 0UL) record.OwnerId = MarkedOwner(container);
                 _byNet[record.NetId] = record;
                 container.enableSaving = true;
+                ReleaseTruePveClaim(container);
                 DroppedItemContainer drop = container as DroppedItemContainer;
                 if (drop != null) HoldDrop(drop);
                 StorageContainer storage = container as StorageContainer;
