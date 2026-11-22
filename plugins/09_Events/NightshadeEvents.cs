@@ -9,6 +9,10 @@
 // A custom event may set Category to "custom" or "seasonal". A missing Category
 // stays in Custom, so older Store.json files load with their schedules unchanged.
 //
+// Starts are spaced by "Minimum minutes between scheduled event starts".
+// Clock-time events keep their clock time. While the server is empty, or below
+// an event's min players, a due event is moved forward instead of left overdue.
+//
 // Vanilla names and prefabs were checked against developer/patched_assemblies/Assembly-CSharp.dll.
 // EventsManager (plugins/09_Events/EventsManager.cs, commands /em and em_spawn) is a separate
 // plugin. This one uses /nsevents and nightshadeevents.admin and does not edit that file.
@@ -26,7 +30,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeEvents", "Nightshade", "1.1.1")]
+    [Info("NightshadeEvents", "Nightshade", "1.1.2")]
     [Description("Schedules vanilla, seasonal, and custom events from a compact admin panel.")]
     public class NightshadeEvents : RustPlugin
     {
@@ -63,6 +67,9 @@ namespace Oxide.Plugins
         private TimeZoneInfo zone = TimeZoneInfo.Utc;
         private string zoneLabel = "UTC";
         private Timer ticker;
+        private DateTime lastScheduledStartUtc = DateTime.MinValue;
+        private readonly Dictionary<string, DateTime> blockedSince = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        private const int ClockGraceMinutes = 2;
         private int bindTries;
         private bool bound;
         private bool ownDeepSea;
@@ -82,6 +89,7 @@ namespace Oxide.Plugins
             [JsonProperty("Disable vanilla automatic events")] public bool DisableVanillaAutomaticEvents = true;
             [JsonProperty("Missed events after downtime (skip or once)")] public string MissedEvents = "skip";
             [JsonProperty("Minutes to wait for min players before skipping a due event")] public int MinPlayerWaitMinutes = 180;
+            [JsonProperty("Minimum minutes between scheduled event starts")] public int MinStartGapMinutes = 5;
             [JsonProperty("Schedule check seconds")] public int CheckSeconds = 15;
             [JsonProperty("Theme mode (Shop, Auto, or a theme name)")] public string ThemeMode = "Shop";
             [JsonProperty("Theme source config file")] public string ThemeFile = "NightshadeShop.json";
@@ -200,7 +208,7 @@ namespace Oxide.Plugins
                 PrintWarning("EventsManager is also loaded. It uses /em and EventsManager.use and can fight this plugin over the same vanilla schedules and the deep sea. Use one suppressor.");
             if (plugins.Find("HeliSignals") != null)
                 PrintWarning("HeliSignals is loaded. If its no-vanilla-heli option is on, it kills patrol helicopters spawned by the event schedule, including ones this plugin starts that way.");
-            Puts("Data file: data/Nightshade/NightshadeEvents/Store.json. It is kept across reloads, restarts, and map wipes. Missed events: " + MissedMode() + ".");
+            Puts("Data file: data/Nightshade/NightshadeEvents/Store.json. It is kept across reloads, restarts, and map wipes. Missed events: " + MissedMode() + ". Minimum gap between starts: " + GapMinutes() + " minutes.");
             timer.Once(1f, BindWhenReady);
         }
 
@@ -257,6 +265,8 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.MissedEvents)) config.MissedEvents = "skip";
             if (config.CheckSeconds < 5) config.CheckSeconds = 15;
             if (config.MinPlayerWaitMinutes < 1) config.MinPlayerWaitMinutes = 180;
+            if (config.MinStartGapMinutes < 0) config.MinStartGapMinutes = 5;
+            if (config.MinStartGapMinutes > 180) config.MinStartGapMinutes = 180;
             if (config.WindowWidth < 480f) config.WindowWidth = 572f;
             if (config.WindowHeight < 360f) config.WindowHeight = 448f;
             SaveConfig();
@@ -449,6 +459,55 @@ namespace Oxide.Plugins
             return null;
         }
 
+        private EventDef FindEventToken(string token)
+        {
+            if (string.IsNullOrEmpty(token) || store == null || store.Events == null) return null;
+            var byId = FindEvent(token);
+            if (byId != null) return byId;
+            string needle = token.Trim();
+            EventDef exact = null;
+            int exactCount = 0;
+            EventDef partial = null;
+            int partialCount = 0;
+            for (int i = 0; i < store.Events.Count; i++)
+            {
+                var ev = store.Events[i];
+                if (ev == null || string.IsNullOrEmpty(ev.Name)) continue;
+                if (string.Equals(ev.Name, needle, StringComparison.OrdinalIgnoreCase))
+                {
+                    exact = ev;
+                    exactCount++;
+                    continue;
+                }
+                if (ev.Name.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    partial = ev;
+                    partialCount++;
+                }
+            }
+            if (exactCount == 1) return exact;
+            if (exactCount > 1) return null;
+            if (partialCount == 1) return partial;
+            return null;
+        }
+
+        private static string JoinArgs(string[] args, int from)
+        {
+            if (args == null || from >= args.Length) return "";
+            string text = args[from] ?? "";
+            for (int i = from + 1; i < args.Length; i++)
+            {
+                text += " ";
+                text += args[i] ?? "";
+            }
+            return text.Trim();
+        }
+
+        private void MarkScheduledStart()
+        {
+            lastScheduledStartUtc = DateTime.UtcNow;
+        }
+
         #endregion
 
         #region Time
@@ -501,37 +560,233 @@ namespace Oxide.Plugins
 
         private void ResumeAfterLoad()
         {
-            if (!storeOk) return;
+            if (!storeOk || store == null || store.Events == null) return;
             bool once = MissedMode() == "once";
             var now = DateTime.UtcNow;
+            int gap = GapMinutes();
             bool changed = false;
+            var catchup = new List<EventDef>();
             for (int i = 0; i < store.Events.Count; i++)
             {
                 var ev = store.Events[i];
                 if (ev == null || !ev.Enabled) continue;
-                long ticks;
-                bool has = store.NextRunUtcTicks.TryGetValue(ev.Id, out ticks) && ticks > 0;
-                if (!has)
+                DateTime due;
+                if (!TryDue(ev, out due))
                 {
-                    var fresh = ArmNext(ev, now, true);
+                    var fresh = ArmNext(ev, now, !IsClock(ev));
                     if (fresh.HasValue)
                     {
-                        store.NextRunUtcTicks[ev.Id] = fresh.Value.Ticks;
+                        SetNext(ev, fresh);
                         changed = true;
                     }
                     continue;
                 }
-                var due = new DateTime(ticks, DateTimeKind.Utc);
                 if (due > now) continue;
-                if (once) continue;
-                var future = ComputeFutureAfterMiss(ev, due, now);
-                if (future.HasValue)
+                if (IsClock(ev))
                 {
-                    store.NextRunUtcTicks[ev.Id] = future.Value.Ticks;
+                    // A missed clock slot is the next clock time, not a catch-up start.
+                    SetNext(ev, NextClock(ev, now, false));
+                    changed = true;
+                    continue;
+                }
+                if (!once)
+                {
+                    var future = ComputeFutureAfterMiss(ev, due, now);
+                    if (future.HasValue)
+                    {
+                        SetNext(ev, future);
+                        changed = true;
+                    }
+                    continue;
+                }
+                catchup.Add(ev);
+            }
+            if (catchup.Count > 0)
+            {
+                QueueFrom(catchup, now, gap);
+                changed = true;
+            }
+            if (SeparateUpcoming(now, gap)) changed = true;
+            SeedLastStart();
+            if (changed) SaveStore();
+        }
+
+        private int GapMinutes()
+        {
+            int gap = config == null ? 5 : config.MinStartGapMinutes;
+            if (gap < 0) return 5;
+            if (gap > 180) return 180;
+            return gap;
+        }
+
+        private bool TryDue(EventDef ev, out DateTime when)
+        {
+            when = DateTime.MinValue;
+            if (ev == null || store == null || store.NextRunUtcTicks == null) return false;
+            long ticks;
+            if (!store.NextRunUtcTicks.TryGetValue(ev.Id, out ticks) || ticks <= 0) return false;
+            when = new DateTime(ticks, DateTimeKind.Utc);
+            return true;
+        }
+
+        private void SeedLastStart()
+        {
+            lastScheduledStartUtc = DateTime.MinValue;
+            if (store == null || store.LastRunUtcTicks == null) return;
+            long best = 0;
+            foreach (var pair in store.LastRunUtcTicks)
+                if (pair.Value > best) best = pair.Value;
+            if (best > 0) lastScheduledStartUtc = new DateTime(best, DateTimeKind.Utc);
+        }
+
+        private void QueueFrom(List<EventDef> events, DateTime now, int gap)
+        {
+            int step = gap > 0 ? gap : 1;
+            DateTime cursor = now;
+            var clocks = ClockTimesAfter(now);
+            for (int i = 0; i < events.Count; i++)
+            {
+                DateTime slot = PlaceAfter(cursor.AddMinutes(step), cursor, true, clocks, step);
+                if (slot <= now) slot = now.AddMinutes(step * (i + 1));
+                SetNext(events[i], slot);
+                cursor = slot;
+            }
+        }
+
+        private bool SeparateUpcoming(DateTime now, int gap)
+        {
+            if (gap <= 0 || store == null || store.Events == null) return false;
+            var clocks = new List<DateTime>();
+            var intervals = new List<EventDef>();
+            for (int i = 0; i < store.Events.Count; i++)
+            {
+                var ev = store.Events[i];
+                if (ev == null || !ev.Enabled) continue;
+                DateTime when;
+                if (!TryDue(ev, out when) || when <= now) continue;
+                if (IsClock(ev)) clocks.Add(when);
+                else intervals.Add(ev);
+            }
+            clocks.Sort();
+            intervals.Sort(delegate (EventDef a, EventDef b)
+            {
+                long ta = 0;
+                long tb = 0;
+                store.NextRunUtcTicks.TryGetValue(a.Id, out ta);
+                store.NextRunUtcTicks.TryGetValue(b.Id, out tb);
+                if (ta < tb) return -1;
+                if (ta > tb) return 1;
+                return string.Compare(a.Id, b.Id, StringComparison.OrdinalIgnoreCase);
+            });
+            bool changed = false;
+            DateTime cursor = DateTime.MinValue;
+            bool hasCursor = false;
+            for (int i = 0; i < intervals.Count; i++)
+            {
+                var ev = intervals[i];
+                DateTime when;
+                if (!TryDue(ev, out when)) continue;
+                DateTime placed = PlaceAfter(when, cursor, hasCursor, clocks, gap);
+                if (placed != when)
+                {
+                    SetNext(ev, placed);
                     changed = true;
                 }
+                cursor = placed;
+                hasCursor = true;
             }
-            if (changed) SaveStore();
+            return changed;
+        }
+
+        private List<DateTime> ClockTimesAfter(DateTime now)
+        {
+            var clocks = new List<DateTime>();
+            if (store == null || store.Events == null) return clocks;
+            for (int i = 0; i < store.Events.Count; i++)
+            {
+                var ev = store.Events[i];
+                if (ev == null || !ev.Enabled || !IsClock(ev)) continue;
+                DateTime when;
+                if (TryDue(ev, out when) && when > now) clocks.Add(when);
+            }
+            clocks.Sort();
+            return clocks;
+        }
+
+        // Clock times stay put. Interval times move to at least `gap` minutes after
+        // the previous interval start and clear of every clock time.
+        private static DateTime PlaceAfter(DateTime when, DateTime cursor, bool hasCursor, List<DateTime> clocks, int gap)
+        {
+            if (gap <= 0) return when;
+            for (int guard = 0; guard < 48; guard++)
+            {
+                DateTime next = when;
+                if (hasCursor)
+                {
+                    DateTime earliest = cursor.AddMinutes(gap);
+                    if (next < earliest) next = earliest;
+                }
+                if (clocks != null)
+                {
+                    for (int i = 0; i < clocks.Count; i++)
+                    {
+                        double delta = (next - clocks[i]).TotalMinutes;
+                        if (delta < gap && delta > -gap)
+                        {
+                            DateTime after = clocks[i].AddMinutes(gap);
+                            if (after > next) next = after;
+                        }
+                    }
+                }
+                if (next == when) return when;
+                when = next;
+            }
+            return when;
+        }
+
+        private DateTime NextOpenSlot(DateTime now, DateTime parkFrom, bool hasPark, int gap)
+        {
+            int step = gap > 0 ? gap : 1;
+            // Chain onto other interval times that are already parked soon. Leave a
+            // multi-hour natural slot alone so a deferral does not jump the queue.
+            if (store != null && store.Events != null)
+            {
+                int intervals = 0;
+                for (int i = 0; i < store.Events.Count; i++)
+                {
+                    var ev = store.Events[i];
+                    if (ev != null && ev.Enabled && !IsClock(ev)) intervals++;
+                }
+                double limit = step * (intervals < 1 ? 1 : intervals);
+                for (int i = 0; i < store.Events.Count; i++)
+                {
+                    var ev = store.Events[i];
+                    if (ev == null || !ev.Enabled || IsClock(ev)) continue;
+                    DateTime when;
+                    if (!TryDue(ev, out when) || when <= now) continue;
+                    if ((when - now).TotalMinutes > limit) continue;
+                    if (!hasPark || when > parkFrom)
+                    {
+                        parkFrom = when;
+                        hasPark = true;
+                    }
+                }
+            }
+            List<DateTime> clocks = gap > 0 ? ClockTimesAfter(now) : null;
+            DateTime seed = hasPark ? parkFrom.AddMinutes(step) : now.AddMinutes(step);
+            DateTime slot = PlaceAfter(seed, parkFrom, hasPark, clocks, step);
+            if (slot <= now)
+            {
+                slot = PlaceAfter(now.AddMinutes(step), now, true, clocks, step);
+                if (slot <= now) slot = now.AddMinutes(step);
+            }
+            return slot;
+        }
+
+        private static bool PopulationBlocked(EventDef ev, int players)
+        {
+            if (players <= 0) return true;
+            return ev != null && ev.MinPlayers > 0 && players < ev.MinPlayers;
         }
 
         private DateTime? ComputeFutureAfterMiss(EventDef ev, DateTime missedDue, DateTime now)
@@ -1045,51 +1300,125 @@ namespace Oxide.Plugins
             if (IsSuppressed("bradley")) ConVar.Bradley.enabled = false;
             var now = DateTime.UtcNow;
             int players = BasePlayer.activePlayerList == null ? 0 : BasePlayer.activePlayerList.Count;
+            int gap = GapMinutes();
+            int freshSeconds = (config.CheckSeconds < 5 ? 15 : config.CheckSeconds) * 2;
             bool changed = false;
-            bool caughtUp = false;
-            for (int i = 0; i < store.Events.Count; i++)
+            bool firedInterval = false;
+            DateTime parkFrom = lastScheduledStartUtc;
+            bool hasPark = parkFrom != DateTime.MinValue;
+            // Clock events first, so an on-time arena is not pushed behind an interval event.
+            for (int pass = 0; pass < 2; pass++)
             {
-                var ev = store.Events[i];
-                if (ev == null || !ev.Enabled) continue;
-                long ticks;
-                if (!store.NextRunUtcTicks.TryGetValue(ev.Id, out ticks) || ticks <= 0)
+                bool clocksPass = pass == 0;
+                for (int i = 0; i < store.Events.Count; i++)
                 {
-                    var armed = ArmNext(ev, now, true);
-                    if (!armed.HasValue) continue;
-                    SetNext(ev, armed);
-                    changed = true;
-                    continue;
-                }
-                var due = new DateTime(ticks, DateTimeKind.Utc);
-                if (due > now) continue;
-                // A slot only a few seconds late is the live schedule. A long-overdue slot is downtime.
-                // Run at most one downtime catch-up per pass so a restart cannot start every event at once.
-                bool late = (now - due).TotalMinutes >= 2;
-                if (late && caughtUp) continue;
-                if (ev.MinPlayers > 0 && players < ev.MinPlayers)
-                {
-                    if (now > due.AddMinutes(config.MinPlayerWaitMinutes))
+                    var ev = store.Events[i];
+                    if (ev == null || !ev.Enabled) continue;
+                    if (IsClock(ev) != clocksPass) continue;
+                    DateTime due;
+                    if (!TryDue(ev, out due))
                     {
-                        SetNext(ev, ArmNext(ev, now, false));
+                        var armed = ArmNext(ev, now, !IsClock(ev));
+                        if (!armed.HasValue) continue;
+                        SetNext(ev, armed);
                         changed = true;
-                        WarnOnce(ev.Id, ev.Name + " skipped this slot. Not enough players online.");
+                        continue;
                     }
-                    continue;
-                }
-                string grid;
-                string error = RunFire(ev, out grid);
-                store.LastRunUtcTicks[ev.Id] = now.Ticks;
-                SetNext(ev, ArmNext(ev, now, true));
-                changed = true;
-                if (late) caughtUp = true;
-                if (error != null) WarnOnce(ev.Id, ev.Name + " did not start. " + error);
-                else
-                {
-                    Puts("Started " + ev.Name + (string.IsNullOrEmpty(grid) ? "." : " at " + grid + "."));
-                    Say(ev, grid);
+                    if (due > now)
+                    {
+                        if (!PopulationBlocked(ev, players)) blockedSince.Remove(ev.Id);
+                        continue;
+                    }
+                    if (PopulationBlocked(ev, players))
+                    {
+                        if (DeferBlocked(ev, due, now, gap, ref parkFrom, ref hasPark)) changed = true;
+                        continue;
+                    }
+                    blockedSince.Remove(ev.Id);
+                    if (IsClock(ev))
+                    {
+                        if ((now - due).TotalMinutes > ClockGraceMinutes)
+                        {
+                            SetNext(ev, NextClock(ev, now, false));
+                            changed = true;
+                            WarnOnce(ev.Id, ev.Name + " missed its clock time and was moved to the next one.");
+                            continue;
+                        }
+                        bool startedClock = StartScheduled(ev, now);
+                        changed = true;
+                        if (!startedClock) continue;
+                        parkFrom = lastScheduledStartUtc;
+                        hasPark = true;
+                        continue;
+                    }
+                    bool backlog = (now - due).TotalSeconds > freshSeconds;
+                    bool gapBlocked = gap > 0 && lastScheduledStartUtc != DateTime.MinValue && now < lastScheduledStartUtc.AddMinutes(gap);
+                    if (backlog || gapBlocked || firedInterval)
+                    {
+                        DateTime slot = NextOpenSlot(now, parkFrom, hasPark, gap);
+                        SetNext(ev, slot);
+                        parkFrom = slot;
+                        hasPark = true;
+                        changed = true;
+                        continue;
+                    }
+                    bool started = StartScheduled(ev, now);
+                    changed = true;
+                    if (!started) continue;
+                    firedInterval = true;
+                    parkFrom = lastScheduledStartUtc;
+                    hasPark = true;
                 }
             }
             if (changed) SaveStore();
+        }
+
+        // Returns true when the saved next-run time changed.
+        private bool DeferBlocked(EventDef ev, DateTime due, DateTime now, int gap, ref DateTime parkFrom, ref bool hasPark)
+        {
+            if (IsClock(ev))
+            {
+                if ((now - due).TotalMinutes <= ClockGraceMinutes) return false;
+                SetNext(ev, NextClock(ev, now, false));
+                WarnOnce(ev.Id, ev.Name + " missed its clock time while the server was blocked and was moved to the next one.");
+                return true;
+            }
+            DateTime since;
+            if (!blockedSince.TryGetValue(ev.Id, out since))
+            {
+                since = now;
+                blockedSince[ev.Id] = since;
+            }
+            int wait = config != null && config.MinPlayerWaitMinutes > 0 ? config.MinPlayerWaitMinutes : 180;
+            if (now > since.AddMinutes(wait))
+            {
+                SetNext(ev, ArmNext(ev, now, false));
+                blockedSince.Remove(ev.Id);
+                WarnOnce(ev.Id, ev.Name + " skipped this slot. Not enough players online.");
+                return true;
+            }
+            DateTime slot = NextOpenSlot(now, parkFrom, hasPark, gap);
+            SetNext(ev, slot);
+            parkFrom = slot;
+            hasPark = true;
+            return true;
+        }
+
+        private bool StartScheduled(EventDef ev, DateTime now)
+        {
+            string grid;
+            string error = RunFire(ev, out grid);
+            store.LastRunUtcTicks[ev.Id] = now.Ticks;
+            SetNext(ev, ArmNext(ev, now, !IsClock(ev)));
+            if (error != null)
+            {
+                WarnOnce(ev.Id, ev.Name + " did not start. " + error);
+                return false;
+            }
+            lastScheduledStartUtc = now;
+            Puts("Started " + ev.Name + (string.IsNullOrEmpty(grid) ? "." : " at " + grid + "."));
+            Say(ev, grid);
+            return true;
         }
 
         private void WarnOnce(string id, string message)
@@ -1139,14 +1468,42 @@ namespace Oxide.Plugins
         private string FireCommands(EventDef ev)
         {
             if (ev.Commands == null || ev.Commands.Count == 0) return "That custom event has no commands.";
+            bool any = false;
             for (int i = 0; i < ev.Commands.Count; i++)
             {
                 string cmd = ev.Commands[i] == null ? "" : ev.Commands[i].Trim();
                 if (cmd.Length == 0) continue;
-                try { ConsoleSystem.Run(ConsoleSystem.Option.Server, cmd); }
-                catch (Exception ex) { PrintWarning(ev.Id + " command failed. " + ex.Message); }
+                any = true;
+                string error = RunServerCommand(cmd);
+                if (error != null) return error;
+            }
+            if (!any) return "That custom event has no commands.";
+            return null;
+        }
+
+        private static string RunServerCommand(string commandLine)
+        {
+            try
+            {
+                ConsoleSystem.CommandResult result = ConsoleSystem.RunWithResult(ConsoleSystem.Option.Server, commandLine);
+                if (result.Result == ConsoleSystem.CommandResultType.CommandNotFound)
+                    return "Command '" + CommandName(commandLine) + "' was not found.";
+                if (result.Result == ConsoleSystem.CommandResultType.PermissionDenied)
+                    return "Command '" + CommandName(commandLine) + "' was denied.";
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
             }
             return null;
+        }
+
+        private static string CommandName(string commandLine)
+        {
+            if (string.IsNullOrEmpty(commandLine)) return "";
+            string text = commandLine.Trim();
+            int space = text.IndexOf(' ');
+            return space < 0 ? text : text.Substring(0, space);
         }
 
         private string FirePrefabEvent(EventDef ev, string prefab, bool triggeredMessage, out string grid)
@@ -1451,7 +1808,7 @@ namespace Oxide.Plugins
             var args = ReadArgs(arg);
             if (args.Count == 0)
             {
-                Reply(player, arg, "nsevents list | nsevents next | nsevents start <id>. Chat /nsevents opens the panel.");
+                Reply(player, arg, "nsevents list | nsevents next | nsevents start <id or name>. Chat /nsevents opens the panel.");
                 return;
             }
             RunVerb(player, arg, args.ToArray());
@@ -1482,13 +1839,13 @@ namespace Oxide.Plugins
             {
                 if (args.Length < 2)
                 {
-                    Reply(player, arg, "Usage: nsevents start <id>");
+                    Reply(player, arg, "Usage: nsevents start <id or name>");
                     return;
                 }
-                var ev = FindEvent(args[1]);
+                var ev = FindEventToken(JoinArgs(args, 1));
                 if (ev == null)
                 {
-                    Reply(player, arg, "No event with that id.");
+                    Reply(player, arg, "No event with that id or name.");
                     return;
                 }
                 string grid;
@@ -1504,11 +1861,12 @@ namespace Oxide.Plugins
                     BumpIfSoon(ev);
                     SaveStore();
                 }
+                MarkScheduledStart();
                 Say(ev, grid);
                 Reply(player, arg, "Started " + ev.Name + ".");
                 return;
             }
-            Reply(player, arg, "nsevents list | nsevents next | nsevents start <id>");
+            Reply(player, arg, "nsevents list | nsevents next | nsevents start <id or name>");
         }
 
         private void BumpIfSoon(EventDef ev)
@@ -1697,6 +2055,7 @@ namespace Oxide.Plugins
                     {
                         store.LastRunUtcTicks[target.Id] = DateTime.UtcNow.Ticks;
                         BumpIfSoon(target);
+                        MarkScheduledStart();
                         Say(target, grid);
                         notice[player.userID] = "Started " + target.Name + ".";
                     }
