@@ -1,10 +1,10 @@
 {
   "name": "Mr.Tootsies",
-  "xp": 297344.83963745844,
+  "xp": 402429.34875772014,
   "prestige_level": 0,
-  "current_level": 38,
-  "achieved_level": 38,
-  "available_points": 6,
+  "current_level": 44,
+  "achieved_level": 44,
+  "available_points": 24,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Tinkerer": 5,
@@ -42,7 +42,7 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T13:10:37.800654+00:00",
+  "logged_off": "2026-11-17T15:59:59.328122+00:00",
   "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
@@ -61,7 +61,7 @@
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.828028+00:00",
   "Loot_Spotter_used_time": "2026-11-13T11:27:56.360972+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-12T09:59:45.295539+00:00",
+  "last_xp_loss": "2026-11-17T13:42:49.487425+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -72,5 +72,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 114
+  "GetTotalSkillPoints": 132
 }

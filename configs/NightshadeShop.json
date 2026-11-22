@@ -5,6 +5,7 @@
   ],
   "Require Use Permission (nightshadeshop.use)": false,
   "Shop Title": "NIGHTSHADE MARKET",
+  "Show Theme Tagline In Shop Header": false,
   "Admin Shop Tab Name": "ADMIN SHOP",
   "Admin Shop Tab Subtitle": "Trade your resources for Blood and more.",
   "Admin Shop Tab - Required Permission (empty = everyone)": "",
@@ -114,6 +115,17 @@
     "Shop-Charged Dungeons - Refund If No Spawn Confirmation Within (seconds)": 180.0,
     "Default Raidable Base Icon (shortname)": "explosive.timed",
     "Default Dungeon Icon (shortname)": "skull.human"
+  },
+  "Bank": {
+    "Enabled": true,
+    "Coin Item Shortname": "paper",
+    "Coin Skin ID": 3843525164,
+    "Coin Display Name": "RP Coin",
+    "RP Per Coin": 1,
+    "Minimum Coins Per Transaction": 1,
+    "Maximum Coins Per Transaction (0 = no limit)": 0,
+    "Required Permission (empty = everyone who can open the shop)": "",
+    "Log Transactions": true
   },
   "Themes": [
     {

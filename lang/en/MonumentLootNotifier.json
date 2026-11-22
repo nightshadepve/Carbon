@@ -1,0 +1,8 @@
+{
+  "DefaultLootMessage": "{0} is looting <color=yellow>{1}</color>",
+  "CargoShipLootMessage": "{0} is looting <color=yellow>{1}</color> at {2}",
+  "AbandonedSupermarketLootMessage": "{0} is looting <color=yellow>{1}</color> at {2}",
+  "OxumsGasStationLootMessage": "{0} is looting <color=yellow>{1}</color> at {2}",
+  "AirdropMessage": "{0} has looted a supply drop at {1}",
+  "HackMessage": "{0} is hacking a locked crate at {1}"
+}

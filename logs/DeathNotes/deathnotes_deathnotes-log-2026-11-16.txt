@@ -1,0 +1,2 @@
+[2026-11-16 10:01:01] 2026-11-16 10:01:01 : Unloading DeathNotes plugin
+[2026-11-16 10:02:02] 2026-11-16 10:02:02 : Initializing DeathNotes plugin

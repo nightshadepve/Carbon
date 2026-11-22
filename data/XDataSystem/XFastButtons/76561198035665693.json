@@ -33,6 +33,19 @@
       "AnchorMaxXY": "0.5 0.5",
       "OffsetMinXY": "-228 -338",
       "OffsetMaxXY": "-203 -315"
+    },
+    {
+      "Text": "",
+      "Command": "chat.say \"/padmin\"",
+      "Color": "1 0 1 0.7",
+      "Font": "robotocondensed-regular.ttf",
+      "Individual": true,
+      "Parent": "Inventory",
+      "Image": "FB_IMAGE_42",
+      "AnchorMinXY": "0 1",
+      "AnchorMaxXY": "0 1",
+      "OffsetMinXY": "10 -40",
+      "OffsetMaxXY": "60 0"
     }
   ]
 }

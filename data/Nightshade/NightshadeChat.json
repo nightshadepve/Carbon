@@ -5,8 +5,8 @@
         "vipx"
       ],
       "NameColor": "__custom",
-      "ChatColor": "blush",
-      "ShowBroadcasts": true,
+      "ChatColor": "lavender",
+      "ShowBroadcasts": false,
       "CustomNameColors": [
         "#D9B8FF",
         "#8B3FBF",
@@ -192,7 +192,42 @@
       "ChatColor": "",
       "ShowBroadcasts": true,
       "CustomNameColors": null
+    },
+    "76561198292405649": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198051074438": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198769950321": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
+    },
+    "76561198028960167": {
+      "Tags": [],
+      "NameColor": "",
+      "ChatColor": "",
+      "ShowBroadcasts": true,
+      "CustomNameColors": null
     }
   },
-  "Mutes": {}
+  "Mutes": {
+    "76561198769950321": {
+      "Name": "kyronwade15",
+      "Expires": 1795143371.0,
+      "Reason": "Spam",
+      "By": "RunaObscura"
+    }
+  }
 }

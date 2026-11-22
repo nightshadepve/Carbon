@@ -7,22 +7,25 @@
   "Players": {
     "76561199069700597": {
       "Name": "Qmx1ZQ",
-      "Raids": 1,
-      "Points": 1,
-      "TotalRaids": 3,
-      "TotalPoints": 4,
-      "ExpiredDate": "2027-01-08T20:10:29.535718+00:00",
-      "Easy": 1,
-      "Medium": 0,
-      "Hard": 0,
+      "Raids": 5,
+      "Points": 9,
+      "TotalRaids": 7,
+      "TotalPoints": 12,
+      "ExpiredDate": "2027-01-17T07:05:54.687384+00:00",
+      "Easy": 2,
+      "Medium": 2,
+      "Hard": 1,
       "Expert": 0,
       "Nightmare": 0,
-      "EasyPoints": 1,
-      "TotalEasy": 2,
-      "TotalEasyPoints": 2,
-      "MediumPoints": 0,
-      "TotalMedium": 1,
-      "TotalMediumPoints": 2
+      "EasyPoints": 2,
+      "TotalEasy": 3,
+      "TotalEasyPoints": 3,
+      "MediumPoints": 4,
+      "TotalMedium": 3,
+      "TotalMediumPoints": 6,
+      "HardPoints": 3,
+      "TotalHard": 1,
+      "TotalHardPoints": 3
     },
     "76561198320243883": {
       "Name": "dmlyZ28",
@@ -130,30 +133,25 @@
     },
     "76561199649462056": {
       "Name": "R29uZSBGaXNoaW4",
-      "Raids": 1,
-      "Points": 1,
-      "TotalRaids": 1,
-      "TotalPoints": 1,
-      "ExpiredDate": "2027-01-11T17:31:40.282176+00:00",
-      "Easy": 1,
+      "Raids": 2,
+      "Points": 2,
+      "TotalRaids": 2,
+      "TotalPoints": 2,
+      "ExpiredDate": "2027-01-12T19:07:38.696325+00:00",
+      "Easy": 2,
       "Medium": 0,
       "Hard": 0,
       "Expert": 0,
       "Nightmare": 0,
-      "EasyPoints": 1,
-      "TotalEasy": 1,
-      "TotalEasyPoints": 1
+      "EasyPoints": 2,
+      "TotalEasy": 2,
+      "TotalEasyPoints": 2
     }
   },
   "BuyableCooldowns": {},
-  "RustNavigationBuilds": [
-    {
-      "center": "-1725.906 13.3649 -224.6721",
-      "size": "43.40112 30.1721 33.26645"
-    }
-  ],
+  "RustNavigationBuilds": [],
   "RaidTime": "0001-01-01T00:00:00",
-  "TotalEvents": 316,
+  "TotalEvents": 341,
   "WipeId": "715b982d16da46ea9070449c6685466d",
   "protocol": 290
 }

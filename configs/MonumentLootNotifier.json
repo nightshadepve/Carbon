@@ -1,0 +1,8 @@
+{
+  "DiscordWebhookUrl": "https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks",
+  "EnableDiscord": false,
+  "LootThreshold": 3,
+  "MapPreset": "",
+  "TrackAirdrops": true,
+  "TrackLockedCrates": true
+}

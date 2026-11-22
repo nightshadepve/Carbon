@@ -171,6 +171,10 @@
     "76561199146317627": {
       "Enabled": true,
       "SortByCategory": false
+    },
+    "76561198051074438": {
+      "Enabled": true,
+      "SortByCategory": true
     }
   }
 }

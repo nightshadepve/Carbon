@@ -110,8 +110,8 @@
         "ShortName": "diesel_barrel",
         "SkinID": 0,
         "Amount": 1,
-        "How many seconds can quarry work on one consume of this fuel?": 60.0,
-        "Resource production interval on this fuel (seconds)": 30.0,
+        "How many seconds can quarry work on one consume of this fuel?": 120.0,
+        "Resource production interval on this fuel (seconds)": 50.0,
         "Gathering resources on this fuel": [
           {
             "Custom name (empty = default)": "",

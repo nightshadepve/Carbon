@@ -1,10 +1,10 @@
 {
   "name": "mino",
-  "xp": 13949.900014877319,
+  "xp": 20324.025014877323,
   "prestige_level": 0,
-  "current_level": 8,
-  "achieved_level": 8,
-  "available_points": 16,
+  "current_level": 9,
+  "achieved_level": 9,
+  "available_points": 18,
   "non_level_related_points_given": 0,
   "buff_values": {},
   "xp_drops": true,
@@ -17,8 +17,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T14:30:57.76034+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-17T13:17:23.058289+00:00",
+  "xp_bonus_pool": 18625.874999999996,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -40,5 +40,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 16
+  "GetTotalSkillPoints": 18
 }

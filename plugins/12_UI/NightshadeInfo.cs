@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeInfo", "Nightshade", "1.2.1")]
+    [Info("NightshadeInfo", "Nightshade", "1.2.3")]
     [Description("Nightshade info panel: live status, rules, and Discord.")]
     public class NightshadeInfo : RustPlugin
     {
@@ -759,7 +759,9 @@ namespace Oxide.Plugins
             }
 
             snap.PvpDetail = "Fri 8 PM - Mon 3 AM ET";
-            snap.PvpValue = (weekend ? "Ends in " : "Starts in ") + FormatDur(weekendSeconds);
+            // A negative countdown is the full-server force with no scheduled end.
+            if (weekend && weekendSeconds < 0d) snap.PvpValue = "On";
+            else snap.PvpValue = (weekend ? "Ends in " : "Starts in ") + FormatDur(weekendSeconds);
             double purgeSeconds;
             if (purge)
             {
@@ -796,7 +798,7 @@ namespace Oxide.Plugins
                 string purgeSource = scheduled ? "built-in schedule" : "built-in schedule (not in window)";
                 if (manual) purgeSource = manualSource + (scheduled ? " + built-in schedule" : "");
                 else if (rulesetPurge) purgeSource = "TruePVE ruleset purge" + (scheduled ? " + built-in schedule" : "");
-                Puts("NightshadeInfo status: PvP from " + weekendSource + ". Purge from " + purgeSource + ". Mode " + snap.ModeValue + ".");
+                Puts("NightshadeInfo status: PvP from " + weekendSource + (weekend && weekendSeconds < 0d ? " (full force, no scheduled end)" : "") + ". Purge from " + purgeSource + ". Mode " + snap.ModeValue + ".");
             }
             return snap;
         }
@@ -1446,7 +1448,7 @@ namespace Oxide.Plugins
                                     L("\u2022 Build for style, defense, roleplay, and deeply suspicious architecture. That part is encouraged.")),
                                 Bk("LOOT & OWNERSHIP",
                                     L("\u2022 Do not take from another player's boxes, furnaces, or TC storage.", "warn"),
-                                    L("\u2022 You, your teammate, TC auth, or someone you /share with can open them."),
+                                    L("\u2022 You and your Rust teammate can open each other's placed boxes, furnaces, fridges, lockers, and vending storage. TC auth does not. A code lock still applies. /share can open one container. Anyone else has to destroy it, and raid protection stops that damage while it is on."),
                                     L("\u2022 Sleeping players cannot be looted, including during PvP weekend and Purge.", "warn"),
                                     L("\u2022 Event loot is open to anyone and is not locked."),
                                     L("\u2022 Hacked crates, supply drops, and heli or Bradley crates from events are public."),
@@ -1528,8 +1530,8 @@ namespace Oxide.Plugins
                                 Bk("PROGRESSION",
                                     L("\u2022 /shop or /store \u2014 the RP shop"),
                                     L("\u2022 /skills, /skilltree, /st \u2014 Skill Tree"),
-                                    L("\u2022 /perks \u2014 VIP kit status"),
-                                    L("\u2022 /perks daily and /perks 4day \u2014 claim VIP kits")),
+                                    L("\u2022 /perks \u2014 open the shop Kits tab"),
+                                    L("\u2022 /perks daily and /perks 4day \u2014 open the shop Kits tab")),
                                 Bk("SKINS, LOOT, HELP",
                                     L("\u2022 /skin, /skincraft, /skinitem, /skininv, /skinauto, /skinbase"),
                                     L("\u2022 /skinrequest <WorkshopID> \u2014 request a Workshop skin"),
@@ -1538,6 +1540,8 @@ namespace Oxide.Plugins
                                     L("\u2022 /hordehelp \u2014 Hordes help"),
                                     L("\u2022 /checkfoundations \u2014 Defendable Homes foundations"),
                                     L("\u2022 /raidbuilderinfo \u2014 vetted raidbase builder help"),
+                                    L("\u2022 /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend \u2014 redeem a raid shield at your TC"),
+                                    L("\u2022 /raidshield \u2014 shield time on the TC you are looking at"),
                                     L("\u2022 /tug or /tugboat \u2014 VIPx tugboat license")))
                         }
                     }
@@ -1568,7 +1572,8 @@ namespace Oxide.Plugins
                                     L("\u2022 There is no separate Black Market currency."),
                                     L("\u2022 Your RP on Home comes from ServerRewards. If it does not answer, it shows -.")),
                                 Bk("LOOT PROTECTION",
-                                    L("\u2022 Boxes, furnaces, and TC storage: you, your teammate, or TC auth. /share opens one container for someone else."),
+                                    L("\u2022 Placed boxes, furnaces, fridges, lockers, and vending storage are shared with your Rust teammate. TC auth does not open them. Anyone else has to destroy the container. Raid protection stops that damage while it is on. /share can still open one container. A code lock still applies. The PvP weekend and Purge do not open these."),
+                                    L("\u2022 Paid raid shields are tokens from /shop. Look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. The timer runs only on the PvP weekend. Unused time carries over."),
                                     L("\u2022 Sleeping players stay unlootable all week, including PvP weekend and Purge. Teammates can still loot them."),
                                     L("\u2022 Event loot is open to anyone and is not locked."),
                                     L("\u2022 Hacked crates, supply drops, and heli or Bradley crates from events are public."),
@@ -1698,6 +1703,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Monuments are always PvP.", "warn"),
                                 L("\u2022 Events are always PvP. A dome only appears over an event.", "warn"),
                                 L("\u2022 PvP weekend: Friday 8:00 PM to Monday 3:00 AM Eastern. Raiding is allowed."),
+                                L("\u2022 Paid shield: look at your TC and use /raidredeem 6h, /raidredeem 1d, or /raidredeem weekend. Time counts down only on that weekend."),
                                 L("\u2022 Purge: Tuesday of wipe week at 2:00 PM Eastern until the Thursday wipe. Raiding is allowed."),
                                 L("\u2022 Outside those, do not attack players or raid bases."),
                                 L("\u2022 Home shows which of PVE, PVP, or PURGE is on right now.")))
@@ -1737,7 +1743,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Hackable crates unlock in 2.5 minutes."),
                                 L("\u2022 No decay on personal boats and tugboats."),
                                 L("\u2022 4-module car chassis access in the RP shop."),
-                                L("\u2022 Claimable tool kits in the VIP shop. /perks daily and /perks 4day."),
+                                L("\u2022 Claim VIP kits from the shop Kits tab."),
                                 L("\u2022 Medium raids: 12h after wipe (default 24h)."),
                                 L("\u2022 Hard raids: 48h after wipe (default 72h)."),
                                 L("\u2022 Expert raids: 96h after wipe (default 120h)."),
@@ -1758,7 +1764,7 @@ namespace Oxide.Plugins
                                 L("\u2022 Hackable crates unlock in 60 seconds."),
                                 L("\u2022 No decay on personal boats and tugboats."),
                                 L("\u2022 4-module car chassis access in the RP shop."),
-                                L("\u2022 VIPx shop tools, plus /perks daily and /perks 4day."),
+                                L("\u2022 VIPx shop tools. Claim kits from the shop Kits tab."),
                                 L("\u2022 Same early raids as VIP: Medium 12h, Hard 48h, Expert 96h, Nightmare 144h.")))
                         }
                     },

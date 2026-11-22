@@ -1,10 +1,10 @@
 {
   "name": "OCB",
-  "xp": 0.0,
+  "xp": 11518.75,
   "prestige_level": 0,
-  "current_level": 0,
-  "achieved_level": 0,
-  "available_points": 0,
+  "current_level": 7,
+  "achieved_level": 7,
+  "available_points": 14,
   "non_level_related_points_given": 0,
   "buff_values": {},
   "xp_drops": true,
@@ -17,8 +17,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-05-22T14:24:41.936692+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-15T21:29:28.222131+00:00",
+  "xp_bonus_pool": 13481.25,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},
@@ -32,11 +32,13 @@
   "last_xp_loss": "2026-09-03T18:12:42.917115+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
+  "pending_levels": 0,
   "DisabledBuffs": [],
   "presets": null,
   "ignoreWarning": false,
+  "ignoreMaxWarning": false,
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 0
+  "GetTotalSkillPoints": 14
 }

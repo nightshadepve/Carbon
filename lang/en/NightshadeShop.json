@@ -27,9 +27,22 @@
   "EventAdded": "Added {0} to {1}.",
   "PickFirst": "Pick an item from the list.",
   "NoAccess": "You don't have access to that listing.",
+  "HiddenCategory": "That category is hidden right now.",
   "LimitReached": "Can't buy that right now: {0}.",
   "NotOwned": "You need to own {0} on Steam to buy it here.",
   "Help": "Shop admin commands:\n/{0} theme <name|auto>\n/{0} themes\n/{0} addcat <name> [iconShortname]\n/{0} delcat <name|index>\n/{0} add <category|index> <price> [amount] (uses held item)\n/{0} remove <itemId>\n/{0} trade <inShortname> <inAmount> <outShortname> <outAmount>\n/{0} deltrade <tradeId>\nUse 'rp' as a shortname for Server Rewards points.",
   "PickQty": "Pick x1, x10 or MAX first, then press CONFIRM.",
-  "TradeNeed": "You need {0} {1} for that (you have {2})."
+  "TradeNeed": "You need {0} {1} for that (you have {2}).",
+  "BankDeposited": "Deposited {0} {1} for {2} RP. Balance: {3} RP.",
+  "BankWithdrawn": "Withdrew {0} {1} for {2} RP. Balance: {3} RP.",
+  "BankNoCoins": "You don't have that many {0} (you have {1}).",
+  "BankNeedRp": "You need {0} RP to withdraw that (you have {1}).",
+  "BankNoSpace": "Not enough inventory space for {0} {1}.",
+  "BankNotConfigured": "The RP coin is not set up yet. An admin has to set the coin shortname and skin ID.",
+  "BankNoPermission": "You don't have permission to use the bank.",
+  "BankFailed": "The bank could not finish that, so it was rolled back.",
+  "BankNoRewards": "Server Rewards is not loaded, so the bank is unavailable.",
+  "BankBusy": "Wait for the bank action to finish.",
+  "BankRange": "That amount has to stay between {0} and {1}.",
+  "BankOverflow": "That many coins would not fit in an RP balance."
 }

@@ -1,0 +1,6 @@
+{
+  "Enabled": true,
+  "PrintStartupMessage": true,
+  "RetrySeconds": 1.0,
+  "MaxAttempts": 6
+}

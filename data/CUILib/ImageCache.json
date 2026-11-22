@@ -1,0 +1,47 @@
+{
+  "Version": 2,
+  "LastProtocol": 290,
+  "LastCommunityNetId": 99632,
+  "Entries": {
+    "fp:placeholder:loading": {
+      "Crc": 3966730374,
+      "Meta": "",
+      "LastSeenUnix": 1795255407,
+      "ETag": null,
+      "LastModified": null,
+      "CheckedUnix": 0
+    },
+    "fp:placeholder:missing": {
+      "Crc": 4256202178,
+      "Meta": "",
+      "LastSeenUnix": 1795255407,
+      "ETag": null,
+      "LastModified": null,
+      "CheckedUnix": 0
+    },
+    "https://rust-cui.crashplugins.space/scrapworm/7d098bbda92fb853.png": {
+      "Crc": 1982632412,
+      "Meta": "",
+      "LastSeenUnix": 1795255430,
+      "ETag": "\"d21e16bd897548832bbbae0a69b212be\"",
+      "LastModified": null,
+      "CheckedUnix": 1795255430
+    },
+    "https://rust-cui.crashplugins.space/scrapworm/967f831bd67ab027.png": {
+      "Crc": 823880101,
+      "Meta": "",
+      "LastSeenUnix": 1795255430,
+      "ETag": "\"6784042b3799869a3f9b26e31f703dd3\"",
+      "LastModified": null,
+      "CheckedUnix": 1795255430
+    },
+    "https://rust-cui.crashplugins.space/scrapworm/28b1e9c662971474.png": {
+      "Crc": 3792123367,
+      "Meta": "",
+      "LastSeenUnix": 1795255430,
+      "ETag": "\"74d7071bc05db722df993387d26e0779\"",
+      "LastModified": null,
+      "CheckedUnix": 1795255430
+    }
+  }
+}

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using Facepunch;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -11,15 +13,15 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.5.0")]
-    [Description("Seasonal-themed Server Rewards shop with in-game item management and an Admin Shop resource exchange")]
+    [Info("NightshadeShop", "Nightshade", "1.8.2")]
+    [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, claimable kits, and an RP coin bank")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.5.0";
+        private const string PluginVersion = "1.8.2";
 
-        [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents;
+        [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
         private static readonly string[] RbDifficulties = { "EASY", "MEDIUM", "HARD", "EXPERT", "NIGHTMARE" };
         private const int PickPerRow = 10, PickRows = 4, PickPerPage = PickPerRow * PickRows;
@@ -36,6 +38,13 @@ namespace Oxide.Plugins
         private bool unloading;
         private bool serverReady;
         private const string DataRefunds = "Nightshade/NightshadeShop/Refunds";
+        private const string DataKits = "Nightshade/NightshadeShop/Kits";
+        private const string DataBankLog = "Nightshade/NightshadeShop/BankLog";
+        private const string VipDailyId = "vip-daily";
+        private const string VipxDailyId = "vipx-daily";
+        private const string VipFourId = "vip-4day";
+        private const string VipxFourId = "vipx-4day";
+        private KitFile kitFile;
         private readonly List<PendingRefund> pendingRefunds = new List<PendingRefund>();
 
         private class PendingRefund
@@ -54,6 +63,18 @@ namespace Oxide.Plugins
 
         private const string PermAdmin = "nightshadeshop.admin";
         private const string PermUse = "nightshadeshop.use";
+        // Granted to the default_unlocked group by NightshadeDefaultUnlocked. Shop categories use this same permission.
+        private const string PermWipeLock = "nightshadeshop.wipelock";
+        private const string PermVipPerk = "nightshadeshop.vipperk";
+        private const string PermVipXPerk = "nightshadeshop.vipxperk";
+        private const string DailyKitPng = "VIP_Daily.png";
+        private const string FourDayKitPng = "VIP_4Day.png";
+        private readonly HashSet<string> localPngQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool imageLibraryWarned;
+        private readonly HashSet<ulong> bankBusy = new HashSet<ulong>();
+        private BankLogFile bankLog;
+        private bool bankLogUnreadable;
 
         private const string UiMain = "NShop.Main";
         private const string UiScrollTest = "NShop.ScrollTest";
@@ -76,7 +97,7 @@ namespace Oxide.Plugins
 
         private class UiState
         {
-            public int Tab;              // 0 = Shop, 1 = Admin Shop (exchange)
+            public int Tab;              // 0 = Shop, 1 = Events, 2 = Admin Shop (exchange)
             public int Cat;
             public bool Admin;
             public int Mult = 1;
@@ -108,6 +129,17 @@ namespace Oxide.Plugins
             public int TradeCat = TradeTiles;
             public int TradeSel;                // trade row with a pending quantity
             public string TradeQty = "1";       // "1", "10" or "max"   // Admin Shop: -2 = category tiles, -1 = uncategorized, >= 0 category index
+
+            public string EditKitId;
+            public string KitShort = "";
+            public string KitAmt = "1";
+            public string KitSkin = "0";
+
+            // Bank is a header view, not one of the equal-width tabs.
+            public bool BankOpen;
+            public bool ThemeMenu;
+            public int BankDeposit = 1;
+            public int BankWithdraw = 1;
         }
 
         #endregion
@@ -124,6 +156,10 @@ namespace Oxide.Plugins
 
             [JsonProperty("Shop Title")]
             public string Title = "NIGHTSHADE MARKET";
+
+            // Theme taglines stay in config for other plugins. The shop header hides them unless this is turned on.
+            [JsonProperty("Show Theme Tagline In Shop Header")]
+            public bool ShowHeaderTagline = false;
 
             [JsonProperty("Admin Shop Tab Name")]
             public string ExchangeTabName = "ADMIN SHOP";
@@ -161,8 +197,43 @@ namespace Oxide.Plugins
             [JsonProperty("Event Listings")]
             public EventSettings Events = new EventSettings();
 
+            [JsonProperty("Bank")]
+            public BankSettings Bank = new BankSettings();
+
             [JsonProperty("Themes")]
             public List<Theme> Themes = new List<Theme>();
+        }
+
+        private class BankSettings
+        {
+            [JsonProperty("Enabled")]
+            public bool Enabled = true;
+
+            // Owner-confirmed RP coin: paper with this workshop skin. Plain paper (skin 0) does not match.
+            [JsonProperty("Coin Item Shortname")]
+            public string CoinShortname = "paper";
+
+            [JsonProperty("Coin Skin ID")]
+            public ulong CoinSkin = 3843525164UL;
+
+            [JsonProperty("Coin Display Name")]
+            public string CoinName = "RP Coin";
+
+            [JsonProperty("RP Per Coin")]
+            public int RpPerCoin = 1;
+
+            [JsonProperty("Minimum Coins Per Transaction")]
+            public int MinCoins = 1;
+
+            [JsonProperty("Maximum Coins Per Transaction (0 = no limit)")]
+            public int MaxCoins;
+
+            // Empty matches the shop: everyone who can open the shop. Set nightshadeshop.bank to require a permission that is not granted here.
+            [JsonProperty("Required Permission (empty = everyone who can open the shop)")]
+            public string Permission = "";
+
+            [JsonProperty("Log Transactions")]
+            public bool Log = true;
         }
 
         private class EventSettings
@@ -375,7 +446,20 @@ namespace Oxide.Plugins
                 config.Multipliers = config.Multipliers.Where(m => m > 0).Distinct().OrderBy(m => m).ToList();
                 config.Commands = config.Commands.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim().ToLowerInvariant()).Distinct().ToList();
                 if (config.Events == null) config.Events = new EventSettings();
+                if (config.Bank == null) config.Bank = new BankSettings();
+                if (config.Bank.RpPerCoin < 1) config.Bank.RpPerCoin = 1;
+                if (config.Bank.MinCoins < 1) config.Bank.MinCoins = 1;
+                if (config.Bank.MaxCoins < 0) config.Bank.MaxCoins = 0;
+                if (config.Bank.MaxCoins > 0 && config.Bank.MinCoins > config.Bank.MaxCoins) config.Bank.MaxCoins = config.Bank.MinCoins;
+                if (config.Bank.CoinShortname == null) config.Bank.CoinShortname = "";
+                if (config.Bank.CoinName == null) config.Bank.CoinName = "RP Coin";
+                if (config.Bank.Permission == null) config.Bank.Permission = "";
+                config.Bank.CoinShortname = config.Bank.CoinShortname.Trim();
+                config.Bank.CoinName = config.Bank.CoinName.Trim();
+                config.Bank.Permission = config.Bank.Permission.Trim();
+                bool dropThemeFile = TakeThemeFile();
                 SaveConfig();
+                if (dropThemeFile) DeleteThemeFile();
             }
             catch (Exception e)
             {
@@ -416,6 +500,14 @@ namespace Oxide.Plugins
 
             [JsonProperty("Only Visible During Themes (empty = always)")]
             public List<string> Themes = new List<string>();
+
+            // Null when the key is absent in Shop.json. Missing means shop, until the one-time name migration fills it in.
+            [JsonProperty("Tab (shop|events)", NullValueHandling = NullValueHandling.Ignore)]
+            public string Tab;
+
+            // Null when the key is absent. Missing means visible, until the one-time name migration fills it in.
+            [JsonProperty("Admin mode only (hidden from players)", NullValueHandling = NullValueHandling.Ignore)]
+            public bool? AdminModeOnly;
 
             public List<ShopItem> Items = new List<ShopItem>();
         }
@@ -528,6 +620,51 @@ namespace Oxide.Plugins
             public string OutName = "";
         }
 
+        private class KitFile
+        {
+            [JsonProperty("Migrated From VIPPerks")]
+            public bool MigratedFromVipPerks;
+
+            public int NextId = 1;
+
+            public List<KitDef> Kits = new List<KitDef>();
+
+            public Dictionary<string, Dictionary<string, KitClaim>> Claims = new Dictionary<string, Dictionary<string, KitClaim>>();
+        }
+
+        private class KitDef
+        {
+            public string Id = "";
+            public string Name = "Kit";
+
+            [JsonProperty("Icon (URL, skin ID or shortname)")]
+            public string Icon = "";
+
+            [JsonProperty("Required Permission (empty = anyone who can open Kits)")]
+            public string Permission = "";
+
+            [JsonProperty("Cooldown (seconds)")]
+            public int CooldownSeconds;
+
+            [JsonProperty("Max Uses Per Wipe (0 = no cap)")]
+            public int MaxUsesPerWipe;
+
+            public List<KitStack> Items = new List<KitStack>();
+        }
+
+        private class KitStack
+        {
+            public string Shortname = "";
+            public int Amount = 1;
+            public ulong Skin;
+        }
+
+        private class KitClaim
+        {
+            public DateTime LastClaim = DateTime.MinValue;
+            public int WipeUses;
+        }
+
         private StoredData DefaultData()
         {
             var d = new StoredData();
@@ -575,6 +712,55 @@ namespace Oxide.Plugins
                 data = DefaultData();
                 SaveData();
             }
+            int migrated = 0;
+            foreach (var cat in data.Categories)
+                if (MigrateCategory(cat)) migrated++;
+            if (migrated > 0)
+            {
+                SaveData();
+                Puts("NightshadeShop migrated " + migrated + " categor" + (migrated == 1 ? "y" : "ies") + " in Shop.json (Events tab and admin-only flags).");
+            }
+        }
+
+        private static readonly string[] EventsTabNames = { "Dungeons", "Raidable Bases", "Heli Signals", "Brad Signals" };
+        private static readonly string[] AdminOnlyNames = { "Christmas", "Halloween" };
+
+        private static bool NameIs(string name, string[] names)
+        {
+            if (string.IsNullOrWhiteSpace(name) || names == null) return false;
+            string trimmed = name.Trim();
+            for (int i = 0; i < names.Length; i++)
+                if (string.Equals(trimmed, names[i], StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        // Fills missing fields only. A stored shop/events value or an explicit false flag is left alone.
+        private static bool MigrateCategory(ShopCategory cat)
+        {
+            if (cat == null) return false;
+            bool changed = false;
+            if (string.IsNullOrWhiteSpace(cat.Tab))
+            {
+                if (NameIs(cat.Name, EventsTabNames)) { cat.Tab = "events"; changed = true; }
+                else if (cat.Tab != null) { cat.Tab = null; changed = true; }
+            }
+            else
+            {
+                string norm = cat.Tab.Trim().Equals("events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
+                if (!string.Equals(cat.Tab, norm, StringComparison.Ordinal)) { cat.Tab = norm; changed = true; }
+            }
+            if (!cat.AdminModeOnly.HasValue && NameIs(cat.Name, AdminOnlyNames))
+            {
+                cat.AdminModeOnly = true;
+                changed = true;
+            }
+            return changed;
+        }
+
+        private static string CategoryTab(ShopCategory cat)
+        {
+            if (cat == null || string.IsNullOrWhiteSpace(cat.Tab)) return "shop";
+            return cat.Tab.Trim().Equals("events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
         }
 
         private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(DataShop, data);
@@ -587,6 +773,40 @@ namespace Oxide.Plugins
         }
 
         private void SavePurchases() => Interface.Oxide.DataFileSystem.WriteObject(DataPurchases, purchases);
+
+        private void LoadKits()
+        {
+            try { kitFile = Interface.Oxide.DataFileSystem.ReadObject<KitFile>(DataKits); }
+            catch (Exception e)
+            {
+                PrintError("Kits file failed to load: " + e.Message);
+                kitFile = null;
+            }
+            if (kitFile == null) kitFile = new KitFile();
+            if (kitFile.Kits == null) kitFile.Kits = new List<KitDef>();
+            if (kitFile.Claims == null) kitFile.Claims = new Dictionary<string, Dictionary<string, KitClaim>>();
+            bool changed = false;
+            if (!kitFile.MigratedFromVipPerks)
+            {
+                if (MigrateVipPerkKits())
+                {
+                    kitFile.MigratedFromVipPerks = true;
+                    changed = true;
+                }
+                else
+                    PrintWarning("VIP kit cooldown import did not finish. Kits.json was left unmarked so the next load can retry.");
+            }
+            if (ApplyStoredKitDefaults()) changed = true;
+            foreach (var kit in kitFile.Kits)
+            {
+                if (kit.Items == null) kit.Items = new List<KitStack>();
+                if (kit.Permission == null) kit.Permission = "";
+                RegisterPerm(kit.Permission);
+            }
+            if (changed) SaveKits();
+        }
+
+        private void SaveKits() => Interface.Oxide.DataFileSystem.WriteObject(DataKits, kitFile);
 
         #endregion
 
@@ -624,10 +844,23 @@ namespace Oxide.Plugins
                 ["EventAdded"] = "Added {0} to {1}.",
                 ["PickFirst"] = "Pick an item from the list.",
                 ["NoAccess"] = "You don't have access to that listing.",
+                ["HiddenCategory"] = "That category is hidden right now.",
                 ["LimitReached"] = "Can't buy that right now: {0}.",
                 ["NotOwned"] = "You need to own {0} on Steam to buy it here.",
                 ["PickQty"] = "Pick x1, x10 or MAX first, then press CONFIRM.",
                 ["TradeNeed"] = "You need {0} {1} for that (you have {2}).",
+                ["BankDeposited"] = "Deposited {0} {1} for {2} RP. Balance: {3} RP.",
+                ["BankWithdrawn"] = "Withdrew {0} {1} for {2} RP. Balance: {3} RP.",
+                ["BankNoCoins"] = "You don't have that many {0} (you have {1}).",
+                ["BankNeedRp"] = "You need {0} RP to withdraw that (you have {1}).",
+                ["BankNoSpace"] = "Not enough inventory space for {0} {1}.",
+                ["BankNotConfigured"] = "The RP coin is not set up yet. An admin has to set the coin shortname and skin ID.",
+                ["BankNoPermission"] = "You don't have permission to use the bank.",
+                ["BankFailed"] = "The bank could not finish that, so it was rolled back.",
+                ["BankNoRewards"] = "Server Rewards is not loaded, so the bank is unavailable.",
+                ["BankBusy"] = "Wait for the bank action to finish.",
+                ["BankRange"] = "That amount has to stay between {0} and {1}.",
+                ["BankOverflow"] = "That many coins would not fit in an RP balance.",
                 ["Help"] = "Shop admin commands:\n/{0} theme <name|auto>\n/{0} themes\n/{0} addcat <name> [iconShortname]\n/{0} delcat <name|index>\n/{0} add <category|index> <price> [amount] (uses held item)\n/{0} remove <itemId>\n/{0} trade <inShortname> <inAmount> <outShortname> <outAmount>\n/{0} deltrade <tradeId>\nUse 'rp' as a shortname for Server Rewards points."
             }, this);
         }
@@ -653,9 +886,19 @@ namespace Oxide.Plugins
             LoadData();
             LoadPurchases();
             LoadRefunds();
+            LoadKits();
             RegisterListingPerms();
+            RegisterPerm(PermWipeLock);
+            RegisterPerm(PermVipPerk);
+            RegisterPerm(PermVipXPerk);
+            if (config.Bank != null) RegisterPerm(config.Bank.Permission);
+            LoadBankLog();
+            EnsureIconsFolder();
             foreach (var c in config.Commands)
                 cmd.AddChatCommand(c, this, nameof(ChatShop));
+            cmd.AddChatCommand("perks", this, nameof(ChatOpenKits));
+            cmd.AddChatCommand("vipdailykit", this, nameof(ChatOpenKits));
+            cmd.AddChatCommand("vip4daykit", this, nameof(ChatOpenKits));
         }
 
         private void OnServerInitialized()
@@ -665,7 +908,11 @@ namespace Oxide.Plugins
                 PrintWarning("ServerRewards is not loaded. Purchases and RP trades will fail until it is.");
             EnsureRaidableTab();
             FindPaidItems();
-            Puts($"NightshadeShop v{PluginVersion} loaded: {data.Categories.Count} categories, {data.Categories.Sum(x => x.Items.Count)} listings, {data.TradeCategories.Count} Admin Shop categories, {data.Exchanges.Count} trades.");
+            PreloadLocalIcons();
+            Puts($"NightshadeShop v{PluginVersion} loaded: {data.Categories.Count} categories, {data.Categories.Sum(x => x.Items.Count)} listings, {data.TradeCategories.Count} Admin Shop categories, {data.Exchanges.Count} trades, {kitFile.Kits.Count} kits.");
+            ItemDefinition coinDef;
+            if (config.Bank != null && config.Bank.Enabled && !CoinReady(out coinDef))
+                PrintWarning("NightshadeShop bank coin shortname is not a game item. The default is paper with skin 3843525164.");
         }
 
         private void OnPluginLoaded(Plugin plugin)
@@ -685,6 +932,12 @@ namespace Oxide.Plugins
                     foreach (var refund in pendingRefunds.Where(r => r.RefundDue).ToList()) Refund(refund);
                 });
             }
+            else if (plugin.Name == "ImageLibrary")
+            {
+                ImageLibrary = plugin;
+                localPngQueued.Clear();
+                if (serverReady) NextTick(() => { if (!unloading) PreloadLocalIcons(); });
+            }
         }
 
         private void EnsureRaidableTab()
@@ -694,10 +947,11 @@ namespace Oxide.Plugins
                 ?? data.Categories.FirstOrDefault(x => string.Equals(x.Name, "Raidable Bases", StringComparison.OrdinalIgnoreCase));
             if (raid == null)
             {
-                raid = new ShopCategory { Name = "Raidable Bases", Icon = config.Events.RbIcon };
+                raid = new ShopCategory { Name = "Raidable Bases", Icon = config.Events.RbIcon, Tab = "events" };
                 data.Categories.Add(raid);
             }
             raid.RaidableTab = true;
+            MigrateCategory(raid);
 
             // Use the plugin's numeric levels, including custom difficulties, when available.
             var modes = new SortedDictionary<int, string>();
@@ -764,7 +1018,7 @@ namespace Oxide.Plugins
                 || x.Items.Any(i => i.Type == "dungeon"));
             if (dungeon < 0)
             {
-                data.Categories.Add(new ShopCategory { Name = "Dungeon", Icon = config.Events.DeIcon });
+                data.Categories.Add(new ShopCategory { Name = "Dungeon", Icon = config.Events.DeIcon, Tab = "events" });
                 dungeon = data.Categories.Count - 1;
             }
             data.Categories.Insert(dungeon + 1, raid);
@@ -820,6 +1074,7 @@ namespace Oxide.Plugins
             SaveRefunds();
             SaveData();
             SavePurchases();
+            SaveKits();
         }
 
         // Map wipe: reset per-wipe purchase counts.
@@ -830,6 +1085,13 @@ namespace Oxide.Plugins
                 foreach (var rec in player.Values)
                     rec.WipeCount = 0;
             SavePurchases();
+            if (kitFile?.Claims != null)
+            {
+                foreach (var player in kitFile.Claims.Values)
+                    foreach (var claim in player.Values)
+                        claim.WipeUses = 0;
+                SaveKits();
+            }
         }
 
         // Use the complete documented signature for Carbon's plugin hook dispatch.
@@ -880,6 +1142,7 @@ namespace Oxide.Plugins
         {
             SaveData();
             SavePurchases();
+            SaveKits();
         }
 
         private void OnPlayerDisconnected(BasePlayer p) => states.Remove(p.userID);
@@ -1001,6 +1264,16 @@ namespace Oxide.Plugins
 
         private bool CanSee(BasePlayer p, string perm) =>
             string.IsNullOrEmpty(perm) || IsAdmin(p) || permission.UserHasPermission(p.UserIDString, perm);
+
+        // Admin-only categories stay hidden, including from buy commands, until that admin turns admin mode on.
+        private bool HiddenFromPlayer(BasePlayer p, ShopCategory cat)
+        {
+            if (cat == null || cat.AdminModeOnly != true) return false;
+            if (p == null || !IsAdmin(p)) return true;
+            UiState s;
+            if (!states.TryGetValue(p.userID, out s) || s == null || !s.Admin) return true;
+            return false;
+        }
 
         private void RegisterPerm(string perm)
         {
@@ -1251,9 +1524,12 @@ namespace Oxide.Plugins
 
         private Theme ActiveTheme()
         {
-            if (!string.IsNullOrEmpty(config.ThemeMode) && !config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+            // Theme Mode in configs/NightshadeShop.json. NightshadeEvents, NightshadeLocker, and
+            // NightshadeVoteDay read that same key when their own theme mode is Shop.
+            string mode = EffectiveThemeMode();
+            if (!string.IsNullOrEmpty(mode) && !mode.Equals("Auto", StringComparison.OrdinalIgnoreCase))
             {
-                var forced = config.Themes.FirstOrDefault(x => string.Equals(x.Name, config.ThemeMode, StringComparison.OrdinalIgnoreCase));
+                var forced = config.Themes.FirstOrDefault(x => string.Equals(x.Name, mode, StringComparison.OrdinalIgnoreCase));
                 if (forced != null) return forced;
             }
 
@@ -1318,22 +1594,19 @@ namespace Oxide.Plugins
                 case "theme":
                 {
                     if (args.Length < 2) break;
-                    string mode = args[1];
-                    if (!mode.Equals("auto", StringComparison.OrdinalIgnoreCase) &&
-                        !config.Themes.Any(t => string.Equals(t.Name, mode, StringComparison.OrdinalIgnoreCase)))
+                    string stored = SetThemeMode(args[1]);
+                    if (stored == null)
                     {
                         SendReply(p, Msg("ThemeUnknown", p, string.Join(", ", config.Themes.Select(t => t.Name))));
                         return;
                     }
-                    config.ThemeMode = mode.Equals("auto", StringComparison.OrdinalIgnoreCase) ? "Auto" : mode;
-                    SaveConfig();
-                    SendReply(p, Msg("ThemeSet", p, config.ThemeMode, ActiveTheme().Name));
+                    SendReply(p, Msg("ThemeSet", p, stored, ActiveTheme().Name));
                     return;
                 }
                 case "themes":
                 {
                     var active = ActiveTheme();
-                    SendReply(p, "Themes (mode: " + config.ThemeMode + "):\n" + string.Join("\n",
+                    SendReply(p, "Themes (mode: " + EffectiveThemeMode() + "):\n" + string.Join("\n",
                         config.Themes.Select(t => $"{(t == active ? "> " : "  ")}{t.Name}  {t.From} to {t.To}  (priority {t.Priority})")));
                     return;
                 }
@@ -1342,7 +1615,9 @@ namespace Oxide.Plugins
                     if (args.Length < 2) break;
                     string name = args[1];
                     if (data.Categories.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) { SendReply(p, Msg("CategoryExists", p)); return; }
-                    data.Categories.Add(new ShopCategory { Name = name, Icon = args.Length > 2 ? args[2] : "" });
+                    var added = new ShopCategory { Name = name, Icon = args.Length > 2 ? args[2] : "", Tab = "shop" };
+                    MigrateCategory(added);
+                    data.Categories.Add(added);
                     SaveData();
                     SendReply(p, Msg("CategoryAdded", p, name));
                     return;
@@ -1485,8 +1760,9 @@ namespace Oxide.Plugins
         {
             ShopCategory cat;
             var item = FindItem(itemId, out cat);
-            if (item == null || cat == null || !CanSee(p, cat.Permission) || !CanSee(p, item.Permission)
-                || (!InSeason(cat) && !IsAdmin(p))) return;
+            if (item == null || cat == null) return;
+            if (HiddenFromPlayer(p, cat)) { SetStatus(s, Msg("HiddenCategory", p), true); return; }
+            if (!CanSee(p, cat.Permission) || !CanSee(p, item.Permission) || (!InSeason(cat) && !IsAdmin(p))) return;
             s.EditItem = s.EditTrade = 0;
             s.PickTarget = null;
             s.EventMenu = s.DescriptionEdit = false;
@@ -1495,27 +1771,73 @@ namespace Oxide.Plugins
             s.BuyQty = 1;
         }
 
+        // Purchase modal. Description viewport is 68px, about 40% of the previous 162px box.
+        private const int PurchaseDescH = 68;
+        private const int PurchaseIcon = 72;
+        private const int PurchaseDescW = 400;
+        private const int PurchaseDescX = 80;
+
+        private struct PurchaseFrame
+        {
+            public int ModalH;
+            public int IconY;
+            public int DescY;
+            public int QtyY;
+            public int QtyH;
+            public int RowY;
+            public int TypeY;
+            public bool Slider;
+        }
+
+        private static PurchaseFrame PurchaseFrameFor(bool slider)
+        {
+            if (!slider)
+                return new PurchaseFrame { ModalH = 307, IconY = 178, DescY = 102, QtyY = 62, QtyH = 32 };
+            return new PurchaseFrame { ModalH = 381, IconY = 252, DescY = 176, QtyY = 140, QtyH = 26, RowY = 100, TypeY = 62, Slider = true };
+        }
+
+        private string PurchaseTotalRich(BasePlayer p, ShopItem item, int qty, ThemeColors tc)
+        {
+            long cost = (long)Math.Max(0, item.Price) * Math.Max(1, qty);
+            string price = IsEvent(item) && item.ChargedByPlugin && item.PluginPricing ? "PRICED BY EVENT PLUGIN" : cost.ToString("N0") + " RP";
+            string color = Rich(cost > Balance(p) ? tc.Danger : tc.Accent);
+            return "<color=" + color + ">TOTAL: " + price + "</color>";
+        }
+
+        private void DrawQtyLine(CuiElementContainer c, string parent, BasePlayer p, UiState s, ShopItem item, ThemeColors tc, PurchaseFrame frame)
+        {
+            string name = UiModal + ".QtyLine";
+            Box(c, parent, "0 0 0 0", R(16, frame.QtyY, 544, frame.QtyY + frame.QtyH), name);
+            string total = PurchaseTotalRich(p, item, s.BuyQty, tc);
+            string text = frame.Slider
+                ? "QUANTITY: " + s.BuyQty + "  \u2022  " + total + "  \u2022  drag the handle, click the bar, or enter a number"
+                : "QUANTITY: 1  \u2022  This listing is limited to one per purchase.  \u2022  " + total;
+            Label(c, name, text, 11, tc.SubText, TextAnchor.MiddleCenter, Full(), false);
+        }
+
         private void BuildPurchasePopup(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
         {
             ShopCategory cat;
             var item = FindItem(s.BuyItem, out cat);
-            if (item == null) { s.BuyItem = 0; s.BuyToken = null; return; }
-            s.BuyQty = Mathf.Clamp(s.BuyQty, 1, PopupMax(p, item));
-            string box = ModalBox(c, tc, 560, 460, "PURCHASE \u2022 " + ItemLabel(item));
-            ListIcon(c, box, item.Icon, CardIcon(item), IsEvent(item) ? 0 : item.Skin, R(22, 304, 110, 392));
+            if (item == null || HiddenFromPlayer(p, cat)) { s.BuyItem = 0; s.BuyToken = null; return; }
+            int max = PopupMax(p, item);
+            s.BuyQty = Mathf.Clamp(s.BuyQty, 1, max);
+            var frame = PurchaseFrameFor(max > 1);
+            string box = ModalBox(c, tc, 560, frame.ModalH, "PURCHASE \u2022 " + ItemLabel(item));
+            int iconX = PurchaseDescX + (PurchaseDescW - PurchaseIcon) / 2;
+            ListIcon(c, box, item.Icon, CardIcon(item), IsEvent(item) ? 0 : item.Skin, R(iconX, frame.IconY, iconX + PurchaseIcon, frame.IconY + PurchaseIcon));
             string desc = ItemDescription(item);
             if (string.IsNullOrWhiteSpace(desc)) desc = "No additional description has been provided for this item.";
-            int textHeight = Math.Max(162, ((desc.Length + 45) / 46 + desc.Count(ch => ch == '\n')) * 20);
-            string descriptionArea = Scroll(c, box, R(130, 234, 536, 396), 162, textHeight, tc);
-            Label(c, descriptionArea, desc, 14, tc.Text, TextAnchor.UpperLeft, TL(4, 4, 392, textHeight - 8), false);
-            Box(c, box, tc.Panel, R(20, 218, 540, 220));
-            int max = PopupMax(p, item);
-            if (max > 1)
+            int textHeight = Math.Max(PurchaseDescH, ((desc.Length + 41) / 42 + desc.Count(ch => ch == '\n')) * 20);
+            string descriptionArea = Scroll(c, box, R(PurchaseDescX, frame.DescY, PurchaseDescX + PurchaseDescW, frame.DescY + PurchaseDescH), PurchaseDescH, textHeight, tc);
+            Label(c, descriptionArea, desc, 14, tc.Text, TextAnchor.UpperLeft, TL(8, 6, PurchaseDescW - 28, textHeight - 8), false);
+            DrawQtyLine(c, box, p, s, item, tc, frame);
+            if (frame.Slider)
             {
-                Label(c, box, "QUANTITY \u2022 drag the handle, click the bar, or enter a number", 12, tc.SubText, TextAnchor.MiddleCenter, R(20, 168, 540, 198));
-                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Max(1, s.BuyQty - 1)}", tc.Button, R(24, 126, 64, 158), "\u2212", 22, tc.ButtonText);
-                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Min(max, s.BuyQty + 1)}", tc.Button, R(496, 126, 536, 158), "+", 22, tc.ButtonText);
-                string track = Box(c, box, tc.Panel, R(100, 130, 460, 154));
+                int row = frame.RowY;
+                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Max(1, s.BuyQty - 1)}", tc.Button, R(24, row, 64, row + 32), "\u2212", 22, tc.ButtonText);
+                Btn(c, box, $"{UiCmd} buyqty {s.BuyToken} {Math.Min(max, s.BuyQty + 1)}", tc.Button, R(496, row, 536, row + 32), "+", 22, tc.ButtonText);
+                string track = Box(c, box, tc.Panel, R(100, row + 4, 460, row + 28));
                 Box(c, track, tc.Button, R(12, 9, 348, 15));
                 for (int i = 0; i <= 24; i++)
                 {
@@ -1539,25 +1861,13 @@ namespace Oxide.Plugins
                         }
                     }
                 });
-                Label(c, box, "TYPE QTY", 11, tc.SubText, TextAnchor.MiddleRight, R(50, 76, 150, 106));
-                Input(c, box, s.BuyQty.ToString(), $"{UiCmd} buyqty {s.BuyToken}", tc.Card, tc.Text, R(160, 76, 245, 106), 14, 4);
-                Label(c, box, "1\u2013" + max + " purchases \u2022 Enter to apply", 11, tc.SubText, TextAnchor.MiddleLeft, R(258, 76, 530, 106), false);
+                int type = frame.TypeY;
+                Label(c, box, "TYPE QTY", 11, tc.SubText, TextAnchor.MiddleRight, R(50, type, 150, type + 30));
+                Input(c, box, s.BuyQty.ToString(), $"{UiCmd} buyqty {s.BuyToken}", tc.Card, tc.Text, R(160, type, 245, type + 30), 14, 4);
+                Label(c, box, "1\u2013" + max + " purchases \u2022 Enter to apply", 11, tc.SubText, TextAnchor.MiddleLeft, R(258, type, 530, type + 30), false);
             }
-            else
-                Label(c, box, "QUANTITY: 1 \u2022 This listing is limited to one per purchase.", 14, tc.SubText, TextAnchor.MiddleCenter, R(20, 92, 540, 158));
-            DrawPurchaseTotals(c, p, s, item, tc);
             Btn(c, box, $"{UiCmd} buycancel", tc.Button, R(20, 16, 200, 54), "CANCEL", 14, tc.ButtonText);
             Btn(c, box, $"{UiCmd} buyconfirm {s.BuyToken}", tc.Accent, R(216, 16, 540, 54), "CONFIRM PURCHASE", 14, tc.AccentText);
-        }
-
-        private void DrawPurchaseTotals(CuiElementContainer c, BasePlayer p, UiState s, ShopItem item, ThemeColors tc)
-        {
-            string total = UiModal + ".PurchaseTotals";
-            Box(c, UiModal + ".Box", tc.Panel, R(20, 198, 540, 216), total);
-            long cost = (long)Math.Max(0, item.Price) * s.BuyQty;
-            string price = IsEvent(item) && item.ChargedByPlugin && item.PluginPricing ? "PRICED BY EVENT PLUGIN" : $"{cost:N0} RP";
-            string amount = IsEvent(item) || !item.GiveItem ? $"{s.BuyQty:N0} purchase(s)" : $"{s.BuyQty:N0} \u00D7 {item.Amount:N0} = {(long)s.BuyQty * item.Amount:N0} items";
-            Label(c, total, amount + "    \u2022    TOTAL: " + price, 12, cost > Balance(p) ? tc.Danger : tc.Accent, TextAnchor.MiddleCenter, Full());
         }
 
         private void OnCuiDraggableDrag(BasePlayer player, string name, Vector3 position, CommunityEntity.DraggablePositionSendType type)
@@ -1576,9 +1886,9 @@ namespace Oxide.Plugins
             s.BuyQty = Mathf.Clamp(1 + Mathf.RoundToInt(fraction * (max - 1)), 1, max);
             if (Time.realtimeSinceStartup - s.LastQtyDraw < 0.1f) return;
             s.LastQtyDraw = Time.realtimeSinceStartup;
-            CuiHelper.DestroyUi(player, UiModal + ".PurchaseTotals");
+            CuiHelper.DestroyUi(player, UiModal + ".QtyLine");
             var c = new CuiElementContainer();
-            DrawPurchaseTotals(c, player, s, item, ActiveTheme().Colors);
+            DrawQtyLine(c, UiModal + ".Box", player, s, item, ActiveTheme().Colors, PurchaseFrameFor(true));
             CuiHelper.AddUi(player, c);
         }
 
@@ -1626,6 +1936,7 @@ namespace Oxide.Plugins
             var item = FindItem(itemId, out cat);
             if (item == null) { SetStatus(s, Msg("ItemMissing", p), true); return; }
             if (ServerRewards == null) { SetStatus(s, Msg("NoServerRewards", p), true); return; }
+            if (HiddenFromPlayer(p, cat)) { SetStatus(s, Msg("HiddenCategory", p), true); Fx(p, FxDeny); return; }
             if (!CanSee(p, cat.Permission) || !CanSee(p, item.Permission) || (!InSeason(cat) && !IsAdmin(p))) { SetStatus(s, Msg("NoAccess", p), true); Fx(p, FxDeny); return; }
             if (item.GiveItem && item.RequireOwnership && !Owns(p, Def(item.Shortname))) { SetStatus(s, Msg("NotOwned", p, ItemLabel(item)), true); Fx(p, FxDeny); return; }
 
@@ -1890,18 +2201,29 @@ namespace Oxide.Plugins
                     s.BuyToken = null;
                     s.DescriptionEdit = false;
                     s.EditItem = s.EditTrade = 0;
+                    s.EditKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
                     s.Open = false;
                     CuiHelper.DestroyUi(p, UiMain);
                     return;
                 case "tab":
+                    s.BankOpen = false;
+                    s.ThemeMenu = false;
                     s.BuyItem = 0;
                     s.BuyToken = null;
-                    s.Tab = arg.GetInt(1) == 1 && CanExchange(p) ? 1 : 0;
+                    int requested = arg.GetInt(1);
+                    if (requested == 3 && CanExchange(p)) s.Tab = 3;
+                    else if (requested == 2 && CanSeeKits(p)) s.Tab = 2;
+                    else if (requested == 1) s.Tab = 1;
+                    else s.Tab = 0;
                     s.EditItem = s.EditTrade = 0;
+                    s.EditKitId = null;
                     s.TradeCat = TradeTiles;
                     s.Status = "";
+                    break;
+                case "kitclaim":
+                    ClaimKit(p, s, arg.GetString(1, ""));
                     break;
                 case "tcat":
                     s.TradeCat = Mathf.Clamp(arg.GetInt(1, TradeTiles), TradeOther, data.TradeCategories.Count - 1);
@@ -1982,9 +2304,28 @@ namespace Oxide.Plugins
                 case "admin":
                     if (!admin) return;
                     s.Admin = !s.Admin;
+                    s.ThemeMenu = false;
                     s.EditItem = s.EditTrade = 0;
+                    s.EditKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
+                    break;
+                case "bank":
+                    if (!CanUseBank(p)) { SetStatus(s, Msg("BankNoPermission", p), true); break; }
+                    OpenBank(s);
+                    break;
+                case "bankgo":
+                    if (!CanUseBank(p)) return;
+                    OpenBank(s);
+                    RunBank(p, s, arg.GetString(1, ""));
+                    break;
+                case "thememenu":
+                    if (!admin || !s.Admin) return;
+                    s.ThemeMenu = !s.ThemeMenu;
+                    break;
+                case "themepick":
+                    if (!admin || !s.Admin) return;
+                    if (ApplyThemeChoice(p, s, Rest(arg, 1))) s.ThemeMenu = false;
                     break;
                 default:
                     if (!admin || !s.Admin) return;
@@ -2009,7 +2350,9 @@ namespace Oxide.Plugins
                     string name = Rest(arg, 1);
                     if (string.IsNullOrEmpty(name)) return;
                     if (data.Categories.Any(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase))) { SetStatus(s, Msg("CategoryExists", p), true); return; }
-                    data.Categories.Add(new ShopCategory { Name = name });
+                    var added = new ShopCategory { Name = name, Tab = s.Tab == 1 ? "events" : "shop" };
+                    MigrateCategory(added);
+                    data.Categories.Add(added);
                     s.Cat = data.Categories.Count - 1;
                     SaveData();
                     SetStatus(s, Msg("CategoryAdded", p, name), false);
@@ -2044,6 +2387,32 @@ namespace Oxide.Plugins
                         .Distinct().ToList();
                     SaveData();
                     SetStatus(s, data.Categories[s.Cat].Themes.Count == 0 ? "Category is now visible all year." : "Category shows during: " + string.Join(", ", data.Categories[s.Cat].Themes), false);
+                    return;
+                }
+                case "cattab":
+                {
+                    if (s.Cat < 0 || s.Cat >= data.Categories.Count) return;
+                    string chosen = arg.GetString(1, "");
+                    if (!string.Equals(chosen, "shop", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(chosen, "events", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SetStatus(s, Msg("BadValue", p), true);
+                        return;
+                    }
+                    string norm = string.Equals(chosen, "events", StringComparison.OrdinalIgnoreCase) ? "events" : "shop";
+                    data.Categories[s.Cat].Tab = norm;
+                    s.Tab = norm == "events" ? 1 : 0;
+                    SaveData();
+                    SetStatus(s, "Category tab set to " + norm + ".", false);
+                    return;
+                }
+                case "cathidden":
+                {
+                    if (s.Cat < 0 || s.Cat >= data.Categories.Count) return;
+                    var hiddenCat = data.Categories[s.Cat];
+                    hiddenCat.AdminModeOnly = hiddenCat.AdminModeOnly != true;
+                    SaveData();
+                    SetStatus(s, hiddenCat.AdminModeOnly == true ? "Category is hidden from players." : "Category is visible to players.", false);
                     return;
                 }
                 case "caticontext":
@@ -2089,9 +2458,139 @@ namespace Oxide.Plugins
                 case "done":
                     s.DescriptionEdit = false;
                     s.EditItem = s.EditTrade = 0;
+                    s.EditKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
                     return;
+                case "kitnew":
+                {
+                    if (kitFile.Kits == null) kitFile.Kits = new List<KitDef>();
+                    var created = new KitDef
+                    {
+                        Id = "kit" + kitFile.NextId++,
+                        Name = "New Kit",
+                        Icon = "supply.signal",
+                        Permission = "",
+                        CooldownSeconds = 86400
+                    };
+                    kitFile.Kits.Add(created);
+                    SaveKits();
+                    s.EditKitId = created.Id;
+                    s.KitShort = "";
+                    s.KitAmt = "1";
+                    s.KitSkin = "0";
+                    SetStatus(s, "Kit created. Empty permission means anyone who can open Kits.", false);
+                    return;
+                }
+                case "kitedit":
+                    s.EditKitId = arg.GetString(1, "");
+                    s.EditItem = s.EditTrade = 0;
+                    s.KitShort = "";
+                    s.KitAmt = "1";
+                    s.KitSkin = "0";
+                    return;
+                case "kitdel":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    if (kit == null) return;
+                    if (!Confirm(s, "kit" + kit.Id)) { SetStatus(s, Msg("ConfirmDelete", p) + " (" + kit.Name + ")", true); return; }
+                    kitFile.Kits.Remove(kit);
+                    if (s.EditKitId == kit.Id) s.EditKitId = null;
+                    SaveKits();
+                    SetStatus(s, Msg("Deleted", p), false);
+                    return;
+                }
+                case "kitset":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    if (kit == null) return;
+                    if (!SetKitField(kit, arg.GetString(2, "").ToLowerInvariant(), Rest(arg, 3))) { SetStatus(s, Msg("BadValue", p), true); return; }
+                    RegisterPerm(kit.Permission);
+                    SaveKits();
+                    SetStatus(s, Msg("Saved", p), false);
+                    return;
+                }
+                case "kiticonheld":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    if (kit == null) return;
+                    var held = SourceItem(p);
+                    if (held == null) { SetStatus(s, Msg("HoldItem", p), true); return; }
+                    kit.Icon = held.info.shortname;
+                    SaveKits();
+                    SetStatus(s, Msg("Saved", p), false);
+                    return;
+                }
+                case "kitdraft":
+                {
+                    string field = arg.GetString(2, "").ToLowerInvariant();
+                    string value = Rest(arg, 3);
+                    if (field == "short") s.KitShort = value.Trim();
+                    else if (field == "amt") s.KitAmt = value.Trim();
+                    else if (field == "skin") s.KitSkin = value.Trim();
+                    return;
+                }
+                case "kitadd":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    if (kit == null) return;
+                    if (!AddKitStack(kit, s.KitShort, s.KitAmt, s.KitSkin)) { SetStatus(s, Msg("BadValue", p), true); return; }
+                    SaveKits();
+                    s.KitShort = "";
+                    s.KitAmt = "1";
+                    s.KitSkin = "0";
+                    SetStatus(s, Msg("Saved", p), false);
+                    return;
+                }
+                case "kititem":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    int index = arg.GetInt(2, -1);
+                    if (kit == null || kit.Items == null || index < 0 || index >= kit.Items.Count) return;
+                    string field = arg.GetString(3, "").ToLowerInvariant();
+                    string value = Rest(arg, 4);
+                    var stack = kit.Items[index];
+                    if (field == "amt")
+                    {
+                        int amount;
+                        if (!int.TryParse(value, out amount) || amount < 1) { SetStatus(s, Msg("BadValue", p), true); return; }
+                        stack.Amount = amount;
+                    }
+                    else if (field == "skin")
+                    {
+                        ulong skin;
+                        if (!ulong.TryParse(value, out skin)) { SetStatus(s, Msg("BadValue", p), true); return; }
+                        stack.Skin = skin;
+                    }
+                    else if (field == "short")
+                    {
+                        if (Def(value) == null) { SetStatus(s, Msg("BadValue", p), true); return; }
+                        stack.Shortname = value.Trim();
+                    }
+                    else return;
+                    SaveKits();
+                    SetStatus(s, Msg("Saved", p), false);
+                    return;
+                }
+                case "kitdelitem":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    int index = arg.GetInt(2, -1);
+                    if (kit == null || kit.Items == null || index < 0 || index >= kit.Items.Count) return;
+                    kit.Items.RemoveAt(index);
+                    SaveKits();
+                    SetStatus(s, Msg("Deleted", p), false);
+                    return;
+                }
+                case "kitcopy":
+                {
+                    var kit = FindKit(arg.GetString(1, ""));
+                    if (kit == null) return;
+                    int added = CopyInventoryToKit(p, kit);
+                    SaveKits();
+                    SetStatus(s, "Added " + added + " stack" + (added == 1 ? "" : "s") + " from your main inventory and belt.", false);
+                    return;
+                }
 
                 // ---- Item picklist ----
                 case "pickopen":
@@ -2368,6 +2867,18 @@ namespace Oxide.Plugins
             string target = s.PickTarget;
             s.PickTarget = null;
 
+            if (!string.IsNullOrEmpty(target) && target.StartsWith("kitadd:", StringComparison.Ordinal))
+            {
+                var kit = FindKit(target.Substring("kitadd:".Length));
+                if (kit == null) return;
+                if (kit.Items == null) kit.Items = new List<KitStack>();
+                kit.Items.Add(new KitStack { Shortname = def.shortname, Amount = 1, Skin = 0 });
+                SaveKits();
+                s.EditKitId = kit.Id;
+                SetStatus(s, Msg("Saved", p) + " Set the amount and skin below.", false);
+                return;
+            }
+
             if (target == "new")
             {
                 var cat = data.Categories[Mathf.Clamp(s.Cat, 0, data.Categories.Count - 1)];
@@ -2494,7 +3005,7 @@ namespace Oxide.Plugins
             c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = def.itemid, SkinId = skin, BlocksRaycast = false }, rect } });
         }
 
-        // Renders a URL image, a workshop skin ID, or an item shortname; falls back to def/skin.
+        // URL, workshop skin ID, item shortname, or a png in data/Nightshade/NightshadeShop/Icons/.
         private void ListIcon(CuiElementContainer c, string parent, string icon, ItemDefinition fallback, ulong fallbackSkin, CuiRectTransformComponent rect)
         {
             if (!string.IsNullOrEmpty(icon))
@@ -2504,14 +3015,26 @@ namespace Oxide.Plugins
                     c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Url = icon, Color = "1 1 1 1", BlocksRaycast = false }, rect } });
                     return;
                 }
-                ulong skinIcon;
-                if (ulong.TryParse(icon, out skinIcon))
+                if (IsLocalPng(icon))
                 {
-                    c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = SkinIconItemId, SkinId = skinIcon, BlocksRaycast = false }, rect } });
-                    return;
+                    string png = LocalPngId(icon);
+                    if (!string.IsNullOrEmpty(png))
+                    {
+                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Png = png, Color = "1 1 1 1", BlocksRaycast = false }, rect } });
+                        return;
+                    }
                 }
-                var d = Def(icon);
-                if (d != null) { Icon(c, parent, d, 0, rect); return; }
+                else
+                {
+                    ulong skinIcon;
+                    if (ulong.TryParse(icon, out skinIcon))
+                    {
+                        c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = SkinIconItemId, SkinId = skinIcon, BlocksRaycast = false }, rect } });
+                        return;
+                    }
+                    var d = Def(icon);
+                    if (d != null) { Icon(c, parent, d, 0, rect); return; }
+                }
             }
             Icon(c, parent, fallback, fallbackSkin, rect);
         }
@@ -2549,7 +3072,7 @@ namespace Oxide.Plugins
                     new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-230 -220", OffsetMax = "230 220" }
                 }
             });
-            Label(ui, UiScrollTest, "NIGHTSHADE SCROLL TEST v1.5.0", 18, "#FFFFFF", TextAnchor.MiddleCenter, R(10, 390, 450, 430));
+            Label(ui, UiScrollTest, "NIGHTSHADE SCROLL TEST v" + PluginVersion, 18, "#FFFFFF", TextAnchor.MiddleCenter, R(10, 390, 450, 430));
             Label(ui, UiScrollTest, "Hover the numbered rows and turn the wheel.", 13, "#DDDDDD", TextAnchor.MiddleCenter, R(10, 355, 450, 390));
             string scrollName = UiScrollTest + ".Native";
             var scroll = new CuiScrollViewComponent
@@ -2624,7 +3147,11 @@ namespace Oxide.Plugins
             var s = S(p);
             bool admin = IsAdmin(p);
             if (!admin) s.Admin = false;
-            if (s.Tab == 1 && !CanExchange(p)) s.Tab = 0;
+            if (s.Tab == 3 && !CanExchange(p)) s.Tab = 0;
+            if (s.Tab == 2 && !CanSeeKits(p)) s.Tab = 0;
+            if (s.Tab < 0 || s.Tab > 3) s.Tab = 0;
+            if (!CanUseBank(p)) s.BankOpen = false;
+            if (!admin || !s.Admin) s.ThemeMenu = false;
 
             var theme = ActiveTheme();
             var tc = theme.Colors;
@@ -2643,38 +3170,27 @@ namespace Oxide.Plugins
                 Components = { Img(tc.Background), new CuiRectTransformComponent { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-550 -310", OffsetMax = "550 310" } }
             });
 
-            // Header
+            // Header. BANK and the admin theme control live here, not in the equal-width tab bar.
             string header = Box(c, UiFrame, tc.Header, R(0, 570, 1100, 620));
             Box(c, UiFrame, tc.Accent, R(0, 566, 1100, 570));
-            Icon(c, header, Def(theme.Icon), 0, R(12, 7, 48, 43));
-            Label(c, header, $"{config.Title}   <size=14><color={Rich(tc.Accent)}>{theme.Tagline}</color></size>", 24, tc.Text, TextAnchor.MiddleLeft, R(58, 0, 760, 50));
+            DrawShopHeader(c, header, p, s, tc, theme, admin, bal);
 
-            string balBox = Box(c, header, tc.Card, R(800, 8, 1050, 42));
-            Label(c, balBox, "BALANCE", 11, tc.SubText, TextAnchor.MiddleLeft, R(10, 0, 100, 34));
-            Label(c, balBox, ServerRewards == null ? "N/A" : $"{bal:N0} <color={Rich(tc.Accent)}>RP</color>", 18, tc.Text, TextAnchor.MiddleRight, R(90, 0, 240, 34));
-            Btn(c, header, $"{UiCmd} close", tc.Danger, R(1058, 9, 1090, 41), "X", 16, tc.DangerText);
-
-            // Tab bar
+            // Tab bar. Width is split evenly across whichever tabs this player can see.
             string tabs = Box(c, UiFrame, tc.Panel, R(0, 526, 1100, 566));
-            Btn(c, tabs, $"{UiCmd} tab 0", s.Tab == 0 ? tc.Accent : tc.Button, R(16, 6, 196, 34), "SHOP", 15, s.Tab == 0 ? tc.AccentText : tc.ButtonText);
-            if (CanExchange(p))
-                Btn(c, tabs, $"{UiCmd} tab 1", s.Tab == 1 ? tc.Accent : tc.Button, R(204, 6, 384, 34), config.ExchangeTabName, 15, s.Tab == 1 ? tc.AccentText : tc.ButtonText);
+            DrawTopTabs(c, tabs, p, s, tc);
 
-            if (s.Tab == 0)
-                Label(c, tabs, "SELECT AN ITEM \u2022 REVIEW \u2022 CONFIRM", 12, tc.SubText, TextAnchor.MiddleCenter, R(400, 6, 910, 34), false);
-
-            if (admin)
-                Btn(c, tabs, $"{UiCmd} admin", s.Admin ? tc.Danger : tc.Button, R(930, 6, 1084, 34), s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
-
-            // Content
-            if (s.Tab == 0) BuildShop(c, p, s, tc, bal);
-            else BuildExchange(c, p, s, tc);
+            // Content. 0 shop, 1 events, 2 kits, 3 admin shop. Bank replaces that content without becoming a tab.
+            if (s.BankOpen) BuildBank(c, p, s, tc, bal);
+            else if (s.Tab == 3) BuildExchange(c, p, s, tc);
+            else if (s.Tab == 2) BuildKits(c, p, s, tc);
+            else BuildShop(c, p, s, tc, bal);
 
             // Footer
             if (!string.IsNullOrEmpty(s.Status))
                 Label(c, UiFrame, s.Status, 13, s.StatusBad ? tc.Danger : tc.Accent, TextAnchor.MiddleLeft, R(18, 10, 800, 44));
-            string modeText = config.ThemeMode.Equals("Auto", StringComparison.OrdinalIgnoreCase) ? "AUTO" : "LOCKED";
+            string modeText = EffectiveThemeMode().Equals("Auto", StringComparison.OrdinalIgnoreCase) ? "AUTO" : "LOCKED";
             Label(c, UiFrame, $"v{PluginVersion}   THEME: {theme.Name.ToUpperInvariant()} ({modeText})", 11, tc.SubText, TextAnchor.MiddleRight, R(800, 10, 1084, 44));
+            if (s.ThemeMenu && admin && s.Admin) DrawThemeMenu(c, p, s, tc);
 
             // Editors
             if (s.BuyItem != 0) BuildPurchasePopup(c, p, s, tc);
@@ -2683,6 +3199,7 @@ namespace Oxide.Plugins
             else if (s.Admin && s.EventMenu) BuildEventMenu(c, tc);
             else if (s.Admin && s.EditItem != 0) BuildItemEditor(c, s, tc);
             else if (s.Admin && s.EditTrade != 0) BuildTradeEditor(c, s, tc);
+            else if (s.Admin && !string.IsNullOrEmpty(s.EditKitId)) BuildKitEditor(c, s, tc);
 
             s.Open = true;
             CuiHelper.AddUi(p, c);
@@ -2690,9 +3207,15 @@ namespace Oxide.Plugins
 
         private void BuildShop(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc, int bal)
         {
+            string wantTab = s.Tab == 1 ? "events" : "shop";
             var visible = new List<int>();
             for (int i = 0; i < data.Categories.Count; i++)
-                if (CanSee(p, data.Categories[i].Permission) && (InSeason(data.Categories[i]) || IsAdmin(p))) visible.Add(i);
+            {
+                var candidate = data.Categories[i];
+                if (CategoryTab(candidate) != wantTab) continue;
+                if (HiddenFromPlayer(p, candidate)) continue;
+                if (CanSee(p, candidate.Permission) && (InSeason(candidate) || IsAdmin(p))) visible.Add(i);
+            }
             if (visible.Count > 0 && !visible.Contains(s.Cat)) s.Cat = visible[0];
 
             // Sidebar
@@ -2710,8 +3233,10 @@ namespace Oxide.Plugins
                 int count = cat.Items.Count(x => CanSee(p, x.Permission));
                 string b = Btn(c, catScroll, $"{UiCmd} cat {i}", on ? tc.Accent : tc.Button, TL(0, row * 40, 198, 36), null, 0, null);
                 ListIcon(c, b, cat.Icon, null, 0, R(6, 5, 32, 31));
-                string offSeason = InSeason(cat) ? "" : " <size=9>OFF</size>";
-                Label(c, b, $"{cat.Name.ToUpperInvariant()} <size=11>({count})</size>{offSeason}", cat.Name.Length > 12 ? 11 : 14, on ? tc.AccentText : tc.ButtonText, TextAnchor.MiddleLeft, R(40, 0, 170, 36));
+                string marks = "";
+                if (!InSeason(cat)) marks += " <size=9>OFF</size>";
+                if (cat.AdminModeOnly == true) marks += " <size=9>HIDDEN</size>";
+                Label(c, b, $"{cat.Name.ToUpperInvariant()} <size=11>({count})</size>{marks}", cat.Name.Length > 12 || marks.Length > 0 ? 11 : 14, on ? tc.AccentText : tc.ButtonText, TextAnchor.MiddleLeft, R(40, 0, 170, 36));
                 if (s.Admin)
                     Btn(c, catScroll, $"{UiCmd} delcat {i}", tc.Danger, TL(172, row * 40 + 7, 22, 22), "X", 11, tc.DangerText);
             }
@@ -2726,7 +3251,10 @@ namespace Oxide.Plugins
             string grid = Box(c, UiFrame, tc.Panel, R(250, 56, 1084, 510));
             if (visible.Count == 0)
             {
-                Label(c, grid, s.Admin ? "No categories yet. Add one on the left." : "The shop is empty right now.", 18, tc.SubText, TextAnchor.MiddleCenter, Full());
+                string empty = s.Tab == 1
+                    ? (s.Admin ? "No event categories yet. Add one on the left, or move a category here." : "No event listings right now.")
+                    : (s.Admin ? "No categories yet. Add one on the left." : "The shop is empty right now.");
+                Label(c, grid, empty, 18, tc.SubText, TextAnchor.MiddleCenter, Full());
                 return;
             }
 
@@ -2742,9 +3270,15 @@ namespace Oxide.Plugins
                 Label(c, grid, "PERM", 10, tc.SubText, TextAnchor.MiddleLeft, R(16, 393, 48, 413));
                 Input(c, grid, current.Permission, $"{UiCmd} catperm", tc.Card, tc.Text, R(48, 393, 290, 413), 11);
                 Label(c, grid, "ICON", 10, tc.SubText, TextAnchor.MiddleLeft, R(298, 393, 330, 413));
-                Input(c, grid, current.Icon, $"{UiCmd} caticontext", tc.Card, tc.Text, R(330, 393, 560, 413), 11);
+                Input(c, grid, current.Icon, $"{UiCmd} caticontext", tc.Card, tc.Text, R(330, 393, 560, 413), 11, 128);
                 Label(c, grid, "THEMES", 10, tc.SubText, TextAnchor.MiddleLeft, R(568, 393, 614, 413));
                 Input(c, grid, string.Join(", ", current.Themes ?? new List<string>()), $"{UiCmd} catthemes", tc.Card, tc.Text, R(614, 393, 818, 413), 11);
+                string tabNow = CategoryTab(current);
+                Label(c, grid, "TAB", 10, tc.SubText, TextAnchor.MiddleLeft, R(16, 360, 46, 384));
+                Btn(c, grid, $"{UiCmd} cattab shop", tabNow == "shop" ? tc.Accent : tc.Button, R(48, 360, 140, 384), "SHOP", 11, tabNow == "shop" ? tc.AccentText : tc.ButtonText);
+                Btn(c, grid, $"{UiCmd} cattab events", tabNow == "events" ? tc.Accent : tc.Button, R(146, 360, 250, 384), "EVENTS", 11, tabNow == "events" ? tc.AccentText : tc.ButtonText);
+                bool hiddenFlag = current.AdminModeOnly == true;
+                Btn(c, grid, $"{UiCmd} cathidden", hiddenFlag ? tc.Danger : tc.Button, R(266, 360, 520, 384), hiddenFlag ? "HIDDEN FROM PLAYERS: ON" : "HIDDEN FROM PLAYERS: OFF", 11, hiddenFlag ? tc.DangerText : tc.ButtonText);
             }
             else
             {
@@ -2755,7 +3289,8 @@ namespace Oxide.Plugins
             int descriptionH = listings.Any(x => x.ShowDescriptionOnCard && !string.IsNullOrWhiteSpace(ItemDescription(x))) ? 100 : 0;
             int cardH = 176 + descriptionH;
             int rows = (listings.Count + perRow - 1) / perRow;
-            string area = Scroll(c, grid, R(8, 8, 826, 388), 380, rows * (cardH + gap), tc);
+            int gridTop = s.Admin ? 352 : 388;
+            string area = Scroll(c, grid, R(8, 8, 826, gridTop), gridTop - 8, rows * (cardH + gap), tc);
 
             if (listings.Count == 0)
                 Label(c, area, s.Admin ? "No items. Hold an item and click + ADD HELD ITEM." : "Nothing here yet.", 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 150, 810, 40));
@@ -3109,10 +3644,10 @@ namespace Oxide.Plugins
             return box;
         }
 
-        private void Field(CuiElementContainer c, string box, ThemeColors tc, int y, string label, string value, string command, int x = 0)
+        private void Field(CuiElementContainer c, string box, ThemeColors tc, int y, string label, string value, string command, int x = 0, int chars = 64)
         {
             Label(c, box, label, 12, tc.SubText, TextAnchor.MiddleLeft, R(20 + x, y, 170 + x, y + 30));
-            Input(c, box, value, command, tc.Card, tc.Text, R(175 + x, y, 460 + x, y + 30));
+            Input(c, box, value, command, tc.Card, tc.Text, R(175 + x, y, 460 + x, y + 30), 14, chars);
         }
 
         // Right-hand column of the listing editor: access and purchase limits (all listing types).
@@ -3126,7 +3661,7 @@ namespace Oxide.Plugins
             Field(c, box, tc, 242, "DAILY LIMIT", item.DailyLimit.ToString(), cmd + " daily", x);
             Field(c, box, tc, 202, "WIPE LIMIT", item.WipeLimit.ToString(), cmd + " wipe", x);
             Field(c, box, tc, 162, "CARD ICON", item.Icon, cmd + " icon", x);
-            Label(c, box, "URL, workshop skin ID or shortname. Empty = item icon.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
+            Label(c, box, "URL, skin ID, shortname, or Icons/file.png. Empty = item icon.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
 
             Label(c, box, "ONE PER PURCHASE", 12, tc.SubText, TextAnchor.MiddleLeft, R(20 + x, 102, 170 + x, 132));
             Btn(c, box, cmd + " one", item.LimitToOne ? tc.Accent : tc.Button, R(175 + x, 102, 275 + x, 132), item.LimitToOne ? "YES" : "NO", 13, item.LimitToOne ? tc.AccentText : tc.ButtonText);
@@ -3208,6 +3743,1529 @@ namespace Oxide.Plugins
             Label(c, box, "Press Enter to save each field. Use 'rp' as the shortname for Server Rewards points.", 11, tc.SubText, TextAnchor.MiddleCenter, R(20, 62, 460, 92), false);
             Btn(c, box, $"{UiCmd} tdel {ex.Id}", tc.Danger, R(20, 16, 160, 52), "DELETE", 14, tc.DangerText);
             Btn(c, box, $"{UiCmd} done", tc.Accent, R(320, 16, 460, 52), "DONE", 14, tc.AccentText);
+        }
+
+        #endregion
+
+        #region Kits
+
+        // Kits tab is the wipe-unlock gate. default_unlocked is an Oxide group maintained by
+        // NightshadeDefaultUnlocked. That group is granted nightshadeshop.wipelock, and shop
+        // categories such as Halloween already require that permission through CanSee.
+        private bool CanSeeKits(BasePlayer p) => CanSee(p, PermWipeLock);
+
+        private void ChatOpenKits(BasePlayer p, string command, string[] args)
+        {
+            if (!CanUse(p)) { SendReply(p, Msg("NoPermission", p)); return; }
+            if (!CanSeeKits(p))
+            {
+                SendReply(p, "The Kits tab opens with wipe unlock (default_unlocked).");
+                return;
+            }
+            var s = S(p);
+            s.Tab = 2;
+            s.BuyItem = 0;
+            s.BuyToken = null;
+            s.EditItem = s.EditTrade = 0;
+            s.EditKitId = null;
+            s.PickTarget = null;
+            s.EventMenu = false;
+            s.DescriptionEdit = false;
+            s.Status = "";
+            OpenUi(p);
+        }
+
+        private KitDef FindKit(string id)
+        {
+            if (kitFile?.Kits == null || string.IsNullOrEmpty(id)) return null;
+            for (int i = 0; i < kitFile.Kits.Count; i++)
+                if (string.Equals(kitFile.Kits[i].Id, id, StringComparison.OrdinalIgnoreCase))
+                    return kitFile.Kits[i];
+            return null;
+        }
+
+        private static bool IsVipPerkPerm(string perm) =>
+            string.Equals((perm ?? "").Trim(), PermVipPerk, StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsVipXPerm(string perm) =>
+            string.Equals((perm ?? "").Trim(), PermVipXPerk, StringComparison.OrdinalIgnoreCase);
+
+        private static string LockLabel(string perm)
+        {
+            if (IsVipPerkPerm(perm)) return "VIP ONLY";
+            if (IsVipXPerm(perm)) return "VIPX ONLY";
+            return "LOCKED";
+        }
+
+        private KitClaim ClaimOf(string userId, string kitId, bool create)
+        {
+            if (kitFile.Claims == null) kitFile.Claims = new Dictionary<string, Dictionary<string, KitClaim>>();
+            Dictionary<string, KitClaim> map;
+            if (!kitFile.Claims.TryGetValue(userId, out map) || map == null)
+            {
+                if (!create) return null;
+                map = new Dictionary<string, KitClaim>();
+                kitFile.Claims[userId] = map;
+            }
+            KitClaim claim;
+            if (!map.TryGetValue(kitId, out claim) || claim == null)
+            {
+                if (!create) return null;
+                claim = new KitClaim();
+                map[kitId] = claim;
+            }
+            return claim;
+        }
+
+        private static DateTime AsUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc) return value;
+            if (value.Kind == DateTimeKind.Local) return value.ToUniversalTime();
+            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        }
+
+        private double CooldownLeft(BasePlayer p, KitDef kit)
+        {
+            if (kit == null || kit.CooldownSeconds <= 0 || p == null) return 0;
+            var claim = ClaimOf(p.UserIDString, kit.Id, false);
+            if (claim == null || claim.LastClaim == DateTime.MinValue) return 0;
+            double left = kit.CooldownSeconds - (DateTime.UtcNow - AsUtc(claim.LastClaim)).TotalSeconds;
+            return left > 0 ? left : 0;
+        }
+
+        private int UsesRemaining(BasePlayer p, KitDef kit)
+        {
+            if (kit == null || kit.MaxUsesPerWipe <= 0) return int.MaxValue;
+            var claim = p == null ? null : ClaimOf(p.UserIDString, kit.Id, false);
+            int used = claim?.WipeUses ?? 0;
+            return Math.Max(0, kit.MaxUsesPerWipe - used);
+        }
+
+        private static string FormatSpan(double seconds)
+        {
+            if (seconds < 0) seconds = 0;
+            int total = (int)Math.Ceiling(seconds);
+            int days = total / 86400;
+            int hours = (total % 86400) / 3600;
+            int minutes = (total % 3600) / 60;
+            if (days > 0) return hours > 0 ? days + "d " + hours + "h" : days + "d";
+            if (hours > 0) return minutes > 0 ? hours + "h " + minutes + "m" : hours + "h";
+            if (minutes > 0) return minutes + "m";
+            return Math.Max(1, total) + "s";
+        }
+
+        private static string HoursText(int seconds)
+        {
+            double hours = seconds / 3600d;
+            if (Math.Abs(hours - Math.Round(hours)) < 0.001d)
+                return Math.Round(hours).ToString("0", CultureInfo.InvariantCulture);
+            return hours.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+
+        private bool HasKitPerm(BasePlayer p, KitDef kit)
+        {
+            if (p == null || kit == null) return false;
+            string perm = (kit.Permission ?? "").Trim();
+            if (perm.Length == 0) return true;
+            return permission.UserHasPermission(p.UserIDString, perm);
+        }
+
+        private void ClaimKit(BasePlayer p, UiState s, string id)
+        {
+            if (!CanSeeKits(p))
+            {
+                SetStatus(s, "The Kits tab is available after wipe unlock.", true);
+                Fx(p, FxDeny);
+                return;
+            }
+            var kit = FindKit(id);
+            if (kit == null)
+            {
+                SetStatus(s, "That kit no longer exists.", true);
+                Fx(p, FxDeny);
+                return;
+            }
+            string deny;
+            if (!TryClaimKit(p, kit, out deny))
+            {
+                SetStatus(s, deny, true);
+                Fx(p, FxDeny);
+                return;
+            }
+            SetStatus(s, kit.Name + " claimed.", false);
+            Fx(p, FxBuy);
+        }
+
+        private bool TryClaimKit(BasePlayer p, KitDef kit, out string deny)
+        {
+            deny = "";
+            if (p == null || kit == null) { deny = "That kit no longer exists."; return false; }
+            if (!CanSeeKits(p)) { deny = "The Kits tab is available after wipe unlock."; return false; }
+            string perm = (kit.Permission ?? "").Trim();
+            if (perm.Length > 0 && !permission.UserHasPermission(p.UserIDString, perm))
+            {
+                deny = IsVipPerkPerm(perm) ? "VIP only. You need " + PermVipPerk + "."
+                    : IsVipXPerm(perm) ? "VIPx only. You need " + PermVipXPerk + "."
+                    : "You need " + perm + " to claim this kit.";
+                return false;
+            }
+            double left = CooldownLeft(p, kit);
+            if (left > 0)
+            {
+                deny = kit.Name + " is on cooldown. Available in " + FormatSpan(left) + ".";
+                return false;
+            }
+            if (UsesRemaining(p, kit) <= 0)
+            {
+                deny = "No uses left this wipe.";
+                return false;
+            }
+            if (!TryGiveKit(p, kit))
+            {
+                deny = "Your inventory is full. Make space and try again. The cooldown was not used.";
+                return false;
+            }
+            var claim = ClaimOf(p.UserIDString, kit.Id, true);
+            claim.LastClaim = DateTime.UtcNow;
+            if (kit.MaxUsesPerWipe > 0) claim.WipeUses++;
+            SaveKits();
+            Log(p.displayName + " (" + p.UserIDString + ") claimed kit " + kit.Id + " (" + kit.Name + ")");
+            return true;
+        }
+
+        private bool TryGiveKit(BasePlayer p, KitDef kit)
+        {
+            var items = kit.Items ?? new List<KitStack>();
+            var main = p.inventory.containerMain;
+            var belt = p.inventory.containerBelt;
+            int slotsNeeded = 0;
+            bool any = false;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var stack = items[i];
+                if (stack == null || stack.Amount < 1) continue;
+                var def = Def(stack.Shortname);
+                if (def == null)
+                {
+                    PrintWarning("Kit " + kit.Id + " has an unknown shortname: " + stack.Shortname);
+                    continue;
+                }
+                any = true;
+                int remaining = stack.Amount;
+                remaining -= PartialStackRoom(main, def, stack.Skin);
+                remaining -= PartialStackRoom(belt, def, stack.Skin);
+                if (remaining > 0)
+                {
+                    int stackSize = Math.Max(1, def.stackable);
+                    slotsNeeded += (remaining + stackSize - 1) / stackSize;
+                }
+            }
+            if (!any) return false;
+            int freeSlots = CountFreeSlots(main) + CountFreeSlots(belt);
+            if (slotsNeeded > freeSlots) return false;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var stack = items[i];
+                if (stack == null || stack.Amount < 1) continue;
+                var def = Def(stack.Shortname);
+                if (def == null) continue;
+                var item = ItemManager.Create(def, stack.Amount, stack.Skin);
+                if (item == null) continue;
+                if (!p.inventory.GiveItem(item))
+                    item.Drop(p.GetDropPosition(), p.GetDropVelocity());
+            }
+            return true;
+        }
+
+        private static int CountFreeSlots(ItemContainer container)
+        {
+            if (container == null) return 0;
+            int free = 0;
+            for (int i = 0; i < container.capacity; i++)
+                if (container.GetSlot(i) == null) free++;
+            return free;
+        }
+
+        private static int PartialStackRoom(ItemContainer container, ItemDefinition def, ulong skin)
+        {
+            if (container == null) return 0;
+            int room = 0;
+            for (int i = 0; i < container.itemList.Count; i++)
+            {
+                var slot = container.itemList[i];
+                if (slot != null && slot.info == def && slot.skin == skin && slot.amount < slot.MaxStackable())
+                    room += slot.MaxStackable() - slot.amount;
+            }
+            return room;
+        }
+
+        private bool SetKitField(KitDef kit, string field, string value)
+        {
+            if (kit == null) return false;
+            value = value ?? "";
+            switch (field)
+            {
+                case "name":
+                    if (string.IsNullOrWhiteSpace(value)) return false;
+                    kit.Name = value.Trim();
+                    return true;
+                case "icon":
+                    kit.Icon = value.Trim();
+                    return true;
+                case "perm":
+                    kit.Permission = value.Trim();
+                    return true;
+                case "cooldown":
+                {
+                    double hours;
+                    if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out hours) || hours < 0 || hours > 8760)
+                        return false;
+                    kit.CooldownSeconds = (int)Math.Round(hours * 3600d);
+                    return true;
+                }
+                case "uses":
+                {
+                    int uses;
+                    if (!int.TryParse(value, out uses) || uses < 0) return false;
+                    kit.MaxUsesPerWipe = uses;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool AddKitStack(KitDef kit, string shortname, string amountText, string skinText)
+        {
+            if (kit == null) return false;
+            shortname = (shortname ?? "").Trim();
+            if (Def(shortname) == null) return false;
+            int amount;
+            if (!int.TryParse(amountText, out amount) || amount < 1) return false;
+            ulong skin = 0;
+            if (!string.IsNullOrWhiteSpace(skinText) && !ulong.TryParse(skinText.Trim(), out skin)) return false;
+            if (kit.Items == null) kit.Items = new List<KitStack>();
+            for (int i = 0; i < kit.Items.Count; i++)
+            {
+                var existing = kit.Items[i];
+                if (existing != null && string.Equals(existing.Shortname, shortname, StringComparison.OrdinalIgnoreCase) && existing.Skin == skin)
+                {
+                    existing.Amount += amount;
+                    return true;
+                }
+            }
+            kit.Items.Add(new KitStack { Shortname = shortname, Amount = amount, Skin = skin });
+            return true;
+        }
+
+        private int CopyInventoryToKit(BasePlayer p, KitDef kit)
+        {
+            if (p?.inventory == null || kit == null) return 0;
+            if (kit.Items == null) kit.Items = new List<KitStack>();
+            var found = new List<KitStack>();
+            TakeContainer(p.inventory.containerMain, found);
+            TakeContainer(p.inventory.containerBelt, found);
+            int added = 0;
+            for (int i = 0; i < found.Count; i++)
+            {
+                var stack = found[i];
+                bool merged = false;
+                for (int n = 0; n < kit.Items.Count; n++)
+                {
+                    var existing = kit.Items[n];
+                    if (existing != null && string.Equals(existing.Shortname, stack.Shortname, StringComparison.OrdinalIgnoreCase) && existing.Skin == stack.Skin)
+                    {
+                        existing.Amount += stack.Amount;
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) kit.Items.Add(stack);
+                added++;
+            }
+            return added;
+        }
+
+        private static void TakeContainer(ItemContainer container, List<KitStack> found)
+        {
+            if (container?.itemList == null) return;
+            for (int i = 0; i < container.itemList.Count; i++)
+            {
+                var item = container.itemList[i];
+                if (item?.info == null || item.amount < 1 || string.IsNullOrEmpty(item.info.shortname)) continue;
+                bool merged = false;
+                for (int n = 0; n < found.Count; n++)
+                {
+                    if (string.Equals(found[n].Shortname, item.info.shortname, StringComparison.OrdinalIgnoreCase) && found[n].Skin == item.skin)
+                    {
+                        found[n].Amount += item.amount;
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) found.Add(new KitStack { Shortname = item.info.shortname, Amount = item.amount, Skin = item.skin });
+            }
+        }
+
+        private void DrawTopTabs(CuiElementContainer c, string parent, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            var entries = new List<KeyValuePair<int, string>>
+            {
+                new KeyValuePair<int, string>(0, "SHOP"),
+                new KeyValuePair<int, string>(1, "EVENTS")
+            };
+            if (CanSeeKits(p)) entries.Add(new KeyValuePair<int, string>(2, "KITS"));
+            if (CanExchange(p))
+                entries.Add(new KeyValuePair<int, string>(3, string.IsNullOrEmpty(config.ExchangeTabName) ? "ADMIN SHOP" : config.ExchangeTabName));
+
+            const int barW = 1100;
+            const int margin = 8;
+            const int gap = 6;
+            int count = entries.Count;
+            int usable = barW - margin * 2 - gap * Math.Max(0, count - 1);
+            int width = Math.Max(1, usable / count);
+            int extra = usable - width * count;
+            int x = margin;
+            for (int i = 0; i < count; i++)
+            {
+                int w = width + (i < extra ? 1 : 0);
+                bool on = !s.BankOpen && s.Tab == entries[i].Key;
+                Btn(c, parent, UiCmd + " tab " + entries[i].Key, on ? tc.Accent : tc.Button, R(x, 6, x + w, 34), entries[i].Value, 15, on ? tc.AccentText : tc.ButtonText);
+                x += w + gap;
+            }
+        }
+
+        private void BuildKits(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
+            Label(c, panel, "KITS", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 414, 200, 446));
+            if (s.Admin)
+                Btn(c, panel, UiCmd + " kitnew", tc.Accent, R(900, 414, 1052, 444), "+ NEW KIT", 13, tc.AccentText);
+
+            var list = kitFile?.Kits ?? new List<KitDef>();
+            const int rowH = 156;
+            const int gap = 8;
+            const int viewTop = 406;
+            string area = Scroll(c, panel, R(8, 8, 1060, viewTop), viewTop - 8, Math.Max(1, list.Count) * (rowH + gap), tc);
+            if (list.Count == 0)
+            {
+                Label(c, area, s.Admin ? "No kits yet. Click + NEW KIT." : "No kits right now.", 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 150, 1040, 40));
+                return;
+            }
+            for (int i = 0; i < list.Count; i++)
+                DrawKitCard(c, area, p, s, tc, list[i], i * (rowH + gap), rowH);
+        }
+
+        private void DrawKitCard(CuiElementContainer c, string parent, BasePlayer p, UiState s, ThemeColors tc, KitDef kit, int y, int height)
+        {
+            const int width = 1040;
+            // Left-middle point anchor plus equal pixel offsets. Equal anchor spans are
+            // wider than they are tall on a 16:9 screen, which stretches the square kit art.
+            const int iconSize = 120;
+            const int iconLeft = 16;
+            string row = Box(c, parent, tc.Card, TL(0, y, width, height));
+            string icon = string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon;
+            string iconBg = Box(c, row, tc.Panel, new CuiRectTransformComponent
+            {
+                AnchorMin = "0 0.5",
+                AnchorMax = "0 0.5",
+                OffsetMin = $"{iconLeft} {-iconSize / 2}",
+                OffsetMax = $"{iconLeft + iconSize} {iconSize / 2}"
+            });
+            const int inset = 4;
+            ListIcon(c, iconBg, icon, Def(FirstKitIcon(kit)), 0, R(inset, inset, iconSize - inset, iconSize - inset));
+
+            bool admin = s.Admin;
+            int textX = iconLeft + iconSize + 14;
+            int textRight = admin ? 750 : 876;
+            Label(c, row, string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant(), 16, tc.Text, TextAnchor.MiddleLeft, R(textX, 96, textRight, 122));
+
+            DrawKitContents(c, row, tc, kit.Items, textX, 6, textRight - textX, 84);
+
+            bool allowed = HasKitPerm(p, kit);
+            double left = CooldownLeft(p, kit);
+            int uses = UsesRemaining(p, kit);
+            int claimX = admin ? 760 : 888;
+            int claimR = admin ? 876 : 1024;
+            if (!allowed)
+            {
+                string locked = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
+                Label(c, locked, LockLabel(kit.Permission), 13, tc.SubText, TextAnchor.MiddleCenter, Full());
+            }
+            else if (left > 0)
+            {
+                string wait = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
+                int bw = claimR - claimX;
+                Label(c, wait, "COOLDOWN", 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 23, bw - 2, 42));
+                Label(c, wait, FormatSpan(left).ToUpperInvariant(), 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 2, bw - 2, 21));
+            }
+            else if (uses <= 0)
+            {
+                string none = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
+                Label(c, none, "LIMIT REACHED", 11, tc.SubText, TextAnchor.MiddleCenter, Full());
+            }
+            else
+                Btn(c, row, UiCmd + " kitclaim " + kit.Id, tc.Accent, R(claimX, 48, claimR, 92), "CLAIM", 14, tc.AccentText);
+
+            if (admin)
+            {
+                Btn(c, row, UiCmd + " kitedit " + kit.Id, tc.Button, R(892, 100, 1024, 132), "EDIT", 12, tc.ButtonText);
+                Btn(c, row, UiCmd + " kitdel " + kit.Id, tc.Danger, R(892, 12, 1024, 40), "DEL", 12, tc.DangerText);
+            }
+        }
+
+        private static string FirstKitIcon(KitDef kit)
+        {
+            if (kit?.Items == null) return "supply.signal";
+            for (int i = 0; i < kit.Items.Count; i++)
+                if (kit.Items[i] != null && !string.IsNullOrEmpty(kit.Items[i].Shortname))
+                    return kit.Items[i].Shortname;
+            return "supply.signal";
+        }
+
+        private void DrawKitContents(CuiElementContainer c, string parent, ThemeColors tc, List<KitStack> items, int x, int y, int width, int height)
+        {
+            if (items == null || items.Count == 0)
+            {
+                Label(c, parent, "This kit is empty.", 12, tc.SubText, TextAnchor.MiddleLeft, R(x, y, x + width, y + height), false);
+                return;
+            }
+            const int cell = 40;
+            const int gap = 4;
+            int stride = cell + gap;
+            int cols = Math.Max(1, (width + gap) / stride);
+            int rows = (items.Count + cols - 1) / cols;
+            if (rows <= 2)
+            {
+                for (int i = 0; i < items.Count; i++)
+                {
+                    int col = i % cols;
+                    int row = i / cols;
+                    int cx = x + col * stride;
+                    int cy = y + height - (row + 1) * cell - row * gap;
+                    DrawKitStack(c, parent, tc, items[i], cx, cy, cell);
+                }
+                return;
+            }
+            int contentW = items.Count * stride;
+            string strip = HScroll(c, parent, R(x, y, x + width, y + height), contentW, height, tc);
+            for (int i = 0; i < items.Count; i++)
+                DrawKitStack(c, strip, tc, items[i], i * stride, Math.Max(0, height - cell - 6), cell);
+        }
+
+        private void DrawKitStack(CuiElementContainer c, string parent, ThemeColors tc, KitStack stack, int x, int y, int size)
+        {
+            if (stack == null) return;
+            string cell = Box(c, parent, tc.Panel, R(x, y, x + size, y + size));
+            var def = Def(stack.Shortname);
+            if (def != null) Icon(c, cell, def, stack.Skin, R(2, 12, size - 2, size - 2));
+            else Label(c, cell, "?", 14, tc.Danger, TextAnchor.MiddleCenter, R(0, 12, size, size));
+            Label(c, cell, "x" + Math.Max(0, stack.Amount).ToString(CultureInfo.InvariantCulture), 9, tc.Text, TextAnchor.MiddleCenter, R(0, 0, size, 14));
+        }
+
+        private string HScroll(CuiElementContainer c, string parent, CuiRectTransformComponent rect, int contentW, int viewportH, ThemeColors tc)
+        {
+            string name = CuiHelper.GetGuid();
+            int w = Math.Max(contentW, 1);
+            c.Add(new CuiElement
+            {
+                Name = name,
+                Parent = parent,
+                Components =
+                {
+                    new CuiImageComponent { Color = "0 0 0 0", BlocksRaycast = true },
+                    new CuiNeedsCursorComponent(),
+                    new CuiScrollViewComponent
+                    {
+                        Horizontal = true,
+                        Vertical = false,
+                        MovementType = ScrollRect.MovementType.Clamped,
+                        Elasticity = 0.1f,
+                        Inertia = true,
+                        DecelerationRate = 0.135f,
+                        ScrollSensitivity = 40f,
+                        ContentTransform = new CuiRectTransform { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "0 0", OffsetMax = w + " " + viewportH },
+                        HorizontalScrollbar = new CuiScrollbar { Size = 4, AutoHide = true, HandleColor = C(tc.Accent), HighlightColor = C(tc.Accent), PressedColor = C(tc.Accent), TrackColor = C(tc.Panel) }
+                    },
+                    rect
+                }
+            });
+            return name;
+        }
+
+        private void BuildKitEditor(CuiElementContainer c, UiState s, ThemeColors tc)
+        {
+            var kit = FindKit(s.EditKitId);
+            if (kit == null) { s.EditKitId = null; return; }
+            if (kit.Items == null) kit.Items = new List<KitStack>();
+            string box = ModalBox(c, tc, 980, 580, "EDIT KIT  " + kit.Name);
+            string cmd = UiCmd + " kitset " + kit.Id;
+
+            Field(c, box, tc, 490, "NAME", kit.Name, cmd + " name", 0, 64);
+            Field(c, box, tc, 450, "ICON", kit.Icon, cmd + " icon", 0, 256);
+            Btn(c, box, UiCmd + " kiticonheld " + kit.Id, tc.Button, R(468, 450, 560, 480), "HELD ICON", 11, tc.ButtonText);
+            string preview = Box(c, box, tc.Panel, R(568, 446, 606, 484));
+            ListIcon(c, preview, string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon, Def(FirstKitIcon(kit)), 0, R(4, 4, 34, 34));
+            Field(c, box, tc, 410, "PERMISSION", kit.Permission, cmd + " perm", 0, 128);
+            Label(c, box, "Empty = Kits access. vipperk = VIP ONLY. vipxperk = VIPX ONLY. Icon: URL, skin, shortname, or VIP_Daily.png in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
+            Field(c, box, tc, 350, "COOLDOWN (HOURS)", HoursText(kit.CooldownSeconds), cmd + " cooldown");
+            Field(c, box, tc, 310, "MAX USES / WIPE", kit.MaxUsesPerWipe.ToString(), cmd + " uses");
+            Label(c, box, "0 uses means no wipe cap. Cooldown still applies.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 288, 560, 308), false);
+
+            Label(c, box, "SHORTNAME", 10, tc.SubText, TextAnchor.MiddleLeft, R(20, 258, 110, 278));
+            Input(c, box, s.KitShort, UiCmd + " kitdraft " + kit.Id + " short", tc.Card, tc.Text, R(20, 226, 220, 256), 12, 64);
+            Label(c, box, "AMOUNT", 10, tc.SubText, TextAnchor.MiddleLeft, R(228, 258, 300, 278));
+            Input(c, box, s.KitAmt, UiCmd + " kitdraft " + kit.Id + " amt", tc.Card, tc.Text, R(228, 226, 310, 256), 12, 8);
+            Label(c, box, "SKIN", 10, tc.SubText, TextAnchor.MiddleLeft, R(318, 258, 430, 278));
+            Input(c, box, s.KitSkin, UiCmd + " kitdraft " + kit.Id + " skin", tc.Card, tc.Text, R(318, 226, 470, 256), 12, 24);
+            Btn(c, box, UiCmd + " kitadd " + kit.Id, tc.Accent, R(478, 226, 560, 256), "ADD", 12, tc.AccentText);
+            Btn(c, box, UiCmd + " pickopen kitadd:" + kit.Id, tc.Button, R(568, 226, 680, 256), "PICK ITEM", 12, tc.ButtonText);
+            Btn(c, box, UiCmd + " kitcopy " + kit.Id, tc.Button, R(688, 226, 880, 256), "COPY INVENTORY", 12, tc.ButtonText);
+
+            Label(c, box, "CONTENTS", 13, tc.Accent, TextAnchor.MiddleLeft, R(20, 190, 200, 216));
+            const int rowH = 36;
+            int contentH = Math.Max(rowH, kit.Items.Count * rowH);
+            string list = Scroll(c, box, R(16, 64, 964, 188), 124, contentH, tc);
+            if (kit.Items.Count == 0)
+                Label(c, list, "No items yet.", 13, tc.SubText, TextAnchor.MiddleLeft, TL(8, 8, 400, 28), false);
+            for (int i = 0; i < kit.Items.Count; i++)
+            {
+                var stack = kit.Items[i];
+                string line = Box(c, list, tc.Card, TL(0, i * rowH, 930, rowH - 2));
+                var def = Def(stack.Shortname);
+                if (def != null) Icon(c, line, def, stack.Skin, R(4, 2, 30, 30));
+                Label(c, line, stack.Shortname, 12, tc.Text, TextAnchor.MiddleLeft, R(36, 0, 280, rowH - 2));
+                Input(c, line, stack.Amount.ToString(), UiCmd + " kititem " + kit.Id + " " + i + " amt", tc.Panel, tc.Text, R(290, 3, 380, rowH - 5), 12, 8);
+                Input(c, line, stack.Skin.ToString(), UiCmd + " kititem " + kit.Id + " " + i + " skin", tc.Panel, tc.Text, R(388, 3, 560, rowH - 5), 12, 24);
+                Btn(c, line, UiCmd + " kitdelitem " + kit.Id + " " + i, tc.Danger, R(880, 4, 922, rowH - 6), "X", 12, tc.DangerText);
+            }
+
+            Btn(c, box, UiCmd + " kitdel " + kit.Id, tc.Danger, R(16, 14, 160, 50), "DELETE", 14, tc.DangerText);
+            Btn(c, box, UiCmd + " done", tc.Accent, R(820, 14, 964, 50), "DONE", 14, tc.AccentText);
+        }
+
+        // Switches the four migrated kits off the old item-shortname icons, and points the
+        // VIPx kits at nightshadeshop.vipxperk, only while those icons are still the originals.
+        private bool ApplyStoredKitDefaults()
+        {
+            bool changed = false;
+            changed |= RetargetMigratedKit(VipDailyId, "woodtea.advanced", DailyKitPng, null);
+            changed |= RetargetMigratedKit(VipxDailyId, "healingtea.pure", DailyKitPng, PermVipXPerk);
+            changed |= RetargetMigratedKit(VipFourId, "hazmatsuit", FourDayKitPng, null);
+            changed |= RetargetMigratedKit(VipxFourId, "explosive.timed", FourDayKitPng, PermVipXPerk);
+            return changed;
+        }
+
+        private bool RetargetMigratedKit(string id, string oldIcon, string png, string permIfStillDefault)
+        {
+            var kit = FindKit(id);
+            if (kit == null) return false;
+            string icon = (kit.Icon ?? "").Trim();
+            bool stillDefault = icon.Length == 0 || string.Equals(icon, oldIcon, StringComparison.OrdinalIgnoreCase);
+            if (!stillDefault) return false;
+            bool changed = false;
+            if (!string.Equals(icon, png, StringComparison.OrdinalIgnoreCase))
+            {
+                kit.Icon = png;
+                changed = true;
+            }
+            if (!string.IsNullOrEmpty(permIfStillDefault))
+            {
+                string perm = (kit.Permission ?? "").Trim();
+                if (!string.Equals(perm, permIfStillDefault, StringComparison.OrdinalIgnoreCase))
+                {
+                    kit.Permission = permIfStillDefault;
+                    changed = true;
+                }
+            }
+            return changed;
+        }
+
+        private string IconsDirectory()
+        {
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", "Icons");
+        }
+
+        private void EnsureIconsFolder()
+        {
+            string dir = IconsDirectory();
+            if (!Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+        }
+
+        // "VIP_Daily.png" or "Icons/VIP_Daily.png" both mean a file in the Icons folder.
+        private static string LocalPngName(string icon)
+        {
+            if (string.IsNullOrWhiteSpace(icon)) return null;
+            string text = icon.Trim().Replace('\\', '/');
+            if (text.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+            if (text.StartsWith("Icons/", StringComparison.OrdinalIgnoreCase))
+                text = text.Substring("Icons/".Length);
+            if (text.IndexOf('/') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return null;
+            if (!text.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) return null;
+            return text;
+        }
+
+        private static bool IsLocalPng(string icon) => LocalPngName(icon) != null;
+
+        // ImageLibrary stores the png and GetImage returns the id drawn by CuiRawImageComponent.Png.
+        // The same Call form is used by NightshadeInfo and ServerRewards (file:// for a data-folder png).
+        private string LocalPngId(string icon)
+        {
+            string name = LocalPngName(icon);
+            if (name == null) return null;
+            if (!ImageLibraryReady()) return null;
+            if (!localPngQueued.Contains(name))
+                QueueLocalPng(name);
+            object stored = ImageLibrary.Call("HasImage", name, 0UL);
+            if (!(stored is bool) || !(bool)stored) return null;
+            string png = ImageLibrary.Call<string>("GetImage", name, 0UL);
+            if (string.IsNullOrEmpty(png) || png == "0") return null;
+            return png;
+        }
+
+        private bool ImageLibraryReady()
+        {
+            if (ImageLibrary != null && ImageLibrary.IsLoaded) return true;
+            if (!imageLibraryWarned)
+            {
+                imageLibraryWarned = true;
+                PrintWarning("ImageLibrary is not loaded. Local shop icons will use the default icon.");
+            }
+            return false;
+        }
+
+        private void QueueLocalPng(string name)
+        {
+            EnsureIconsFolder();
+            string path = Path.Combine(IconsDirectory(), name);
+            if (!File.Exists(path))
+            {
+                if (localPngWarned.Add(name))
+                    PrintWarning("NightshadeShop icon file missing: " + name + ". Place it in data/Nightshade/NightshadeShop/Icons/. Using the default icon.");
+                return;
+            }
+            try
+            {
+                if (new FileInfo(path).Length <= 0)
+                {
+                    if (localPngWarned.Add(name))
+                        PrintWarning("NightshadeShop icon file is empty: " + name + ". Using the default icon.");
+                    return;
+                }
+                string url = Path.Combine("file://" + Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", "Icons", name);
+                ImageLibrary.Call("AddImage", url, name, 0UL);
+                localPngQueued.Add(name);
+            }
+            catch (Exception ex)
+            {
+                if (localPngWarned.Add(name))
+                    PrintWarning("NightshadeShop could not read icon " + name + ": " + ex.Message + ". Using the default icon.");
+            }
+        }
+
+        private void PreloadLocalIcons()
+        {
+            EnsureIconsFolder();
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (kitFile?.Kits != null)
+                foreach (var kit in kitFile.Kits)
+                    NoteLocalIcon(names, kit.Icon);
+            if (data?.Categories != null)
+            {
+                foreach (var cat in data.Categories)
+                {
+                    NoteLocalIcon(names, cat.Icon);
+                    if (cat.Items == null) continue;
+                    foreach (var item in cat.Items)
+                        NoteLocalIcon(names, item.Icon);
+                }
+            }
+            if (data?.TradeCategories != null)
+                foreach (var trade in data.TradeCategories)
+                    NoteLocalIcon(names, trade.Icon);
+            foreach (var name in names)
+                LocalPngId(name);
+        }
+
+        private static void NoteLocalIcon(HashSet<string> names, string icon)
+        {
+            string name = LocalPngName(icon);
+            if (name != null) names.Add(name);
+        }
+
+        private bool MigrateVipPerkKits()
+        {
+            EnsureMigratedKit(VipDailyId, "VIP Daily Kit", DailyKitPng, PermVipPerk, 86400, DailyVipItems());
+            EnsureMigratedKit(VipxDailyId, "VIPx Daily Kit", DailyKitPng, PermVipXPerk, 86400, DailyVipxItems());
+            EnsureMigratedKit(VipFourId, "VIP 4-Day Kit", FourDayKitPng, PermVipPerk, 345600, FourVipItems());
+            EnsureMigratedKit(VipxFourId, "VIPx 4-Day Kit", FourDayKitPng, PermVipXPerk, 345600, FourVipxItems());
+            bool daily = ImportCooldownFile("VIPPerks_DailyKit", VipDailyId, VipxDailyId);
+            bool four = ImportCooldownFile("VIPPerks_4DayKit", VipFourId, VipxFourId);
+            if (daily && four)
+                Puts("NightshadeShop migrated VIP perk kits into Kits.json.");
+            return daily && four;
+        }
+
+        private void EnsureMigratedKit(string id, string name, string icon, string perm, int cooldown, KitStack[] items)
+        {
+            if (FindKit(id) != null) return;
+            var kit = new KitDef
+            {
+                Id = id,
+                Name = name,
+                Icon = icon,
+                Permission = perm,
+                CooldownSeconds = cooldown,
+                MaxUsesPerWipe = 0,
+                Items = new List<KitStack>(items)
+            };
+            kitFile.Kits.Add(kit);
+            int n;
+            if (id.StartsWith("kit", StringComparison.Ordinal) && int.TryParse(id.Substring(3), out n) && n >= kitFile.NextId)
+                kitFile.NextId = n + 1;
+            if (kitFile.NextId < 5) kitFile.NextId = 5;
+        }
+
+        private bool ImportCooldownFile(string file, params string[] kitIds)
+        {
+            Dictionary<string, DateTime> rows = null;
+            bool failed = false;
+            try { rows = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<string, DateTime>>(file); }
+            catch (Exception ex)
+            {
+                failed = true;
+                PrintWarning("Could not read " + file + ": " + ex.Message);
+            }
+            if (failed) return false;
+            if (rows == null || rows.Count == 0)
+            {
+                try
+                {
+                    var numeric = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<ulong, DateTime>>(file);
+                    if (numeric != null)
+                    {
+                        rows = new Dictionary<string, DateTime>();
+                        foreach (var pair in numeric)
+                            rows[pair.Key.ToString(CultureInfo.InvariantCulture)] = pair.Value;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    PrintWarning("Could not read " + file + ": " + ex.Message);
+                    return false;
+                }
+            }
+            if (rows == null) return true;
+            foreach (var pair in rows)
+            {
+                if (string.IsNullOrEmpty(pair.Key) || pair.Value == DateTime.MinValue) continue;
+                Dictionary<string, KitClaim> map;
+                if (!kitFile.Claims.TryGetValue(pair.Key, out map) || map == null)
+                {
+                    map = new Dictionary<string, KitClaim>();
+                    kitFile.Claims[pair.Key] = map;
+                }
+                for (int i = 0; i < kitIds.Length; i++)
+                {
+                    if (map.ContainsKey(kitIds[i])) continue;
+                    map[kitIds[i]] = new KitClaim { LastClaim = AsUtc(pair.Value), WipeUses = 0 };
+                }
+            }
+            return true;
+        }
+
+        private static KitStack StackItem(string shortname, int amount, ulong skin) =>
+            new KitStack { Shortname = shortname, Amount = amount, Skin = skin };
+
+        private static KitStack[] DailyVipItems() => new[]
+        {
+            StackItem("advanceharvestingtea", 1, 0), StackItem("healingtea.advanced", 1, 0), StackItem("oretea.advanced", 1, 0),
+            StackItem("scraptea.advanced", 1, 0), StackItem("woodtea.advanced", 1, 0), StackItem("lowgradefuel", 1000, 0),
+            StackItem("pumpkin", 10, 0), StackItem("bandage", 5, 0), StackItem("largemedkit", 5, 0), StackItem("syringe.medical", 10, 0),
+            StackItem("sewingkit", 10, 0), StackItem("sheetmetal", 10, 0), StackItem("roadsigns", 10, 0), StackItem("metalpipe", 5, 0),
+            StackItem("cctv.camera", 2, 0), StackItem("tarp", 4, 0)
+        };
+
+        private static KitStack[] DailyVipxItems() => new[]
+        {
+            StackItem("radiationresisttea.pure", 1, 0), StackItem("purecraftingtea_quality", 1, 0), StackItem("healingtea.pure", 2, 0),
+            StackItem("bandage", 10, 0), StackItem("largemedkit", 5, 0), StackItem("syringe.medical", 20, 0), StackItem("sewingkit", 20, 0),
+            StackItem("sheetmetal", 10, 0), StackItem("roadsigns", 10, 0), StackItem("metalpipe", 10, 0), StackItem("supply.signal", 1, 0)
+        };
+
+        private static KitStack[] FourVipItems() => new[]
+        {
+            StackItem("hazmatsuit", 1, 0), StackItem("ammo.pistol", 100, 0), StackItem("keycard_green", 1, 0), StackItem("bandage", 5, 0),
+            StackItem("bearmeat.cooked", 1, 0), StackItem("supply.signal", 1, 0), StackItem("supply.signal", 1, 2905355269UL),
+            StackItem("supply.signal", 1, 2920175997UL)
+        };
+
+        private static KitStack[] FourVipxItems() => new[]
+        {
+            StackItem("explosive.timed", 2, 0), StackItem("gunpowder", 5, 0), StackItem("supply.signal", 1, 2905355269UL),
+            StackItem("supply.signal", 1, 2920175997UL), StackItem("diesel_barrel", 5, 0), StackItem("keycard_green", 1, 0),
+            StackItem("keycard_blue", 1, 0), StackItem("supply.signal", 2, 0), StackItem("syringe.medical", 40, 0)
+        };
+
+        #endregion
+
+        #region Bank
+
+        private struct ShopHeaderLayout
+        {
+            public int TitleRight;
+            public int TitleSize;
+            public bool AdminButton;
+            public int AdminL, AdminR;
+            public bool ThemeButton;
+            public int ThemeL, ThemeR;
+            public int BalL, BalR;
+            public bool BankButton;
+            public int BankL, BankR;
+        }
+
+        private ShopHeaderLayout MakeHeaderLayout(bool isAdmin, bool adminMode, bool showBank)
+        {
+            var layout = new ShopHeaderLayout();
+            bool theme = isAdmin && adminMode;
+            if (!showBank && !theme)
+            {
+                layout.TitleRight = isAdmin ? 612 : 790;
+                layout.TitleSize = 24;
+                layout.AdminButton = isAdmin;
+                layout.AdminL = 622;
+                layout.AdminR = 790;
+                layout.BalL = 800;
+                layout.BalR = 1050;
+                return layout;
+            }
+
+            int right = 1050;
+            const int gap = 8;
+            if (showBank)
+            {
+                layout.BankButton = true;
+                layout.BankR = right;
+                layout.BankL = right - 100;
+                right = layout.BankL - gap;
+            }
+            layout.BalR = right;
+            layout.BalL = right - 236;
+            right = layout.BalL - gap;
+            if (isAdmin)
+            {
+                layout.AdminButton = true;
+                layout.AdminR = right;
+                layout.AdminL = right - 168;
+                right = layout.AdminL - gap;
+            }
+            if (theme)
+            {
+                layout.ThemeButton = true;
+                layout.ThemeR = right;
+                layout.ThemeL = right - 168;
+                right = layout.ThemeL - gap;
+            }
+            layout.TitleRight = Math.Max(220, right);
+            layout.TitleSize = layout.TitleRight - 58 < 360 ? 18 : 24;
+            return layout;
+        }
+
+        private void DrawShopHeader(CuiElementContainer c, string header, BasePlayer p, UiState s, ThemeColors tc, Theme theme, bool admin, int bal)
+        {
+            var layout = MakeHeaderLayout(admin, s.Admin, CanUseBank(p));
+            Icon(c, header, Def(theme.Icon), 0, R(12, 7, 48, 43));
+            string heading = config.Title ?? "";
+            if (config.ShowHeaderTagline && !string.IsNullOrEmpty(theme.Tagline))
+                heading += "   <size=14><color=" + Rich(tc.Accent) + ">" + theme.Tagline + "</color></size>";
+            Label(c, header, heading, layout.TitleSize, tc.Text, TextAnchor.MiddleLeft, R(58, 0, layout.TitleRight, 50));
+
+            if (layout.ThemeButton)
+            {
+                string modeLabel = EffectiveThemeMode();
+                if (!modeLabel.Equals("Auto", StringComparison.OrdinalIgnoreCase)) modeLabel = modeLabel.ToUpperInvariant();
+                else modeLabel = "AUTO";
+                if (modeLabel.Length > 12) modeLabel = modeLabel.Substring(0, 11) + ".";
+                Btn(c, header, UiCmd + " thememenu", s.ThemeMenu ? tc.Accent : tc.Button, R(layout.ThemeL, 8, layout.ThemeR, 42),
+                    "THEME: " + modeLabel, 11, s.ThemeMenu ? tc.AccentText : tc.ButtonText);
+            }
+            if (layout.AdminButton)
+                Btn(c, header, UiCmd + " admin", s.Admin ? tc.Danger : tc.Button, R(layout.AdminL, 8, layout.AdminR, 42),
+                    s.Admin ? "ADMIN MODE: ON" : "ADMIN MODE: OFF", 13, s.Admin ? tc.DangerText : tc.ButtonText);
+
+            int balW = layout.BalR - layout.BalL;
+            string balBox = Box(c, header, tc.Card, R(layout.BalL, 8, layout.BalR, 42));
+            Label(c, balBox, "BALANCE", 11, tc.SubText, TextAnchor.MiddleLeft, R(10, 0, 84, 34));
+            Label(c, balBox, ServerRewards == null ? "N/A" : bal.ToString("N0") + " <color=" + Rich(tc.Accent) + ">RP</color>", 16, tc.Text, TextAnchor.MiddleRight, R(78, 0, balW - 8, 34));
+
+            if (layout.BankButton)
+                Btn(c, header, UiCmd + " bank", s.BankOpen ? tc.Accent : tc.Button, R(layout.BankL, 8, layout.BankR, 42),
+                    "BANK", 15, s.BankOpen ? tc.AccentText : tc.ButtonText);
+            Btn(c, header, UiCmd + " close", tc.Danger, R(1058, 9, 1090, 41), "X", 16, tc.DangerText);
+        }
+
+        private void DrawThemeMenu(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            var layout = MakeHeaderLayout(true, true, CanUseBank(p));
+            int themes = 0;
+            if (config.Themes != null)
+                for (int i = 0; i < config.Themes.Count; i++)
+                    if (config.Themes[i] != null && !string.IsNullOrEmpty(config.Themes[i].Name)) themes++;
+            int rows = 1 + themes;
+            const int rowH = 28;
+            const int gap = 4;
+            int height = 16 + rows * rowH + Math.Max(0, rows - 1) * gap;
+            int top = 560;
+            int bottom = Math.Max(56, top - height);
+            int right = layout.ThemeR;
+            int left = Math.Max(12, right - 300);
+            int menuH = top - bottom;
+            string menu = Box(c, UiFrame, tc.Header, R(left, bottom, right, top));
+            Btn(c, menu, UiCmd + " thememenu", tc.Header, Full(), null, 0, null);
+            Box(c, menu, tc.Accent, R(0, menuH - 2, right - left, menuH));
+            string current = EffectiveThemeMode();
+            int rowTop = menuH - 8;
+            int innerW = right - left - 16;
+            bool autoOn = current.Equals("Auto", StringComparison.OrdinalIgnoreCase);
+            Btn(c, menu, UiCmd + " themepick Auto", autoOn ? tc.Accent : tc.Button, R(8, rowTop - rowH, 8 + innerW, rowTop),
+                "AUTO", 12, autoOn ? tc.AccentText : tc.ButtonText);
+            rowTop -= rowH + gap;
+            if (config.Themes == null) return;
+            for (int i = 0; i < config.Themes.Count; i++)
+            {
+                var theme = config.Themes[i];
+                if (theme == null || string.IsNullOrEmpty(theme.Name) || rowTop - rowH < 6) continue;
+                bool on = string.Equals(theme.Name, current, StringComparison.OrdinalIgnoreCase);
+                string text = theme.Name.ToUpperInvariant();
+                if (!string.IsNullOrEmpty(theme.Tagline)) text += " - " + theme.Tagline;
+                string safe = theme.Name.Replace("\"", "").Replace("\r", " ").Replace("\n", " ");
+                Btn(c, menu, UiCmd + " themepick " + safe, on ? tc.Accent : tc.Button, R(8, rowTop - rowH, 8 + innerW, rowTop),
+                    text, 12, on ? tc.AccentText : tc.ButtonText);
+                rowTop -= rowH + gap;
+            }
+        }
+
+        private class BankLogFile
+        {
+            public List<BankEntry> Entries = new List<BankEntry>();
+        }
+
+        private class BankEntry
+        {
+            public string Time;
+            public string UserId;
+            public string Name;
+            public string Action;
+            public int Coins;
+            public int Rp;
+            public int Balance;
+        }
+
+        private static string ShopDataPath(string fileName) =>
+            Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", fileName);
+
+        private string EffectiveThemeMode()
+        {
+            if (!string.IsNullOrWhiteSpace(config.ThemeMode)) return config.ThemeMode;
+            return "Auto";
+        }
+
+        private string CanonicalThemeMode(string mode)
+        {
+            if (string.IsNullOrWhiteSpace(mode)) return null;
+            if (mode.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase)) return "Auto";
+            if (config?.Themes == null) return null;
+            string trimmed = mode.Trim();
+            var match = config.Themes.FirstOrDefault(t => t != null && string.Equals(t.Name, trimmed, StringComparison.OrdinalIgnoreCase));
+            return match == null ? null : match.Name;
+        }
+
+        // Same write the /shop theme command uses: Theme Mode in configs/NightshadeShop.json.
+        private string SetThemeMode(string mode)
+        {
+            string stored = CanonicalThemeMode(mode);
+            if (stored == null) return null;
+            config.ThemeMode = stored;
+            SaveConfig();
+            return stored;
+        }
+
+        // 1.8.0 stored the admin dropdown in Theme.json, which only the shop read. A non-Auto
+        // value is copied onto Theme Mode once. The file is then deleted and never read again.
+        private bool TakeThemeFile()
+        {
+            string path = ShopDataPath("Theme.json");
+            if (!File.Exists(path)) return false;
+            try
+            {
+                var root = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
+                string mode = root.Value<string>("Mode");
+                string stored = CanonicalThemeMode(mode);
+                if (stored != null && !stored.Equals("Auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(config.ThemeMode, stored, StringComparison.Ordinal))
+                    {
+                        config.ThemeMode = stored;
+                        Puts("Moved shop theme " + stored + " from data/Nightshade/NightshadeShop/Theme.json into Theme Mode.");
+                    }
+                }
+                else if (stored == null && !string.IsNullOrWhiteSpace(mode) && !mode.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase))
+                    PrintWarning("Theme.json had \"" + mode.Trim() + "\", which is not Auto or a configured theme. It was not copied.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Theme.json could not be read, so it was left in place and is no longer used. " + ex.Message);
+                return false;
+            }
+        }
+
+        private void DeleteThemeFile()
+        {
+            string path = ShopDataPath("Theme.json");
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Theme.json could not be deleted. The shop uses Theme Mode from the config and ignores that file. " + ex.Message);
+            }
+        }
+
+        private bool ApplyThemeChoice(BasePlayer p, UiState s, string mode)
+        {
+            string stored = SetThemeMode(mode);
+            if (stored == null)
+            {
+                string known = config.Themes == null ? "Auto" : string.Join(", ", config.Themes.Select(t => t.Name));
+                string text = Msg("ThemeUnknown", p, known);
+                SetStatus(s, text, true);
+                SendReply(p, text);
+                return false;
+            }
+            string ok = Msg("ThemeSet", p, stored, ActiveTheme().Name);
+            SetStatus(s, ok, false);
+            SendReply(p, ok);
+            return true;
+        }
+
+        private void LoadBankLog()
+        {
+            bankLog = new BankLogFile();
+            bankLogUnreadable = false;
+            string path = ShopDataPath("BankLog.json");
+            if (!File.Exists(path)) return;
+            try
+            {
+                var loaded = Interface.Oxide.DataFileSystem.ReadObject<BankLogFile>(DataBankLog);
+                if (loaded?.Entries != null) bankLog = loaded;
+            }
+            catch (Exception ex)
+            {
+                bankLogUnreadable = true;
+                PrintWarning("Bank log could not be read, so new bank transactions will not overwrite it. " + ex.Message);
+            }
+        }
+
+        private void AppendBankLog(BasePlayer p, string action, int coins, int rp, int balance)
+        {
+            if (config.Bank == null || !config.Bank.Log || bankLogUnreadable) return;
+            if (bankLog == null) bankLog = new BankLogFile();
+            if (bankLog.Entries == null) bankLog.Entries = new List<BankEntry>();
+            bankLog.Entries.Add(new BankEntry
+            {
+                Time = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                UserId = p.UserIDString,
+                Name = p.displayName,
+                Action = action,
+                Coins = coins,
+                Rp = rp,
+                Balance = balance
+            });
+            if (bankLog.Entries.Count > 200)
+                bankLog.Entries.RemoveRange(0, bankLog.Entries.Count - 200);
+            Interface.Oxide.DataFileSystem.WriteObject(DataBankLog, bankLog);
+        }
+
+        private bool CanUseBank(BasePlayer p)
+        {
+            if (p == null || config.Bank == null || !config.Bank.Enabled || !CanUse(p)) return false;
+            return string.IsNullOrEmpty(config.Bank.Permission) || IsAdmin(p) || permission.UserHasPermission(p.UserIDString, config.Bank.Permission);
+        }
+
+        private bool CoinReady(out ItemDefinition def)
+        {
+            def = null;
+            if (config.Bank == null || string.IsNullOrWhiteSpace(config.Bank.CoinShortname)) return false;
+            def = Def(config.Bank.CoinShortname);
+            return def != null;
+        }
+
+        private string CoinItemName()
+        {
+            if (config.Bank == null || string.IsNullOrWhiteSpace(config.Bank.CoinName)) return "";
+            return config.Bank.CoinName.Trim();
+        }
+
+        private string CoinLabel(ItemDefinition def)
+        {
+            string named = CoinItemName();
+            if (!string.IsNullOrEmpty(named)) return named;
+            return def != null ? def.displayName.english : "coin";
+        }
+
+        private static void OpenBank(UiState s)
+        {
+            s.BankOpen = true;
+            s.ThemeMenu = false;
+            s.BuyItem = 0;
+            s.BuyToken = null;
+            s.DescriptionEdit = false;
+            s.EditItem = s.EditTrade = 0;
+            s.EditKitId = null;
+            s.PickTarget = null;
+            s.EventMenu = false;
+            s.Status = "";
+        }
+
+        private int BankCeiling()
+        {
+            int ceiling = config.Bank != null && config.Bank.MaxCoins > 0 ? config.Bank.MaxCoins : 100000;
+            if (config.Bank != null && config.Bank.RpPerCoin > 1)
+            {
+                int fit = int.MaxValue / config.Bank.RpPerCoin;
+                if (fit < ceiling) ceiling = fit;
+            }
+            return ceiling < 0 ? 0 : ceiling;
+        }
+
+        // Empty or non-numeric text is 0. Digits only, capped at 7 so the field cannot overflow.
+        private static int ParseBankAmount(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return 0;
+            int value = 0;
+            bool any = false;
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char ch = raw[i];
+                if (ch < '0' || ch > '9') continue;
+                any = true;
+                if (value > 999999) return 9999999;
+                value = value * 10 + (ch - '0');
+            }
+            return any ? value : 0;
+        }
+
+        // 0 stays 0. Any other amount is clamped to the config min/max and to what the player can actually move.
+        private int ClampTyped(int amount, int available)
+        {
+            if (amount <= 0 || available <= 0) return 0;
+            int min = Math.Max(1, config.Bank == null ? 1 : config.Bank.MinCoins);
+            int ceiling = BankCeiling();
+            if (available < ceiling) ceiling = available;
+            if (ceiling <= 0) return 0;
+            if (amount > ceiling) amount = ceiling;
+            if (amount < min) return ceiling >= min ? min : ceiling;
+            return amount;
+        }
+
+        private int BankQty(UiState s, bool deposit)
+        {
+            int raw = deposit ? s.BankDeposit : s.BankWithdraw;
+            if (raw < 0) return 0;
+            int ceiling = BankCeiling();
+            return raw > ceiling ? ceiling : raw;
+        }
+
+        private int DepositAvailable(BasePlayer p)
+        {
+            ItemDefinition def;
+            if (!CoinReady(out def)) return 0;
+            return CountItems(p, def, config.Bank.CoinSkin);
+        }
+
+        private int DepositMax(BasePlayer p)
+        {
+            int have = DepositAvailable(p);
+            int ceiling = BankCeiling();
+            return have > ceiling ? ceiling : (have < 0 ? 0 : have);
+        }
+
+        private int WithdrawMax(BasePlayer p)
+        {
+            if (config.Bank == null || config.Bank.RpPerCoin < 1) return 0;
+            ItemDefinition def;
+            if (!CoinReady(out def)) return 0;
+            int byBalance = Balance(p) / config.Bank.RpPerCoin;
+            int ceiling = BankCeiling();
+            if (byBalance > ceiling) byBalance = ceiling;
+            if (byBalance < 0) byBalance = 0;
+            int space = CoinCapacity(p, def, config.Bank.CoinSkin, CoinItemName());
+            if (space < byBalance) byBalance = space < 0 ? 0 : space;
+            return byBalance;
+        }
+
+        [ConsoleCommand("nshop.bank.setamount")]
+        private void CmdBankSetAmount(ConsoleSystem.Arg arg)
+        {
+            var p = arg.Player();
+            if (p == null || !arg.HasArgs() || !CanUseBank(p)) return;
+            string side = arg.GetString(0, "");
+            bool deposit = side.Equals("deposit", StringComparison.OrdinalIgnoreCase) || side.Equals("dep", StringComparison.OrdinalIgnoreCase);
+            bool withdraw = side.Equals("withdraw", StringComparison.OrdinalIgnoreCase) || side.Equals("wd", StringComparison.OrdinalIgnoreCase);
+            if (!deposit && !withdraw) return;
+            string raw = arg.GetString(1, "");
+            int amount = raw.Equals("max", StringComparison.OrdinalIgnoreCase)
+                ? (deposit ? DepositMax(p) : WithdrawMax(p))
+                : ClampTyped(ParseBankAmount(raw), deposit ? DepositAvailable(p) : WithdrawMax(p));
+            var s = S(p);
+            if (deposit) s.BankDeposit = amount;
+            else s.BankWithdraw = amount;
+            if (s.Open) OpenUi(p);
+        }
+
+        private bool TryCoinRp(int coins, out int rp)
+        {
+            rp = 0;
+            if (coins < 1 || config.Bank == null || config.Bank.RpPerCoin < 1) return false;
+            long total = (long)coins * config.Bank.RpPerCoin;
+            if (total < 1 || total > int.MaxValue) return false;
+            rp = (int)total;
+            return true;
+        }
+
+        private int TakeCoins(BasePlayer p, ItemDefinition def, ulong skin, int amount)
+        {
+            int left = amount;
+            var containers = new[] { p.inventory.containerMain, p.inventory.containerBelt };
+            for (int c = 0; c < containers.Length && left > 0; c++)
+            {
+                var list = containers[c]?.itemList;
+                if (list == null) continue;
+                foreach (var it in list.ToList())
+                {
+                    if (left <= 0) break;
+                    if (it == null || it.info != def || it.skin != skin) continue;
+                    int take = Math.Min(it.amount, left);
+                    it.UseItem(take);
+                    left -= take;
+                }
+            }
+            return amount - left;
+        }
+
+        private int CoinCapacity(BasePlayer p, ItemDefinition def, ulong skin, string itemName)
+        {
+            if (p?.inventory == null || def == null) return 0;
+            int stack = Math.Max(1, def.stackable);
+            string wanted = itemName ?? "";
+            int room = 0;
+            var containers = new[] { p.inventory.containerMain, p.inventory.containerBelt };
+            for (int i = 0; i < containers.Length; i++)
+            {
+                var cont = containers[i];
+                if (cont == null) continue;
+                int used = cont.itemList == null ? 0 : cont.itemList.Count;
+                room += Math.Max(0, cont.capacity - used) * stack;
+                if (cont.itemList == null) continue;
+                for (int n = 0; n < cont.itemList.Count; n++)
+                {
+                    var it = cont.itemList[n];
+                    if (it == null || it.info != def || it.skin != skin) continue;
+                    if (!string.Equals(it.name ?? "", wanted, StringComparison.Ordinal)) continue;
+                    if (it.amount < stack) room += stack - it.amount;
+                }
+            }
+            return room;
+        }
+
+        private bool ReturnCoins(BasePlayer p, ItemDefinition def, ulong skin, int amount, string itemName)
+        {
+            if (amount < 1) return true;
+            if (TryDeliverItems(p, def, skin, amount, false, itemName)) return true;
+            PrintWarning("Bank could not put " + amount + " " + def.shortname + " back into " + p.UserIDString + "'s inventory. Giving them with a drop fallback.");
+            GiveItems(p, def, skin, amount, false, itemName);
+            return false;
+        }
+
+        private void RunBank(BasePlayer p, UiState s, string side)
+        {
+            if (string.Equals(side, "wd", StringComparison.OrdinalIgnoreCase) || string.Equals(side, "withdraw", StringComparison.OrdinalIgnoreCase))
+                DoBankWithdraw(p, s);
+            else DoBankDeposit(p, s);
+        }
+
+        private void BankTell(BasePlayer p, UiState s, string key, bool bad, params object[] args)
+        {
+            string text = Msg(key, p, args);
+            SetStatus(s, text, bad);
+            SendReply(p, text);
+            Fx(p, bad ? FxDeny : FxTrade);
+        }
+
+        private void DoBankDeposit(BasePlayer p, UiState s)
+        {
+            if (!bankBusy.Add(p.userID)) { BankTell(p, s, "BankBusy", true); return; }
+            try
+            {
+                ItemDefinition def;
+                if (!CoinReady(out def)) { BankTell(p, s, "BankNotConfigured", true); return; }
+                if (ServerRewards == null) { BankTell(p, s, "BankNoRewards", true); return; }
+                int min = Math.Max(1, config.Bank.MinCoins);
+                int max = config.Bank.MaxCoins;
+                int have = CountItems(p, def, config.Bank.CoinSkin);
+                int amount = BankQty(s, true);
+                if (have < 1 || amount > have)
+                {
+                    BankTell(p, s, "BankNoCoins", true, CoinLabel(def), have.ToString("N0", CultureInfo.InvariantCulture));
+                    return;
+                }
+                if (amount < min || (max > 0 && amount > max))
+                {
+                    BankTell(p, s, "BankRange", true, min.ToString("N0", CultureInfo.InvariantCulture), max > 0 ? max.ToString("N0", CultureInfo.InvariantCulture) : BankCeiling().ToString("N0", CultureInfo.InvariantCulture));
+                    return;
+                }
+                int rp;
+                if (!TryCoinRp(amount, out rp)) { BankTell(p, s, "BankOverflow", true); return; }
+
+                int removed = TakeCoins(p, def, config.Bank.CoinSkin, amount);
+                if (removed != amount)
+                {
+                    if (removed > 0) ReturnCoins(p, def, config.Bank.CoinSkin, removed, CoinItemName());
+                    BankTell(p, s, "BankNoCoins", true, CoinLabel(def), CountItems(p, def, config.Bank.CoinSkin).ToString("N0"));
+                    return;
+                }
+                if (!AddRP(p.userID, rp))
+                {
+                    ReturnCoins(p, def, config.Bank.CoinSkin, removed, CoinItemName());
+                    BankTell(p, s, "BankFailed", true);
+                    return;
+                }
+                int balance = Balance(p);
+                AppendBankLog(p, "deposit", amount, rp, balance);
+                BankTell(p, s, "BankDeposited", false, amount.ToString("N0"), CoinLabel(def), rp.ToString("N0"), balance.ToString("N0"));
+            }
+            finally { bankBusy.Remove(p.userID); }
+        }
+
+        private void DoBankWithdraw(BasePlayer p, UiState s)
+        {
+            if (!bankBusy.Add(p.userID)) { BankTell(p, s, "BankBusy", true); return; }
+            try
+            {
+                ItemDefinition def;
+                if (!CoinReady(out def)) { BankTell(p, s, "BankNotConfigured", true); return; }
+                if (ServerRewards == null) { BankTell(p, s, "BankNoRewards", true); return; }
+                int amount = BankQty(s, false);
+                int min = Math.Max(1, config.Bank.MinCoins);
+                int max = config.Bank.MaxCoins;
+                if (amount < min || (max > 0 && amount > max))
+                {
+                    BankTell(p, s, "BankRange", true, min.ToString("N0"), max > 0 ? max.ToString("N0") : BankCeiling().ToString("N0", CultureInfo.InvariantCulture));
+                    return;
+                }
+                int rp;
+                if (!TryCoinRp(amount, out rp)) { BankTell(p, s, "BankOverflow", true); return; }
+                int have = Balance(p);
+                if (have < rp) { BankTell(p, s, "BankNeedRp", true, rp.ToString("N0"), have.ToString("N0")); return; }
+                string itemName = CoinItemName();
+                if (CoinCapacity(p, def, config.Bank.CoinSkin, itemName) < amount)
+                {
+                    BankTell(p, s, "BankNoSpace", true, amount.ToString("N0"), CoinLabel(def));
+                    return;
+                }
+                if (!TakeRP(p.userID, rp)) { BankTell(p, s, "BankNeedRp", true, rp.ToString("N0"), Balance(p).ToString("N0")); return; }
+                if (!TryDeliverItems(p, def, config.Bank.CoinSkin, amount, false, itemName))
+                {
+                    if (!AddRP(p.userID, rp))
+                    {
+                        var refund = new PendingRefund
+                        {
+                            UserId = p.userID, UserName = p.displayName, Amount = rp,
+                            Label = "bank withdraw", RefundDue = true
+                        };
+                        pendingRefunds.Add(refund);
+                        SaveRefunds();
+                        Refund(refund);
+                    }
+                    BankTell(p, s, "BankFailed", true);
+                    return;
+                }
+                int balance = Balance(p);
+                AppendBankLog(p, "withdraw", amount, rp, balance);
+                BankTell(p, s, "BankWithdrawn", false, amount.ToString("N0"), CoinLabel(def), rp.ToString("N0"), balance.ToString("N0"));
+            }
+            finally { bankBusy.Remove(p.userID); }
+        }
+
+        private void BuildBank(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc, int bal)
+        {
+            string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
+            ItemDefinition def;
+            bool ready = CoinReady(out def);
+            Label(c, panel, "BANK", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 410, 240, 446));
+            bool warn = !ready || config.Bank.CoinSkin == 0;
+            if (warn)
+            {
+                string subtitle = !ready
+                    ? "Coin Item Shortname is not a game item. The default RP coin is paper with skin 3843525164."
+                    : "Skin ID is 0, so only unskinned " + def.shortname + " counts. Set Coin Skin ID to the real RP coin before using this.";
+                Label(c, panel, subtitle, 12, tc.SubText, TextAnchor.MiddleLeft, R(16, 378, 1048, 410), false);
+            }
+
+            int coins = ready ? CountItems(p, def, config.Bank.CoinSkin) : 0;
+            string rate = ready ? config.Bank.RpPerCoin.ToString("N0") + " RP / coin" : "Not configured";
+            int statY = warn ? 328 : 360;
+            DrawBankStat(c, panel, tc, 16, statY, "RP BALANCE", ServerRewards == null ? "N/A" : bal.ToString("N0"));
+            DrawBankStat(c, panel, tc, 366, statY, "COINS ON YOU", ready ? coins.ToString("N0") : "-");
+            DrawBankStat(c, panel, tc, 716, statY, "RATE", rate);
+
+            if (!ready || ServerRewards == null)
+            {
+                string note = !ready ? Msg("BankNotConfigured", p) : Msg("BankNoRewards", p);
+                Label(c, panel, note, 16, tc.SubText, TextAnchor.MiddleCenter, R(40, 80, 1028, 300));
+                return;
+            }
+
+            int cardTop = warn ? 316 : 348;
+            s.BankDeposit = ClampTyped(s.BankDeposit, coins);
+            s.BankWithdraw = ClampTyped(s.BankWithdraw, WithdrawMax(p));
+            int depositQty = BankQty(s, true);
+            int withdrawQty = BankQty(s, false);
+            int depositRp;
+            int withdrawRp;
+            TryCoinRp(depositQty, out depositRp);
+            TryCoinRp(withdrawQty, out withdrawRp);
+            DrawBankSide(c, panel, tc, true, 16, cardTop, depositQty, depositRp, coins, CoinLabel(def));
+            DrawBankSide(c, panel, tc, false, 540, cardTop, withdrawQty, withdrawRp, bal, CoinLabel(def));
+        }
+
+        private void DrawBankStat(CuiElementContainer c, string panel, ThemeColors tc, int x, int y, string title, string value)
+        {
+            string box = Box(c, panel, tc.Card, R(x, y, x + 334, y + 42));
+            Label(c, box, title, 11, tc.SubText, TextAnchor.MiddleLeft, R(12, 0, 140, 42));
+            Label(c, box, value, 16, tc.Text, TextAnchor.MiddleRight, R(140, 0, 322, 42));
+        }
+
+        private void DrawBankSide(CuiElementContainer c, string panel, ThemeColors tc, bool deposit, int x, int cardTop, int qty, int rp, int have, string label)
+        {
+            int cardBottom = cardTop - 300;
+            string card = Box(c, panel, tc.Card, R(x, cardBottom, x + 508, cardTop));
+            ItemDefinition def;
+            CoinReady(out def);
+            if (def != null) Icon(c, card, def, config.Bank.CoinSkin, R(16, 258, 52, 294));
+            Label(c, card, deposit ? "DEPOSIT" : "WITHDRAW", 18, tc.Text, TextAnchor.MiddleLeft, R(60, 258, 300, 296));
+            string hint = deposit
+                ? "Pays " + rp.ToString("N0") + " RP. You have " + have.ToString("N0") + " " + label + "."
+                : "Costs " + rp.ToString("N0") + " RP. You have " + have.ToString("N0") + " RP.";
+            Label(c, card, hint, 13, tc.SubText, TextAnchor.MiddleLeft, R(16, 188, 492, 236), false);
+
+            string side = deposit ? "deposit" : "withdraw";
+            Input(c, card, qty.ToString(CultureInfo.InvariantCulture), "nshop.bank.setamount " + side, tc.Background, tc.Text, R(16, 108, 360, 168), 18, 7);
+            Btn(c, card, "nshop.bank.setamount " + side + " max", tc.Button, R(372, 108, 492, 168), "MAX", 16, tc.ButtonText);
+            Btn(c, card, UiCmd + " bankgo " + (deposit ? "dep" : "wd"), tc.Accent, R(16, 24, 492, 88),
+                (deposit ? "DEPOSIT " : "WITHDRAW ") + qty.ToString("N0"), 16, tc.AccentText);
         }
 
         #endregion

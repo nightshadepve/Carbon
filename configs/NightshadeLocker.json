@@ -69,7 +69,13 @@
     "neon": false,
     "signs": false,
     "other": true,
-    "custom": true
+    "custom": true,
+    "electric": false,
+    "industrial": false,
+    "crafting": false,
+    "farming": false,
+    "fun": false,
+    "quarry": false
   },
   "Server closing categories": {
     "door": false,
@@ -80,5 +86,192 @@
     "external": false,
     "fence": false,
     "legacy": false
-  }
+  },
+  "Player default toggles": {
+    "SteamId": "",
+    "Code": "",
+    "Guest": "",
+    "Auto": false,
+    "KeyFallback": false,
+    "GuestEnabled": false,
+    "Share": true,
+    "Streamer": false,
+    "FlightSkin": false,
+    "LockOnDismount": false,
+    "AutoClose": false,
+    "CloseDelay": 30,
+    "OwedCode": 0,
+    "OwedKey": 0,
+    "OwedCloser": 0,
+    "Lock": {
+      "doors": true,
+      "windows": true,
+      "boxes": false,
+      "storage": false,
+      "lockers": true,
+      "cupboards": true,
+      "vehicles": true,
+      "naval": true,
+      "medieval": false,
+      "furnaces": false,
+      "vending": false,
+      "composters": false,
+      "mixing": false,
+      "planters": false,
+      "turrets": false,
+      "sam": false,
+      "traps": false,
+      "racks": false,
+      "stashes": false,
+      "neon": false,
+      "signs": false,
+      "other": false,
+      "custom": false,
+      "electric": false,
+      "industrial": false,
+      "crafting": false,
+      "farming": false,
+      "fun": false,
+      "quarry": false
+    },
+    "Close": {
+      "door": false,
+      "double": false,
+      "window": false,
+      "garage": false,
+      "hatch": false,
+      "external": false,
+      "fence": false,
+      "legacy": false
+    }
+  },
+  "Vehicle prefabs": [
+    {
+      "Name": "Minicopter",
+      "Prefab": "assets/content/vehicles/minicopter/minicopter.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Scrap Transport Helicopter",
+      "Prefab": "assets/content/vehicles/scrap heli carrier/scraptransporthelicopter.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Attack Helicopter",
+      "Prefab": "assets/content/vehicles/attackhelicopter/attackhelicopter.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Hot Air Balloon",
+      "Prefab": "assets/prefabs/deployable/hot air balloon/hotairballoon.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Horse",
+      "Prefab": "assets/content/vehicles/horse/ridablehorse.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Tomaha Snowmobile",
+      "Prefab": "assets/content/vehicles/snowmobiles/tomahasnowmobile.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Snowmobile",
+      "Prefab": "assets/content/vehicles/snowmobiles/snowmobile.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Sedan",
+      "Prefab": "assets/content/vehicles/sedan_a/sedantest.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "2 Module Car",
+      "Prefab": "assets/content/vehicles/modularcar/2module_car_spawned.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "3 Module Car",
+      "Prefab": "assets/content/vehicles/modularcar/3module_car_spawned.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "4 Module Car",
+      "Prefab": "assets/content/vehicles/modularcar/4module_car_spawned.entity.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Motorbike",
+      "Prefab": "assets/content/vehicles/bikes/motorbike.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Motorbike With Sidecar",
+      "Prefab": "assets/content/vehicles/bikes/motorbike_sidecar.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Pedal Bike",
+      "Prefab": "assets/content/vehicles/bikes/pedalbike.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Pedal Trike",
+      "Prefab": "assets/content/vehicles/bikes/pedaltrike.prefab",
+      "Category": "vehicles",
+      "Enabled": true
+    },
+    {
+      "Name": "Kayak",
+      "Prefab": "assets/content/vehicles/boats/kayak/kayak.prefab",
+      "Category": "naval",
+      "Enabled": true
+    },
+    {
+      "Name": "Row Boat",
+      "Prefab": "assets/content/vehicles/boats/rowboat/rowboat.prefab",
+      "Category": "naval",
+      "Enabled": true
+    },
+    {
+      "Name": "RHIB",
+      "Prefab": "assets/content/vehicles/boats/rhib/rhib.prefab",
+      "Category": "naval",
+      "Enabled": true
+    },
+    {
+      "Name": "Tugboat",
+      "Prefab": "assets/content/vehicles/boats/tugboat/tugboat.prefab",
+      "Category": "naval",
+      "Enabled": true
+    },
+    {
+      "Name": "Submarine Solo",
+      "Prefab": "assets/content/vehicles/submarine/submarinesolo.entity.prefab",
+      "Category": "naval",
+      "Enabled": true
+    },
+    {
+      "Name": "Submarine Duo",
+      "Prefab": "assets/content/vehicles/submarine/submarineduo.entity.prefab",
+      "Category": "naval",
+      "Enabled": true
+    }
+  ],
+  "Extra entity prefabs": []
 }

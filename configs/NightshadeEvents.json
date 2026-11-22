@@ -1,0 +1,15 @@
+{
+  "Time zone": "America/New_York",
+  "Disable vanilla automatic events": true,
+  "Missed events after downtime (skip or once)": "skip",
+  "Minutes to wait for min players before skipping a due event": 180,
+  "Minimum minutes between scheduled event starts": 5,
+  "Schedule check seconds": 15,
+  "Theme mode (Shop, Auto, or a theme name)": "Shop",
+  "Theme source config file": "NightshadeShop.json",
+  "Logo source config file": "NightshadeInfo.json",
+  "Logo URL fallback": "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png",
+  "Window width": 572.0,
+  "Window height": 448.0,
+  "Custom events to add when that id is missing from saved data": []
+}

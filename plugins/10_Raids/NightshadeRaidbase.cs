@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeRaidbase", "Nightshade", "1.0.16")]
+    [Info("NightshadeRaidbase", "Nightshade", "1.0.17")]
     [Description("Prepares Nightshade raid bases: loot fill, furnace setup, powered turrets/SAMs, ZoneManager zones, ZoneDomes domes, and TruePVE mappings.")]
     public class NightshadeRaidbase : RustPlugin
     {
@@ -29,7 +29,7 @@ namespace Oxide.Plugins
         [PluginReference] private Plugin TruePVE;
         [PluginReference] private Plugin CopyPaste;
         [PluginReference] private Plugin AdvancedStatus;
-        [PluginReference] private Plugin UnifiedLootProtection;
+        [PluginReference] private Plugin NightshadeLootProtection;
 
         private PluginConfig _config;
         private PluginData _data;
@@ -3941,35 +3941,35 @@ namespace Oxide.Plugins
 
         private void ApplyUlpExemption(string zoneId, Vector3 center, float radius)
         {
-            if (UnifiedLootProtection == null || !UnifiedLootProtection.IsLoaded) return;
+            if (NightshadeLootProtection == null || !NightshadeLootProtection.IsLoaded) return;
             if (string.IsNullOrWhiteSpace(zoneId) || radius <= 0f) return;
 
             try
             {
-                object result = UnifiedLootProtection.Call("AddExemptZone", zoneId, center, radius);
+                object result = NightshadeLootProtection.Call("AddExemptZone", zoneId, center, radius);
                 if (result is bool b && b)
-                    Puts($"ULP exempt zone registered for raidbase zone {zoneId}.");
+                    Puts($"NightshadeLootProtection exempt zone registered for raidbase zone {zoneId}.");
                 else
-                    PrintWarning($"ULP AddExemptZone returned unexpected result for {zoneId}: {result}");
+                    PrintWarning($"NightshadeLootProtection AddExemptZone returned unexpected result for {zoneId}: {result}");
             }
             catch (Exception ex)
             {
-                PrintWarning($"Failed to register ULP exempt zone for {zoneId}: {ex.Message}");
+                PrintWarning($"Failed to register NightshadeLootProtection exempt zone for {zoneId}: {ex.Message}");
             }
         }
 
         private void RemoveUlpExemption(string zoneId)
         {
-            if (UnifiedLootProtection == null || !UnifiedLootProtection.IsLoaded) return;
+            if (NightshadeLootProtection == null || !NightshadeLootProtection.IsLoaded) return;
             if (string.IsNullOrWhiteSpace(zoneId)) return;
 
             try
             {
-                UnifiedLootProtection.Call("RemoveExemptZone", zoneId);
+                NightshadeLootProtection.Call("RemoveExemptZone", zoneId);
             }
             catch (Exception ex)
             {
-                PrintWarning($"Failed to remove ULP exempt zone for {zoneId}: {ex.Message}");
+                PrintWarning($"Failed to remove NightshadeLootProtection exempt zone for {zoneId}: {ex.Message}");
             }
         }
 

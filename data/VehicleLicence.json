@@ -40,7 +40,7 @@
         "lastDeath": 0.0
       },
       "Chinook": {
-        "entityID": 10196489,
+        "entityID": 0,
         "lastDeath": 1794355745.731
       },
       "Tugboat": {
@@ -61,7 +61,7 @@
       },
       "Chinook": {
         "entityID": 0,
-        "lastDeath": 0.0
+        "lastDeath": 1794773537.553
       },
       "RHIB": {
         "entityID": 0,
@@ -111,7 +111,7 @@
     "76561199069700597": {
       "TumblerArmed": {
         "entityID": 0,
-        "lastDeath": 1794536027.006
+        "lastDeath": 1795245840.125
       },
       "Tugboat": {
         "entityID": 0,

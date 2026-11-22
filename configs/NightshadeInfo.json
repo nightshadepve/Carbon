@@ -408,11 +408,11 @@
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
-                      "Text": "• /perks — VIP kit status",
+                      "Text": "• /perks — open the shop Kits tab",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
-                      "Text": "• /perks daily and /perks 4day — claim VIP kits",
+                      "Text": "• /perks daily and /perks 4day — open the shop Kits tab",
                       "Tone (body, accent, warn, muted)": "body"
                     }
                   ]
@@ -1078,7 +1078,7 @@
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
-                      "Text": "• Claimable tool kits in the VIP shop. /perks daily and /perks 4day.",
+                      "Text": "• Claim VIP kits from the shop Kits tab.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
@@ -1167,7 +1167,7 @@
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {
-                      "Text": "• VIPx shop tools, plus /perks daily and /perks 4day.",
+                      "Text": "• VIPx shop tools. Claim kits from the shop Kits tab.",
                       "Tone (body, accent, warn, muted)": "body"
                     },
                     {

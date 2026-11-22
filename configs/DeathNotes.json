@@ -1,0 +1,1700 @@
+{
+  "Translations": {
+    "Death Messages": [
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Generic",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} tried to throw hands with {killer} and got hit with the Uno reverse card. <color=#B084FF>Skill issue, deluxe edition.</color>",
+          "{victim} attacked {killer} and somehow lost the argument with their own damage. <color=#B084FF>The audacity was lethal.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Bullet",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} sent {victim} a ballistic cease-and-desist via {weapon} from {distance}m. <color=#B084FF>Delivery confirmed. No signature required.</color>",
+          "{victim} caught a spicy little love letter from {killer}'s {weapon} at {distance}m. <color=#B084FF>Return to sender unavailable.</color>",
+          "{killer} used {weapon} to uninstall {victim} from {distance}m. <color=#B084FF>Have you tried not being there?</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Arrow",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned {victim} into a budget pincushion with {weapon} from {distance}m. <color=#B084FF>Medieval problems require medieval solutions.</color>",
+          "{victim} met {killer}'s {weapon} from {distance}m away. <color=#B084FF>Cupid has been fired for gross misconduct.</color>",
+          "{killer} made {victim} reconsider arrows as a hobby at {distance}m. <color=#B084FF>Thoughts and punctures.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Heat",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} roasted {victim} with {weapon}. <color=#B084FF>Well done. Emotionally and physically.</color>",
+          "{victim} got a complimentary cremation courtesy of {killer}'s {weapon}. <color=#B084FF>No refunds on crispy.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} folded {victim} with {weapon}. <color=#B084FF>Nightshade does not offer emotional support.</color>",
+          "{victim} challenged {killer} and received the express respawn package via {weapon}. <color=#B084FF>Absolutely skill-issued.</color>",
+          "{killer} turned {victim} into a loot delivery service using {weapon}. <color=#B084FF>Five stars for convenience.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Slash",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} gave {victim} an aggressive haircut with {weapon}. <color=#B084FF>The barber is wanted in seven grids.</color>",
+          "{victim} got sliced by {killer}'s {weapon}. <color=#B084FF>That's not how you make a charcuterie board.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Animal",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} introduced a {victim} to {weapon}. <color=#B084FF>The food chain has filed an incident report.</color>",
+          "{killer} defeated a {victim} with {weapon}. <color=#B084FF>Disney would like a word.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Shark",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned a {victim} into ocean confetti with {weapon}. <color=#B084FF>Baby shark has left the chat.</color>",
+          "{killer} dealt with a {victim} using {weapon}. <color=#B084FF>The ocean's HR department is furious.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Animal",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} sniped a {victim} with {weapon} from {distance}m. <color=#B084FF>The nature documentary took a dark turn.</color>",
+          "A {victim} caught {killer}'s {weapon} at {distance}m. <color=#B084FF>Somewhere, a park ranger is crying.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Animal",
+        "DamageType": "Arrow",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} hit a {victim} with {weapon} from {distance}m. <color=#B084FF>Robin Hood needs therapy.</color>",
+          "A {victim} met {killer}'s {weapon} from {distance}m. <color=#B084FF>The wildlife has voted to unionize.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "ZombieNPC",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} put a {victim} back in the grave with {weapon}. <color=#B084FF>Stay dead this time, you moldy menace.</color>",
+          "{killer} handled a {victim} with {weapon}. <color=#B084FF>The undead have been served an eviction notice.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "ZombieNPC",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got absolutely folded by {killer}. <color=#B084FF>Imagine dying to something already dead.</color>",
+          "{killer} ate {victim}'s brains. <color=#B084FF>Still hungry. Suspicious.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "ZombieNPC",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} headlined the zombie apocalypse with {weapon} from {distance}m. <color=#B084FF>The {victim} got canceled permanently.</color>",
+          "{killer} ventilated a {victim} from {distance}m with {weapon}. <color=#B084FF>No second afterlife for you.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "ScarecrowNPC",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned a {victim} into lawn decoration with {weapon}. <color=#B084FF>The crows are unimpressed.</color>",
+          "{killer} packed up a {victim} with {weapon}. <color=#B084FF>Straw poll says: dead.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "ScarecrowNPC",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got humbled by {killer}. <color=#B084FF>Imagine losing a fight to a haunted hay bale.</color>",
+          "{killer} sent {victim} to the respawn screen. <color=#B084FF>Scared straight into the ground.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "ScarecrowNPC",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} deleted a {victim} with {weapon} from {distance}m. <color=#B084FF>The farm is no longer hiring.</color>",
+          "{killer} shot a {victim} from {distance}m with {weapon}. <color=#B084FF>Hay fever just became terminal.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "GingerbreadNPC",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} crumbled a {victim} with {weapon}. <color=#B084FF>That's one way to make Christmas cookies.</color>",
+          "{killer} turned a {victim} into crumbs with {weapon}. <color=#B084FF>Milk was not included.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "GingerbreadNPC",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got bodied by {killer}. <color=#B084FF>You lost to a cookie. A COOKIE.</color>",
+          "{killer} ended {victim}'s run. <color=#B084FF>The gingerbread man has hands, apparently.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "GingerbreadNPC",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} shot a {victim} with {weapon} from {distance}m. <color=#B084FF>Cookie Monster has been notified.</color>",
+          "{killer} reduced a {victim} to crumbs from {distance}m with {weapon}. <color=#B084FF>Oven-baked vengeance.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Scientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} peer-reviewed a {victim} with {weapon}. <color=#B084FF>Results: extremely deceased.</color>",
+          "{killer} concluded a {victim}'s research with {weapon}. <color=#B084FF>The hypothesis did not survive testing.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Scientist",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} conducted a {distance}m field trial on a {victim} with {weapon}. <color=#B084FF>Science says: ouch.</color>",
+          "{killer} gave a {victim} a high-velocity thesis defense using {weapon} at {distance}m. <color=#B084FF>Failed with distinction.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Scientist",
+        "DamageType": "Arrow",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} gave a {victim} a hands-on anatomy lesson with {weapon} from {distance}m. <color=#B084FF>Peer review declined.</color>",
+          "{killer} demonstrated projectile physics to a {victim} at {distance}m with {weapon}. <color=#B084FF>Study terminated early.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "NPCShopKeeper",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} left a one-star review on {victim} using {weapon}. <color=#B084FF>Customer service is now a crime scene.</color>",
+          "{killer} disputed {victim}'s prices with {weapon}. <color=#B084FF>Management will not be responding.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "CustomNPC",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} sent {victim} to the loading screen. <color=#B084FF>NPCs are evolving. Players are not.</color>",
+          "{victim} got folded by {killer}. <color=#B084FF>The bots have better aim than your excuses.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "TravellingVendor",
+        "VictimType": "*",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} delivered {victim} an express shipment of pain. <color=#B084FF>Shipping was free. Dying was mandatory.</color>",
+          "{victim} asked {killer} for a deal. <color=#B084FF>Best they could do was a body bag.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "FrankensteinPet",
+        "VictimType": "*",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} turned {victim} into spare parts. <color=#B084FF>It's alive! You are not.</color>",
+          "{victim} got manhandled by {owner}'s {killer}. <color=#B084FF>Doctor Frankenstein approves this message.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "FrankensteinPet",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} decommissioned a {victim}. <color=#B084FF>Somebody tell the monster's emotional support scientist.</color>",
+          "{victim} met {killer} and fell apart. <color=#B084FF>Literally. Assembly required.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "CustomNPC",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} showed {victim} the business end of {weapon}. <color=#B084FF>Artificial intelligence, natural stupidity.</color>",
+          "{killer} deleted {victim} with {weapon}. <color=#B084FF>Even the NPCs are filing complaints.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "NPCShopKeeper",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} rang up {victim} for one deluxe funeral using {weapon}. <color=#B084FF>No coupons accepted.</color>",
+          "{victim} tried shopping with {killer}. <color=#B084FF>The checkout was permanent.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "HeavyScientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} sent a {victim} into early retirement with {weapon}. <color=#B084FF>That armor came with no warranty.</color>",
+          "{killer} dismantled a {victim} using {weapon}. <color=#B084FF>Heavy equipment, lightweight survival instincts.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "HeavyScientist",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} opened a ventilation shaft in a {victim} with {weapon} at {distance}m. <color=#B084FF>OSHA is screaming.</color>",
+          "{killer} taught a {victim} about bulletproofn't with {weapon} from {distance}m. <color=#B084FF>Armor is a suggestion.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "HeavyScientist",
+        "DamageType": "Arrow",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} punctured a {victim}'s tactical ego with {weapon} from {distance}m. <color=#B084FF>Medieval technology wins again.</color>",
+          "{killer} hit a {victim} at {distance}m with {weapon}. <color=#B084FF>All that armor for a stick with ambition.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Bradley",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned {victim} into expensive scrap with {weapon}. <color=#B084FF>The insurance adjuster quit.</color>",
+          "{killer} totaled {victim} using {weapon}. <color=#B084FF>Tank you, next.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Helicopter",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} fell out of the sky. <color=#B084FF>Air traffic control says skill issue.</color>",
+          "The {victim} has been grounded indefinitely. <color=#B084FF>The sky has had enough.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Helicopter",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} brought down the {victim} with {weapon}. <color=#B084FF>FAA stands for Feral Aviation Association.</color>",
+          "{killer} canceled the {victim}'s flight with {weapon}. <color=#B084FF>No carry-on baggage survived.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "SAM",
+        "VictimType": "Helicopter",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} grounded the {victim}. <color=#B084FF>Airspace privileges revoked.</color>",
+          "{victim} got absolutely denied by {killer}. <color=#B084FF>Please remain seated during your crash.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Cactus",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} lost a fight with a {killer}. <color=#B084FF>The plant had zero movement speed, bestie.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "SAM",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} entered {killer}'s personal space. <color=#B084FF>Air defense chose violence.</color>",
+          "{killer} swatted {victim} out of the air. <color=#B084FF>No-fly zone means NO, cupcake.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Animal",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got outplayed by a {killer}. <color=#B084FF>Nature is healing. Your ego isn't.</color>",
+          "A {killer} sent {victim} to respawn. <color=#B084FF>The food chain just updated its leaderboard.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Shark",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} became a snack for {killer}. <color=#B084FF>Five stars. Very crunchy.</color>",
+          "{killer} turned {victim} into an ocean appetizer. <color=#B084FF>The sea accepts no refunds.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "BeeSwarm",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got jumped by {killer}. <color=#B084FF>Not the entire flying needle gang.</color>",
+          "{killer} eliminated {victim}. <color=#B084FF>Tiny wings, enormous disrespect.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "BeeSwarm",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} defeated {victim}. <color=#B084FF>Congratulations, you won a war against tiny flying idiots.</color>",
+          "{killer} swatted {victim}. <color=#B084FF>The hive has requested a rematch.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Bradley",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} tried flirting with {killer}. <color=#B084FF>The tank was not interested.</color>",
+          "{killer} sent {victim} straight to respawn. <color=#B084FF>Bradley does not negotiate with idiots.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Helicopter",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned {victim} into pavement seasoning. <color=#B084FF>The helicopter chose violence.</color>",
+          "{victim} caught the attention of {killer}. <color=#B084FF>Congratulations on your free airstrike.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Trap",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} discovered {killer} the hard way. <color=#B084FF>Reading signs was apparently optional.</color>",
+          "{victim} got folded by {killer}. <color=#B084FF>The floor had a surprise, and it was personal.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Trap",
+        "VictimType": "Scientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} outsmarted a {victim}. <color=#B084FF>Science was no match for basic home security.</color>",
+          "A {victim} met {owner}'s {killer}. <color=#B084FF>Field research concluded abruptly.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Trap",
+        "VictimType": "HeavyScientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} folded a {victim}. <color=#B084FF>All that gear, zero situational awareness.</color>",
+          "A {victim} donated its inventory to {owner}'s {killer}. <color=#B084FF>Security system: 1. Science: 0.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Barricade",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} hugged a {killer}. <color=#B084FF>The relationship was painfully one-sided.</color>",
+          "{victim} got intimate with a {killer}. <color=#B084FF>That's not what 'spicy' means, darling.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Turret",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} told {victim} to get off the lawn. <color=#B084FF>In full-auto cursive.</color>",
+          "{victim} met {owner}'s {killer}. <color=#B084FF>Trespassing comes with complimentary ventilation.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Turret",
+        "VictimType": "Scientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} rejected a {victim}'s research grant. <color=#B084FF>Permanently.</color>",
+          "A {victim} tested {owner}'s {killer}. <color=#B084FF>Results: works as intended.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Turret",
+        "VictimType": "HeavyScientist",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{owner}'s {killer} turned a {victim} into lab debris. <color=#B084FF>Heavy armor, featherweight IQ.</color>",
+          "A {victim} got denied by {owner}'s {killer}. <color=#B084FF>Your warranty is void.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Murderer",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got introduced to {killer}. <color=#B084FF>The horror movie had a budget of one brain cell.</color>",
+          "{killer} caught {victim} lacking. <color=#B084FF>The slasher franchise claims another extra.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "TunnelDweller",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} lost a basement argument with {killer}. <color=#B084FF>The tunnels have a new floor decoration.</color>",
+          "{killer} sent {victim} to respawn. <color=#B084FF>Never trust someone who lives under a train station.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "TunnelDweller",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} evicted a {victim} with {weapon}. <color=#B084FF>The tunnel HOA has been dissolved.</color>",
+          "{killer} sent a {victim} to the surface permanently using {weapon}. <color=#B084FF>Underground performance review: failed.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "TunnelDweller",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} canceled a {victim}'s tunnel lease from {distance}m with {weapon}. <color=#B084FF>No security deposit returned.</color>",
+          "{killer} ventilated a {victim} using {weapon} at {distance}m. <color=#B084FF>Subterranean customer service is closed.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "UnderwaterDweller",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got bodied by {killer}. <color=#B084FF>The ocean said no visitors.</color>",
+          "{killer} turned {victim} into artificial reef material. <color=#B084FF>Marine biology is getting weird.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "UnderwaterDweller",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} took out {victim} with {weapon}. <color=#B084FF>The underwater HOA has been notified.</color>",
+          "{killer} evicted {victim} using {weapon}. <color=#B084FF>Atlantis has a strict no-nonsense policy.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "UnderwaterDweller",
+        "DamageType": "Bullet",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} hit {victim} from {distance}m with {weapon}. <color=#B084FF>Underwater bullets, above-water disrespect.</color>",
+          "{killer} canceled {victim}'s dive pass at {distance}m with {weapon}. <color=#B084FF>Submerged and unemployed.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "ExcavatorArm",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got excavated by {killer}. <color=#B084FF>The machine found dirt, scrap, and a skill issue.</color>",
+          "{killer} processed {victim} as raw material. <color=#B084FF>Market value: emotionally devastating.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Elevator",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got flattened by {killer}. <color=#B084FF>Going down was the last item on the itinerary.</color>",
+          "{killer} gave {victim} an express trip to the floor. <color=#B084FF>Elevator music has been replaced with screaming.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "HotAirBalloon",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} lost an argument with {killer}. <color=#B084FF>Gravity remains undefeated.</color>",
+          "{killer} turned {victim}'s flight into a one-way trip. <color=#B084FF>No in-flight snacks, only regrets.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "BatteringRam",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} rearranged {victim}'s skeleton. <color=#B084FF>Door-to-door service, very literal.</color>",
+          "{victim} got flattened by {killer}. <color=#B084FF>Knock knock. It's your obituary.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Tugboat",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned {victim} into nautical roadkill. <color=#B084FF>Honk honk, you soggy goblin.</color>",
+          "{victim} got folded by {killer}. <color=#B084FF>The harbor does not have pedestrian crossings.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "CargoShip",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} introduced {victim} to several thousand tons of nope. <color=#B084FF>Shipping and handling were fatal.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "CarShredder",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} entered {killer} as a person and exited as assorted parts. <color=#B084FF>Recycling is important, babe.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "MagnetCrane",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got emotionally and physically attached to {killer}. <color=#B084FF>Attraction has never been this toxic.</color>",
+          "{killer} picked up {victim}'s entire personality. <color=#B084FF>And promptly dropped it.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Scientist",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} peer-reviewed {victim} at gunpoint. <color=#B084FF>Final grade: deceased.</color>",
+          "{victim} failed {killer}'s surprise exam. <color=#B084FF>The syllabus was written in bullets.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Scientist",
+        "VictimType": "*",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} eliminated {victim}. <color=#B084FF>The lab has denied all responsibility.</color>",
+          "{victim} became an unfortunate case study courtesy of {killer}. <color=#B084FF>Publish or perish, apparently.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "HeavyScientist",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned {victim} into a failed experiment. <color=#B084FF>Heavyweight disappointment.</color>",
+          "{victim} met {killer}. <color=#B084FF>A whole lot of armor and absolutely no bedside manner.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "HeavyScientist",
+        "VictimType": "*",
+        "DamageType": "*",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} eliminated {victim}. <color=#B084FF>The scientific method is getting aggressive.</color>",
+          "{victim} got audited by {killer}. <color=#B084FF>The lab report simply says 'ouch.'</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Sentry",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} broke safe-zone rules and {killer} issued a permanent ban. <color=#B084FF>Terms and conditions accepted.</color>",
+          "{killer} sent {victim} to respawn. <color=#B084FF>Safe zone does not mean safe from consequences.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "-",
+        "VictimType": "Player",
+        "DamageType": "Fall",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} performed an unscheduled gravity inspection. <color=#B084FF>The ground passed. They did not.</color>",
+          "{victim} attempted flight without unlocking wings. <color=#B084FF>Gravity said sit your ass down.</color>",
+          "{victim} discovered fall damage is not a conspiracy theory. <color=#B084FF>Splat, you magnificent dumbass.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "HeatSource",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} got cooked by {killer}. <color=#B084FF>Chef's special: overconfident idiot.</color>",
+          "{killer} roasted {victim}. <color=#B084FF>Medium rare was never an option.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Lock",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} tried {owner}'s {killer}. <color=#B084FF>The electric bill was worth it.</color>",
+          "{owner}'s {killer} gave {victim} an electrifying personality adjustment. <color=#B084FF>Shockingly ineffective.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Heat",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} became a walking barbecue. <color=#B084FF>Crispy is not a survival strategy.</color>",
+          "{victim} learned that fire is, in fact, hot. <color=#B084FF>Groundbreaking research.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Hunger",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} starved in a game literally full of food. <color=#B084FF>The berries are judging you.</color>",
+          "{victim} forgot lunch and selected the permanent diet. <color=#B084FF>Nutritionists hate this one trick.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Thirst",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} died thirsty while surrounded by an entire map. <color=#B084FF>Hydration was apparently DLC.</color>",
+          "{victim} became a cautionary tale for drinking water. <color=#B084FF>The river was RIGHT THERE.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Radiation",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} absorbed enough radiation to become a nightlight. <color=#B084FF>Glow-up canceled.</color>",
+          "{victim} ignored the Geiger counter's screaming. <color=#B084FF>Now they're a spicy isotope.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Cold",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} froze to death. <color=#B084FF>The weather said put some damn pants on.</color>",
+          "{victim} became a human popsicle. <color=#B084FF>Zero stars, terrible flavor.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Player",
+        "DamageType": "Drowned",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} attempted to breathe fish-style. <color=#B084FF>The ocean declined the application.</color>",
+          "{victim} drowned. <color=#B084FF>Lungs are not optional equipment, sweetheart.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "*",
+        "VictimType": "Animal",
+        "DamageType": "Drowned",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "A {victim} drowned. <color=#B084FF>Even the wildlife forgot the tutorial.</color>",
+          "The {victim} tried a very permanent swimming lesson. <color=#B084FF>Nature's patch notes are brutal.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Bleeding",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} bled out after {killer} opened a customer service ticket with violence. <color=#B084FF>Please hold. Forever.</color>",
+          "{killer} left {victim} with more holes than bandages. <color=#B084FF>The medical team has blocked your number.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Animal",
+        "DamageType": "Collision",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} turned a {victim} into a speed bump with {weapon}. <color=#B084FF>Roadkill: premium edition.</color>",
+          "A {victim} lost a traffic dispute with {killer}'s {weapon}. <color=#B084FF>No insurance information exchanged.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Collision",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} used {weapon} to turn {victim} into roadside decor. <color=#B084FF>Pedestrian rights have left the chat.</color>",
+          "{victim} got hit by {killer}'s {weapon}. <color=#B084FF>Look both ways, you feral traffic cone.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Train",
+        "VictimType": "Player",
+        "DamageType": "Collision",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} challenged {killer} to a game of chicken. <color=#B084FF>The train did not blink.</color>",
+          "{killer} introduced {victim} to the express line. <color=#B084FF>Next stop: respawn.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Minicopter",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} crashed a {killer}. <color=#B084FF>Pilot license found in a cereal box.</color>",
+          "{victim} discovered why {killer} isn't a personality trait. <color=#B084FF>Gravity does not negotiate.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "ScrapTransportHelicopter",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} turned {killer} into an airborne group project. <color=#B084FF>Everyone failed.</color>",
+          "{victim} crashed a {killer}. <color=#B084FF>Budget airline, premium funeral.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "AttackHelicopter",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} crashed a {killer}. <color=#B084FF>Attack helicopter, defensive driving: zero.</color>",
+          "{victim} made {killer} meet the ground at speed. <color=#B084FF>Aviation school has revoked your crayons.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Drone",
+        "VictimType": "Player",
+        "DamageType": "*",
+        "Enabled": true,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{killer} delivered {victim} a remote-controlled skill issue with {weapon}. <color=#B084FF>Beep boop, goodbye.</color>",
+          "{victim} got absolutely disrespected by {killer}'s {weapon}. <color=#B084FF>Even the flying Roomba has hands.</color>"
+        ]
+      },
+      {
+        "Display Permissions (Display For All Players If Empty)": [],
+        "KillerType": "Player",
+        "VictimType": "Player",
+        "DamageType": "Suicide",
+        "Enabled": false,
+        "Show Kills in Console": true,
+        "Show Kills in Chat": true,
+        "Show Kills in Notify": false,
+        "Show Kills in UINotify": false,
+        "Messages": [
+          "{victim} hit the respawn button with extreme enthusiasm. <color=#B084FF>New character, same questionable decisions.</color>",
+          "{victim} decided this spawn needed a hard reset. <color=#B084FF>Ctrl Alt Defeat.</color>",
+          "{victim} took the express route back to the beach. <color=#B084FF>Speedrunning bad decisions.</color>"
+        ]
+      }
+    ],
+    "Names": {
+      "Chicken": "Chicken",
+      "Boar": "Boar",
+      "Stag": "Stag",
+      "Bear": "Bear",
+      "Wolf": "Wolf",
+      "Cow": "Cow",
+      "Bull": "Bull",
+      "Sheep": "Sheep",
+      "Rabbit": "Rabbit",
+      "Sea Turtle": "Sea Turtle",
+      "Frog": "Frog",
+      "Crab": "Crab",
+      "Jellyfish": "Jellyfish",
+      "Simple Shark": "Shark",
+      "Scientist": "Scientist",
+      "Heavy Scientist": "Heavy Scientist",
+      "HeavyScientist": "Heavy Scientist",
+      "scientistnpc_heavy": "Heavy Scientist",
+      "Helicopter": "Patrol Helicopter",
+      "Bradley APC": "Bradley APC",
+      "Polarbear": "Polar Bear",
+      "Polar Bear": "Polar Bear",
+      "Code Lock": "Code Lock",
+      "Fire": "Fire",
+      "Sentry": "Sentry",
+      "Sam Site": "SAM Site",
+      "ScarecrowNPC": "Scarecrow",
+      "Tunnel Dweller": "Tunnel Dweller",
+      "Barbed Wooden Barricade": "Barbed Wooden Barricade",
+      "Barricade": "Barricade",
+      "Auto Turret": "Auto Turret",
+      "Patrol Helicopter": "Patrol Helicopter",
+      "GRAF": "GRAF",
+      "Underwater Dweller": "Underwater Dweller",
+      "Campfire": "Campfire",
+      "Wolf2": "Wolf",
+      "Horse": "Horse",
+      "Landmine": "Landmine",
+      "Tesla Coil": "Tesla Coil",
+      "Gun Trap": "Shotgun Trap",
+      "Flame Turret": "Flame Turret",
+      "GingerbreadNPC": "Gingerbread Man",
+      "ScrapTransportHelicopter": "Scrap Transport Helicopter",
+      "AttackHelicopter": "Attack Helicopter",
+      "Minicopter": "Minicopter",
+      "Metal Barricade": "Metal Barricade",
+      "ZombieNPC": "Zombie",
+      "Bear Trap": "Bear Trap",
+      "Custom Bradley": "Custom Bradley",
+      "Farmable Animal": "Farm Animal",
+      "BeeSwarm": "Bee Swarm",
+      "Custom Animal Npc": "Custom Animal NPC",
+      "Zombie": "Zombie",
+      "Shark": "Shark",
+      "Wooden Floor Spike Cluster": "Wooden Floor Spike Cluster",
+      "Crocodile": "Crocodile",
+      "Snake Hazard": "Snake",
+      "Panther": "Panther",
+      "Tiger": "Tiger",
+      "Ridable Horse": "Horse",
+      "NPCShopKeeper": "Waterwell Shopkeeper",
+      "Giant Excavator Arm": "Giant Excavator Arm",
+      "Drone": "Drone",
+      "Cactus": "Cactus",
+      "Magnet Crane": "Magnet Crane",
+      "Elevator": "Elevator",
+      "Hot Air Balloon": "Hot Air Balloon",
+      "Car Shredder": "Car Shredder",
+      "Cargo Ship": "Cargo Ship",
+      "Digit Send Code Lock": "Digit Send Code Lock",
+      "Squirrel": "Squirrel",
+      "NPCAuto Turret": "NPC Auto Turret",
+      "Travelling Vendor": "Travelling Vendor",
+      "Sledge": "Sledge",
+      "Juggernaut": "Juggernaut",
+      "Elite Outlaw": "Elite Outlaw",
+      "Hard Dungeon Boss": "Hard Dungeon Boss",
+      "Easy Dungeon Boss": "Easy Dungeon Boss",
+      "Medium Dungeon Boss": "Medium Dungeon Boss",
+      "Battle Forager": "Battle Forager"
+    },
+    "Bodyparts": {
+      "Body": "Body",
+      "Leg": "Leg",
+      "Chest": "Chest",
+      "Stomach": "Stomach",
+      "Head": "Head",
+      "Arm": "Arm",
+      "Hand": "Hand",
+      "Foot": "Foot"
+    },
+    "Weapons": {
+      "Salvaged Sword": "Salvaged Sword",
+      "Revolver": "Revolver",
+      "Salvaged Cleaver": "Salvaged Cleaver",
+      "Mace": "Mace",
+      "Assault Rifle": "Assault Rifle",
+      "Double Barrel Shotgun": "Double Barrel Shotgun",
+      "Bolt Action Rifle": "Bolt Action Rifle",
+      "M92 Pistol": "M92 Pistol",
+      "Custom SMG": "Custom SMG",
+      "LR-300 Assault Rifle": "LR-300 Assault Rifle",
+      "Timed Explosive Charge": "Timed Explosive Charge (C4)",
+      "Pump Shotgun": "Pump Shotgun",
+      "Prototype 17": "Prototype 17",
+      "Hunting Bow": "Hunting Bow",
+      "Thompson": "Thompson",
+      "M39 Rifle": "M39 Rifle",
+      "Hatchet": "Hatchet",
+      "hatchet.entity": "Hatchet",
+      "M4 Shotgun": "M4 Shotgun",
+      "HMLMG": "HMLMG",
+      "l96.entity": "L96 Rifle",
+      "L96 Rifle": "L96 Rifle",
+      "m249.entity": "M249",
+      "M249": "M249",
+      "Pickaxe": "Pickaxe",
+      "Bone Knife": "Bone Knife",
+      "Semi-Automatic Pistol": "Semi-Automatic Pistol",
+      "Stone Hatchet": "Stone Hatchet",
+      "stonehatchet.entity": "Stone Hatchet",
+      "Rock": "Rock",
+      "Skinning Knife": "Skinning Knife",
+      "Crossbow": "Crossbow",
+      "Combat Knife": "Combat Knife",
+      "Semi-Automatic Rifle": "Semi-Automatic Rifle",
+      "MP5A4": "MP5A4",
+      "Jackhammer": "Jackhammer",
+      "SKS": "SKS",
+      "militaryflamethrower.entity": "Military Flamethrower",
+      "High Velocity Rocket": "High Velocity Rocket",
+      "Spas-12 Shotgun": "Spas-12 Shotgun",
+      "knife.combat.entity": "Combat Knife",
+      "2module_car_spawned.entity": "2-module Vehicle",
+      "car_chassis_2module.entity": "2-module Vehicle",
+      "car_2mod_01": "2-module Vehicle",
+      "car_2mod_02": "2-module Vehicle",
+      "car_2mod_03": "2-module Vehicle",
+      "car_2mod_04": "2-module Vehicle",
+      "car_2mod_05": "2-module Vehicle",
+      "car_2mod_06": "2-module Vehicle",
+      "car_2mod_07": "2-module Vehicle",
+      "car_2mod_08": "2-module Vehicle",
+      "3module_car_spawned.entity": "3-module Vehicle",
+      "car_chassis_3module.entity": "3-module Vehicle",
+      "car_3mod_01": "3-module Vehicle",
+      "car_3mod_02": "3-module Vehicle",
+      "car_3mod_03": "3-module Vehicle",
+      "car_3mod_04": "3-module Vehicle",
+      "car_3mod_05": "3-module Vehicle",
+      "car_3mod_06": "3-module Vehicle",
+      "car_3mod_07": "3-module Vehicle",
+      "car_3mod_08": "3-module Vehicle",
+      "car_3mod_09": "3-module Vehicle",
+      "car_3mod_10": "3-module Vehicle",
+      "car_3mod_11": "3-module Vehicle",
+      "car_3mod_12": "3-module Vehicle",
+      "4module_car_spawned.entity": "4-module Vehicle",
+      "car_chassis_4module.entity": "4-module Vehicle",
+      "car_4mod_01": "4-module Vehicle",
+      "car_4mod_02": "4-module Vehicle",
+      "car_4mod_03": "4-module Vehicle",
+      "car_4mod_04": "4-module Vehicle",
+      "car_4mod_05": "4-module Vehicle",
+      "car_4mod_06": "4-module Vehicle",
+      "car_4mod_07": "4-module Vehicle",
+      "car_4mod_08": "4-module Vehicle",
+      "car_4mod_09": "4-module Vehicle",
+      "car_4mod_10": "4-module Vehicle",
+      "car_4mod_11": "4-module Vehicle",
+      "motorbike": "Motorbike",
+      "motorbike_sidecar": "Motorbike with Sidecar",
+      "pedalbike": "Bicycle",
+      "pedaltrike": "Tricycle",
+      "snowmobile": "Snowmobile",
+      "F1 Grenade": "F1 Grenade",
+      "Satchel Charge": "Satchel Charge",
+      "Wooden Spear": "Wooden Spear",
+      "Stone Spear": "Stone Spear",
+      "Compound Bow": "Compound Bow",
+      "Machete": "Machete",
+      "Pitchfork": "Pitchfork",
+      "Stone Pickaxe": "Stone Pickaxe",
+      "stone_pickaxe.entity": "Stone Pickaxe",
+      "Legacy bow": "Legacy Bow",
+      "Rocket": "Rocket",
+      "Incendiary Rocket": "Incendiary Rocket",
+      "Salvaged Axe": "Salvaged Axe",
+      "Torch": "Torch",
+      "pickaxe.entity": "Pickaxe",
+      "Salvaged Hammer": "Salvaged Hammer",
+      "40mm_grenade_he": "40mm HE Grenade",
+      "Minigun": "Minigun",
+      "Assault Rifle - ICE": "Ice Assault Rifle",
+      "Python Revolver": "Python Revolver",
+      "Nailgun": "Nailgun",
+      "Salvaged Icepick": "Salvaged Icepick",
+      "Longsword": "Longsword",
+      "Waterpipe Shotgun": "Waterpipe Shotgun",
+      "Chainsaw": "Chainsaw",
+      "workcart.entity": "Work Cart",
+      "locomotive.entity": "Locomotive",
+      "workcart_aboveground.entity": "Above Ground Work Cart",
+      "Paddle": "Paddle",
+      "workcart_aboveground2.entity": "Above Ground Work Cart",
+      "hammer_salvaged.entity": "Salvaged Hammer",
+      "Multiple Grenade Launcher": "Multiple Grenade Launcher",
+      "minigun.entity": "Minigun",
+      "rocket_mlrs": "MLRS Rocket",
+      "Eoka Pistol": "Eoka Pistol",
+      "High Caliber Revolver": "High Caliber Revolver",
+      "Abyss Assault Rifle": "Abyss Assault Rifle",
+      "Blunderbuss": "Blunderbuss",
+      "Sickle": "Sickle",
+      "Butcher Knife": "Butcher Knife",
+      "pitchfork.entity": "Pitchfork",
+      "Snowball Gun": "Snowball Gun",
+      "vampirestake.entity": "Vampire Stake",
+      "Baseball Bat": "Baseball Bat",
+      "Handmade SMG": "Handmade SMG",
+      "Beancan Grenade": "Beancan Grenade",
+      "Candy Cane Club": "Candy Cane Club",
+      "Snowball": "Snowball",
+      "Flashlight": "Flashlight",
+      "Speargun": "Speargun",
+      "double_shotgun.entity": "Double Barrel Shotgun",
+      "Skull": "Skull",
+      "Mini Crossbow": "Mini Crossbow",
+      "Ice Assault Rifle": "Ice Assault Rifle",
+      "Frontier Hatchet": "Frontier Hatchet",
+      "Medieval Assault Rifle": "Medieval Assault Rifle",
+      "boulder_explosive_deployed": "Propane Explosive Bomb",
+      "Ballista": "Ballista",
+      "boulder_explosive": "Propane Explosive Bomb",
+      "boulder_mid": "Scattershot",
+      "boulder_incendiary": "Firebomb",
+      "Flame Thrower": "Flame Thrower",
+      "grenade.molotov.deployed": "Molotov Cocktail",
+      "Concrete Pickaxe": "Concrete Pickaxe",
+      "Bone Club": "Bone Club",
+      "scraptransporthelicopter": "Scrap Transport Helicopter",
+      "grenade.bee.deployed": "Bee Grenade",
+      "grenade.flashbang.deployed": "Flashbang Grenade",
+      "Lunar New Year Spear": "Lunar New Year Spear",
+      "boulder": "Boulder",
+      "Prototype Hatchet": "Prototype Hatchet",
+      "Concrete Hatchet": "Concrete Hatchet",
+      "Blow Pipe": "Blow Pipe",
+      "boomerang.thrown.entity": "Boomerang",
+      "Obsidian Bone Knife": "Obsidian Bone Knife",
+      "Jungle Relic Assault Rifle": "Jungle Relic Assault Rifle",
+      "Abyss Metal Pickaxe": "Abyss Metal Pickaxe",
+      "Abyss Metal Hatchet": "Abyss Metal Hatchet",
+      "Cultist Deer Torch": "Cultist Deer Torch",
+      "Jungle Rock": "Jungle Rock",
+      "ak47u.entity": "Assault Rifle",
+      "hmlmg.entity": "HMLMG",
+      "M15 Semi-Automatic Pistol": "M15 Semi-Automatic Pistol",
+      "icepick_salvaged.entity": "Salvaged Icepick",
+      "rocket_hv_rpg": "High-Velocity RPG",
+      "Krieg Shotgun": "Krieg Shotgun",
+      "Krieg chainsword": "Krieg Chainsword",
+      "Medieval AR": "Medieval AR",
+      "Boomerang": "Boomerang",
+      "Space LR-300 Assault Rifle": "Space LR-300 Assault Rifle",
+      "rocket_basic_rpg": "RPG",
+      "rocket_fire_rpg": "Incendiary RPG",
+      "Prototype Pickaxe": "Prototype Pickaxe",
+      "Sunken Combat Knife": "Sunken Combat Knife",
+      "spas12.entity": "Spas-12 Shotgun",
+      "cannonball": "Cannonball",
+      "mortar_shell_fragment": "Fragmentation Mortar Shell",
+      "mortar_shell_basic": "Mortar Shell",
+      "tomahasnowmobile": "Tomaha Snowmobile",
+      "Abyss Torch": "Abyss Torch",
+      "M16A2": "M16A2",
+      "Bowless Crossbow": "Bowless Crossbow",
+      "bow_hunting.entity": "Hunting Bow",
+      "Vehicle": "Vehicle",
+      "hotairballoon": "Hot Air Balloon",
+      "Industrial Torch": "Industrial Torch",
+      "skinningknife.entity": "Skinning Knife",
+      "Crystal Assault Rifle Diamond": "Diamond Crystal Assault Rifle",
+      "Crystal Assault Rifle Emerald": "Emerald Crystal Assault Rifle",
+      "Crystal Assault Rifle Sapphire": "Sapphire Crystal Assault Rifle",
+      "cny_spear.entity": "Lunar New Year Spear",
+      "frontier_hatchet.entity": "Frontier Hatchet"
+    },
+    "Attachments": {
+      "Weapon flashlight": "Weapon Flashlight",
+      "Extended Magazine": "Extended Magazine",
+      "16x Zoom Scope": "16x Zoom Scope",
+      "Weapon Lasersight": "Weapon Lasersight",
+      "Silencer": "Silencer",
+      "8x Zoom Scope": "8x Zoom Scope",
+      "Holosight": "Holosight",
+      "Muzzle Boost": "Muzzle Boost",
+      "Muzzle Brake": "Muzzle Brake",
+      "Simple Handmade Sight": "Simple Handmade Sight",
+      "Gas Compression Overdrive": "Gas Compression Overdrive",
+      "Burst Module": "Burst Module",
+      "Variable Zoom Scope": "Variable Zoom Scope",
+      "Military Silencer": "Military Silencer",
+      "Oil Filter Silencer": "Oil Filter Silencer",
+      "Targeting Attachment": "Targeting Attachment",
+      "Soda Can Silencer": "Soda Can Silencer"
+    }
+  },
+  "Variable Formats": {
+    "attachments": " ({value})"
+  },
+  "Variable Colors": {
+    "killer": "#C4FF00",
+    "victim": "#C4FF00",
+    "weapon": "#C4FF00",
+    "attachments": "#C4FF00",
+    "distance": "#C4FF00",
+    "owner": "#C4FF00",
+    "position": "#C4FF00",
+    "mapgrid": "#C4FF00"
+  },
+  "Chat Format": "<color=#838383>[<color=#B084FF>Nightshade</color><color=#80D000> DeathNotes</color>] {message}</color>",
+  "Chat Icon (SteamID)": "76561198077847390",
+  "Debug Mode Enabled": false,
+  "Notify Message Type": 0,
+  "UINotify Message Type": 0,
+  "Can Player Use /dn Command": true,
+  "Patrol Heli Tags Display Permissions (Display For All Players If Empty)": [],
+  "Show Patrol Heli Tags in Console": true,
+  "Show Patrol Heli Tags in Chat": true,
+  "Show Patrol Heli Tags in Notify": false,
+  "Show Patrol Heli Tags in UINotify": false,
+  "Patrol Helicopter Tag Message": "{killer} tagged {victim} with {weapon} from {distance}m. <color=#B084FF>The sky has officially filed a complaint.</color>",
+  "Bradley APC Tags Display Permissions (Display For All Players If Empty)": [],
+  "Show Bradley APC Tags in Console": true,
+  "Show Bradley APC Tags in Chat": true,
+  "Show Bradley APC Tags in Notify": false,
+  "Show Bradley APC Tags in UINotify": false,
+  "Bradley Tag Message": "{killer} tagged {victim} with {weapon} from {distance}m. <color=#B084FF>Bradley is about to have a very bad day.</color>",
+  "Message Broadcast Radius (in meters)": -1,
+  "Use Metric Distance": true,
+  "Require Permission (deathnotes.cansee)": false
+}

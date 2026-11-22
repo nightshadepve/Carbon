@@ -36,31 +36,6 @@
       "netIdEntity": 0,
       "typeEntity": 0
     },
-    "junk": {
-      "positionHome": {
-        "x": -1408.71948,
-        "y": 10.8153839,
-        "z": -936.4038,
-        "normalized": {
-          "x": -0.8327808,
-          "y": 0.00639363937,
-          "z": -0.5535659,
-          "normalized": {
-            "x": -0.832780838,
-            "y": 0.00639364,
-            "z": -0.553566,
-            "magnitude": 1.0,
-            "sqrMagnitude": 1.00000012
-          },
-          "magnitude": 0.99999994,
-          "sqrMagnitude": 0.99999994
-        },
-        "magnitude": 1691.585,
-        "sqrMagnitude": 2861459.75
-      },
-      "netIdEntity": 0,
-      "typeEntity": 0
-    },
     "dome": {
       "positionHome": {
         "x": 73.87063,
@@ -75,6 +50,49 @@
         },
         "magnitude": 1465.37952,
         "sqrMagnitude": 2147337.25
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "junk": {
+      "positionHome": {
+        "x": -1338.45557,
+        "y": 7.871609,
+        "z": -1223.23474,
+        "normalized": {
+          "x": -0.738158047,
+          "y": 0.00434119161,
+          "z": -0.6746138,
+          "normalized": {
+            "x": -0.7381581,
+            "y": 0.004341192,
+            "z": -0.674613833,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.9999999
+        },
+        "magnitude": 1813.237,
+        "sqrMagnitude": 3287828.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "worm": {
+      "positionHome": {
+        "x": -749.7275,
+        "y": 43.56875,
+        "z": -985.2852,
+        "normalized": {
+          "x": -0.605174839,
+          "y": 0.03516839,
+          "z": -0.7953154,
+          "magnitude": 1.0,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1238.861,
+        "sqrMagnitude": 1534776.5
       },
       "netIdEntity": 0,
       "typeEntity": 0
@@ -222,6 +240,31 @@
       },
       "netIdEntity": 0,
       "typeEntity": 0
+    },
+    "pvp": {
+      "positionHome": {
+        "x": -971.077759,
+        "y": 37.930542,
+        "z": -629.5961,
+        "normalized": {
+          "x": -0.8386262,
+          "y": 0.03275695,
+          "z": -0.543721437,
+          "normalized": {
+            "x": -0.838626266,
+            "y": 0.0327569544,
+            "z": -0.5437215,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1157.93872,
+        "sqrMagnitude": 1340822.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
     }
   },
   "76561198383506301": {
@@ -260,6 +303,24 @@
       },
       "netIdEntity": 0,
       "typeEntity": 0
+    },
+    "flare": {
+      "positionHome": {
+        "x": 1802.72119,
+        "y": 0.46484682,
+        "z": 350.038,
+        "normalized": {
+          "x": 0.981665432,
+          "y": 0.000253130682,
+          "z": 0.190611944,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 1836.39063,
+        "sqrMagnitude": 3372330.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
     }
   },
   "76561198035665693": {
@@ -282,48 +343,101 @@
       "typeEntity": 0
     }
   },
-  "76561199866337898": {
-    "base": {
-      "positionHome": {
-        "x": 1141.2738,
-        "y": 28.7672939,
-        "z": 992.6568,
-        "normalized": {
-          "x": 0.7543889,
-          "y": 0.0190153569,
-          "z": 0.6561522,
-          "normalized": {
-            "x": 0.754389,
-            "y": 0.0190153588,
-            "z": 0.656152248,
-            "magnitude": 1.0,
-            "sqrMagnitude": 1.00000012
-          },
-          "magnitude": 0.99999994,
-          "sqrMagnitude": 0.99999994
-        },
-        "magnitude": 1512.84534,
-        "sqrMagnitude": 2288701.0
-      },
-      "netIdEntity": 0,
-      "typeEntity": 0
-    }
-  },
+  "76561199866337898": {},
   "76561198375397546": {
-    "new": {
+    "home": {
       "positionHome": {
-        "x": 756.1071,
-        "y": 15.0329494,
-        "z": -13.6703453,
+        "x": 757.3841,
+        "y": 24.0329742,
+        "z": -19.4635658,
         "normalized": {
-          "x": 0.999639153,
-          "y": 0.0198748615,
-          "z": -0.0180733819,
+          "x": 0.999167442,
+          "y": 0.0317051336,
+          "z": -0.0256770123,
           "magnitude": 1.0,
           "sqrMagnitude": 1.00000012
         },
-        "magnitude": 756.380066,
-        "sqrMagnitude": 572110.8
+        "magnitude": 758.0152,
+        "sqrMagnitude": 574587.063
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "farm": {
+      "positionHome": {
+        "x": 819.3313,
+        "y": 15.760375,
+        "z": -21.83604,
+        "normalized": {
+          "x": 0.9994603,
+          "y": 0.0192252751,
+          "z": -0.0266366675,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 819.773743,
+        "sqrMagnitude": 672029.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "dome": {
+      "positionHome": {
+        "x": -64.72427,
+        "y": 20.4635925,
+        "z": 1581.16138,
+        "normalized": {
+          "x": -0.0408969671,
+          "y": 0.0129302163,
+          "z": 0.999079645,
+          "normalized": {
+            "x": -0.04089697,
+            "y": 0.0129302172,
+            "z": 0.9990797,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.0
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.9999999
+        },
+        "magnitude": 1582.61792,
+        "sqrMagnitude": 2504679.25
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "brad": {
+      "positionHome": {
+        "x": 1033.762,
+        "y": 55.67163,
+        "z": 1141.68225,
+        "normalized": {
+          "x": 0.6707649,
+          "y": 0.0361229926,
+          "z": 0.7407899,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.00000012
+        },
+        "magnitude": 1541.16882,
+        "sqrMagnitude": 2375201.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    },
+    "new": {
+      "positionHome": {
+        "x": 1362.56067,
+        "y": 6.9282794,
+        "z": 976.060059,
+        "normalized": {
+          "x": 0.812934935,
+          "y": 0.00413357047,
+          "z": 0.5823398,
+          "magnitude": 1.0,
+          "sqrMagnitude": 0.99999994
+        },
+        "magnitude": 1676.10046,
+        "sqrMagnitude": 2809312.75
       },
       "netIdEntity": 0,
       "typeEntity": 0
@@ -386,5 +500,78 @@
   "76561199119497727": {},
   "76561198994220790": {},
   "76561198138332799": {},
-  "76561199152759612": {}
+  "76561199152759612": {},
+  "76561197997818751": {},
+  "76561198292405649": {},
+  "76561198051074438": {
+    "temp": {
+      "positionHome": {
+        "x": 936.2634,
+        "y": 30.1127415,
+        "z": 939.4738,
+        "normalized": {
+          "x": 0.7057136,
+          "y": 0.0226976424,
+          "z": 0.708133459,
+          "normalized": {
+            "x": 0.7057137,
+            "y": 0.0226976443,
+            "z": 0.7081335,
+            "magnitude": 1.0,
+            "sqrMagnitude": 1.00000012
+          },
+          "magnitude": 0.99999994,
+          "sqrMagnitude": 0.9999999
+        },
+        "magnitude": 1326.69031,
+        "sqrMagnitude": 1760107.0
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198770473764": {},
+  "76561198028960167": {
+    "home": {
+      "positionHome": {
+        "x": -644.7525,
+        "y": 49.98919,
+        "z": 514.8289,
+        "normalized": {
+          "x": -0.7800135,
+          "y": 0.0604762919,
+          "z": 0.62283355,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.00000012
+        },
+        "magnitude": 826.5915,
+        "sqrMagnitude": 683253.5
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561198769950321": {},
+  "76561198799369142": {
+    "home": {
+      "positionHome": {
+        "x": 674.1709,
+        "y": 26.2370758,
+        "z": 41.981987,
+        "normalized": {
+          "x": 0.9973147,
+          "y": 0.03881304,
+          "z": 0.0621048026,
+          "magnitude": 1.0,
+          "sqrMagnitude": 1.0
+        },
+        "magnitude": 675.986145,
+        "sqrMagnitude": 456957.281
+      },
+      "netIdEntity": 0,
+      "typeEntity": 0
+    }
+  },
+  "76561199132885452": {},
+  "76561199837492600": {}
 }

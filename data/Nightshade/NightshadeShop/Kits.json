@@ -1,0 +1,267 @@
+{
+  "Migrated From VIPPerks": false,
+  "NextId": 5,
+  "Kits": [
+    {
+      "Id": "vip-daily",
+      "Name": "VIP Daily Kit",
+      "Icon (URL, skin ID or shortname)": "VIP_Daily.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Items": [
+        {
+          "Shortname": "advanceharvestingtea",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "healingtea.advanced",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "oretea.advanced",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "scraptea.advanced",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "woodtea.advanced",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "lowgradefuel",
+          "Amount": 1000,
+          "Skin": 0
+        },
+        {
+          "Shortname": "pumpkin",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "bandage",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "largemedkit",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "syringe.medical",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "sewingkit",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "sheetmetal",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "roadsigns",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "metalpipe",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "cctv.camera",
+          "Amount": 2,
+          "Skin": 0
+        },
+        {
+          "Shortname": "tarp",
+          "Amount": 4,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "vipx-daily",
+      "Name": "VIPx Daily Kit",
+      "Icon (URL, skin ID or shortname)": "VIP_Daily.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Items": [
+        {
+          "Shortname": "radiationresisttea.pure",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "purecraftingtea_quality",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "healingtea.pure",
+          "Amount": 2,
+          "Skin": 0
+        },
+        {
+          "Shortname": "bandage",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "largemedkit",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "syringe.medical",
+          "Amount": 20,
+          "Skin": 0
+        },
+        {
+          "Shortname": "sewingkit",
+          "Amount": 20,
+          "Skin": 0
+        },
+        {
+          "Shortname": "sheetmetal",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "roadsigns",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "metalpipe",
+          "Amount": 10,
+          "Skin": 0
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "vip-4day",
+      "Name": "VIP 4-Day Kit",
+      "Icon (URL, skin ID or shortname)": "VIP_4Day.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
+      "Cooldown (seconds)": 345600,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Items": [
+        {
+          "Shortname": "hazmatsuit",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "ammo.pistol",
+          "Amount": 100,
+          "Skin": 0
+        },
+        {
+          "Shortname": "keycard_green",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "bandage",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "bearmeat.cooked",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 2905355269
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 2920175997
+        }
+      ]
+    },
+    {
+      "Id": "vipx-4day",
+      "Name": "VIPx 4-Day Kit",
+      "Icon (URL, skin ID or shortname)": "VIP_4Day.png",
+      "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
+      "Cooldown (seconds)": 345600,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Items": [
+        {
+          "Shortname": "explosive.timed",
+          "Amount": 2,
+          "Skin": 0
+        },
+        {
+          "Shortname": "gunpowder",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 2905355269
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 1,
+          "Skin": 2920175997
+        },
+        {
+          "Shortname": "diesel_barrel",
+          "Amount": 5,
+          "Skin": 0
+        },
+        {
+          "Shortname": "keycard_green",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "keycard_blue",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "supply.signal",
+          "Amount": 2,
+          "Skin": 0
+        },
+        {
+          "Shortname": "syringe.medical",
+          "Amount": 40,
+          "Skin": 0
+        }
+      ]
+    }
+  ],
+  "Claims": {}
+}

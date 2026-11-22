@@ -55,14 +55,14 @@
       "Label": "BRADLEY",
       "Enabled": true,
       "Show count": true,
-      "Order": 10
+      "Order": 20
     },
     {
       "Key": "PatrolHeli",
       "Label": "HELI",
       "Enabled": true,
       "Show count": true,
-      "Order": 20
+      "Order": 10
     },
     {
       "Key": "Cargo",

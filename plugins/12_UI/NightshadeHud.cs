@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Text;
 using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
@@ -11,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.1.1")]
+    [Info("NightshadeHud", "Nightshade", "1.1.3")]
     [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, TC shield, and event labels.")]
     public class NightshadeHud : RustPlugin
     {
@@ -60,8 +61,6 @@ namespace Oxide.Plugins
         private string onlineCache = "\0";
         private string countdownCache = "\0";
         private string deepSeaCache = "\0";
-        private string heliCache = "\0";
-        private string bradCache = "\0";
 
         private readonly HashSet<ulong> bradleys = new HashSet<ulong>();
         private readonly HashSet<ulong> helis = new HashSet<ulong>();
@@ -202,6 +201,20 @@ namespace Oxide.Plugins
                     entry.Label = updated;
                     added = true;
                 }
+            }
+            EventCfg heli = null;
+            EventCfg brad = null;
+            foreach (var entry in config.Events)
+            {
+                if (entry == null) continue;
+                if (entry.Key == "PatrolHeli") heli = entry;
+                else if (entry.Key == "Bradley") brad = entry;
+            }
+            if (heli != null && brad != null && heli.Order == 20 && brad.Order == 10)
+            {
+                heli.Order = 10;
+                brad.Order = 20;
+                added = true;
             }
             SaveConfig();
         }
@@ -697,8 +710,15 @@ namespace Oxide.Plugins
             ShieldLine(player, out shieldText, out shieldColor);
             AddLabel(container, "NightshadeHud.Shield", parent, shieldText, shieldColor, 11, TextAnchor.MiddleRight, "0 1", "0 1", Px(split + 4f, y - Line), Px(config.Width - Pad, y));
             y -= Line;
+            if (config.ShowShield)
+            {
+                string queueText, queueColor;
+                ShieldQueueLine(player, out queueText, out queueColor);
+                AddLabel(container, "NightshadeHud.ShieldQueue", parent, queueText, queueColor, 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(config.Width - Pad, y));
+                y -= Line;
+            }
             AddStatusLine(container, parent, y);
-            if (player != null) shieldCache[player.userID] = shieldText + "|" + shieldColor;
+            if (player != null) shieldCache[player.userID] = ShieldSignature(player);
             clockCache = ClockText();
             onlineCache = OnlineText();
             countdownCache = countText + "|" + countColor;
@@ -716,21 +736,6 @@ namespace Oxide.Plugins
                 DeepSeaLine(out text, out color);
                 x = AddChip(container, "NightshadeHud.DeepSea", parent, text, color, font, x, TextWidth(text, font, false) + 2f, limit, y) + gap;
                 deepSeaCache = text + "|" + color;
-            }
-            if (ShowChip("PatrolHeli") && x < limit)
-            {
-                string text, color;
-                HeliLine(out text, out color);
-                x = AddChip(container, "NightshadeHud.Karen", parent, text, color, font, x, TextWidth(text, font, false) + 2f, limit, y) + gap;
-                heliCache = text + "|" + color;
-            }
-            if (ShowChip("Bradley") && x < limit)
-            {
-                string text, color;
-                BradleyLine(out text, out color);
-                float width = Mathf.Max(TextWidth(text, font, false), TextWidth(BradleySlotText(), font, false)) + 2f;
-                AddChip(container, "NightshadeHud.Brad", parent, text, color, font, x, width, limit, y);
-                bradCache = text + "|" + color;
             }
         }
 
@@ -780,7 +785,7 @@ namespace Oxide.Plugins
                 bool on, contested;
                 ReadEvent(entry.Key, out count, out on, out contested);
                 string text = EventText(entry, count, on);
-                string color = EventColor(on, contested);
+                string color = EventColorFor(entry, on, contested);
                 eventCache[entry.Key] = text + "|" + color;
                 int col = i % columns;
                 int row = i / columns;
@@ -922,6 +927,7 @@ namespace Oxide.Plugins
         private float HalfHeight()
         {
             float height = Pad + config.IconSize + BadgeHang() + 2f + Line;
+            if (config != null && config.ShowShield) height += Line;
             if (HasStatusLine()) height += Line;
             return height + Pad;
         }
@@ -978,13 +984,7 @@ namespace Oxide.Plugins
                 seaChanged = seaSig != deepSeaCache;
                 if (seaChanged) deepSeaCache = seaSig;
             }
-            string heliText = null;
-            string heliColor = null;
-            string bradText = null;
-            string bradColor = null;
-            bool heliChanged = ChipChanged(ShowChip("PatrolHeli"), true, ref heliText, ref heliColor, ref heliCache);
-            bool bradChanged = ChipChanged(ShowChip("Bradley"), false, ref bradText, ref bradColor, ref bradCache);
-            if (!clockChanged && !onlineChanged && !countChanged && !badgeChanged && !includeShield && !seaChanged && !heliChanged && !bradChanged) return;
+            if (!clockChanged && !onlineChanged && !countChanged && !badgeChanged && !includeShield && !seaChanged) return;
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (player == null || !player.IsConnected) continue;
@@ -997,20 +997,7 @@ namespace Oxide.Plugins
                 if (countChanged) PushText(player, "NightshadeHud.Countdown", countText, countColor, TextAnchor.MiddleLeft);
                 if (includeShield) PushShield(player, false);
                 if (seaChanged) PushText(player, "NightshadeHud.DeepSea", seaText, seaColor, TextAnchor.MiddleLeft);
-                if (heliChanged) PushText(player, "NightshadeHud.Karen", heliText, heliColor, TextAnchor.MiddleLeft);
-                if (bradChanged) PushText(player, "NightshadeHud.Brad", bradText, bradColor, TextAnchor.MiddleLeft);
             }
-        }
-
-        private bool ChipChanged(bool shownChip, bool heli, ref string text, ref string color, ref string cache)
-        {
-            if (!shownChip) return false;
-            if (heli) HeliLine(out text, out color);
-            else BradleyLine(out text, out color);
-            string sig = text + "|" + color;
-            if (sig == cache) return false;
-            cache = sig;
-            return true;
         }
 
         private void PushModeLine()
@@ -1047,9 +1034,12 @@ namespace Oxide.Plugins
             string previous;
             if (!force && shieldCache.TryGetValue(player.userID, out previous) && previous == sig) return;
             shieldCache[player.userID] = sig;
-            string text, color;
+            string text, color, queueText, queueColor;
             ShieldLine(player, out text, out color);
+            ShieldQueueLine(player, out queueText, out queueColor);
             PushText(player, "NightshadeHud.Shield", text, color, TextAnchor.MiddleRight);
+            if (config.ShowShield)
+                PushText(player, "NightshadeHud.ShieldQueue", queueText, queueColor, TextAnchor.MiddleLeft, 10);
         }
 
         private void PushBadge(BasePlayer player, bool pvp)
@@ -1109,19 +1099,13 @@ namespace Oxide.Plugins
                 int count;
                 bool on, contested;
                 ReadEvent(entry.Key, out count, out on, out contested);
-                string sig = EventText(entry, count, on) + "|" + EventColor(on, contested);
+                string sig = EventText(entry, count, on) + "|" + EventColorFor(entry, on, contested);
                 string previous;
                 if (eventCache.TryGetValue(entry.Key, out previous) && previous == sig) continue;
                 eventCache[entry.Key] = sig;
                 dirty.Add(entry);
             }
-            string heliText = null;
-            string heliColor = null;
-            string bradText = null;
-            string bradColor = null;
-            bool heliChanged = ChipChanged(ShowChip("PatrolHeli"), true, ref heliText, ref heliColor, ref heliCache);
-            bool bradChanged = ChipChanged(ShowChip("Bradley"), false, ref bradText, ref bradColor, ref bradCache);
-            if (dirty.Count == 0 && !heliChanged && !bradChanged) return;
+            if (dirty.Count == 0) return;
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (player == null) continue;
@@ -1146,7 +1130,7 @@ namespace Oxide.Plugins
                                     Text = EventText(entry, count, on),
                                     FontSize = EventFont(),
                                     Align = TextAnchor.MiddleLeft,
-                                    Color = EventColor(on, contested),
+                                    Color = EventColorFor(entry, on, contested),
                                     Font = "robotocondensed-bold.ttf"
                                 }
                             }
@@ -1154,8 +1138,6 @@ namespace Oxide.Plugins
                     }
                     CuiHelper.AddUi(player, container);
                 }
-                if (heliChanged) PushText(player, "NightshadeHud.Karen", heliText, heliColor, TextAnchor.MiddleLeft);
-                if (bradChanged) PushText(player, "NightshadeHud.Brad", bradText, bradColor, TextAnchor.MiddleLeft);
             }
         }
 
@@ -1220,7 +1202,9 @@ namespace Oxide.Plugins
             }
             bool active = CallBool(NightshadeRaidProtection, "API_IsPvPActive");
             double seconds = ToDouble(NightshadeRaidProtection.Call("API_SecondsUntilPvPChange"));
-            text = active ? "PVP \u00B7 ends in " + FormatDur(seconds) : "PvP in " + FormatDur(seconds);
+            // -1 means the full-server force is holding PvP open with no scheduled end.
+            if (active && seconds < 0d) text = "PVP";
+            else text = active ? "PVP \u00B7 ends in " + FormatDur(seconds) : "PvP in " + FormatDur(seconds);
             color = Hex(active ? config.CountdownActive : config.CountdownIdle);
         }
 
@@ -1249,13 +1233,13 @@ namespace Oxide.Plugins
             double seconds = ToDouble(DictValue(raw, "seconds"));
             if (state == "active")
             {
-                text = "Shield " + FormatDur(seconds);
+                text = "Shield " + CompactDur(seconds);
                 color = Hex(config.ShieldActive);
                 return;
             }
             if (state == "queued")
             {
-                text = "Shield queued";
+                text = "Queued " + CompactDur(seconds);
                 color = Hex(config.ShieldQueued);
                 return;
             }
@@ -1263,11 +1247,84 @@ namespace Oxide.Plugins
             color = Hex(config.MutedColor, config.InactiveAlpha);
         }
 
+        private void ShieldQueueLine(BasePlayer player, out string text, out string color)
+        {
+            text = string.Empty;
+            color = Hex(config.MutedColor, config.InactiveAlpha);
+            if (!config.ShowShield || player == null || NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+                return;
+            object raw = NightshadeRaidProtection.Call("API_GetPlayerShield", player);
+            string state = DictString(raw, "state") ?? "none";
+            if (state != "active" && state != "queued") return;
+            bool draining = DictBool(raw, "draining") || state == "active";
+            double until = ToDouble(DictValue(raw, "secondsUntilDrain"));
+            string entries = DictString(raw, "entries");
+            string body = QueueBody(entries);
+            if (string.IsNullOrEmpty(body)) body = CompactDur(ToDouble(DictValue(raw, "seconds")));
+            string tail = draining ? "counting down" : "starts in " + FormatDur(until);
+            text = FitWidth(body + " left, " + tail, 10, false);
+            color = draining ? Hex(config.ShieldActive) : Hex(config.ShieldQueued);
+        }
+
+        private static string QueueBody(string entries)
+        {
+            if (string.IsNullOrEmpty(entries)) return string.Empty;
+            string[] parts = entries.Split(',');
+            StringBuilder sb = new StringBuilder();
+            int shown = 0;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                double seconds;
+                if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out seconds)) continue;
+                if (sb.Length > 0) sb.Append(", ");
+                sb.Append(CompactDur(seconds));
+                shown++;
+                if (shown >= 6)
+                {
+                    if (i + 1 < parts.Length) sb.Append(", ...");
+                    break;
+                }
+            }
+            return sb.ToString();
+        }
+
+        private string FitWidth(string text, int font, bool bold)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            float limit = Math.Max(40f, config.Width - Pad * 2f);
+            if (TextWidth(text, font, bold) <= limit) return text;
+            const string ellipsis = "...";
+            int keep = text.Length;
+            while (keep > 4 && TextWidth(text.Substring(0, keep) + ellipsis, font, bold) > limit) keep--;
+            return text.Substring(0, keep) + ellipsis;
+        }
+
+        private static string CompactDur(double seconds)
+        {
+            if (seconds < 0d || double.IsNaN(seconds) || double.IsInfinity(seconds)) seconds = 0d;
+            int total = (int)Math.Ceiling(seconds);
+            int hours = total / 3600;
+            int minutes = (total % 3600) / 60;
+            if (hours >= 48)
+            {
+                int days = hours / 24;
+                int left = hours % 24;
+                return left == 0
+                    ? days.ToString(CultureInfo.InvariantCulture) + "d"
+                    : days.ToString(CultureInfo.InvariantCulture) + "d " + left.ToString(CultureInfo.InvariantCulture) + "h";
+            }
+            if (hours > 0 && minutes == 0) return hours.ToString(CultureInfo.InvariantCulture) + "h";
+            if (hours > 0) return hours.ToString(CultureInfo.InvariantCulture) + "h " + minutes.ToString(CultureInfo.InvariantCulture) + "m";
+            if (minutes > 0) return minutes.ToString(CultureInfo.InvariantCulture) + "m";
+            return (total % 60).ToString(CultureInfo.InvariantCulture) + "s";
+        }
+
         private string ShieldSignature(BasePlayer player)
         {
-            string text, color;
+            string text, color, queueText, queueColor;
             ShieldLine(player, out text, out color);
-            return text + "|" + color;
+            ShieldQueueLine(player, out queueText, out queueColor);
+            return text + "|" + color + "|" + queueText + "|" + queueColor;
         }
 
         private void DebugHud(BasePlayer player)
@@ -1719,7 +1776,7 @@ namespace Oxide.Plugins
             foreach (var entry in config.Events)
             {
                 if (entry == null || !entry.Enabled || string.IsNullOrEmpty(entry.Key)) continue;
-                if (entry.Key == "DeepSea" || entry.Key == "PatrolHeli" || entry.Key == "Bradley") continue;
+                if (entry.Key == "DeepSea") continue;
                 list.Add(entry);
             }
             list.Sort((a, b) => a.Order.CompareTo(b.Order));
@@ -1730,7 +1787,7 @@ namespace Oxide.Plugins
 
         private bool HasStatusLine()
         {
-            return ShowChip("DeepSea") || ShowChip("PatrolHeli") || ShowChip("Bradley");
+            return ShowChip("DeepSea");
         }
 
         private bool ShowChip(string key)
@@ -1767,28 +1824,25 @@ namespace Oxide.Plugins
             color = open ? Hex(config.DeepSeaOpenColor) : Hex(config.MutedColor, config.InactiveAlpha);
         }
 
-        private void HeliLine(out string text, out string color)
+        private string EventLabel(EventCfg entry)
         {
-            text = string.IsNullOrEmpty(config.HeliLabel) ? "KAREN" : config.HeliLabel;
-            color = helis.Count > 0 ? Hex(config.HeliActiveColor) : Hex(config.MutedColor, config.InactiveAlpha);
+            if (entry == null) return string.Empty;
+            if (entry.Key == "PatrolHeli") return string.IsNullOrEmpty(config.HeliLabel) ? "KAREN" : config.HeliLabel;
+            if (entry.Key == "Bradley") return string.IsNullOrEmpty(config.BradleyLabel) ? "BRAD" : config.BradleyLabel;
+            return entry.Label ?? string.Empty;
         }
 
-        private void BradleyLine(out string text, out string color)
+        private string EventColorFor(EventCfg entry, bool on, bool contested)
         {
-            string label = string.IsNullOrEmpty(config.BradleyLabel) ? "BRAD" : config.BradleyLabel;
-            EventCfg entry = FindEvent("Bradley");
-            bool showCount = entry == null || entry.ShowCount;
-            text = bradleys.Count > 1 && showCount ? label + " " + bradleys.Count.ToString(CultureInfo.InvariantCulture) : label;
-            string active = string.IsNullOrEmpty(config.BradleyActiveColor) ? config.ActiveColor : config.BradleyActiveColor;
-            color = bradleys.Count > 0 ? Hex(active) : Hex(config.MutedColor, config.InactiveAlpha);
-        }
-
-        private string BradleySlotText()
-        {
-            string label = string.IsNullOrEmpty(config.BradleyLabel) ? "BRAD" : config.BradleyLabel;
-            EventCfg entry = FindEvent("Bradley");
-            if (entry != null && !entry.ShowCount) return label;
-            return label + " 99";
+            if (contested) return Hex(config.ContestedColor);
+            if (!on) return Hex(config.MutedColor, config.InactiveAlpha);
+            if (entry != null && entry.Key == "PatrolHeli") return Hex(string.IsNullOrEmpty(config.HeliActiveColor) ? "#FF4D4D" : config.HeliActiveColor);
+            if (entry != null && entry.Key == "Bradley")
+            {
+                string active = string.IsNullOrEmpty(config.BradleyActiveColor) ? config.ActiveColor : config.BradleyActiveColor;
+                return Hex(active);
+            }
+            return Hex(config.ActiveColor);
         }
 
         private int EventFont()
@@ -1799,25 +1853,19 @@ namespace Oxide.Plugins
             return size;
         }
 
-        private static string EventText(EventCfg entry, int count, bool on)
+        private string EventText(EventCfg entry, int count, bool on)
         {
-            if (!on || !entry.ShowCount) return entry.Label;
-            return entry.Label + " " + count;
-        }
-
-        private string EventColor(bool on, bool contested)
-        {
-            if (contested) return Hex(config.ContestedColor);
-            if (on) return Hex(config.ActiveColor);
-            return Hex(config.MutedColor, config.InactiveAlpha);
+            string label = EventLabel(entry);
+            if (entry == null || !on || !entry.ShowCount) return label;
+            return label + " " + count.ToString(CultureInfo.InvariantCulture);
         }
 
         private static List<EventCfg> DefaultEvents()
         {
             return new List<EventCfg>
             {
-                Ev("Bradley", "BRADLEY", true, true, 10),
-                Ev("PatrolHeli", "HELI", true, true, 20),
+                Ev("PatrolHeli", "HELI", true, true, 10),
+                Ev("Bradley", "BRADLEY", true, true, 20),
                 Ev("Cargo", "CARGO", true, true, 30),
                 Ev("Harbor", "HARBOR", true, false, 40),
                 Ev("AirDrop", "AIRDROP", true, true, 50),
@@ -1892,6 +1940,13 @@ namespace Oxide.Plugins
         {
             object value = DictValue(raw, key);
             return value == null ? null : value.ToString();
+        }
+
+        private static bool DictBool(object raw, string key)
+        {
+            object value = DictValue(raw, key);
+            if (value is bool flag) return flag;
+            return value != null && string.Equals(value.ToString(), "true", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool CallBool(Plugin plugin, string method)
