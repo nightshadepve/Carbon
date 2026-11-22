@@ -23,7 +23,16 @@ namespace Oxide.Plugins
         private const string DefaultQr = "https://i.ibb.co/fz03Kqzb/discord.png";
 
 #pragma warning disable 0649
-        [PluginReference] private Plugin NightshadeRaidProtection;
+        [PluginReference] private Plugin NightshadePVPWeekend;
+
+        // plugins.Find avoids a missing-plugin warning after the rename. The old name still answers if it is loaded.
+        private Plugin WeekendPlugin()
+        {
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
+            return null;
+        }
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
         [PluginReference] private Plugin ServerRewards;
         [PluginReference] private Plugin ImageLibrary;
@@ -807,11 +816,11 @@ namespace Oxide.Plugins
         {
             object flag;
             object left;
-            if (TryPair(NightshadeRaidProtection, "API_IsPvPActive", "API_SecondsUntilPvPChange", out flag, out left) && flag is bool)
+            if (TryPair(WeekendPlugin(), "API_IsPvPActive", "API_SecondsUntilPvPChange", out flag, out left) && flag is bool)
             {
                 active = (bool)flag;
                 seconds = left != null ? ToDouble(left) : LocalSeconds(active);
-                return "NightshadeRaidProtection.Call";
+                return "NightshadePVPWeekend.Call";
             }
             if (TryHookPair("API_IsPvPActive", "API_SecondsUntilPvPChange", out flag, out left) && flag is bool)
             {

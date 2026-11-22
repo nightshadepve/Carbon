@@ -70,7 +70,16 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, float> _nextTell = new Dictionary<ulong, float>();
         private readonly List<DeathDecision> _decisions = new List<DeathDecision>();
 
-        [PluginReference] private Plugin NightshadeRaidProtection;
+        [PluginReference] private Plugin NightshadePVPWeekend;
+
+        // plugins.Find avoids a missing-plugin warning after the rename. The old name still answers if it is loaded.
+        private Plugin WeekendPlugin()
+        {
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
+            return null;
+        }
         [PluginReference] private Plugin Backpacks;
         [PluginReference] private Plugin RaidableBases;
         [PluginReference] private Plugin AbandonedBases;
@@ -269,7 +278,7 @@ namespace Oxide.Plugins
             WarnMissingDefaultPermission();
             Puts("NightshadeDeathBox 1.0.2. Debug logging is " + (_config.DebugLogging ? "on" : "off")
                 + ". Container prefab: " + ContainerPrefabPath()
-                + ". New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
+                + ". New boxes follow NightshadePVPWeekend.API_IsPvPActive (Eastern weekend, test clock, and nspvp.pvpweekend).");
         }
 
         private void Unload()
@@ -590,19 +599,19 @@ namespace Oxide.Plugins
         private bool QueryPvp(out string detail)
         {
             detail = "not checked";
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
             {
-                detail = "NightshadeRaidProtection not loaded";
+                detail = "NightshadePVPWeekend not loaded";
                 if (!_raidWarned)
                 {
                     _raidWarned = true;
-                    PrintWarning("NightshadeRaidProtection is not loaded. Only During PvP Weekend is on, so no new death boxes will be created.");
+                    PrintWarning("NightshadePVPWeekend is not loaded. Only During PvP Weekend is on, so no new death boxes will be created.");
                 }
                 return false;
             }
             try
             {
-                object value = NightshadeRaidProtection.Call("API_IsPvPActive");
+                object value = WeekendPlugin().Call("API_IsPvPActive");
                 if (value is bool)
                 {
                     bool active = (bool)value;
