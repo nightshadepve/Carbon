@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeDeathBox", "Nightshade", "1.0.2")]
+    [Info("NightshadeDeathBox", "Nightshade", "1.0.3")]
     [Description("Puts a player's death loot in owner-only containers during the PvP weekend.")]
     public class NightshadeDeathBox : RustPlugin
     {
@@ -69,6 +69,7 @@ namespace Oxide.Plugins
         private readonly HashSet<ulong> _announce = new HashSet<ulong>();
         private readonly Dictionary<ulong, float> _nextTell = new Dictionary<ulong, float>();
         private readonly List<DeathDecision> _decisions = new List<DeathDecision>();
+        private readonly Dictionary<ulong, List<ulong>> _listedNets = new Dictionary<ulong, List<ulong>>();
 
         [PluginReference] private Plugin NightshadeRaidProtection;
         [PluginReference] private Plugin Backpacks;
@@ -257,6 +258,8 @@ namespace Oxide.Plugins
             cmd.AddChatCommand("deathbox", this, nameof(CmdDeathBoxChat));
             cmd.AddConsoleCommand("deathbox", this, nameof(CmdDeathBoxConsole));
             cmd.AddConsoleCommand("nsdeathbox.status", this, nameof(CmdStatusConsole));
+            cmd.AddConsoleCommand("nsdeathbox.list", this, nameof(CmdListConsole));
+            cmd.AddConsoleCommand("nsdeathbox.tp", this, nameof(CmdTpConsole));
         }
 
         private void OnServerInitialized()
@@ -267,9 +270,10 @@ namespace Oxide.Plugins
             _worldReady = true;
             _maintainTimer = timer.Every(60f, Maintain);
             WarnMissingDefaultPermission();
-            Puts("NightshadeDeathBox 1.0.2. Debug logging is " + (_config.DebugLogging ? "on" : "off")
+            Puts("NightshadeDeathBox 1.0.3. Debug logging is " + (_config.DebugLogging ? "on" : "off")
                 + ". Container prefab: " + ContainerPrefabPath()
-                + ". New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend).");
+                + ". New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend)."
+                + " Admin locate: nsdeathbox.list [name|steamid], nsdeathbox.tp <netId|index>.");
         }
 
         private void Unload()
@@ -1698,7 +1702,7 @@ namespace Oxide.Plugins
             BasePlayer player = arg.Player();
             if (player == null)
             {
-                arg.ReplyWith("Use /deathbox in chat, or nsdeathbox.status for the last deaths.");
+                arg.ReplyWith("Use /deathbox in chat, nsdeathbox.list [name|steamid] to locate containers, or nsdeathbox.status for the last deaths.");
                 return;
             }
             string who = arg.HasArgs() ? arg.GetString(0) : null;
@@ -1776,8 +1780,6 @@ namespace Oxide.Plugins
         private static int CountItems(BaseEntity entity)
         {
             if (entity == null || entity.IsDestroyed) return 0;
-            DroppedItemContainer drop = entity as DroppedItemContainer;
-            if (drop != null && drop.inventory != null && drop.inventory.itemList != null) return drop.inventory.itemList.Count;
             LootableCorpse corpse = entity as LootableCorpse;
             if (corpse != null && corpse.containers != null)
             {
@@ -1789,6 +1791,8 @@ namespace Oxide.Plugins
                 }
                 return count;
             }
+            ItemContainer inventory = InventoryOf(entity);
+            if (inventory != null && inventory.itemList != null) return inventory.itemList.Count;
             return 0;
         }
 
@@ -1800,6 +1804,375 @@ namespace Oxide.Plugins
             if (age.TotalHours < 1d) return Math.Floor(age.TotalMinutes).ToString(CultureInfo.InvariantCulture) + "m ago";
             if (age.TotalDays < 2d) return Math.Floor(age.TotalHours).ToString(CultureInfo.InvariantCulture) + "h ago";
             return Math.Floor(age.TotalDays).ToString(CultureInfo.InvariantCulture) + "d ago";
+        }
+
+        // Server console and RCON may list every tracked container. A player needs
+        // nightshadedeathbox.admin, which this plugin registers and does not grant.
+        // nsdeathbox.tp is player F1 only. A number inside the last list is an index.
+        // Any other number is a net ID. "net" and "index" force that choice.
+        private void CmdListConsole(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !AllowAdminConsole(arg)) return;
+            string filter = JoinFilter(arg);
+            List<BoxRecord> rows = CollectBoxes(filter);
+            BasePlayer player = arg.Player();
+            RememberList(player == null ? 0UL : player.userID, rows);
+            arg.ReplyWith(FormatBoxList(rows, filter));
+        }
+
+        private void CmdTpConsole(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return;
+            BasePlayer player = arg.Player();
+            if (player == null || arg.IsRcon || arg.Connection == null)
+            {
+                arg.ReplyWith("nsdeathbox.tp only works from a player's F1 console. Server console and RCON cannot teleport.");
+                return;
+            }
+            if (!permission.UserHasPermission(player.UserIDString, PermAdmin))
+            {
+                arg.ReplyWith("You need the nightshadedeathbox.admin permission.");
+                return;
+            }
+            string mode;
+            string token;
+            string usage;
+            if (!TryParseTeleportArg(arg, out mode, out token, out usage))
+            {
+                arg.ReplyWith(usage);
+                return;
+            }
+            BoxRecord record;
+            string error;
+            if (!TryResolveTeleport(player, mode, token, out record, out error))
+            {
+                arg.ReplyWith(error);
+                return;
+            }
+            BaseEntity entity = FindEntity(record.NetId);
+            bool alive = EntityAlive(entity);
+            Vector3 position = BoxPosition(record, entity);
+            TeleportAdmin(player, position + new Vector3(0f, 1.5f, 0f));
+            string state = alive
+                ? "Entity exists."
+                : "Entity is STALE (missing). This is the last known position.";
+            arg.ReplyWith("Teleported to death container. owner " + OwnerText(record)
+                + " net " + record.NetId.ToString(CultureInfo.InvariantCulture)
+                + " pos " + FormatPos(position)
+                + " grid " + GridOf(position)
+                + ". " + state);
+        }
+
+        private bool AllowAdminConsole(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return false;
+            if (arg.IsRcon || arg.Connection == null) return true;
+            BasePlayer player = arg.Player();
+            if (player == null) return true;
+            if (permission.UserHasPermission(player.UserIDString, PermAdmin)) return true;
+            arg.ReplyWith("You need the nightshadedeathbox.admin permission.");
+            return false;
+        }
+
+        private static bool TryParseTeleportArg(ConsoleSystem.Arg arg, out string mode, out string token, out string error)
+        {
+            mode = "auto";
+            token = null;
+            error = "Usage: nsdeathbox.tp <netId|index>   or   nsdeathbox.tp net <netId>   or   nsdeathbox.tp index <n>";
+            if (arg == null || !arg.HasArgs()) return false;
+            string first = arg.GetString(0);
+            if (string.IsNullOrEmpty(first)) return false;
+            first = first.Trim();
+            if (arg.HasArgs(2))
+            {
+                if (arg.HasArgs(3)) return false;
+                string second = arg.GetString(1);
+                if (string.IsNullOrEmpty(second)) return false;
+                second = second.Trim();
+                if (first.Equals("net", StringComparison.OrdinalIgnoreCase) || first.Equals("id", StringComparison.OrdinalIgnoreCase))
+                {
+                    mode = "net";
+                    token = second;
+                    return true;
+                }
+                if (first.Equals("index", StringComparison.OrdinalIgnoreCase) || first.Equals("line", StringComparison.OrdinalIgnoreCase))
+                {
+                    mode = "index";
+                    token = second;
+                    return true;
+                }
+                return false;
+            }
+            if (first.Length > 1 && first[0] == '#')
+            {
+                mode = "index";
+                token = first.Substring(1);
+                return true;
+            }
+            token = first;
+            return true;
+        }
+
+        private bool TryResolveTeleport(BasePlayer player, string mode, string token, out BoxRecord record, out string error)
+        {
+            record = null;
+            error = "Usage: nsdeathbox.tp <netId|index>   or   nsdeathbox.tp net <netId>   or   nsdeathbox.tp index <n>";
+            ulong id;
+            if (string.IsNullOrEmpty(token) || !ulong.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out id))
+                return false;
+            List<ulong> nets = ListNetsFor(player);
+            bool asIndex = mode == "index" || (mode != "net" && id >= 1UL && id <= (ulong)nets.Count);
+            if (asIndex)
+            {
+                if (nets.Count == 0 || id < 1UL || id > (ulong)nets.Count)
+                {
+                    error = nets.Count == 0
+                        ? "There is no list index to use. Run nsdeathbox.list [name|steamid] first."
+                        : "Index " + token + " is outside the list (1-" + nets.Count.ToString(CultureInfo.InvariantCulture) + "). Run nsdeathbox.list [name|steamid].";
+                    return false;
+                }
+                ulong netId = nets[(int)id - 1];
+                BoxRecord indexed;
+                if (!_byNet.TryGetValue(netId, out indexed) || indexed == null)
+                {
+                    error = "List index " + token + " pointed at net " + netId.ToString(CultureInfo.InvariantCulture) + ", which is no longer tracked. Run nsdeathbox.list again.";
+                    return false;
+                }
+                record = indexed;
+                error = null;
+                return true;
+            }
+            BoxRecord direct;
+            if (_byNet.TryGetValue(id, out direct) && direct != null)
+            {
+                record = direct;
+                error = null;
+                return true;
+            }
+            error = "No death container with net ID " + token + ". Run nsdeathbox.list [name|steamid].";
+            return false;
+        }
+
+        private List<ulong> ListNetsFor(BasePlayer player)
+        {
+            List<ulong> nets;
+            if (player != null && _listedNets.TryGetValue(player.userID, out nets) && nets != null) return nets;
+            return NetIdsOf(CollectBoxes(null));
+        }
+
+        private static string JoinFilter(ConsoleSystem.Arg arg)
+        {
+            if (arg == null || !arg.HasArgs()) return null;
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < 16 && arg.HasArgs(i + 1); i++)
+            {
+                string part = arg.GetString(i);
+                if (string.IsNullOrEmpty(part)) continue;
+                if (builder.Length > 0) builder.Append(' ');
+                builder.Append(part.Trim());
+            }
+            if (builder.Length == 0) return null;
+            string text = builder.ToString().Trim();
+            return text.Length == 0 ? null : text;
+        }
+
+        private List<BoxRecord> CollectBoxes(string filter)
+        {
+            List<BoxRecord> rows = new List<BoxRecord>();
+            foreach (BoxRecord record in _byNet.Values)
+            {
+                if (record == null || !MatchesFilter(record, filter)) continue;
+                rows.Add(record);
+            }
+            rows.Sort(CompareBoxes);
+            return rows;
+        }
+
+        private int CompareBoxes(BoxRecord left, BoxRecord right)
+        {
+            if (left == null && right == null) return 0;
+            if (left == null) return 1;
+            if (right == null) return -1;
+            int name = string.Compare(OwnerDisplayName(left), OwnerDisplayName(right), StringComparison.OrdinalIgnoreCase);
+            if (name != 0) return name;
+            int owner = left.OwnerId.CompareTo(right.OwnerId);
+            if (owner != 0) return owner;
+            int created = right.CreatedUtcTicks.CompareTo(left.CreatedUtcTicks);
+            if (created != 0) return created;
+            return left.NetId.CompareTo(right.NetId);
+        }
+
+        private bool MatchesFilter(BoxRecord record, string filter)
+        {
+            if (record == null) return false;
+            if (string.IsNullOrEmpty(filter)) return true;
+            ulong steamId;
+            if (TrySteamId(filter, out steamId)) return record.OwnerId == steamId;
+            if (ContainsText(OwnerDisplayName(record), filter)) return true;
+            return !string.IsNullOrEmpty(record.OwnerName) && ContainsText(record.OwnerName, filter);
+        }
+
+        private static bool TrySteamId(string text, out ulong steamId)
+        {
+            steamId = 0UL;
+            if (string.IsNullOrEmpty(text) || text.Length < 17) return false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c < '0' || c > '9') return false;
+            }
+            return ulong.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out steamId);
+        }
+
+        private static bool ContainsText(string haystack, string needle)
+        {
+            if (string.IsNullOrEmpty(haystack) || string.IsNullOrEmpty(needle)) return false;
+            return haystack.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private void RememberList(ulong callerId, List<BoxRecord> rows)
+        {
+            _listedNets[callerId] = NetIdsOf(rows);
+        }
+
+        private static List<ulong> NetIdsOf(List<BoxRecord> rows)
+        {
+            List<ulong> nets = new List<ulong>();
+            if (rows == null) return nets;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i] != null) nets.Add(rows[i].NetId);
+            }
+            return nets;
+        }
+
+        private string FormatBoxList(List<BoxRecord> rows, string filter)
+        {
+            int count = rows == null ? 0 : rows.Count;
+            if (count == 0)
+            {
+                if (!string.IsNullOrEmpty(filter))
+                    return "No containers found for " + OneLine(filter, 64) + ". Total: 0";
+                return "No active death containers. Total: 0";
+            }
+            StringBuilder builder = new StringBuilder();
+            builder.Append("NightshadeDeathBox 1.0.3");
+            if (!string.IsNullOrEmpty(filter))
+                builder.Append(" matching \"").Append(OneLine(filter, 64)).Append("\"");
+            for (int i = 0; i < count; i++)
+            {
+                builder.Append("\n");
+                builder.Append(FormatBoxLine(i + 1, rows[i]));
+            }
+            builder.Append("\nTotal: ").Append(count.ToString(CultureInfo.InvariantCulture));
+            return builder.ToString();
+        }
+
+        private string FormatBoxLine(int index, BoxRecord record)
+        {
+            BaseEntity entity = record == null ? null : FindEntity(record.NetId);
+            bool alive = EntityAlive(entity);
+            Vector3 position = BoxPosition(record, entity);
+            string items = alive ? CountItems(entity).ToString(CultureInfo.InvariantCulture) : "n/a";
+            string state = alive ? "exists" : "STALE";
+            return index.ToString(CultureInfo.InvariantCulture)
+                + ". owner " + OwnerText(record)
+                + " net " + (record == null ? "0" : record.NetId.ToString(CultureInfo.InvariantCulture))
+                + " pos " + FormatPos(position)
+                + " grid " + GridOf(position)
+                + " items " + items
+                + " created " + CreatedText(record == null ? 0L : record.CreatedUtcTicks)
+                + " remaining " + RemainingText(record)
+                + " entity " + state;
+        }
+
+        private string OwnerText(BoxRecord record)
+        {
+            string id = record == null || record.OwnerId == 0UL
+                ? "unknown"
+                : record.OwnerId.ToString(CultureInfo.InvariantCulture);
+            return OwnerDisplayName(record) + " (" + id + ")";
+        }
+
+        private string OwnerDisplayName(BoxRecord record)
+        {
+            if (record == null) return "unknown";
+            if (record.OwnerId != 0UL)
+            {
+                BasePlayer owner = FindPlayer(record.OwnerId);
+                if (owner != null)
+                {
+                    string live = OneLine(owner.displayName, 32);
+                    if (live != "unknown") return live;
+                }
+            }
+            return OneLine(record.OwnerName, 32);
+        }
+
+        private string RemainingText(BoxRecord record)
+        {
+            float hours = _config == null ? 0f : _config.MaxLifetimeHours;
+            if (hours <= 0f) return "no timed expiry or unlock";
+            if (record == null || record.CreatedUtcTicks <= 0L) return "unknown";
+            DateTime created = new DateTime(record.CreatedUtcTicks, DateTimeKind.Utc);
+            TimeSpan left = created.AddHours(hours) - DateTime.UtcNow;
+            if (left.TotalSeconds <= 0d) return "expired, awaiting removal";
+            return FormatDuration(left) + " until expiry";
+        }
+
+        private static string CreatedText(long ticks)
+        {
+            if (ticks <= 0L) return "unknown";
+            DateTime at = new DateTime(ticks, DateTimeKind.Utc);
+            return at.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + " UTC (" + AgeOf(ticks) + ")";
+        }
+
+        private static string FormatDuration(TimeSpan span)
+        {
+            if (span.TotalSeconds < 1d) return "0s";
+            if (span.TotalDays >= 2d)
+                return Math.Floor(span.TotalDays).ToString(CultureInfo.InvariantCulture) + "d " + span.Hours.ToString(CultureInfo.InvariantCulture) + "h";
+            if (span.TotalHours >= 1d)
+                return Math.Floor(span.TotalHours).ToString(CultureInfo.InvariantCulture) + "h " + span.Minutes.ToString(CultureInfo.InvariantCulture) + "m";
+            if (span.TotalMinutes >= 1d)
+                return Math.Floor(span.TotalMinutes).ToString(CultureInfo.InvariantCulture) + "m " + span.Seconds.ToString(CultureInfo.InvariantCulture) + "s";
+            return span.Seconds.ToString(CultureInfo.InvariantCulture) + "s";
+        }
+
+        private static Vector3 BoxPosition(BoxRecord record, BaseEntity entity)
+        {
+            if (entity != null && !entity.IsDestroyed && entity.transform != null) return entity.transform.position;
+            if (record == null) return Vector3.zero;
+            return new Vector3(record.X, record.Y, record.Z);
+        }
+
+        private static bool EntityAlive(BaseEntity entity)
+        {
+            return entity != null && !entity.IsDestroyed;
+        }
+
+        private static string OneLine(string text, int max)
+        {
+            if (string.IsNullOrEmpty(text) || max < 1) return "unknown";
+            StringBuilder builder = new StringBuilder(Math.Min(text.Length, max));
+            for (int i = 0; i < text.Length && builder.Length < max; i++)
+            {
+                char c = text[i];
+                if (c < 32 || c == '{' || c == '}') builder.Append(' ');
+                else builder.Append(c);
+            }
+            string trimmed = builder.ToString().Trim();
+            return trimmed.Length == 0 ? "unknown" : trimmed;
+        }
+
+        private static void TeleportAdmin(BasePlayer player, Vector3 dest)
+        {
+            if (player == null) return;
+            player.PauseFlyHackDetection(5f);
+            player.PauseSpeedHackDetection(5f);
+            player.EnsureDismounted();
+            if (player.HasParent()) player.SetParent(null, true, true);
+            player.Teleport(dest);
         }
 
         #endregion
@@ -1961,7 +2334,8 @@ namespace Oxide.Plugins
             try { granted = permission.GroupHasPermission("default", PermUse); }
             catch { granted = false; }
             StringBuilder builder = new StringBuilder();
-            builder.Append("NightshadeDeathBox 1.0.2");
+            builder.Append("NightshadeDeathBox 1.0.3");
+            builder.Append("\nadmin: nsdeathbox.list [name|steamid]   nsdeathbox.tp <netId|index> (player F1 only)");
             builder.Append("\ncontainer prefab: ").Append(ContainerPrefabPath());
             builder.Append("\ndefault group nightshadedeathbox.use: ").Append(granted ? "yes" : "NO");
             builder.Append("\npvp active: ").Append(pvp ? "yes" : "no").Append(" (").Append(pvpDetail).Append(")");
