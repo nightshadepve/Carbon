@@ -247,18 +247,7 @@ namespace Oxide.Plugins
                         root["Default RuleSet"] = plan.Ruleset ?? string.Empty;
                         JObject schedule = root["Schedule"] as JObject;
                         if (schedule != null) schedule["enabled"] = false;
-                        string text = root.ToString(Formatting.Indented) + "\n";
-                        string tmp = path + ".nightshade.tmp";
-                        File.WriteAllText(tmp, text, new UTF8Encoding(false));
-                        try
-                        {
-                            File.Replace(tmp, path, null);
-                        }
-                        catch
-                        {
-                            File.Copy(tmp, path, true);
-                            File.Delete(tmp);
-                        }
+                        NightshadeTruePveProfiles.WriteRoot(path, root);
                         result.Wrote = true;
                     }
                     catch (Exception ex)
@@ -268,16 +257,18 @@ namespace Oxide.Plugins
                 }
             }
             if (command == null || !truePveLoaded) return result;
-            if (plan.RunRulesetCommand && !string.IsNullOrEmpty(plan.Ruleset))
-            {
-                command(RulesetCommand, new object[] { plan.Ruleset });
-                result.RanRulesetCommand = true;
-            }
-            // Reload only after a successful write. Reloading the old file would put the previous ruleset back.
+            // A reload loads Default RuleSet from the file just written, so the in-memory
+            // tpve.ruleset command is only needed when the file was already correct.
+            // A brand-new ruleset is not in memory until that reload.
             if (plan.ReloadTruePve && result.Wrote)
             {
                 command(ReloadCommand, new object[0]);
                 result.Reloaded = true;
+            }
+            else if (plan.RunRulesetCommand && !string.IsNullOrEmpty(plan.Ruleset))
+            {
+                command(RulesetCommand, new object[] { plan.Ruleset });
+                result.RanRulesetCommand = true;
             }
             return result;
         }
@@ -876,13 +867,284 @@ namespace Oxide.Plugins
         }
     }
 
-#if !NIGHTSHADE_RAID_TESTS
-    [Info("NightshadeRaidProtection", "Nightshade", "1.4.9")]
-    [Description("PvP-window Tool Cupboard raid shields, offline protection, the Eastern-time weekend window that drives TruePVE, and the Giant Excavator weekend boost.")]
-    public class NightshadeRaidProtection : RustPlugin
+
+    // Owned TruePVE rulesets.
+    // TruePVE 2.4.4 switches the active ruleset in memory with "tpve.ruleset <name>".
+    // Its Schedule, when enabled, also switches currentRuleSet on a timer (every 30s
+    // when useRealtime is true). That clock is DateTime.Now, the server's local time,
+    // not America/New_York. It cannot yield to a purge, the test clock, or the
+    // full-weekend force, and a running schedule would undo tpve.ruleset.
+    // AddOrUpdateMapping only stores a zone key in TruePVE's data file, and the
+    // ruleset must already exist in config. This plugin keeps Schedule.enabled false,
+    // writes the two ruleset bodies below into TruePVE's RuleSets and Mappings when
+    // they differ, and selects the active one by Default RuleSet plus tpve.ruleset.
+    public static class NightshadeTruePveProfiles
     {
-        private const string PermAdmin = "nightshaderaidprotection.admin";
-        private const string DataPath = "Nightshade/NightshadeRaidProtection/RaidProtection";
+        public const string WeekdayName = "nightshade_pve_weekday";
+        public const string WeekendName = "nightshade_pvp_weekend";
+        public const string WeekdayFlags = "NoHeliDamage, HopperCannotTargetEnemyLoot, AuthorizedFarmableDamage, CupboardOwnership, HumanNPCDamage, LockedBoxesImmortal, LockedDoorsImmortal, LockedVehiclesImmortal";
+
+        public struct Spec
+        {
+            public string Name;
+            public bool Enabled;
+            public bool DefaultAllowDamage;
+            public string Flags;
+            public List<string> Rules;
+        }
+
+        public static Spec Weekday()
+        {
+            return new Spec
+            {
+                Name = WeekdayName,
+                Enabled = true,
+                DefaultAllowDamage = false,
+                Flags = WeekdayFlags,
+                Rules = new List<string>(WeekdayRules)
+            };
+        }
+
+        public static Spec Weekend()
+        {
+            return new Spec
+            {
+                Name = WeekendName,
+                Enabled = true,
+                DefaultAllowDamage = true,
+                Flags = "",
+                Rules = new List<string> { "anything can hurt anything" }
+            };
+        }
+
+        // True when a ruleset body or its name mapping changed. Every other TruePVE key stays.
+        public static bool Merge(JObject root, Spec weekday, Spec weekend)
+        {
+            if (root == null) return false;
+            bool changed = false;
+            if (Upsert(root, weekday)) changed = true;
+            if (Upsert(root, weekend)) changed = true;
+            return changed;
+        }
+
+        public static void WriteRoot(string path, JObject root)
+        {
+            string text = root.ToString(Formatting.Indented) + "\n";
+            string tmp = path + ".nightshade.tmp";
+            File.WriteAllText(tmp, text, new UTF8Encoding(false));
+            try
+            {
+                File.Replace(tmp, path, null);
+            }
+            catch
+            {
+                File.Copy(tmp, path, true);
+                File.Delete(tmp);
+            }
+        }
+
+        private static bool Upsert(JObject root, Spec spec)
+        {
+            if (root == null || string.IsNullOrEmpty(spec.Name) || spec.Rules == null || spec.Rules.Count == 0) return false;
+            bool changed = false;
+            JArray sets = root["RuleSets"] as JArray;
+            if (sets == null)
+            {
+                sets = new JArray();
+                root["RuleSets"] = sets;
+                changed = true;
+            }
+            JObject found = null;
+            for (int i = 0; i < sets.Count; i++)
+            {
+                JObject entry = sets[i] as JObject;
+                if (entry == null) continue;
+                JToken name = entry["name"];
+                if (name != null && name.Type == JTokenType.String && string.Equals((string)name, spec.Name, StringComparison.Ordinal))
+                {
+                    found = entry;
+                    break;
+                }
+            }
+            if (found == null)
+            {
+                found = new JObject();
+                sets.Add(found);
+                changed = true;
+            }
+            if (!SameString(found["name"], spec.Name)) { found["name"] = spec.Name; changed = true; }
+            if (!SameBool(found["enabled"], spec.Enabled)) { found["enabled"] = spec.Enabled; changed = true; }
+            if (!SameBool(found["defaultAllowDamage"], spec.DefaultAllowDamage)) { found["defaultAllowDamage"] = spec.DefaultAllowDamage; changed = true; }
+            string flags = spec.Flags ?? "";
+            if (!SameString(found["flags"], flags)) { found["flags"] = flags; changed = true; }
+            if (!SameRules(found["rules"] as JArray, spec.Rules))
+            {
+                JArray rules = new JArray();
+                for (int i = 0; i < spec.Rules.Count; i++) rules.Add(spec.Rules[i] ?? "");
+                found["rules"] = rules;
+                changed = true;
+            }
+            JObject mappings = root["Mappings"] as JObject;
+            if (mappings == null)
+            {
+                mappings = new JObject();
+                root["Mappings"] = mappings;
+                changed = true;
+            }
+            if (!SameString(mappings[spec.Name], spec.Name))
+            {
+                mappings[spec.Name] = spec.Name;
+                changed = true;
+            }
+            return changed;
+        }
+
+        private static bool SameString(JToken token, string value)
+        {
+            return token != null && token.Type == JTokenType.String && string.Equals((string)token, value ?? "", StringComparison.Ordinal);
+        }
+
+        private static bool SameBool(JToken token, bool value)
+        {
+            return token != null && token.Type == JTokenType.Boolean && token.Value<bool>() == value;
+        }
+
+        private static bool SameRules(JArray current, List<string> wanted)
+        {
+            if (current == null || wanted == null || current.Count != wanted.Count) return false;
+            HashSet<string> have = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < current.Count; i++)
+            {
+                JToken token = current[i];
+                if (token == null || token.Type != JTokenType.String) return false;
+                have.Add((string)token);
+            }
+            if (have.Count != wanted.Count) return false;
+            for (int i = 0; i < wanted.Count; i++)
+            {
+                if (!have.Contains(wanted[i] ?? "")) return false;
+            }
+            return true;
+        }
+
+        private static readonly string[] WeekdayRules = new string[]
+        {
+            "base_defenses can hurt Heli",
+            "players can hurt trees",
+            "nothing can hurt base_external_defenses",
+            "nothing can hurt base_barricades",
+            "nothing can hurt base_defenses",
+            "nothing can hurt siege",
+            "nothing can hurt base_structure",
+            "nothing can hurt base_deployables",
+            "entities cannot hurt base_deployables",
+            "npcs cannot hurt base_deployables",
+            "guards cannot hurt base_deployables",
+            "heli cannot hurt base_deployables",
+            "heliturrets cannot hurt base_deployables",
+            "bradley cannot hurt base_deployables",
+            "fire cannot hurt base_deployables",
+            "mlrs cannot hurt base_deployables",
+            "siege cannot hurt base_deployables",
+            "npcs cannot hurt base_structure",
+            "npcs cannot hurt base_external_defenses",
+            "npcs cannot hurt base_defenses",
+            "npcs cannot hurt base_barricades",
+            "guards cannot hurt base_structure",
+            "guards cannot hurt base_external_defenses",
+            "guards cannot hurt base_defenses",
+            "guards cannot hurt base_barricades",
+            "heli cannot hurt base_structure",
+            "heli cannot hurt base_external_defenses",
+            "heli cannot hurt base_defenses",
+            "heli cannot hurt base_barricades",
+            "heliturrets cannot hurt base_structure",
+            "heliturrets cannot hurt base_external_defenses",
+            "heliturrets cannot hurt base_defenses",
+            "heliturrets cannot hurt base_barricades",
+            "bradley cannot hurt base_structure",
+            "bradley cannot hurt base_external_defenses",
+            "bradley cannot hurt base_defenses",
+            "bradley cannot hurt base_barricades",
+            "fire cannot hurt base_structure",
+            "fire cannot hurt base_external_defenses",
+            "fire cannot hurt base_defenses",
+            "fire cannot hurt base_barricades",
+            "mlrs cannot hurt base_structure",
+            "mlrs cannot hurt base_external_defenses",
+            "mlrs cannot hurt base_defenses",
+            "mlrs cannot hurt base_barricades",
+            "siege cannot hurt base_structure",
+            "siege cannot hurt base_external_defenses",
+            "siege cannot hurt base_defenses",
+            "siege cannot hurt base_barricades",
+            "heli can hurt players",
+            "heliturrets can hurt players",
+            "bradley can hurt players",
+            "guards can hurt players",
+            "fire can hurt players",
+            "traps can hurt players",
+            "npcs can hurt players",
+            "animals can hurt players",
+            "farm can hurt players",
+            "bees can hurt players",
+            "players can hurt bradley",
+            "players can hurt twig",
+            "players can hurt resources",
+            "anything can hurt dispensers",
+            "anything can hurt heli",
+            "anything can hurt npcs",
+            "nothing can hurt ch47",
+            "players cannot hurt base_structure",
+            "players cannot hurt cars",
+            "nothing can hurt mini",
+            "nothing can hurt snowmobiles",
+            "players can hurt ridablehorses",
+            "cars cannot hurt anything",
+            "mini cannot hurt anything",
+            "ch47 cannot hurt anything",
+            "scrapheli cannot hurt anything",
+            "players cannot hurt base_defenses",
+            "players cannot hurt farm",
+            "players cannot hurt players",
+            "players cannot hurt tugboats",
+            "base_defenses can hurt players",
+            "base_external_defenses can hurt players",
+            "base_barricades can hurt players",
+            "mini cannot hurt mini",
+            "junkyard cannot hurt anything",
+            "junkyard can hurt cars",
+            "ramhead can hurt ramhead",
+            "siege can hurt players",
+        };
+    }
+
+    // Player-vs-player combat for the teleport block. NPCs, self hits, zero damage,
+    // and (when configured) teammates do not start the timer.
+    public static class NightshadeCombatGate
+    {
+        public const string DefaultMessage = "Combat lock: teleport blocked for {seconds}s.";
+
+        public static bool Tag(bool enabled, bool onlyWeekend, bool weekendActive, bool selfHit, bool realAttacker, bool realVictim, bool teammates, bool ignoreTeammates, float damage)
+        {
+            if (!enabled || damage <= 0f) return false;
+            if (onlyWeekend && !weekendActive) return false;
+            if (selfHit || !realAttacker || !realVictim) return false;
+            if (ignoreTeammates && teammates) return false;
+            return true;
+        }
+    }
+
+#if !NIGHTSHADE_RAID_TESTS
+    [Info("NightshadePVPWeekend", "Nightshade", "2.0.0")]
+    [Description("Eastern-time PvP weekend, owned TruePVE rulesets, TC raid shields, offline protection, the Giant Excavator boost, and a combat teleport block.")]
+    public class NightshadePVPWeekend : RustPlugin
+    {
+        private const string PermAdmin = "nightshadepvpweekend.admin";
+        // Not granted to any user or group. IsAdmin does not bypass the combat teleport block.
+        private const string PermBypassCombat = "nightshadepvpweekend.bypasscombatblock";
+        private const string DataPath = "Nightshade/NightshadePVPWeekend/RaidProtection";
+        private const string LegacyDataDirName = "NightshadeRaidProtection";
         private const ulong SteamIdMin = 76561197960265728UL;
         // Shop purchases are PAPER items. The skin id is the tier. See NightshadeVoucherTiers.
         private const string VoucherShortname = "paper";
@@ -918,7 +1180,7 @@ namespace Oxide.Plugins
         // While on, the offline-protection damage decision treats the PvP weekend as active.
         // It does not call CheckWindow, EnsureRuleset, or ApplyExcavator.
         // TruePVE rulesets and reloads, Giant Excavator speed, and API_IsPvPActive
-        // are unchanged by this switch. nrp.faketime still affects only the paths it already did.
+        // are unchanged by this switch. nspvp.faketime still affects only the paths it already did.
         // Paid shields are not gated on this switch. A shield with time left blocks raid damage
         // on the real clock whether or not the weekend, this switch, or the full-weekend force is on.
         private bool forceOfflinePvp;
@@ -931,13 +1193,14 @@ namespace Oxide.Plugins
         // everywhere the real weekend is: TruePVE (existing Decide/Apply path, reload only
         // when the target changes), excavator boost, offline protection, API_IsPvPActive,
         // and the HUD/info listeners of that API. Paid-shield time still drains only on the
-        // real Eastern weekend. nsraid.forcepvp on does not flip this. nsraid.pvpweekend does.
+        // real Eastern weekend. nspvp.forcepvp on does not flip this. nspvp.pvpweekend does.
         private bool forceFullPvp;
         private float nextFullForceWarning;
 
         // Admin hit log. Memory only. At most one line per entity every two seconds.
         private bool debugHits;
         private readonly Dictionary<ulong, float> debugNext = new Dictionary<ulong, float>();
+        private readonly Dictionary<ulong, float> combatUntil = new Dictionary<ulong, float>();
         private int scaleFrame = -1;
         private ulong scaleEntity;
         private ulong scaleAttacker;
@@ -948,11 +1211,11 @@ namespace Oxide.Plugins
             [JsonProperty("Enable paid TC raid shields")] public bool PaidShields = true;
             [JsonProperty("Enable automatic offline raid protection during PvP")] public bool OfflineProtection = true;
             [JsonProperty("Minutes everyone authorized on TC must be offline before auto protection")] public int OfflineGraceMinutes = 30;
-            // Dev-server opt-in. False by default and not flipped by nsraid.forcepvp. A true value
+            // Dev-server opt-in. False by default and not flipped by nspvp.forcepvp. A true value
             // enables the same in-memory offline-protection override after each load. It still does
             // not switch TruePVE or the excavator.
             [JsonProperty("Force PvP weekend for testing")] public bool ForcePvpWeekendForTesting = false;
-            // Dev-server opt-in. False by default. nsraid.pvpweekend on|off saves this.
+            // Dev-server opt-in. False by default. nspvp.pvpweekend on|off saves this.
             // A true value makes the whole server follow the PvP weekend until it is turned off.
             [JsonProperty("Force full PvP weekend")] public bool ForceFullPvpWeekend = false;
             [JsonProperty("Offline protection damage reduction percent (100 = fully block)")] public int OfflineReductionPercent = 100;
@@ -969,10 +1232,32 @@ namespace Oxide.Plugins
             // A positive value is the weekend token's shield hours instead of that window.
             [JsonProperty("Weekend voucher hours (0 = full Eastern window)")] public double WeekendVoucherHours = 0d;
             [JsonProperty("Drive TruePVE from the Eastern weekend window")] public bool DriveTruePve = true;
-            [JsonProperty("TruePVE ruleset during the weekend window")] public string PvpRuleset = "nightshade_pvp_weekend";
-            [JsonProperty("TruePVE ruleset outside the weekend window")] public string PveRuleset = "default";
+            [JsonProperty("TruePVE ruleset during the weekend window")] public string PvpRuleset = NightshadeTruePveProfiles.WeekendName;
+            [JsonProperty("TruePVE ruleset outside the weekend window")] public string PveRuleset = NightshadeTruePveProfiles.WeekdayName;
             [JsonProperty("Yield TruePVE changes while a purge is active")] public bool YieldToPurge = true;
+            [JsonProperty("Install owned TruePVE rulesets")] public bool InstallOwnedRulesets = true;
+            [JsonProperty("TruePVE weekday profile")] public TruePveProfile WeekdayProfile;
+            [JsonProperty("TruePVE weekend profile")] public TruePveProfile WeekendProfile;
+            [JsonProperty("Combat teleport block")] public CombatBlockSettings CombatTeleport = new CombatBlockSettings();
             [JsonProperty("Excavator")] public ExcavatorSettings Excavator = new ExcavatorSettings();
+        }
+
+        private class TruePveProfile
+        {
+            [JsonProperty("Name")] public string Name;
+            [JsonProperty("Enabled")] public bool Enabled = true;
+            [JsonProperty("Default allow damage")] public bool DefaultAllowDamage;
+            [JsonProperty("Flags")] public string Flags = "";
+            [JsonProperty("Rules")] public List<string> Rules = new List<string>();
+        }
+
+        private class CombatBlockSettings
+        {
+            [JsonProperty("Enabled")] public bool Enabled = true;
+            [JsonProperty("Seconds")] public int Seconds = 60;
+            [JsonProperty("Only during the PvP weekend")] public bool OnlyDuringPvpWeekend;
+            [JsonProperty("Ignore damage between teammates")] public bool IgnoreTeammates = true;
+            [JsonProperty("Message")] public string Message = NightshadeCombatGate.DefaultMessage;
         }
 
         private class ExcavatorSettings
@@ -1056,17 +1341,34 @@ namespace Oxide.Plugins
         protected override void LoadDefaultConfig() { settings = new Settings(); }
         protected override void LoadConfig()
         {
+            bool legacyShape = ImportLegacyConfig();
             base.LoadConfig();
             try { settings = Config.ReadObject<Settings>() ?? new Settings(); }
             catch (Exception ex) { PrintError("Invalid config; inspect and repair it: " + ex.Message); settings = new Settings(); }
-            if (string.IsNullOrEmpty(settings.PvpRuleset)) settings.PvpRuleset = "nightshade_pvp_weekend";
-            if (string.IsNullOrEmpty(settings.PveRuleset)) settings.PveRuleset = "default";
+            if (string.IsNullOrEmpty(settings.PvpRuleset)) settings.PvpRuleset = NightshadeTruePveProfiles.WeekendName;
+            if (legacyShape && (string.IsNullOrEmpty(settings.PveRuleset) || settings.PveRuleset == "default"))
+            {
+                settings.PveRuleset = NightshadeTruePveProfiles.WeekdayName;
+                Puts("Weekday TruePVE ruleset moved from \"default\" to \"" + NightshadeTruePveProfiles.WeekdayName + "\". That profile is this plugin's copy of the weekday rules. The default ruleset already in TruePVE.json is not deleted.");
+            }
+            if (string.IsNullOrEmpty(settings.PveRuleset)) settings.PveRuleset = NightshadeTruePveProfiles.WeekdayName;
             if (double.IsNaN(settings.WeekendVoucherHours) || double.IsInfinity(settings.WeekendVoucherHours) || settings.WeekendVoucherHours < 0d)
                 settings.WeekendVoucherHours = 0d;
             if (settings.Excavator == null) settings.Excavator = new ExcavatorSettings();
             float excavatorMult = settings.Excavator.SpeedMultiplier;
             if (float.IsNaN(excavatorMult) || float.IsInfinity(excavatorMult) || excavatorMult < 0.01f)
                 settings.Excavator.SpeedMultiplier = NightshadeExcavatorBoost.DefaultSpeedMultiplier;
+            if (settings.WeekdayProfile == null || settings.WeekdayProfile.Rules == null || settings.WeekdayProfile.Rules.Count == 0)
+                settings.WeekdayProfile = ProfileFrom(NightshadeTruePveProfiles.Weekday());
+            if (settings.WeekendProfile == null || settings.WeekendProfile.Rules == null || settings.WeekendProfile.Rules.Count == 0)
+                settings.WeekendProfile = ProfileFrom(NightshadeTruePveProfiles.Weekend());
+            if (string.IsNullOrEmpty(settings.WeekdayProfile.Name)) settings.WeekdayProfile.Name = NightshadeTruePveProfiles.WeekdayName;
+            if (string.IsNullOrEmpty(settings.WeekendProfile.Name)) settings.WeekendProfile.Name = NightshadeTruePveProfiles.WeekendName;
+            if (settings.CombatTeleport == null) settings.CombatTeleport = new CombatBlockSettings();
+            if (settings.CombatTeleport.Seconds < 1) settings.CombatTeleport.Seconds = 60;
+            else if (settings.CombatTeleport.Seconds > 900) settings.CombatTeleport.Seconds = 900;
+            if (string.IsNullOrEmpty(settings.CombatTeleport.Message))
+                settings.CombatTeleport.Message = NightshadeCombatGate.DefaultMessage;
             // The protection-only override dies with the plugin instance unless its own config key is set.
             // The full-weekend force is the config key, so a reload keeps it.
             forceOfflinePvp = settings.ForcePvpWeekendForTesting;
@@ -1078,14 +1380,75 @@ namespace Oxide.Plugins
         }
         protected override void SaveConfig() => Config.WriteObject(settings, true);
 
+        // First load only: copy configs/NightshadeRaidProtection.json when the new file is absent.
+        // True when that file has no "Install owned TruePVE rulesets" key (the 1.4.9 shape).
+        // Permissions are not copied and are not granted.
+        private bool ImportLegacyConfig()
+        {
+            string dir = Interface.Oxide.ConfigDirectory;
+            string next = Path.Combine(dir, "NightshadePVPWeekend.json");
+            string prev = Path.Combine(dir, "NightshadeRaidProtection.json");
+            if (!File.Exists(next) && File.Exists(prev))
+            {
+                File.Copy(prev, next, false);
+                Puts("Imported configs/NightshadeRaidProtection.json to configs/NightshadePVPWeekend.json.");
+            }
+            if (!File.Exists(next)) return true;
+            try
+            {
+                JObject raw = JObject.Parse(File.ReadAllText(next));
+                return raw["Install owned TruePVE rulesets"] == null;
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Could not inspect configs/NightshadePVPWeekend.json before load: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static TruePveProfile ProfileFrom(NightshadeTruePveProfiles.Spec spec)
+        {
+            TruePveProfile profile = new TruePveProfile();
+            profile.Name = spec.Name;
+            profile.Enabled = spec.Enabled;
+            profile.DefaultAllowDamage = spec.DefaultAllowDamage;
+            profile.Flags = spec.Flags ?? "";
+            profile.Rules = spec.Rules ?? new List<string>();
+            return profile;
+        }
+
+        private static NightshadeTruePveProfiles.Spec SpecFrom(TruePveProfile profile)
+        {
+            NightshadeTruePveProfiles.Spec spec = new NightshadeTruePveProfiles.Spec();
+            if (profile == null) return spec;
+            spec.Name = profile.Name;
+            spec.Enabled = profile.Enabled;
+            spec.DefaultAllowDamage = profile.DefaultAllowDamage;
+            spec.Flags = profile.Flags;
+            spec.Rules = profile.Rules;
+            return spec;
+        }
+
         private void Init()
         {
-            // Registered only. This permission is not granted to any user or group.
+            // Registered only. Neither permission is granted to any user or group.
             permission.RegisterPermission(PermAdmin, this);
+            permission.RegisterPermission(PermBypassCombat, this);
             cmd.AddChatCommand("raidredeem", this, nameof(RedeemCommand));
             cmd.AddChatCommand("raidvoucher", this, nameof(LegacyVoucherCommand));
             cmd.AddConsoleCommand("raidredeem", this, nameof(ConsoleRedeem));
             cmd.AddChatCommand("raidshield", this, nameof(StatusCommand));
+            cmd.AddChatCommand("nspvptest", this, nameof(CmdNsRaidTest));
+            cmd.AddChatCommand("nspvppvp", this, nameof(CmdNsRaidPvp));
+            cmd.AddChatCommand("nspvpwhy", this, nameof(CmdNsRaidWhy));
+            cmd.AddConsoleCommand("nspvp.faketime", this, nameof(CmdFakeTime));
+            cmd.AddConsoleCommand("nspvp.window", this, nameof(CmdWindow));
+            cmd.AddConsoleCommand("nspvp.forcepvp", this, nameof(CmdForcePvp));
+            cmd.AddConsoleCommand("nspvp.pvpweekend", this, nameof(CmdPvpWeekend));
+            cmd.AddConsoleCommand("nspvp.why", this, nameof(CmdWhy));
+            cmd.AddConsoleCommand("nspvp.check", this, nameof(CmdCheck));
+            cmd.AddConsoleCommand("nspvp.debug", this, nameof(CmdDebug));
+            // Old names still run the same handlers. They are not removed.
             cmd.AddChatCommand("nsraidtest", this, nameof(CmdNsRaidTest));
             cmd.AddChatCommand("nsraidpvp", this, nameof(CmdNsRaidPvp));
             cmd.AddChatCommand("nsraidwhy", this, nameof(CmdNsRaidWhy));
@@ -1096,6 +1459,7 @@ namespace Oxide.Plugins
             cmd.AddConsoleCommand("nsraid.why", this, nameof(CmdWhy));
             cmd.AddConsoleCommand("nsraid.check", this, nameof(CmdCheck));
             cmd.AddConsoleCommand("nsraid.debug", this, nameof(CmdDebug));
+            ImportLegacyData();
             try { store = Interface.Oxide.DataFileSystem.ReadObject<Store>(DataPath) ?? new Store(); }
             catch (Exception ex) { throw new Exception("Raid shield data could not be loaded: purchases disabled to prevent lost vouchers. " + ex.Message); }
             if (store.Shields == null) store.Shields = new Dictionary<ulong, Shield>();
@@ -1105,6 +1469,37 @@ namespace Oxide.Plugins
         }
 
         private void Save() => Interface.Oxide.DataFileSystem.WriteObject(DataPath, store);
+
+        // First load only: copy data/Nightshade/NightshadeRaidProtection/* when the new file is absent.
+        // Existing files under data/Nightshade/NightshadePVPWeekend/ are left as they are.
+        private void ImportLegacyData()
+        {
+            string root = Interface.Oxide.DataDirectory;
+            string oldDir = Path.Combine(root, "Nightshade", LegacyDataDirName);
+            string newDir = Path.Combine(root, "Nightshade", "NightshadePVPWeekend");
+            if (!Directory.Exists(oldDir)) return;
+            string[] files;
+            try { files = Directory.GetFiles(oldDir); }
+            catch (Exception ex)
+            {
+                throw new Exception("Could not read data/Nightshade/NightshadeRaidProtection. Shield data was not loaded. " + ex.Message);
+            }
+            for (int i = 0; i < files.Length; i++)
+            {
+                string dest = Path.Combine(newDir, Path.GetFileName(files[i]));
+                if (File.Exists(dest)) continue;
+                try
+                {
+                    Directory.CreateDirectory(newDir);
+                    File.Copy(files[i], dest, false);
+                    Puts("Imported " + files[i] + " to " + dest + ".");
+                }
+                catch (Exception ex)
+                {
+                    throw new Exception("Could not import " + files[i] + ". Shield data was not loaded. " + ex.Message);
+                }
+            }
+        }
         private void OnServerSave()
         {
             // Entity serialization runs after this hook. Hold vanilla fuel seconds in cachedFuelTime
@@ -1123,7 +1518,7 @@ namespace Oxide.Plugins
             shieldTimer?.Destroy();
             fakeUtc = null;
             if (forceOfflinePvp)
-                PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection cleared on unload.");
+                PrintWarning("NightshadePVPWeekend TEST: forced PvP weekend for offline protection cleared on unload.");
             forceOfflinePvp = false;
             forceOfflineGraceMinutes = null;
             nextForceOfflineWarning = 0f;
@@ -1216,10 +1611,10 @@ namespace Oxide.Plugins
         // API_IsPvPActive() -> bool
         //     True during Friday 8:00 PM through Monday 3:00 AM America/New_York.
         //     A manual /purge is not included; ask Nightshade Purge Status API_IsPurgeActive.
-        //     nrp.faketime and API_SetTestClockUtcTicks are included. API_ClearTestClock returns to the real clock.
-        //     nsraid.pvpweekend (config "Force full PvP weekend") is included. While that force is on
+        //     nspvp.faketime and API_SetTestClockUtcTicks are included. API_ClearTestClock returns to the real clock.
+        //     nspvp.pvpweekend (config "Force full PvP weekend") is included. While that force is on
         //     this returns true even outside the Eastern window.
-        //     nsraid.forcepvp / /nsraidtest without "full" are NOT included. That switch only lets this
+        //     nspvp.forcepvp / /nspvptest without "full" are NOT included. That switch only lets this
         //     plugin's offline protection treat the weekend as active. It does not change this API.
         // API_IsFullPvPForced() -> bool
         //     True only for the persisted full-server force, not for the real window or the test clock.
@@ -1227,7 +1622,7 @@ namespace Oxide.Plugins
         // API_SetTestClockUtcTicks(long utcTicks) -> bool, API_ClearTestClock() -> bool
         //     Memory only. TruePVE.json is not written. The excavator boost follows this clock.
         // API_GetExcavatorStatus() -> string
-        //     The same excavator clause nrp.window prints.
+        //     The same excavator clause nspvp.window prints.
         // API_SecondsUntilPvPChange() -> double
         //     Seconds until the window opens, or until it closes when it is already open.
         //     -1 while the full-server force is holding PvP open outside the scheduled window
@@ -1402,7 +1797,7 @@ namespace Oxide.Plugins
             EnsureRuleset();
             PrintWarning(forceFullPvp
                 ? "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. Full PvP weekend force is ON, so the server stays on the PvP weekend. The test clock does not turn that off."
-                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. TruePVE.json is not changed. The Giant Excavator boost follows this clock. Clear with API_ClearTestClock or nrp.faketime clear.");
+                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ") via API. TruePVE.json is not changed. The Giant Excavator boost follows this clock. Clear with API_ClearTestClock or nspvp.faketime clear.");
             return true;
         }
 
@@ -1431,7 +1826,7 @@ namespace Oxide.Plugins
             NightshadeWeekendClock.Evaluate(utc, eastern, out startUtc, out endUtc, out active);
         }
 
-        // scheduled is the clock (real, or nrp.faketime when utc is NowUtc()).
+        // scheduled is the clock (real, or nspvp.faketime when utc is NowUtc()).
         // The return value is what the server should behave as.
         private bool EffectiveNow(DateTime utc, out DateTime startUtc, out DateTime endUtc, out bool scheduled)
         {
@@ -2207,7 +2602,7 @@ namespace Oxide.Plugins
         // 0 means this hit is not reduced. Paid shields return 1 whenever time is left.
         // Offline protection uses the config percent, and only inside the weekend or a force.
         // attacker 0 is an outsider, so tool-cupboard authorization cannot clear the block.
-        // The real clock is used on purpose. nrp.faketime does not open or drain a shield.
+        // The real clock is used on purpose. nspvp.faketime does not open or drain a shield.
         private ScaleResult ComputeProtection(BaseCombatEntity entity, ulong attacker)
         {
             ScaleResult result = new ScaleResult();
@@ -2434,7 +2829,11 @@ namespace Oxide.Plugins
             if (entity == null || hit == null || hit.damageTypes == null || hit.damageTypes.Has(Rust.DamageType.Decay)) return null;
             // Players, NPCs, and animals are not building pieces. Buildings, attached
             // deployables, and loose player containers inside a protected cupboard zone are.
-            if (entity is BasePlayer) return null;
+            if (entity is BasePlayer)
+            {
+                NotePlayerCombat(hit.InitiatorPlayer, entity as BasePlayer, hit);
+                return null;
+            }
             ulong attacker = AttackerId(hit);
             ScaleResult result = ScaleForHit(entity, attacker);
             NoteHit(entity, attacker, result);
@@ -2447,6 +2846,99 @@ namespace Oxide.Plugins
             return null;
         }
 
+        private void OnPlayerAttack(BasePlayer attacker, HitInfo info)
+        {
+            if (attacker == null || info == null) return;
+            NotePlayerCombat(attacker, info.HitEntity as BasePlayer, info);
+        }
+
+        // Direct player hits only. InitiatorPlayer ignores turrets, traps, and other owned entities.
+        private void NotePlayerCombat(BasePlayer attacker, BasePlayer victim, HitInfo hit)
+        {
+            CombatBlockSettings combat = settings == null ? null : settings.CombatTeleport;
+            if (combat == null || hit == null || hit.damageTypes == null) return;
+            bool teammates = attacker != null && victim != null && attacker.currentTeam != 0UL && attacker.currentTeam == victim.currentTeam;
+            bool selfHit = attacker != null && victim != null && attacker.userID == victim.userID;
+            if (!NightshadeCombatGate.Tag(combat.Enabled, combat.OnlyDuringPvpWeekend, API_IsPvPActive(), selfHit, RealFighter(attacker), RealFighter(victim), teammates, combat.IgnoreTeammates, hit.damageTypes.Total()))
+                return;
+            float until = Time.realtimeSinceStartup + combat.Seconds;
+            combatUntil[attacker.userID] = until;
+            combatUntil[victim.userID] = until;
+            if (combatUntil.Count > 256) PruneCombatLocks();
+        }
+
+        private static bool RealFighter(BasePlayer player)
+        {
+            if (player == null || player.IsNpc) return false;
+            return player.userID >= SteamIdMin;
+        }
+
+        private void PruneCombatLocks()
+        {
+            float now = Time.realtimeSinceStartup;
+            List<ulong> drop = new List<ulong>();
+            foreach (KeyValuePair<ulong, float> pair in combatUntil)
+            {
+                if (pair.Value <= now) drop.Add(pair.Key);
+            }
+            for (int i = 0; i < drop.Count; i++) combatUntil.Remove(drop[i]);
+        }
+
+        // IQTeleportation treats a string from these hooks as the chat line and cancels the teleport.
+        // A null return lets the teleport continue. NTeleportation and Kits (not installed here) use
+        // the same CanTeleport / canTeleport names. Admin /tp in IQTeleportation does not call them.
+        private object CanTeleport(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object canTeleport(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object CanTeleport(BasePlayer player, Vector3 destination) { return CombatTeleportBlock(player); }
+        private object CanTeleportHome(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object CanTeleportHome(BasePlayer player, Vector3 destination) { return CombatTeleportBlock(player); }
+        private object CanTeleportPlayer(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object CanTeleportWarp(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object CanTownTeleport(BasePlayer player) { return CombatTeleportBlock(player); }
+        private object CanOutpostTeleport(BasePlayer player) { return CombatTeleportBlock(player); }
+
+        // IQ calls this as OnTeleportRequested(acceptor, requester). The requester is the player who moves.
+        private object OnTeleportRequested(BasePlayer player, BasePlayer target)
+        {
+            object mover = CombatTeleportBlock(target);
+            if (mover != null) return mover;
+            return CombatTeleportBlock(player);
+        }
+
+        private object CombatTeleportBlock(BasePlayer player)
+        {
+            CombatBlockSettings combat = settings == null ? null : settings.CombatTeleport;
+            if (combat == null || !combat.Enabled || player == null) return null;
+            if (combat.OnlyDuringPvpWeekend && !API_IsPvPActive()) return null;
+            if (permission.UserHasPermission(player.UserIDString, PermBypassCombat)) return null;
+            float now = Time.realtimeSinceStartup;
+            float until;
+            if (!combatUntil.TryGetValue(player.userID, out until) || until <= now)
+            {
+                if (until > 0f) combatUntil.Remove(player.userID);
+                return null;
+            }
+            int seconds = (int)Math.Ceiling(until - now);
+            if (seconds < 1) seconds = 1;
+            string template = string.IsNullOrEmpty(combat.Message) ? NightshadeCombatGate.DefaultMessage : combat.Message;
+            return template.Replace("{seconds}", seconds.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private string CombatWindowText()
+        {
+            CombatBlockSettings combat = settings == null ? null : settings.CombatTeleport;
+            if (combat == null || !combat.Enabled) return "off";
+            float now = Time.realtimeSinceStartup;
+            int locks = 0;
+            foreach (KeyValuePair<ulong, float> pair in combatUntil)
+            {
+                if (pair.Value > now) locks++;
+            }
+            return "on " + combat.Seconds.ToString(CultureInfo.InvariantCulture) + "s"
+                + (combat.OnlyDuringPvpWeekend ? " weekend-only" : "")
+                + " locks " + locks.ToString(CultureInfo.InvariantCulture);
+        }
+
         private void StatusCommand(BasePlayer player, string command, string[] args)
         {
             if (player == null) return;
@@ -2454,7 +2946,7 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool active;
             Weekend(now, out start, out end, out active);
-            if (fakeUtc.HasValue) Reply(player, "Test clock is on. Window checks below are not the live clock. Clear it with nrp.faketime clear.");
+            if (fakeUtc.HasValue) Reply(player, "Test clock is on. Window checks below are not the live clock. Clear it with nspvp.faketime clear.");
             if (forceFullPvp) Reply(player, "Full PvP weekend force is on. Raiding follows the PvP weekend. A paid shield with time left still blocks. Its timer uses the real Eastern weekend.");
             Reply(player, active ? "PvP weekend ends in " + Format(end - now) + "." : "PvP weekend starts in " + Format(start - now) + ".");
             BuildingPrivlidge tc = TargetCupboard(player);
@@ -2519,7 +3011,7 @@ namespace Oxide.Plugins
             }
             BaseCombatEntity entity = LookTarget(player);
             ReplyLines(player, entity == null
-                ? "Look at a building piece or deployable and run /nsraidwhy again."
+                ? "Look at a building piece or deployable and run /nspvpwhy again."
                 : ExplainEntity(entity, SteamIdOf(player)));
         }
 
@@ -2529,12 +3021,12 @@ namespace Oxide.Plugins
             BasePlayer player = arg.Connection == null ? null : arg.Connection.player as BasePlayer;
             if (player == null)
             {
-                arg.ReplyWith("Look at an entity and run nsraid.why from F1, or use nsraid.check x y z.");
+                arg.ReplyWith("Look at an entity and run nspvp.why from F1, or use nspvp.check x y z.");
                 return;
             }
             BaseCombatEntity entity = LookTarget(player);
             string report = entity == null
-                ? "Look at a building piece or deployable and run nsraid.why again."
+                ? "Look at a building piece or deployable and run nspvp.why again."
                 : ExplainEntity(entity, SteamIdOf(player));
             arg.ReplyWith(report);
             ReplyLines(player, report);
@@ -2550,7 +3042,7 @@ namespace Oxide.Plugins
                 || !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)
                 || !float.TryParse(args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out z))
             {
-                arg.ReplyWith("Usage: nsraid.check <x> <y> <z>");
+                arg.ReplyWith("Usage: nspvp.check <x> <y> <z>");
                 return;
             }
             BaseCombatEntity entity = CombatNear(new Vector3(x, y, z));
@@ -2574,7 +3066,7 @@ namespace Oxide.Plugins
         private string HandleDebug(string[] args)
         {
             if (args == null || args.Length != 1 || string.IsNullOrEmpty(args[0]))
-                return "Usage: nsraid.debug on | off | status";
+                return "Usage: nspvp.debug on | off | status";
             string action = args[0];
             if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
                 return "Hit debug log is " + (debugHits ? "ON" : "OFF") + ". Each entity is logged at most once every 2 seconds.";
@@ -2585,9 +3077,9 @@ namespace Oxide.Plugins
                 return "Hit debug log is OFF.";
             }
             if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
-                return "Usage: nsraid.debug on | off | status";
+                return "Usage: nspvp.debug on | off | status";
             debugHits = true;
-            return "Hit debug log is ON. Each entity is logged at most once every 2 seconds. Turn it off with nsraid.debug off.";
+            return "Hit debug log is ON. Each entity is logged at most once every 2 seconds. Turn it off with nspvp.debug off.";
         }
 
         private static BaseCombatEntity LookTarget(BasePlayer player)
@@ -3048,7 +3540,7 @@ namespace Oxide.Plugins
                 }
                 JToken enabled = JObject.Parse(File.ReadAllText(path))["Schedule"]?["enabled"];
                 if (enabled != null && enabled.Type == JTokenType.Boolean && enabled.Value<bool>())
-                    PrintWarning("TruePVE Schedule.enabled is true. Set Schedule.enabled to false in carbon/configs/TruePVE.json and reload TruePVE. NightshadeRaidProtection sets the ruleset; TruePVE's own schedule will override it.");
+                    PrintWarning("TruePVE Schedule.enabled is true. NightshadePVPWeekend turns it off. TruePVE 2.4.4's schedule uses the server local clock, not America/New_York, and it would replace the active ruleset every 30 seconds.");
             }
             catch (Exception ex)
             {
@@ -3076,7 +3568,19 @@ namespace Oxide.Plugins
 
         private void EnsureRuleset()
         {
-            if (applyingRuleset || settings == null || !settings.DriveTruePve) return;
+            if (applyingRuleset || settings == null) return;
+            string path = Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json");
+            bool skipFile = NightshadeWeekendClock.SkipRulesetFile(fakeUtc.HasValue, forceFullPvp);
+            bool profilesChanged = !skipFile && InstallOwnedProfiles(path);
+            if (!settings.DriveTruePve)
+            {
+                if (profilesChanged && TruePVE != null && TruePVE.IsLoaded)
+                {
+                    Server.Command(NightshadeWeekendClock.ReloadCommand);
+                    Puts("Installed owned TruePVE rulesets and reloaded TruePVE. The Eastern window is not selecting the active ruleset.");
+                }
+                return;
+            }
             string purgeRuleset = null;
             bool purgeActive = false;
             // Purge owns the ruleset for its whole span, including a weekend that falls inside a manual purge.
@@ -3088,20 +3592,20 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool scheduled;
             bool active = EffectiveNow(NowUtc(), out start, out end, out scheduled);
-            string path = Path.Combine(Interface.Oxide.ConfigDirectory, "TruePVE.json");
             NightshadeWeekendClock.TruePveState state = NightshadeWeekendClock.Read(path);
-            bool skipFile = NightshadeWeekendClock.SkipRulesetFile(fakeUtc.HasValue, forceFullPvp);
             NightshadeWeekendClock.TogglePlan plan = NightshadeWeekendClock.Decide(state, appliedRuleset, purgeActive, purgeRuleset, active, settings.PvpRuleset, settings.PveRuleset, skipFile);
-            if (plan.Adopt || (!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand))
+            if (!profilesChanged && (plan.Adopt || (!plan.WriteConfig && !plan.ReloadTruePve && !plan.RunRulesetCommand)))
             {
                 appliedRuleset.Known = true;
                 appliedRuleset.Ruleset = plan.Ruleset;
                 return;
             }
+            if (profilesChanged) plan.ReloadTruePve = true;
             bool loaded = TruePVE != null && TruePVE.IsLoaded;
             applyingRuleset = true;
             try
             {
+                if (plan.WriteConfig) BackupTruePveOnce(path);
                 NightshadeWeekendClock.ApplyResult result = NightshadeWeekendClock.Apply(path, plan, loaded, (cmd, args) =>
                 {
                     if (args == null || args.Length == 0) Server.Command(cmd);
@@ -3112,15 +3616,22 @@ namespace Oxide.Plugins
                     PrintWarning("TruePVE ruleset was not saved: " + result.Error);
                     return;
                 }
-                if (plan.RunRulesetCommand && loaded && !result.RanRulesetCommand) return;
-                if (plan.ReloadTruePve && loaded && !result.Reloaded) return;
+                bool reloaded = result.Reloaded;
+                if (profilesChanged && loaded && !reloaded)
+                {
+                    Server.Command(NightshadeWeekendClock.ReloadCommand);
+                    reloaded = true;
+                }
+                if (plan.ReloadTruePve && loaded && !reloaded) return;
+                if (plan.RunRulesetCommand && loaded && !reloaded && !result.RanRulesetCommand) return;
                 appliedRuleset.Known = true;
                 appliedRuleset.Ruleset = plan.Ruleset;
-                if (result.Wrote || result.RanRulesetCommand || result.Reloaded)
+                if (profilesChanged || result.Wrote || result.RanRulesetCommand || reloaded)
                     Puts("TruePVE " + plan.Reason + " -> " + plan.Ruleset
+                        + (profilesChanged ? " (installed owned rulesets)" : "")
                         + (result.Wrote ? " (wrote Default RuleSet" + (plan.DisableSchedule ? ", schedule off" : "") + ")" : "")
                         + (result.RanRulesetCommand ? " via tpve.ruleset" : "")
-                        + (result.Reloaded ? " and reloaded TruePVE" : "")
+                        + (reloaded ? " and reloaded TruePVE" : "")
                         + WindowNote()
                         + ".");
             }
@@ -3128,6 +3639,51 @@ namespace Oxide.Plugins
             {
                 applyingRuleset = false;
             }
+        }
+
+        // Upserts the weekday and weekend ruleset objects and their name mappings.
+        // The original configs/TruePVE.json is copied once, before the first write.
+        private bool InstallOwnedProfiles(string path)
+        {
+            if (settings == null || !settings.InstallOwnedRulesets) return false;
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                PrintWarning("TruePVE.json was not found, so the owned rulesets were not installed.");
+                return false;
+            }
+            JObject root;
+            try { root = JObject.Parse(File.ReadAllText(path)); }
+            catch (Exception ex)
+            {
+                PrintWarning("Could not read TruePVE.json: " + ex.Message);
+                return false;
+            }
+            bool changed = NightshadeTruePveProfiles.Merge(root, SpecFrom(settings.WeekdayProfile), SpecFrom(settings.WeekendProfile));
+            if (!changed) return false;
+            try
+            {
+                BackupTruePveOnce(path);
+                NightshadeTruePveProfiles.WriteRoot(path, root);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("Owned TruePVE rulesets were not saved: " + ex.Message);
+                return false;
+            }
+            string weekday = settings.WeekdayProfile == null ? "" : settings.WeekdayProfile.Name;
+            string weekend = settings.WeekendProfile == null ? "" : settings.WeekendProfile.Name;
+            Puts("Wrote TruePVE rulesets " + weekday + " and " + weekend + " into configs/TruePVE.json (those RuleSets entries and their Mappings only).");
+            return true;
+        }
+
+        private void BackupTruePveOnce(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+            string backup = Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadePVPWeekend", "TruePVE.json.original");
+            if (File.Exists(backup)) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(backup));
+            File.Copy(path, backup, false);
+            Puts("Backed up configs/TruePVE.json to data/Nightshade/NightshadePVPWeekend/TruePVE.json.original.");
         }
 
         private string FormatEdge(DateTime utc)
@@ -3177,6 +3733,7 @@ namespace Oxide.Plugins
                 + " | purge override " + purge
                 + " | zone " + eastern.Id + (usedZoneFallback ? " (fallback)" : "")
                 + " | test clock " + (fakeUtc.HasValue ? fakeUtc.Value.ToString("u") : "off")
+                + " | combat tp " + CombatWindowText()
                 + " | " + excavatorStatus);
         }
 
@@ -3200,8 +3757,8 @@ namespace Oxide.Plugins
             if (args.Length == 0)
             {
                 arg.ReplyWith(fakeUtc.HasValue
-                    ? "Test clock is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). nrp.faketime clear"
-                    : "Test clock is off. nrp.faketime 2026-11-02T07:59:00Z   or   nrp.faketime eastern 2026-10-30 20:00");
+                    ? "Test clock is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). nspvp.faketime clear"
+                    : "Test clock is off. nspvp.faketime 2026-11-02T07:59:00Z   or   nspvp.faketime eastern 2026-10-30 20:00");
                 return;
             }
             if (args[0].Equals("clear", StringComparison.OrdinalIgnoreCase) || args[0].Equals("off", StringComparison.OrdinalIgnoreCase))
@@ -3220,7 +3777,7 @@ namespace Oxide.Plugins
             {
                 if (!DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out parsed))
                 {
-                    arg.ReplyWith("Could not parse that Eastern time. Example: nrp.faketime eastern 2026-10-30 20:00");
+                    arg.ReplyWith("Could not parse that Eastern time. Example: nspvp.faketime eastern 2026-10-30 20:00");
                     return;
                 }
                 try { fakeUtc = ToUtc(parsed); }
@@ -3234,7 +3791,7 @@ namespace Oxide.Plugins
             {
                 if (!DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out parsed))
                 {
-                    arg.ReplyWith("Could not parse that UTC time. Example: nrp.faketime 2026-11-02T07:59:00Z");
+                    arg.ReplyWith("Could not parse that UTC time. Example: nspvp.faketime 2026-11-02T07:59:00Z");
                     return;
                 }
                 fakeUtc = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
@@ -3243,7 +3800,7 @@ namespace Oxide.Plugins
             EnsureRuleset();
             PrintWarning(forceFullPvp
                 ? "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). Full PvP weekend force is ON, so the server stays on the PvP weekend and TruePVE keeps the normal ruleset path. The test clock does not turn that off. Shield drain still uses the real clock."
-                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. The Giant Excavator boost follows this clock until nrp.faketime clear.");
+                : "PvP TEST CLOCK is " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + "). TruePVE follows it in memory only. TruePVE.json is not changed. Shield drain still uses the real clock. The Giant Excavator boost follows this clock until nspvp.faketime clear.");
             arg.ReplyWith("Test clock set to " + fakeUtc.Value.ToString("u") + " (" + FormatEdge(fakeUtc.Value) + ").");
         }
 
@@ -3259,7 +3816,7 @@ namespace Oxide.Plugins
         }
 
         // Offline grace while the test switch is on. Off, or on with no minute argument,
-        // this is the configured grace. "nsraid.forcepvp on 1" replaces it until off or reload.
+        // this is the configured grace. "nspvp.forcepvp on 1" replaces it until off or reload.
         private int EffectiveOfflineGraceMinutes()
         {
             if (forceOfflinePvp && forceOfflineGraceMinutes.HasValue)
@@ -3280,25 +3837,25 @@ namespace Oxide.Plugins
             DateTime start, end;
             bool realActive;
             Weekend(DateTime.UtcNow, out start, out end, out realActive);
-            PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend is ON for offline protection only. Effective grace minutes: "
+            PrintWarning("NightshadePVPWeekend TEST: forced PvP weekend is ON for offline protection only. Effective grace minutes: "
                 + grace + ". Real weekend: " + (realActive ? "active" : "inactive")
                 + ". This switch does not change TruePVE mode, TruePVE reloads, or Giant Excavator speed. "
-                + (forceFullPvp ? "Full server force is also ON (nsraid.pvpweekend). " : "In memory only. ")
-                + "Turn it off with nsraid.forcepvp off.");
+                + (forceFullPvp ? "Full server force is also ON (nspvp.pvpweekend). " : "In memory only. ")
+                + "Turn it off with nspvp.forcepvp off.");
         }
 
         private string ForcePvpStatus()
         {
             DateTime start, end;
             bool realActive;
-            // Real clock on purpose. nrp.faketime and the force switch must not change this line.
+            // Real clock on purpose. nspvp.faketime and the force switch must not change this line.
             Weekend(DateTime.UtcNow, out start, out end, out realActive);
             int grace = EffectiveOfflineGraceMinutes();
             if (grace < 0) grace = 0;
             bool configOn = settings != null && settings.ForcePvpWeekendForTesting;
             string full = forceFullPvp
-                ? "\nFull server force is ON (nsraid.pvpweekend). That switch does change TruePVE, the excavator, and API_IsPvPActive."
-                : "\nTruePVE, excavator speed, and API_IsPvPActive are unchanged by this protection-only switch. Full server force: nsraid.pvpweekend status.";
+                ? "\nFull server force is ON (nspvp.pvpweekend). That switch does change TruePVE, the excavator, and API_IsPvPActive."
+                : "\nTruePVE, excavator speed, and API_IsPvPActive are unchanged by this protection-only switch. Full server force: nspvp.pvpweekend status.";
             return "Force PvP weekend (offline protection only): " + (forceOfflinePvp ? "ON" : "OFF")
                 + "\nEffective grace minutes: " + grace
                 + "\nReal weekend: " + (realActive ? "active" : "inactive")
@@ -3315,20 +3872,20 @@ namespace Oxide.Plugins
         private string HandleForcePvp(string[] args)
         {
             if (args == null || args.Length == 0 || string.IsNullOrEmpty(args[0]))
-                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    nsraid.forcepvp full on|off|status    or    nsraid.pvpweekend on|off|status";
+                return "Usage: nspvp.forcepvp on [graceMinutes] | off | status    or    nspvp.forcepvp full on|off|status    or    nspvp.pvpweekend on|off|status";
             string action = args[0];
             if (action.Equals("full", StringComparison.OrdinalIgnoreCase))
                 return HandleFullPvp(ShiftArgs(args));
             if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
             {
                 if (args.Length != 1)
-                    return "Usage: nsraid.forcepvp status";
+                    return "Usage: nspvp.forcepvp status";
                 return ForcePvpStatus();
             }
             if (action.Equals("off", StringComparison.OrdinalIgnoreCase))
             {
                 if (args.Length != 1)
-                    return "Usage: nsraid.forcepvp off";
+                    return "Usage: nspvp.forcepvp off";
                 bool wasOn = forceOfflinePvp;
                 forceOfflinePvp = false;
                 forceOfflineGraceMinutes = null;
@@ -3338,20 +3895,20 @@ namespace Oxide.Plugins
                     string extra = settings != null && settings.ForcePvpWeekendForTesting
                         ? " Config \"Force PvP weekend for testing\" is still true, so a reload turns this back on."
                         : "";
-                    PrintWarning("NightshadeRaidProtection TEST: forced PvP weekend for offline protection is OFF. Offline protection follows the real Eastern weekend again. TruePVE and the Giant Excavator were not changed." + extra + (forceFullPvp ? " Full server force is still ON." : ""));
+                    PrintWarning("NightshadePVPWeekend TEST: forced PvP weekend for offline protection is OFF. Offline protection follows the real Eastern weekend again. TruePVE and the Giant Excavator were not changed." + extra + (forceFullPvp ? " Full server force is still ON." : ""));
                 }
                 return ForcePvpStatus();
             }
             if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
-                return "Usage: nsraid.forcepvp on [graceMinutes] | off | status    or    nsraid.forcepvp full on|off|status    or    nsraid.pvpweekend on|off|status";
+                return "Usage: nspvp.forcepvp on [graceMinutes] | off | status    or    nspvp.forcepvp full on|off|status    or    nspvp.pvpweekend on|off|status";
             if (args.Length > 2)
-                return "Usage: nsraid.forcepvp on [graceMinutes]";
+                return "Usage: nspvp.forcepvp on [graceMinutes]";
             int? grace = null;
             if (args.Length == 2)
             {
                 int minutes;
                 if (!int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out minutes) || minutes < 0 || minutes > MaxForceGraceMinutes)
-                    return "Grace minutes must be a whole number from 0 to 10080. Example: nsraid.forcepvp on 1";
+                    return "Grace minutes must be a whole number from 0 to 10080. Example: nspvp.forcepvp on 1";
                 grace = minutes;
             }
             forceOfflinePvp = true;
@@ -3483,7 +4040,7 @@ namespace Oxide.Plugins
         private string HandleFullPvp(string[] args)
         {
             if (args == null || args.Length != 1 || string.IsNullOrEmpty(args[0]))
-                return "Usage: nsraid.pvpweekend on | off | status    or    nsraid.forcepvp full on|off|status";
+                return "Usage: nspvp.pvpweekend on | off | status    or    nspvp.forcepvp full on|off|status";
             string action = args[0];
             if (action.Equals("status", StringComparison.OrdinalIgnoreCase))
                 return FullPvpStatus();
@@ -3498,13 +4055,13 @@ namespace Oxide.Plugins
                     string target;
                     string fileRuleset;
                     DescribeTruePve(out realActive, out mode, out target, out fileRuleset);
-                    PrintWarning("NightshadeRaidProtection: FULL PvP weekend force is OFF. The Eastern schedule is in use again. Real weekend: "
+                    PrintWarning("NightshadePVPWeekend: FULL PvP weekend force is OFF. The Eastern schedule is in use again. Real weekend: "
                         + (realActive ? "active" : "inactive") + ". Effective TruePVE mode: " + mode + " (" + target + ").");
                 }
                 return FullPvpStatus();
             }
             if (!action.Equals("on", StringComparison.OrdinalIgnoreCase))
-                return "Usage: nsraid.pvpweekend on | off | status    or    nsraid.forcepvp full on|off|status";
+                return "Usage: nspvp.pvpweekend on | off | status    or    nspvp.forcepvp full on|off|status";
             ApplyFullForce(true);
             WarnFullForce(true);
             return FullPvpStatus();
@@ -3521,9 +4078,9 @@ namespace Oxide.Plugins
             string target;
             string fileRuleset;
             DescribeTruePve(out realActive, out mode, out target, out fileRuleset);
-            PrintWarning("NightshadeRaidProtection: FULL PvP weekend force is ON. Real weekend: "
+            PrintWarning("NightshadePVPWeekend: FULL PvP weekend force is ON. Real weekend: "
                 + (realActive ? "active" : "inactive") + ". Effective TruePVE mode: " + mode + " (" + target
-                + "). Saved in config \"Force full PvP weekend\". Turn it off with nsraid.pvpweekend off.");
+                + "). Saved in config \"Force full PvP weekend\". Turn it off with nspvp.pvpweekend off.");
         }
 
         #endregion

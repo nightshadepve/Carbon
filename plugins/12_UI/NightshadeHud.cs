@@ -30,7 +30,16 @@ namespace Oxide.Plugins
         private const string BadgeBgName = "NightshadeHud.BadgeBg";
         private const string BadgeName = "NightshadeHud.Badge";
 
-        [PluginReference] private Plugin NightshadeRaidProtection;
+        [PluginReference] private Plugin NightshadePVPWeekend;
+
+        // plugins.Find avoids a missing-plugin warning after the rename. The old name still answers if it is loaded.
+        private Plugin WeekendPlugin()
+        {
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
+            return null;
+        }
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
         [PluginReference("Raidable Bases")] private Plugin RaidableBases;
         [PluginReference] private Plugin ArmoredTrain;
@@ -1148,7 +1157,7 @@ namespace Oxide.Plugins
         private bool CombatPvp()
         {
             if (purge) return true;
-            return CallBool(NightshadeRaidProtection, "API_IsPvPActive");
+            return CallBool(WeekendPlugin(), "API_IsPvPActive");
         }
 
         private string ClockText()
@@ -1194,14 +1203,14 @@ namespace Oxide.Plugins
                 color = Hex(config.CountdownIdle);
                 return;
             }
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
             {
                 text = "PvP unavailable";
                 color = Hex(config.MutedColor, config.InactiveAlpha);
                 return;
             }
-            bool active = CallBool(NightshadeRaidProtection, "API_IsPvPActive");
-            double seconds = ToDouble(NightshadeRaidProtection.Call("API_SecondsUntilPvPChange"));
+            bool active = CallBool(WeekendPlugin(), "API_IsPvPActive");
+            double seconds = ToDouble(WeekendPlugin().Call("API_SecondsUntilPvPChange"));
             // -1 means the full-server force is holding PvP open with no scheduled end.
             if (active && seconds < 0d) text = "PVP";
             else text = active ? "PVP \u00B7 ends in " + FormatDur(seconds) : "PvP in " + FormatDur(seconds);
@@ -1210,8 +1219,8 @@ namespace Oxide.Plugins
 
         private double CountdownSeconds()
         {
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded) return 3600d;
-            return Math.Max(0d, ToDouble(NightshadeRaidProtection.Call("API_SecondsUntilPvPChange")));
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded) return 3600d;
+            return Math.Max(0d, ToDouble(WeekendPlugin().Call("API_SecondsUntilPvPChange")));
         }
 
         private void ShieldLine(BasePlayer player, out string text, out string color)
@@ -1222,13 +1231,13 @@ namespace Oxide.Plugins
                 color = Hex(config.MutedColor, config.InactiveAlpha);
                 return;
             }
-            if (player == null || NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
             {
                 text = "Shield: \u2014";
                 color = Hex(config.MutedColor, config.InactiveAlpha);
                 return;
             }
-            object raw = NightshadeRaidProtection.Call("API_GetPlayerShield", player);
+            object raw = WeekendPlugin().Call("API_GetPlayerShield", player);
             string state = DictString(raw, "state") ?? "none";
             double seconds = ToDouble(DictValue(raw, "seconds"));
             if (state == "active")
@@ -1251,9 +1260,9 @@ namespace Oxide.Plugins
         {
             text = string.Empty;
             color = Hex(config.MutedColor, config.InactiveAlpha);
-            if (!config.ShowShield || player == null || NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (!config.ShowShield || player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
                 return;
-            object raw = NightshadeRaidProtection.Call("API_GetPlayerShield", player);
+            object raw = WeekendPlugin().Call("API_GetPlayerShield", player);
             string state = DictString(raw, "state") ?? "none";
             if (state != "active" && state != "queued") return;
             bool draining = DictBool(raw, "draining") || state == "active";
@@ -1329,15 +1338,15 @@ namespace Oxide.Plugins
 
         private void DebugHud(BasePlayer player)
         {
-            object activeRaw = NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded ? NightshadeRaidProtection.Call("API_IsPvPActive") : null;
-            object secondsRaw = NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded ? NightshadeRaidProtection.Call("API_SecondsUntilPvPChange") : null;
-            object weekendRaw = NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded ? NightshadeRaidProtection.Call("API_GetWeekend") : null;
-            object shieldRaw = NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded ? NightshadeRaidProtection.Call("API_GetPlayerShield", player) : null;
+            object activeRaw = WeekendPlugin() != null && WeekendPlugin().IsLoaded ? WeekendPlugin().Call("API_IsPvPActive") : null;
+            object secondsRaw = WeekendPlugin() != null && WeekendPlugin().IsLoaded ? WeekendPlugin().Call("API_SecondsUntilPvPChange") : null;
+            object weekendRaw = WeekendPlugin() != null && WeekendPlugin().IsLoaded ? WeekendPlugin().Call("API_GetWeekend") : null;
+            object shieldRaw = WeekendPlugin() != null && WeekendPlugin().IsLoaded ? WeekendPlugin().Call("API_GetPlayerShield", player) : null;
             BuildingPrivlidge tc = player.GetBuildingPrivilege();
             bool authed = tc != null && tc.authorizedPlayers != null && tc.authorizedPlayers.Contains(player.userID);
             string ruleset = DictString(weekendRaw, "ruleset") ?? "(no weekend result)";
             player.ChatMessage("<color=#b084ff>[Nightshade HUD]</color> mode " + StateOf(player)
-                + " | raid plugin " + (NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded ? "loaded" : "MISSING"));
+                + " | pvp weekend plugin " + (WeekendPlugin() != null && WeekendPlugin().IsLoaded ? "loaded" : "MISSING"));
             player.ChatMessage("PvP active raw: " + (activeRaw == null ? "null" : activeRaw.GetType().Name + " " + activeRaw)
                 + " | seconds raw: " + (secondsRaw == null ? "null" : secondsRaw.GetType().Name + " " + secondsRaw)
                 + " | ruleset: " + ruleset);
@@ -1384,7 +1393,7 @@ namespace Oxide.Plugins
             else if (name == "Dungeon Events") RefreshDungeons();
             else if (name == "DefendableHomes") { defend = CountDefend(); MarkEvents(); }
             else if (name == "Nightshade Purge Status") { purge = CallBool(PurgeStatus, "API_IsPurgeActive"); MarkEvents(); PushModeLine(); }
-            else if (name == "NightshadeRaidProtection") PushModeLine();
+            else if (name == "NightshadePVPWeekend" || name == "NightshadeRaidProtection") PushModeLine();
         }
 
         private void OnNightshadePvPStarted(long startUtcTicks, long endUtcTicks) => PushModeLine();
