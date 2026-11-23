@@ -72,7 +72,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_LOOT_TESTS
-    [Info("NightshadeLootProtection", "Nightshade", "1.3.1")]
+    [Info("NightshadeLootProtection", "Nightshade", "1.3.2")]
     [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
     public class NightshadeLootProtection : CarbonPlugin
     {
@@ -468,7 +468,8 @@ namespace Carbon.Plugins
             {
                 PrintWarning("NightshadeLootProtection could not copy unifiedlootprotection.admin grants: " + ex.Message);
             }
-            Puts("NightshadeLootProtection permissions: copied unifiedlootprotection.admin onto nightshadelootprotection.admin for " + users + " users and " + groups + " groups. Nothing was granted to anyone who did not already have the old permission. The old permission is still accepted.");
+            if (users > 0 || groups > 0)
+                Puts("NightshadeLootProtection: copied legacy admin permission to " + users + " users, " + groups + " groups.");
         }
 
         private bool HasAdminPerm(BasePlayer player)
