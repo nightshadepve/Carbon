@@ -72,7 +72,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_LOOT_TESTS
-    [Info("NightshadeLootProtection", "Nightshade", "1.3.1")]
+    [Info("NightshadeLootProtection", "Nightshade", "1.3.3")]
     [Description("Team-shared player containers. Everyone else has to destroy the container. Raid protection still blocks that damage.")]
     public class NightshadeLootProtection : CarbonPlugin
     {
@@ -184,6 +184,12 @@ namespace Carbon.Plugins
             // Off by default. The save-timer cleanup stays silent unless this is true.
             [JsonProperty("Log cleanup summary")]
             public bool LogCleanupSummary { get; set; } = false;
+
+            // Off by default. BradleyDrops and HeliSignals keep bradley_crate,
+            // heli_crate, their hackable crates, and the gibs. Turning this on
+            // makes this plugin apply its own lock to those entities.
+            [JsonProperty("Claim Bradley and patrol heli crates")]
+            public bool ClaimBradleyAndHeliCrates { get; set; } = false;
         }
 
         private class TrapTeamSafetyConfig
@@ -477,7 +483,8 @@ namespace Carbon.Plugins
             {
                 PrintWarning("NightshadeLootProtection could not copy unifiedlootprotection.admin grants: " + ex.Message);
             }
-            Puts("NightshadeLootProtection permissions: copied unifiedlootprotection.admin onto nightshadelootprotection.admin for " + users + " users and " + groups + " groups. Nothing was granted to anyone who did not already have the old permission. The old permission is still accepted.");
+            if (users > 0 || groups > 0)
+                Puts("NightshadeLootProtection: copied legacy admin permission to " + users + " users, " + groups + " groups.");
         }
 
         private bool HasAdminPerm(BasePlayer player)
@@ -1486,12 +1493,52 @@ namespace Carbon.Plugins
         private object CanLootEntity(BasePlayer player, DroppedItemContainer container) => CheckLootAccess(player, container);
         private object CanLootEntity(BasePlayer player, WorldItem item) => CheckLootAccess(player, item);
 
+        // Carbon treats any non-null CanLootEntity result as "do not open".
+        // BradleyDrops and HeliSignals already return that for someone else's
+        // bradley_crate / heli_crate. A false here would replace their lock
+        // (Rust team and TC rules instead of their owner, team, and clan rules).
+        // Hackable crates from those drops are named with the profile, and
+        // CanHackCrate would otherwise overwrite OwnerID with whoever tried to hack.
+        private bool DeferBradleyHeliLoot(BaseEntity entity)
+        {
+            if (_config != null && _config.ClaimBradleyAndHeliCrates) return false;
+            return IsBradleyOrHeliDrop(entity);
+        }
+
+        private static bool IsBradleyOrHeliDrop(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            if (entity is LockedByEntCrate || entity is HelicopterDebris || entity is ServerGib)
+                return true;
+            string prefab = entity.ShortPrefabName;
+            if (!string.IsNullOrEmpty(prefab))
+            {
+                if (prefab.Equals("bradley_crate", StringComparison.OrdinalIgnoreCase) ||
+                    prefab.Equals("heli_crate", StringComparison.OrdinalIgnoreCase) ||
+                    prefab.Equals("servergibs_bradley", StringComparison.OrdinalIgnoreCase) ||
+                    prefab.Equals("servergibs_patrolhelicopter", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            if (entity is HackableLockedCrate)
+                return IsBradleyOrHeliProfileName(entity._name);
+            return false;
+        }
+
+        private static bool IsBradleyOrHeliProfileName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name.IndexOf("Bradley", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("Heli", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return false;
+        }
+
         private object CheckLootAccess(BasePlayer player, BaseEntity entity)
         {
             if (player == null || entity == null) return null;
             // NightshadeDeathBox owns these containers. Any non-null CanLootEntity
             // result aborts PlayerOpenLoot, so this plugin must not add a false.
             if (IsNightshadeDeathBox(entity)) return null;
+            if (DeferBradleyHeliLoot(entity)) return null;
             if (IsPlayerPlacedStorage(entity))
                 return DecidePlayerPlaced(player, entity, true);
             if (IsWeekendPvp(player))
@@ -1635,6 +1682,7 @@ namespace Carbon.Plugins
             if (!_config.HackableCrate.Enabled) return;
             if (crate == null || player == null) return;
             if (SkipEventOwnership(player)) return;
+            if (DeferBradleyHeliLoot(crate)) return;
 
             // Set OwnerID directly on the crate so storage protection handles it automatically
             crate.OwnerID = player.userID;
@@ -1886,6 +1934,7 @@ namespace Carbon.Plugins
         {
             if (entity == null || player == null) return null;
             if (IsNightshadeDeathBox(entity)) return null;
+            if (DeferBradleyHeliLoot(entity)) return null;
 
             // Vehicles stay on their own rules. A player-owned storage box still cannot be picked up by a stranger.
             if (entity is BaseVehicle || entity is BaseVehicleModule) return null;

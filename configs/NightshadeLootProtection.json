@@ -76,5 +76,6 @@
   "TurretTcAuth": {
     "Enabled": true
   },
-  "Log cleanup summary": false
+  "Log cleanup summary": false,
+  "Claim Bradley and patrol heli crates": false
 }
