@@ -16,7 +16,7 @@ namespace Oxide.Plugins
         // Same pairing as NightshadeExcavatorBoost.EnginePairMeters. DieselEngine.EngineOn broadcasts at 20m.
         private const float EnginePairMeters = 50f;
 
-        [PluginReference] private Plugin NightshadeRaidProtection;
+        [PluginReference] private Plugin NightshadePVPWeekend;
 
         private bool ownsClock;
         private bool hadClock;
@@ -72,7 +72,7 @@ namespace Oxide.Plugins
             {
                 if (!ownsClock)
                 {
-                    arg.ReplyWith("This plugin is not holding a test clock. nrp.faketime clear resets one set by hand.");
+                    arg.ReplyWith("This plugin is not holding a test clock. nspvp.faketime clear resets one set by hand.");
                     return;
                 }
                 restoreTimer?.Destroy();
@@ -176,7 +176,7 @@ namespace Oxide.Plugins
             Plugin plugin = Protection();
             if (plugin == null)
             {
-                arg.ReplyWith("NightshadeRaidProtection is not loaded.");
+                arg.ReplyWith("NightshadePVPWeekend is not loaded.");
                 return false;
             }
             bool already = ownsClock;
@@ -199,7 +199,7 @@ namespace Oxide.Plugins
             if (when <= 0L)
             {
                 if (!already) { hadClock = savedHad; previousTicks = savedTicks; }
-                arg.ReplyWith("Could not read the weekend edge from NightshadeRaidProtection.");
+                arg.ReplyWith("Could not read the weekend edge from NightshadePVPWeekend.");
                 return false;
             }
             object set = plugin.Call("API_SetTestClockUtcTicks", when);
@@ -227,7 +227,7 @@ namespace Oxide.Plugins
             Plugin plugin = Protection();
             if (plugin == null)
             {
-                Puts("nexttest was holding a test clock but NightshadeRaidProtection is not loaded (" + why + "). If the clock is still on, run nrp.faketime clear.");
+                Puts("nexttest was holding a test clock but NightshadePVPWeekend is not loaded (" + why + "). If the clock is still on, run nspvp.faketime clear.");
                 return;
             }
             try
@@ -381,7 +381,7 @@ namespace Oxide.Plugins
         private string WeekendClause()
         {
             Plugin plugin = Protection();
-            if (plugin == null) return "NightshadeRaidProtection is not loaded.";
+            if (plugin == null) return "NightshadePVPWeekend is not loaded.";
             object active = plugin.Call("API_IsPvPActive");
             bool on = active is bool && (bool)active;
             return "PvP weekend " + (on ? "ACTIVE" : "inactive") + ".";
@@ -395,9 +395,12 @@ namespace Oxide.Plugins
             return value as string ?? "(no answer)";
         }
 
+
         private Plugin Protection()
         {
-            if (NightshadeRaidProtection != null && NightshadeRaidProtection.IsLoaded) return NightshadeRaidProtection;
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
             return null;
         }
 

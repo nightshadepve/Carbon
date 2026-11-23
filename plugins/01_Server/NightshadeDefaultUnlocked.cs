@@ -97,7 +97,7 @@ namespace Oxide.Plugins
             return cycle;
         }
 
-        // Same daily cap as NightshadeRaidProtection.ScheduleBoundary: wake at the
+        // Same daily cap as NightshadePVPWeekend.ScheduleBoundary: wake at the
         // boundary, but at least once a day so a clock or DST correction is not missed.
         public static double WakeSeconds(DateTime utc, DateTime boundaryUtc, int dailyCapSeconds)
         {
@@ -172,7 +172,7 @@ namespace Oxide.Plugins
             return FallbackEastern();
         }
 
-        // Same built-in US Eastern zone NightshadeInfo and NightshadeRaidProtection use
+        // Same built-in US Eastern zone NightshadeInfo and NightshadePVPWeekend use
         // when the host has no America/New_York data: EST (UTC-5), EDT (UTC-4),
         // second Sunday in March 02:00 through first Sunday in November 02:00.
         public static TimeZoneInfo FallbackEastern()

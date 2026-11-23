@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeDeathBox", "Nightshade", "1.0.3")]
+    [Info("NightshadeDeathBox", "Nightshade", "1.0.4")]
     [Description("Puts a player's death loot in owner-only containers during the PvP weekend.")]
     public class NightshadeDeathBox : RustPlugin
     {
@@ -70,8 +70,18 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, float> _nextTell = new Dictionary<ulong, float>();
         private readonly List<DeathDecision> _decisions = new List<DeathDecision>();
         private readonly Dictionary<ulong, List<ulong>> _listedNets = new Dictionary<ulong, List<ulong>>();
+        private readonly Dictionary<ulong, string> _removeReason = new Dictionary<ulong, string>();
 
-        [PluginReference] private Plugin NightshadeRaidProtection;
+        [PluginReference] private Plugin NightshadePVPWeekend;
+
+        // plugins.Find avoids a missing-plugin warning after the rename. The old name still answers if it is loaded.
+        private Plugin WeekendPlugin()
+        {
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
+            return null;
+        }
         [PluginReference] private Plugin Backpacks;
         [PluginReference] private Plugin RaidableBases;
         [PluginReference] private Plugin AbandonedBases;
@@ -131,6 +141,7 @@ namespace Oxide.Plugins
             public int Spawned;
             public int ItemsMoved;
             public float Until;
+            public bool Convert;
             public DeathDecision Decision;
             public List<ulong> CreatedNets = new List<ulong>();
             public List<VanillaMark> Vanilla = new List<VanillaMark>();
@@ -270,9 +281,9 @@ namespace Oxide.Plugins
             _worldReady = true;
             _maintainTimer = timer.Every(60f, Maintain);
             WarnMissingDefaultPermission();
-            Puts("NightshadeDeathBox 1.0.3. Debug logging is " + (_config.DebugLogging ? "on" : "off")
+            Puts("NightshadeDeathBox 1.0.4. Debug logging is " + (_config.DebugLogging ? "on" : "off")
                 + ". Container prefab: " + ContainerPrefabPath()
-                + ". New boxes follow NightshadeRaidProtection.API_IsPvPActive (Eastern weekend, test clock, and nsraid.pvpweekend)."
+                + ". New boxes follow NightshadePVPWeekend.API_IsPvPActive (Eastern weekend, test clock, and nspvp.pvpweekend)."
                 + " Admin locate: nsdeathbox.list [name|steamid], nsdeathbox.tp <netId|index>.");
         }
 
@@ -508,6 +519,7 @@ namespace Oxide.Plugins
                 Spawned = 0,
                 ItemsMoved = 0,
                 Until = Time.realtimeSinceStartup + PendingSeconds,
+                Convert = true,
                 Decision = decision
             };
             _pending[player.userID] = session;
@@ -594,19 +606,19 @@ namespace Oxide.Plugins
         private bool QueryPvp(out string detail)
         {
             detail = "not checked";
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
             {
-                detail = "NightshadeRaidProtection not loaded";
+                detail = "NightshadePVPWeekend not loaded";
                 if (!_raidWarned)
                 {
                     _raidWarned = true;
-                    PrintWarning("NightshadeRaidProtection is not loaded. Only During PvP Weekend is on, so no new death boxes will be created.");
+                    PrintWarning("NightshadePVPWeekend is not loaded. Only During PvP Weekend is on, so no new death boxes will be created.");
                 }
                 return false;
             }
             try
             {
-                object value = NightshadeRaidProtection.Call("API_IsPvPActive");
+                object value = WeekendPlugin().Call("API_IsPvPActive");
                 if (value is bool)
                 {
                     bool active = (bool)value;
@@ -718,7 +730,9 @@ namespace Oxide.Plugins
         {
             if (corpse == null || corpse.IsDestroyed || corpse.net == null) return;
             PendingDeath session;
-            if (!_pending.TryGetValue(corpse.playerSteamID, out session) || session == null || session.Until < Time.realtimeSinceStartup)
+            // A skipped death stays in _pending so the decision can be logged, but Convert
+            // is false. Touching that corpse deletes the vanilla loot. Only a real conversion may move items.
+            if (!_pending.TryGetValue(corpse.playerSteamID, out session) || session == null || !session.Convert || session.Until < Time.realtimeSinceStartup)
                 return;
             if (corpse.containers == null)
             {
@@ -740,6 +754,7 @@ namespace Oxide.Plugins
             {
                 // DoServerDestroy spawns item_drop_backpack unless blockBagDrop is set.
                 corpse.blockBagDrop = true;
+                Puts("Removed vanilla corpse after moving its loot into a death box. owner " + session.Name + " (" + session.UserId.ToString(CultureInfo.InvariantCulture) + ") net " + corpse.net.ID.Value.ToString(CultureInfo.InvariantCulture) + " pos " + FormatPos(corpse.transform.position) + " grid " + GridOf(corpse.transform.position) + " items moved " + moved.ToString(CultureInfo.InvariantCulture) + ".");
                 corpse.Kill();
             }
             else if (!IsEmptyCorpse(corpse))
@@ -762,7 +777,7 @@ namespace Oxide.Plugins
             if (!string.Equals(container.ShortPrefabName, "item_drop_backpack", StringComparison.OrdinalIgnoreCase)) return;
             NoteRecent(container, container.playerSteamID);
             PendingDeath session;
-            if (!_pending.TryGetValue(container.playerSteamID, out session) || session == null || session.Until < Time.realtimeSinceStartup)
+            if (!_pending.TryGetValue(container.playerSteamID, out session) || session == null || !session.Convert || session.Until < Time.realtimeSinceStartup)
                 return;
             if (IsEmpty(container.inventory))
             {
@@ -780,6 +795,12 @@ namespace Oxide.Plugins
         {
             PendingDeath session;
             bool pending = _pending.TryGetValue(ownerId, out session) && session != null && session.Until >= Time.realtimeSinceStartup;
+            if (pending && !session.Convert)
+            {
+                if (_config != null && _config.DebugLogging)
+                    Puts("Left a plugin backpack untouched for " + ownerId.ToString(CultureInfo.InvariantCulture) + ". This death was skipped (" + (session.Decision == null ? "no decision" : session.Decision.Reason) + ").");
+                return;
+            }
             if (!pending)
             {
                 if (!_config.ConvertSeparateBackpacks) return;
@@ -813,6 +834,7 @@ namespace Oxide.Plugins
                     Position = where,
                     GroupId = NextGroup(),
                     Spawned = 0,
+                    Convert = true,
                     Until = Time.realtimeSinceStartup + PendingSeconds
                 };
             }
@@ -872,6 +894,7 @@ namespace Oxide.Plugins
             int moved = MoveItems(session, items);
             if (IsEmpty(source.inventory))
             {
+                Puts("Removed dropped backpack after moving its loot into a death box. owner " + session.Name + " (" + session.UserId.ToString(CultureInfo.InvariantCulture) + ") net " + source.net.ID.Value.ToString(CultureInfo.InvariantCulture) + " pos " + FormatPos(source.transform.position) + " grid " + GridOf(source.transform.position) + " items moved " + moved.ToString(CultureInfo.InvariantCulture) + ".");
                 source.Kill();
             }
             else
@@ -1005,7 +1028,7 @@ namespace Oxide.Plugins
             if (entity.net == null)
             {
                 entity.Kill();
-                PrintWarning("Death box spawned without a net id for " + session.UserId + ".");
+                PrintWarning("Death box spawned without a net id for " + session.UserId + " and was discarded.");
                 return null;
             }
 
@@ -1229,6 +1252,7 @@ namespace Oxide.Plugins
             if (!IsTracked(entity)) return;
             if (!EntityEmpty(entity)) return;
             SuppressDestroyLoot(entity);
+            NoteRemoval(entity, "owner emptied it");
             entity.Kill();
         }
 
@@ -1255,9 +1279,31 @@ namespace Oxide.Plugins
             if (entity == null || entity.net == null) return;
             BoxRecord record;
             if (!_byNet.TryGetValue(entity.net.ID.Value, out record)) return;
+            string reason;
+            if (!_removeReason.TryGetValue(entity.net.ID.Value, out reason) || string.IsNullOrEmpty(reason))
+                reason = "entity destroyed";
+            _removeReason.Remove(entity.net.ID.Value);
+            LogRemoval(record, entity, reason);
             _byNet.Remove(entity.net.ID.Value);
             if (!GroupHasBoxes(record.GroupId)) KillMarker(record.GroupId);
             if (_worldReady) SaveData();
+        }
+
+        private void NoteRemoval(BaseEntity entity, string reason)
+        {
+            if (entity == null || entity.net == null || string.IsNullOrEmpty(reason)) return;
+            _removeReason[entity.net.ID.Value] = reason;
+        }
+
+        private void LogRemoval(BoxRecord record, BaseEntity entity, string reason)
+        {
+            ulong netId = entity != null && entity.net != null ? entity.net.ID.Value : (record == null ? 0UL : record.NetId);
+            Vector3 position = entity != null && entity.transform != null
+                ? entity.transform.position
+                : (record == null ? Vector3.zero : new Vector3(record.X, record.Y, record.Z));
+            string name = record == null || string.IsNullOrEmpty(record.OwnerName) ? "unknown" : record.OwnerName;
+            string id = record == null || record.OwnerId == 0UL ? "unknown" : record.OwnerId.ToString(CultureInfo.InvariantCulture);
+            Puts("Removed death container. owner " + name + " (" + id + ") net " + netId.ToString(CultureInfo.InvariantCulture) + " pos " + FormatPos(position) + " grid " + GridOf(position) + " reason " + reason + ".");
         }
 
         private bool GroupHasBoxes(long groupId)
@@ -1311,6 +1357,7 @@ namespace Oxide.Plugins
                 BoxRecord record;
                 if (_byNet.TryGetValue(missing[i], out record))
                 {
+                    LogRemoval(record, null, "entity missing");
                     _byNet.Remove(missing[i]);
                     if (record != null && !GroupHasBoxes(record.GroupId)) KillMarker(record.GroupId);
                 }
@@ -1324,6 +1371,7 @@ namespace Oxide.Plugins
                 bool expired = lifeHours > 0d && !EntityEmpty(entity);
                 if (expired && TryRecord(entity, out record)) expiredOwners.Add(record.OwnerId);
                 SuppressDestroyLoot(entity);
+                NoteRemoval(entity, expired ? "lifetime expired" : "empty during upkeep");
                 entity.Kill();
             }
             foreach (ulong ownerId in expiredOwners)
@@ -1435,6 +1483,7 @@ namespace Oxide.Plugins
             }
             for (int i = 0; i < kill.Count; i++)
             {
+                NoteRemoval(kill[i], "map wipe");
                 kill[i].Kill();
             }
             if (kill.Count > 0) Puts("Removed " + kill.Count + " death boxes left on the new map.");
@@ -2056,7 +2105,7 @@ namespace Oxide.Plugins
                 return "No active death containers. Total: 0";
             }
             StringBuilder builder = new StringBuilder();
-            builder.Append("NightshadeDeathBox 1.0.3");
+            builder.Append("NightshadeDeathBox 1.0.4");
             if (!string.IsNullOrEmpty(filter))
                 builder.Append(" matching \"").Append(OneLine(filter, 64)).Append("\"");
             for (int i = 0; i < count; i++)
@@ -2179,6 +2228,8 @@ namespace Oxide.Plugins
 
         #region Decisions
 
+        // Records the skip. Convert stays false, so corpse and backpack hooks must not
+        // move items or kill the body while this entry is alive.
         private void HoldDecision(ulong userId, DeathDecision decision)
         {
             PendingDeath holder = new PendingDeath
@@ -2301,12 +2352,16 @@ namespace Oxide.Plugins
                 tail = "protected " + decision.ItemsMoved.ToString(CultureInfo.InvariantCulture)
                     + " items in " + boxes + " " + noun + ": " + decision.Created + ". Vanilla left: " + decision.Vanilla + ".";
             }
-            else
+            else if (decision.Reason == "no protected container")
             {
                 string vanilla = string.IsNullOrEmpty(decision.Vanilla) || decision.Vanilla == "none"
                     ? "Loot left vanilla."
                     : "Loot left vanilla: " + decision.Vanilla + ".";
                 tail = "skipped (" + decision.Reason + "). " + vanilla;
+            }
+            else
+            {
+                tail = "skipped (" + decision.Reason + "). Inventory, corpse, and backpack were not touched.";
             }
             return decision.Name + " (" + decision.UserId.ToString(CultureInfo.InvariantCulture) + ") at " + decision.Place
                 + ": pvp=" + pvp + " (" + decision.PvpDetail + ") perm=" + perm + " -> " + tail;
@@ -2334,7 +2389,7 @@ namespace Oxide.Plugins
             try { granted = permission.GroupHasPermission("default", PermUse); }
             catch { granted = false; }
             StringBuilder builder = new StringBuilder();
-            builder.Append("NightshadeDeathBox 1.0.3");
+            builder.Append("NightshadeDeathBox 1.0.4");
             builder.Append("\nadmin: nsdeathbox.list [name|steamid]   nsdeathbox.tp <netId|index> (player F1 only)");
             builder.Append("\ncontainer prefab: ").Append(ContainerPrefabPath());
             builder.Append("\ndefault group nightshadedeathbox.use: ").Append(granted ? "yes" : "NO");

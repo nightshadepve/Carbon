@@ -127,7 +127,16 @@ namespace Carbon.Plugins
         private const string TurretName = "tcturretauth";
         private const string WipeName = "wipe";
 
-        [PluginReference] private Plugin RaidableBases, TruePVE, NightshadeRaidProtection, NightshadeDeathBox;
+        [PluginReference] private Plugin RaidableBases, TruePVE, NightshadePVPWeekend, NightshadeDeathBox;
+
+        // plugins.Find avoids a missing-plugin warning after the rename. The old name still answers if it is loaded.
+        private Plugin WeekendPlugin()
+        {
+            if (NightshadePVPWeekend != null && NightshadePVPWeekend.IsLoaded) return NightshadePVPWeekend;
+            Plugin legacy = plugins.Find("NightshadeRaidProtection");
+            if (legacy != null && legacy.IsLoaded) return legacy;
+            return null;
+        }
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
 
         #endregion
@@ -821,17 +830,17 @@ namespace Carbon.Plugins
         private bool TryGetRaidWeekendState(out bool active)
         {
             active = false;
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded) return false;
-            var value = NightshadeRaidProtection.Call("API_IsPvPActive");
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded) return false;
+            var value = WeekendPlugin().Call("API_IsPvPActive");
             if (!(value is bool)) return false;
             active = (bool)value;
             return true;
         }
 
-        // The real Eastern clock is an additional guard: nrp.faketime modifies
+        // The real Eastern clock is an additional guard: nspvp.faketime modifies
         // NRP's published window, but its damage blocker uses the REAL clock.
         // Never open storage on a weekday just because the test clock is active.
-        // nsraid.pvpweekend is the persisted full-server force. API_IsPvPActive is
+        // nspvp.pvpweekend is the persisted full-server force. API_IsPvPActive is
         // true for it. Event loot follows that window. Player-placed storage stays
         // closed to non-teammates unless OpenPlayerStorageToNonTeammates is true.
         private bool IsWeekendPvp(BasePlayer player = null)
@@ -853,8 +862,8 @@ namespace Carbon.Plugins
 
         private bool IsFullPvPForced()
         {
-            if (NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded) return false;
-            var value = NightshadeRaidProtection.Call("API_IsFullPvPForced");
+            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded) return false;
+            var value = WeekendPlugin().Call("API_IsFullPvPForced");
             return value is bool && (bool)value;
         }
 
@@ -905,14 +914,14 @@ namespace Carbon.Plugins
             return false;
         }
 
-        // Outsiders are blocked when NightshadeRaidProtection would block their damage.
+        // Outsiders are blocked when NightshadePVPWeekend would block their damage.
         // Attacker 0 keeps TC authorization from clearing the block. The raid plugin
         // uses the container's own building, not the nearest cupboard.
         private bool IsRaidProtectedAgainstOutsiders(BaseEntity entity)
         {
-            if (entity == null || NightshadeRaidProtection == null || !NightshadeRaidProtection.IsLoaded)
+            if (entity == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
                 return false;
-            var result = NightshadeRaidProtection.Call("API_IsEntityProtected", entity, 0UL);
+            var result = WeekendPlugin().Call("API_IsEntityProtected", entity, 0UL);
             return result is bool && (bool)result;
         }
 
@@ -1355,7 +1364,7 @@ namespace Carbon.Plugins
         #region Damage Tracking
 
         // Event damage tracking only. This does not block damage to player containers.
-        // NightshadeRaidProtection is what stops damage while a base is protected.
+        // NightshadePVPWeekend is what stops damage while a base is protected.
         private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
             if (entity == null || info == null) return null;
