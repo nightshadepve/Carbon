@@ -1,0 +1,18 @@
+{
+  "Prefix": "<color=#c9b27c>[Sort]</color> ",
+  "Sort": "Sort",
+  "Title": "SORT BY",
+  "Close": "X",
+  "ModeCategorySkin": "Category + Skin",
+  "ModeCategory": "Category",
+  "ModeName": "Name (A-Z)",
+  "ModeAmount": "Amount (biggest first)",
+  "Merge": "Merge partial stacks",
+  "Remember": "Remember my choice",
+  "SortNow": "SORT NOW",
+  "Cancel": "Cancel",
+  "Transfer": "TRANSFER ALL",
+  "NoPermission": "You do not have permission to do that.",
+  "Moved": "Moved {0} stacks. {1} could not fit.",
+  "NoneMoved": "Nothing could be moved into that container."
+}
