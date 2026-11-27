@@ -13,13 +13,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.8.2")]
+    [Info("NightshadeShop", "Nightshade", "1.8.3")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, claimable kits, and an RP coin bank")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.8.2";
+        private const string PluginVersion = "1.8.3";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
@@ -71,7 +71,11 @@ namespace Oxide.Plugins
         private const string FourDayKitPng = "VIP_4Day.png";
         private readonly HashSet<string> localPngQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> remoteIconWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool imageLibraryWarned;
+        private int iconLibTries;
+        private bool iconLibWaiting;
+        private const int IconMaxBytes = 3145728;
         private readonly HashSet<ulong> bankBusy = new HashSet<ulong>();
         private BankLogFile bankLog;
         private bool bankLogUnreadable;
@@ -715,10 +719,14 @@ namespace Oxide.Plugins
             int migrated = 0;
             foreach (var cat in data.Categories)
                 if (MigrateCategory(cat)) migrated++;
-            if (migrated > 0)
+            bool icons = StripRemoteIcons();
+            if (migrated > 0 || icons)
             {
                 SaveData();
-                Puts("NightshadeShop migrated " + migrated + " categor" + (migrated == 1 ? "y" : "ies") + " in Shop.json (Events tab and admin-only flags).");
+                if (migrated > 0)
+                    Puts("NightshadeShop migrated " + migrated + " categor" + (migrated == 1 ? "y" : "ies") + " in Shop.json (Events tab and admin-only flags).");
+                if (icons)
+                    Puts("NightshadeShop replaced remote icon URLs with local png file names.");
             }
         }
 
@@ -799,8 +807,10 @@ namespace Oxide.Plugins
             if (ApplyStoredKitDefaults()) changed = true;
             foreach (var kit in kitFile.Kits)
             {
+                if (kit == null) continue;
                 if (kit.Items == null) kit.Items = new List<KitStack>();
                 if (kit.Permission == null) kit.Permission = "";
+                kit.Icon = LocalIconName(kit.Icon, ref changed);
                 RegisterPerm(kit.Permission);
             }
             if (changed) SaveKits();
@@ -3005,16 +3015,17 @@ namespace Oxide.Plugins
             c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiImageComponent { ItemId = def.itemid, SkinId = skin, BlocksRaycast = false }, rect } });
         }
 
-        // URL, workshop skin ID, item shortname, or a png in data/Nightshade/NightshadeShop/Icons/.
+        // Workshop skin ID, item shortname, or a png in data/Nightshade/NightshadeShop/Icons/.
         private void ListIcon(CuiElementContainer c, string parent, string icon, ItemDefinition fallback, ulong fallbackSkin, CuiRectTransformComponent rect)
         {
+            if (!string.IsNullOrEmpty(icon) && (icon.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || icon.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (remoteIconWarned.Add(icon.Trim()))
+                    PrintWarning("NightshadeShop is not downloading " + icon.Trim() + ". Use a png in data/Nightshade/NightshadeShop/Icons/. Showing the item icon.");
+                icon = "";
+            }
             if (!string.IsNullOrEmpty(icon))
             {
-                if (icon.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                {
-                    c.Add(new CuiElement { Name = CuiHelper.GetGuid(), Parent = parent, Components = { new CuiRawImageComponent { Url = icon, Color = "1 1 1 1", BlocksRaycast = false }, rect } });
-                    return;
-                }
                 if (IsLocalPng(icon))
                 {
                     string png = LocalPngId(icon);
@@ -3661,7 +3672,7 @@ namespace Oxide.Plugins
             Field(c, box, tc, 242, "DAILY LIMIT", item.DailyLimit.ToString(), cmd + " daily", x);
             Field(c, box, tc, 202, "WIPE LIMIT", item.WipeLimit.ToString(), cmd + " wipe", x);
             Field(c, box, tc, 162, "CARD ICON", item.Icon, cmd + " icon", x);
-            Label(c, box, "URL, skin ID, shortname, or Icons/file.png. Empty = item icon.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
+            Label(c, box, "Skin ID, shortname, or Icons/file.png. Empty = item icon. Web addresses are not downloaded.", 10, tc.SubText, TextAnchor.UpperLeft, R(175 + x, 144, 460 + x, 160), false);
 
             Label(c, box, "ONE PER PURCHASE", 12, tc.SubText, TextAnchor.MiddleLeft, R(20 + x, 102, 170 + x, 132));
             Btn(c, box, cmd + " one", item.LimitToOne ? tc.Accent : tc.Button, R(175 + x, 102, 275 + x, 132), item.LimitToOne ? "YES" : "NO", 13, item.LimitToOne ? tc.AccentText : tc.ButtonText);
@@ -4306,7 +4317,7 @@ namespace Oxide.Plugins
             string preview = Box(c, box, tc.Panel, R(568, 446, 606, 484));
             ListIcon(c, preview, string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon, Def(FirstKitIcon(kit)), 0, R(4, 4, 34, 34));
             Field(c, box, tc, 410, "PERMISSION", kit.Permission, cmd + " perm", 0, 128);
-            Label(c, box, "Empty = Kits access. vipperk = VIP ONLY. vipxperk = VIPX ONLY. Icon: URL, skin, shortname, or VIP_Daily.png in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
+            Label(c, box, "Empty = Kits access. vipperk = VIP ONLY. vipxperk = VIPX ONLY. Icon: skin, shortname, or VIP_Daily.png in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
             Field(c, box, tc, 350, "COOLDOWN (HOURS)", HoursText(kit.CooldownSeconds), cmd + " cooldown");
             Field(c, box, tc, 310, "MAX USES / WIPE", kit.MaxUsesPerWipe.ToString(), cmd + " uses");
             Label(c, box, "0 uses means no wipe cap. Cooldown still applies.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 288, 560, 308), false);
@@ -4407,8 +4418,7 @@ namespace Oxide.Plugins
 
         private static bool IsLocalPng(string icon) => LocalPngName(icon) != null;
 
-        // ImageLibrary stores the png and GetImage returns the id drawn by CuiRawImageComponent.Png.
-        // The same Call form is used by NightshadeInfo and ServerRewards (file:// for a data-folder png).
+        // ImageLibrary stores the png bytes and GetImage returns the id drawn by CuiRawImageComponent.Png.
         private string LocalPngId(string icon)
         {
             string name = LocalPngName(icon);
@@ -4446,14 +4456,21 @@ namespace Oxide.Plugins
             }
             try
             {
-                if (new FileInfo(path).Length <= 0)
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > IconMaxBytes || !ShopIsPng(bytes))
                 {
                     if (localPngWarned.Add(name))
-                        PrintWarning("NightshadeShop icon file is empty: " + name + ". Using the default icon.");
+                        PrintWarning("NightshadeShop icon is empty, not a png, or larger than 3 MB: " + name + ". Using the default icon.");
                     return;
                 }
-                string url = Path.Combine("file://" + Interface.Oxide.DataDirectory, "Nightshade", "NightshadeShop", "Icons", name);
-                ImageLibrary.Call("AddImage", url, name, 0UL);
+                if (ImageLibrary == null || !ImageLibrary.IsLoaded) return;
+                object added = ImageLibrary.Call("AddImageData", name, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    if (localPngWarned.Add(name))
+                        PrintWarning("ImageLibrary did not accept shop icon " + name + ". Using the default icon.");
+                    return;
+                }
                 localPngQueued.Add(name);
             }
             catch (Exception ex)
@@ -4465,6 +4482,24 @@ namespace Oxide.Plugins
 
         private void PreloadLocalIcons()
         {
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                if (!imageLibraryWarned)
+                {
+                    imageLibraryWarned = true;
+                    PrintWarning("ImageLibrary is not loaded. Local shop icons will use the default icon until it loads.");
+                }
+                if (iconLibTries >= 4 || iconLibWaiting) return;
+                iconLibTries++;
+                iconLibWaiting = true;
+                float delay = iconLibTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    iconLibWaiting = false;
+                    if (!unloading) PreloadLocalIcons();
+                });
+                return;
+            }
             EnsureIconsFolder();
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (kitFile?.Kits != null)
@@ -4485,6 +4520,61 @@ namespace Oxide.Plugins
                     NoteLocalIcon(names, trade.Icon);
             foreach (var name in names)
                 LocalPngId(name);
+        }
+
+        private bool StripRemoteIcons()
+        {
+            bool changed = false;
+            if (data != null && data.Categories != null)
+            {
+                foreach (var cat in data.Categories)
+                {
+                    if (cat == null) continue;
+                    cat.Icon = LocalIconName(cat.Icon, ref changed);
+                    if (cat.Items == null) continue;
+                    foreach (var item in cat.Items)
+                        if (item != null) item.Icon = LocalIconName(item.Icon, ref changed);
+                }
+            }
+            if (data != null && data.TradeCategories != null)
+            {
+                foreach (var trade in data.TradeCategories)
+                    if (trade != null) trade.Icon = LocalIconName(trade.Icon, ref changed);
+            }
+            return changed;
+        }
+
+        private string LocalIconName(string icon, ref bool changed)
+        {
+            if (string.IsNullOrWhiteSpace(icon)) return icon ?? "";
+            string text = icon.Trim();
+            if (!text.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !text.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return icon;
+            changed = true;
+            string name = IconFileFromUrl(text);
+            if (name != null && File.Exists(Path.Combine(IconsDirectory(), name))) return name;
+            if (remoteIconWarned.Add(text))
+                PrintWarning("NightshadeShop is not downloading " + text + ". Showing the item icon. Place a png in data/Nightshade/NightshadeShop/Icons/ and set the icon to that file name.");
+            return "";
+        }
+
+        private static string IconFileFromUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return null;
+            int query = url.IndexOf('?');
+            if (query >= 0) url = url.Substring(0, query);
+            int slash = url.LastIndexOf('/');
+            string name = (slash >= 0 ? url.Substring(slash + 1) : url).Trim();
+            if (name.Length == 0 || name.IndexOf("..", StringComparison.Ordinal) >= 0) return null;
+            if (name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0) return null;
+            if (!name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) return null;
+            return name;
+        }
+
+        private static bool ShopIsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
         }
 
         private static void NoteLocalIcon(HashSet<string> names, string icon)

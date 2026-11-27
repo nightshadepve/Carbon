@@ -12,15 +12,16 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeInfo", "Nightshade", "1.2.3")]
+    [Info("NightshadeInfo", "Nightshade", "1.2.4")]
     [Description("Nightshade info panel: live status, rules, and Discord.")]
     public class NightshadeInfo : RustPlugin
     {
         private const string Root = "NightshadeInfo";
         private const string DataPath = "Nightshade/NightshadeInfo/Players";
         private const string UiCommand = "nightshadeinfo.ui";
-        private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
-        private const string DefaultQr = "https://i.ibb.co/fz03Kqzb/discord.png";
+        private const string LogoImageKey = "NightshadeInfo.Logo";
+        private const string QrImageKey = "NightshadeInfo.Qr";
+        private const int ImageMaxBytes = 3145728;
 
 #pragma warning disable 0649
         [PluginReference] private Plugin NightshadePVPWeekend;
@@ -36,6 +37,13 @@ namespace Oxide.Plugins
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
         [PluginReference] private Plugin ServerRewards;
         [PluginReference] private Plugin ImageLibrary;
+        private int imageTries;
+        private bool imageWaiting;
+        private bool logoQueued;
+        private bool qrQueued;
+        private bool logoGaveUp;
+        private bool qrGaveUp;
+        private readonly HashSet<string> imageWarned = new HashSet<string>(StringComparer.Ordinal);
 #pragma warning restore 0649
 
         private Settings settings;
@@ -60,7 +68,8 @@ namespace Oxide.Plugins
         {
             [JsonProperty("Toggle commands")] public List<string> ToggleCommands = new List<string>();
             [JsonProperty("Show on first join")] public bool ShowOnFirstJoin;
-            [JsonProperty("Logo URL")] public string LogoUrl = DefaultLogo;
+            [JsonProperty("Logo URL")] public string LogoUrl = "";
+            [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
             [JsonProperty("Server name")] public string ServerName = "Nightshade";
             [JsonProperty("Server tag")] public string ServerTag = "Solo/Duo";
             [JsonProperty("Panel width")] public float PanelWidth = 800f;
@@ -221,6 +230,9 @@ namespace Oxide.Plugins
                 save = true;
             }
             Normalize(settings);
+            if (!SafeImageName(settings.LogoImage)) settings.LogoImage = "logo.png";
+            else settings.LogoImage = settings.LogoImage.Trim();
+            if (ClearHttpImages()) save = true;
             if (save) SaveConfig();
         }
 
@@ -244,12 +256,12 @@ namespace Oxide.Plugins
                 PrintWarning("Time zone '" + settings.TimeZoneId + "' was not found. Using an Eastern fallback for the wipe clock.");
             float rate = settings.RefreshSeconds < 0.5f ? 0.5f : settings.RefreshSeconds;
             clock = timer.Every(rate, Tick);
-            timer.Once(1f, RegisterImages);
+            timer.Once(1f, QueueImages);
         }
 
         private void OnPluginLoaded(Plugin plugin)
         {
-            if (plugin != null && plugin.Name == "ImageLibrary") RegisterImages();
+            if (plugin != null && plugin.Name == "ImageLibrary") QueueImages();
         }
 
         private void Unload()
@@ -371,21 +383,25 @@ namespace Oxide.Plugins
             const float header = 52f;
             Box(container, window + ".Header", window, Hex("#120E16", 0.72f), "0 1", "1 1", "0 -" + F(header), "0 0", null);
             Box(container, window + ".HeaderLine", window + ".Header", Hex(settings.Accent, 0.35f), "0 0", "1 0", "0 0", "0 1", null);
-            container.Add(new CuiElement
+            string logo = LogoPng();
+            if (!string.IsNullOrEmpty(logo))
             {
-                Name = window + ".Logo",
-                Parent = window + ".Header",
-                Components =
+                container.Add(new CuiElement
                 {
-                    new CuiRawImageComponent
+                    Name = window + ".Logo",
+                    Parent = window + ".Header",
+                    Components =
                     {
-                        Url = string.IsNullOrEmpty(settings.LogoUrl) ? DefaultLogo : settings.LogoUrl,
-                        Color = "1 1 1 1",
-                        Sprite = "assets/content/textures/generic/fulltransparent.tga"
-                    },
-                    new CuiRectTransformComponent { AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = "14 -18", OffsetMax = "50 18" }
-                }
-            });
+                        new CuiRawImageComponent
+                        {
+                            Png = logo,
+                            Color = "1 1 1 1",
+                            Sprite = "assets/content/textures/generic/fulltransparent.tga"
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0.5", AnchorMax = "0 0.5", OffsetMin = "14 -18", OffsetMax = "50 18" }
+                    }
+                });
+            }
             string serverName = string.IsNullOrEmpty(settings.ServerName) ? "Nightshade" : settings.ServerName;
             float nameX = 60f;
             float nameW = Mathf.Clamp(serverName.Length * 12.2f, 96f, 260f);
@@ -597,14 +613,35 @@ namespace Oxide.Plugins
 
         private void DrawQrCard(CuiElementContainer container, string parent, Tab tab, float top)
         {
-            string url = DiscordQrUrl(tab);
             float w = 332f;
             float h = 210f;
             float y = top + 8f;
             string card = parent + ".Qr";
             Box(container, card + ".Edge", parent, Hex(settings.Accent, 0.4f), "1 1", "1 1", Px(-(w + 16f), -(y + h)), Px(-12f, -y), null);
             Box(container, card, card + ".Edge", Hex("#16131C", 0.98f), "0 0", "1 1", "1 1", "-1 -1", null);
-            AddRawImage(container, card + ".Img", card, url, QrKey(url), "0 0", "1 1", "6 6", "-6 -6");
+            string qr = QrPng();
+            if (!string.IsNullOrEmpty(qr))
+            {
+                container.Add(new CuiElement
+                {
+                    Name = card + ".Img",
+                    Parent = card,
+                    Components =
+                    {
+                        new CuiRawImageComponent
+                        {
+                            Png = qr,
+                            Color = "1 1 1 1",
+                            Sprite = "assets/content/textures/generic/fulltransparent.tga"
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 6", OffsetMax = "-6 -6" }
+                    }
+                });
+            }
+            else
+            {
+                Box(container, card + ".Img", card, "0 0 0 0", "0 0", "1 1", "6 6", "-6 -6", null);
+            }
             string invite = tab != null && !string.IsNullOrEmpty(tab.DiscordInvite) ? tab.DiscordInvite : "discord.gg/dFmeweQmsy";
             string inviteMin = tab != null && !string.IsNullOrEmpty(tab.DiscordQrInviteMin) ? tab.DiscordQrInviteMin : "0.2379 0.3154";
             string inviteMax = tab != null && !string.IsNullOrEmpty(tab.DiscordQrInviteMax) ? tab.DiscordQrInviteMax : "0.5849 0.4096";
@@ -1071,59 +1108,146 @@ namespace Oxide.Plugins
             Interface.Oxide.DataFileSystem.WriteObject(DataPath, stored);
         }
 
-        private void RegisterImages()
+        private bool ClearHttpImages()
         {
-            if (ImageLibrary == null || !ImageLibrary.IsLoaded || settings == null || settings.Pages == null) return;
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            if (settings == null) return false;
+            bool changed = false;
+            if (IsHttp(settings.LogoUrl))
+            {
+                settings.LogoUrl = "";
+                changed = true;
+            }
+            if (settings.Pages == null) return changed;
             foreach (Page page in settings.Pages)
             {
                 if (page == null || page.Tabs == null) continue;
                 foreach (Tab tab in page.Tabs)
                 {
-                    if (tab == null || page.Layout != "discord") continue;
-                    string url = DiscordQrUrl(tab);
-                    if (!seen.Add(url)) continue;
-                    ImageLibrary.Call("AddImage", url, QrKey(url), 0UL);
+                    if (tab == null || !IsHttp(tab.DiscordQr)) continue;
+                    tab.DiscordQr = "";
+                    changed = true;
                 }
             }
+            return changed;
         }
 
-        private static string QrKey(string url)
+        private static bool IsHttp(string url)
         {
-            return string.IsNullOrEmpty(url) ? "NightshadeInfo.Qr" : "NightshadeInfo.Qr";
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string DiscordQrUrl(Tab tab)
+        private static bool SafeImageName(string name)
         {
-            if (tab != null && !string.IsNullOrEmpty(tab.DiscordQr)) return tab.DiscordQr;
-            return DefaultQr;
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim();
+            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
         }
 
-        private void AddRawImage(CuiElementContainer container, string name, string parent, string url, string key, string anchorMin, string anchorMax, string offsetMin, string offsetMax)
+        private void QueueImages()
         {
-            string png = null;
-            if (ImageLibrary != null && ImageLibrary.IsLoaded)
+            if (imageWaiting) return;
+            if ((logoQueued || logoGaveUp) && (qrQueued || qrGaveUp)) return;
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
             {
-                png = ImageLibrary.Call<string>("GetImage", key);
-                if (png == "0" || png == "NONE_0") png = null;
-            }
-            var image = new CuiRawImageComponent
-            {
-                Color = "1 1 1 1",
-                Sprite = "assets/content/textures/generic/fulltransparent.tga"
-            };
-            if (!string.IsNullOrEmpty(png)) image.Png = png;
-            else image.Url = url ?? string.Empty;
-            container.Add(new CuiElement
-            {
-                Name = name,
-                Parent = parent,
-                Components =
+                imageTries++;
+                if (imageTries >= 4)
                 {
-                    image,
-                    new CuiRectTransformComponent { AnchorMin = anchorMin, AnchorMax = anchorMax, OffsetMin = offsetMin, OffsetMax = offsetMax }
+                    if (!logoQueued) logoGaveUp = true;
+                    if (!qrQueued) qrGaveUp = true;
+                    WarnImage("ImageLibrary is not loaded. The info panel opens without its logo and Discord picture.");
+                    return;
                 }
-            });
+                imageWaiting = true;
+                float delay = imageTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    imageWaiting = false;
+                    QueueImages();
+                });
+                return;
+            }
+            if (!logoQueued && !logoGaveUp)
+                TryStore(settings == null || !SafeImageName(settings.LogoImage) ? "logo.png" : settings.LogoImage.Trim(), LogoImageKey, ref logoQueued, ref logoGaveUp);
+            if (!qrQueued && !qrGaveUp)
+                TryStore("discord.png", QrImageKey, ref qrQueued, ref qrGaveUp);
+        }
+
+        private void TryStore(string fileName, string key, ref bool queued, ref bool gaveUp)
+        {
+            string path = Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeInfo", fileName);
+            if (!File.Exists(path))
+            {
+                gaveUp = true;
+                WarnImage("Image file is missing (" + path + "). The info panel opens without it. Remote image URLs are not downloaded.");
+                return;
+            }
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > ImageMaxBytes || !IsPng(bytes))
+                {
+                    gaveUp = true;
+                    WarnImage("Image file is empty, not a png, or larger than 3 MB (" + path + "). The info panel opens without it.");
+                    return;
+                }
+                object added = ImageLibrary.Call("AddImageData", key, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    gaveUp = true;
+                    WarnImage("ImageLibrary did not accept " + fileName + ". The info panel opens without it.");
+                    return;
+                }
+                queued = true;
+            }
+            catch (Exception ex)
+            {
+                gaveUp = true;
+                WarnImage("Could not read " + fileName + ": " + ex.Message + ". The info panel opens without it.");
+            }
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private void WarnImage(string message)
+        {
+            if (string.IsNullOrEmpty(message) || !imageWarned.Add(message)) return;
+            PrintWarning(message);
+        }
+
+        private string StoredPng(string key, bool queued, bool gaveUp)
+        {
+            if (gaveUp || !queued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object stored = ImageLibrary.Call("HasImage", key, 0UL);
+                if (!(stored is bool) || !(bool)stored) return null;
+                string png = ImageLibrary.Call<string>("GetImage", key, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch (Exception ex)
+            {
+                WarnImage("ImageLibrary could not return " + key + ": " + ex.Message);
+                return null;
+            }
+        }
+
+        private string LogoPng()
+        {
+            if (!logoQueued && !logoGaveUp) QueueImages();
+            return StoredPng(LogoImageKey, logoQueued, logoGaveUp);
+        }
+
+        private string QrPng()
+        {
+            if (!qrQueued && !qrGaveUp) QueueImages();
+            return StoredPng(QrImageKey, qrQueued, qrGaveUp);
         }
 
         private static void Normalize(Settings value)
@@ -1380,7 +1504,7 @@ namespace Oxide.Plugins
             {
                 ToggleCommands = new List<string> { "info", "start" },
                 ShowOnFirstJoin = false,
-                LogoUrl = DefaultLogo,
+                LogoUrl = "",
                 ServerName = "Nightshade",
                 ServerTag = "Solo/Duo",
                 Pages = new List<Page>
@@ -1491,7 +1615,7 @@ namespace Oxide.Plugins
                         Title = "Discord",
                         DiscordTitle = "JOIN THE SERVER",
                         DiscordInvite = "discord.gg/dFmeweQmsy",
-                        DiscordQr = DefaultQr,
+                        DiscordQr = "",
                         DiscordQrInviteMin = "0.2379 0.3154",
                         DiscordQrInviteMax = "0.5849 0.4096",
                         DiscordLines = new List<Line>

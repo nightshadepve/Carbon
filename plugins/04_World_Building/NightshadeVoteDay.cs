@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeVoteDay", "Nightshade", "1.6.5")]
+    [Info("NightshadeVoteDay", "Nightshade", "1.6.6")]
     [Description("Vote for day at a configurable night time. One vote per night. Players vote and buy day from one Overlay panel left of the hotbar.")]
     public class NightshadeVoteDay : RustPlugin
     {
@@ -23,6 +23,8 @@ namespace Oxide.Plugins
         private const string Root = "NightshadeVoteDay";
         private const string BgName = "NightshadeVoteDay.Bg";
         private const string LogoName = "NightshadeVoteDay.Logo";
+        private const string LogoImageKey = "NightshadeVoteDay.Logo";
+        private const int LogoMaxBytes = 3145728;
         private const string SunName = "NightshadeVoteDay.Sun";
         private const string TitleName = "NightshadeVoteDay.Title";
         private const string CountName = "NightshadeVoteDay.Count";
@@ -220,6 +222,7 @@ namespace Oxide.Plugins
             catch { _config = new PluginConfig(); }
             ApplyConfigMigrations(raw, _config);
             NormalizeConfig(_config);
+            NoteRemoteLogo(_config);
             SaveConfig();
             if (_ready) OnConfigReloaded();
         }
@@ -486,6 +489,13 @@ namespace Oxide.Plugins
         // --- Plugin references ---
         [PluginReference] Plugin ServerRewards;
         [PluginReference] Plugin Economics;
+        [PluginReference] Plugin ImageLibrary;
+        private int logoTries;
+        private bool logoQueued;
+        private bool logoWaiting;
+        private bool logoGaveUp;
+        private bool logoWarned;
+        private bool logoUrlNoted;
 
         // --- Hooks ---
 
@@ -499,6 +509,16 @@ namespace Oxide.Plugins
                 + ". Skip Night is one Overlay panel left of the hotbar. It is created when a vote starts, and removed when that vote ends.");
             timer.Every(10f, CheckGameTime);
             timer.Once(1f, CheckGameTime);
+            timer.Once(1f, QueueLogo);
+        }
+
+        void OnPluginLoaded(Plugin plugin)
+        {
+            if (plugin == null || plugin.Name != "ImageLibrary" || logoQueued) return;
+            logoGaveUp = false;
+            logoTries = 0;
+            logoWaiting = false;
+            QueueLogo();
         }
 
         void Unload()
@@ -1477,7 +1497,7 @@ namespace Oxide.Plugins
 
         private bool HasLogo()
         {
-            return _config != null && !string.IsNullOrWhiteSpace(_config.PanelLogoUrl);
+            return LogoPng() != null;
         }
 
         private static string UiId(string name, bool menu)
@@ -1487,9 +1507,130 @@ namespace Oxide.Plugins
             return menu ? name : name;
         }
 
+        private void NoteRemoteLogo(PluginConfig config)
+        {
+            if (config == null || !IsHttp(config.PanelLogoUrl)) return;
+            string url = config.PanelLogoUrl.Trim();
+            config.PanelLogoUrl = "logo.png";
+            if (logoUrlNoted) return;
+            logoUrlNoted = true;
+            PrintWarning("Skipped logo download " + url + ". NightshadeVoteDay loads data/Nightshade/NightshadeVoteDay/logo.png instead. An empty panel logo field still hides the logo.");
+        }
+
+        private static bool IsHttp(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SafeLogoName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim();
+            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string LogoFileName()
+        {
+            if (_config == null) return null;
+            string name = (_config.PanelLogoUrl ?? "").Trim();
+            return SafeLogoName(name) ? name : null;
+        }
+
+        private void QueueLogo()
+        {
+            if (logoQueued || logoGaveUp || logoWaiting) return;
+            string name = LogoFileName();
+            if (name == null) return;
+            string path = Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeVoteDay", name);
+            if (!File.Exists(path))
+            {
+                logoGaveUp = true;
+                WarnLogo("Logo file is missing (" + path + "). The vote card opens without it. Remote logo URLs are not downloaded.");
+                return;
+            }
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                logoTries++;
+                if (logoTries >= 4)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary is not loaded. The vote card opens without its logo.");
+                    return;
+                }
+                logoWaiting = true;
+                float delay = logoTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    logoWaiting = false;
+                    QueueLogo();
+                });
+                return;
+            }
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > LogoMaxBytes || !IsPng(bytes))
+                {
+                    logoGaveUp = true;
+                    WarnLogo("Logo file is empty, not a png, or larger than 3 MB (" + path + "). The vote card opens without it.");
+                    return;
+                }
+                object added = ImageLibrary.Call("AddImageData", LogoImageKey, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary did not accept the vote logo. The card opens without it.");
+                    return;
+                }
+                logoQueued = true;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("Could not read the vote logo: " + ex.Message + ". The card opens without it.");
+            }
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private void WarnLogo(string message)
+        {
+            if (logoWarned) return;
+            logoWarned = true;
+            PrintWarning(message);
+        }
+
+        private string LogoPng()
+        {
+            if (LogoFileName() == null) return null;
+            if (!logoQueued && !logoGaveUp) QueueLogo();
+            if (logoGaveUp || !logoQueued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object stored = ImageLibrary.Call("HasImage", LogoImageKey, 0UL);
+                if (!(stored is bool) || !(bool)stored) return null;
+                string png = ImageLibrary.Call<string>("GetImage", LogoImageKey, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("ImageLibrary could not return the vote logo: " + ex.Message);
+                return null;
+            }
+        }
+
         private void AddLogo(CuiElementContainer container, float left, float top, float size, bool menu)
         {
-            if (!HasLogo()) return;
+            string logo = LogoPng();
+            if (string.IsNullOrEmpty(logo)) return;
             container.Add(new CuiElement
             {
                 Name = UiId(LogoName, menu),
@@ -1498,7 +1639,7 @@ namespace Oxide.Plugins
                 {
                     new CuiRawImageComponent
                     {
-                        Url = _config.PanelLogoUrl.Trim(),
+                        Png = logo,
                         Color = "1 1 1 1",
                         Sprite = "assets/content/textures/generic/fulltransparent.tga"
                     },

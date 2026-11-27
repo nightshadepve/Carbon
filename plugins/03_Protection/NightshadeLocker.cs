@@ -21,7 +21,7 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeLocker", "Nightshade", "1.2.0")]
+    [Info("NightshadeLocker", "Nightshade", "1.2.1")]
     [Description("Nightshade locks, automatic lock placement, and automatic closing.")]
     public class NightshadeLocker : RustPlugin
     {
@@ -40,7 +40,8 @@ namespace Oxide.Plugins
         private const string CodePrefab = "assets/prefabs/locks/keypad/lock.code.prefab";
         private const string KeyPrefab = "assets/prefabs/locks/keylock/lock.key.prefab";
         private const string CloserPrefab = "assets/prefabs/misc/doorcloser/doorcloser.prefab";
-        private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
+        private const string LogoImageKey = "NightshadeLocker.Logo";
+        private const int LogoMaxBytes = 3145728;
         private const string FontReg = "robotocondensed-regular.ttf";
         private const string FontBold = "robotocondensed-bold.ttf";
 
@@ -63,6 +64,14 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, string> uiPage = new Dictionary<ulong, string>();
         private readonly HashSet<string> commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<int> pending = new HashSet<int>();
+        private int logoTries;
+        private bool logoQueued;
+        private bool logoWaiting;
+        private bool logoGaveUp;
+        private bool logoWarned;
+        private string skippedLogoUrl = "";
+
+        [PluginReference] private Plugin ImageLibrary;
 
         #region Config and data
 
@@ -75,7 +84,8 @@ namespace Oxide.Plugins
             [JsonProperty("Theme mode (Shop, Auto, or a theme name)")] public string ThemeMode = "Shop";
             [JsonProperty("Theme source config file")] public string ThemeFile = "NightshadeShop.json";
             [JsonProperty("Logo source config file")] public string LogoFile = "NightshadeInfo.json";
-            [JsonProperty("Logo URL fallback")] public string LogoUrl = DefaultLogo;
+            [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
+            [JsonProperty("Logo URL fallback")] public string LogoUrl = "";
             [JsonProperty("Window width")] public float WindowWidth = NightshadeLockerRules.Layout.WindowWidth;
             [JsonProperty("Window height")] public float WindowHeight = NightshadeLockerRules.Layout.WindowHeight;
             [JsonProperty("Layout version")] public int LayoutVersion = 0;
@@ -202,6 +212,13 @@ namespace Oxide.Plugins
             if (config.MinDelay < 1) config.MinDelay = 1;
             if (config.MaxDelay < config.MinDelay) config.MaxDelay = config.MinDelay;
             config.DefaultDelay = NightshadeLockerRules.ClampDelay(config.DefaultDelay, config.MinDelay, config.MaxDelay);
+            if (IsHttp(config.LogoUrl))
+            {
+                skippedLogoUrl = config.LogoUrl.Trim();
+                config.LogoUrl = "";
+            }
+            if (!SafeLogoName(config.LogoImage)) config.LogoImage = "logo.png";
+            else config.LogoImage = config.LogoImage.Trim();
             NightshadeLockerRules.PlayerPref.Normalize(config.Defaults, config.DefaultDelay);
             SaveConfig();
         }
@@ -284,6 +301,7 @@ namespace Oxide.Plugins
                 PrintWarning("DLC ownership checks are off. Use that only on a creative or test server.");
             }
             ticker = timer.Every(1f, Tick);
+            timer.Once(1f, QueueLogo);
             Puts("NightshadeLocker ready. Players open it with /" + NightshadeLockerRules.PrimaryCommand + ".");
         }
 
@@ -306,7 +324,13 @@ namespace Oxide.Plugins
 
         private void OnPluginLoaded(Plugin plugin)
         {
-            _ = plugin;
+            if (plugin != null && plugin.Name == "ImageLibrary" && !logoQueued)
+            {
+                logoGaveUp = false;
+                logoTries = 0;
+                logoWaiting = false;
+                QueueLogo();
+            }
             RefreshConflict(true);
         }
 
@@ -2471,23 +2495,111 @@ namespace Oxide.Plugins
             return new Palette();
         }
 
-        private string Logo()
+        private static bool IsHttp(string url)
         {
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SafeLogoName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim();
+            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string LogoPath()
+        {
+            string name = config == null || !SafeLogoName(config.LogoImage) ? "logo.png" : config.LogoImage.Trim();
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeLocker", name);
+        }
+
+        private void QueueLogo()
+        {
+            if (logoQueued || logoGaveUp || logoWaiting) return;
+            string path = LogoPath();
+            if (!File.Exists(path))
+            {
+                logoGaveUp = true;
+                string skipped = string.IsNullOrEmpty(skippedLogoUrl) ? "" : " Not downloading " + skippedLogoUrl + ".";
+                WarnLogo("Logo file is missing (" + path + ")." + skipped + " The locker panel opens without it.");
+                return;
+            }
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                logoTries++;
+                if (logoTries >= 4)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary is not loaded. The locker panel opens without its logo.");
+                    return;
+                }
+                logoWaiting = true;
+                float delay = logoTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    logoWaiting = false;
+                    QueueLogo();
+                });
+                return;
+            }
             try
             {
-                string path = Path.Combine(Interface.Oxide.ConfigDirectory, string.IsNullOrEmpty(config.LogoFile) ? "NightshadeInfo.json" : config.LogoFile);
-                if (File.Exists(path))
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > LogoMaxBytes || !IsPng(bytes))
                 {
-                    var root = JObject.Parse(File.ReadAllText(path));
-                    var url = root.Value<string>("Logo URL");
-                    if (!string.IsNullOrEmpty(url)) return url;
+                    logoGaveUp = true;
+                    WarnLogo("Logo file is empty, not a png, or larger than 3 MB (" + path + "). The locker panel opens without it.");
+                    return;
                 }
+                object added = ImageLibrary.Call("AddImageData", LogoImageKey, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary did not accept the locker logo. The panel opens without it.");
+                    return;
+                }
+                logoQueued = true;
             }
-            catch
+            catch (Exception ex)
             {
-                // The fallback logo still draws.
+                logoGaveUp = true;
+                WarnLogo("Could not read the locker logo: " + ex.Message + ". The panel opens without it.");
             }
-            return string.IsNullOrEmpty(config.LogoUrl) ? DefaultLogo : config.LogoUrl;
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private void WarnLogo(string message)
+        {
+            if (logoWarned) return;
+            logoWarned = true;
+            PrintWarning(message);
+        }
+
+        private string LogoPng()
+        {
+            if (!logoQueued && !logoGaveUp) QueueLogo();
+            if (logoGaveUp || !logoQueued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object stored = ImageLibrary.Call("HasImage", LogoImageKey, 0UL);
+                if (!(stored is bool) || !(bool)stored) return null;
+                string png = ImageLibrary.Call<string>("GetImage", LogoImageKey, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("ImageLibrary could not return the locker logo: " + ex.Message);
+                return null;
+            }
         }
 
         private class Row
@@ -2533,15 +2645,19 @@ namespace Oxide.Plugins
             });
             string header = Box(c, frame, palette.Header, 0, h - NightshadeLockerRules.Layout.Header, w, h);
             Box(c, frame, palette.Accent, 0, h - NightshadeLockerRules.Layout.Header - 2, w, h - NightshadeLockerRules.Layout.Header);
-            c.Add(new CuiElement
+            string logo = LogoPng();
+            if (!string.IsNullOrEmpty(logo))
             {
-                Name = CuiHelper.GetGuid(), Parent = header,
-                Components =
+                c.Add(new CuiElement
                 {
-                    new CuiRawImageComponent { Url = Logo(), Color = "1 1 1 1", BlocksRaycast = false },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "14 9", OffsetMax = "42 37" }
-                }
-            });
+                    Name = CuiHelper.GetGuid(), Parent = header,
+                    Components =
+                    {
+                        new CuiRawImageComponent { Png = logo, Color = "1 1 1 1", BlocksRaycast = false },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "14 9", OffsetMax = "42 37" }
+                    }
+                });
+            }
             float textRight = w - 56f;
             Label(c, header, "Nightshade Locker", 16, palette.Text, TextAnchor.MiddleLeft, 50, 16, textRight, 40, true);
             Label(c, header, palette.Tagline, 10, palette.SubText, TextAnchor.MiddleLeft, 50, 4, conflict ? 196f : textRight, 18, false);

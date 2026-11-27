@@ -13,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.2.0")]
+    [Info("NightshadeHud", "Nightshade", "1.2.1")]
     [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, raid protection, teleport prices, and event labels.")]
     public class NightshadeHud : RustPlugin
     {
@@ -79,6 +79,14 @@ namespace Oxide.Plugins
         private string onlineCache = "\0";
         private string countdownCache = "\0";
         private string deepSeaCache = "\0";
+        private const string LogoImageKey = "NightshadeHud.Logo";
+        private const int LogoMaxBytes = 3145728;
+        private int logoTries;
+        private bool logoQueued;
+        private bool logoWaiting;
+        private bool logoGaveUp;
+        private bool logoWarned;
+        private string skippedLogoUrl = "";
         private int outpostPrice = 150;
         private int banditPrice = 200;
         private bool priceFileWarned;
@@ -120,7 +128,8 @@ namespace Oxide.Plugins
             [JsonProperty("Icon size (px)")] public float IconSize = 34f;
             [JsonProperty("Event columns")] public int Columns = 3;
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
-            [JsonProperty("Logo URL")] public string LogoUrl = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
+            [JsonProperty("Logo URL")] public string LogoUrl = "";
+            [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
             [JsonProperty("Server name")] public string ServerName = "Nightshade";
             [JsonProperty("Tag text")] public string TagText = "Solo/Duo";
             [JsonProperty("Tag color")] public string TagColor = "#C4A6E0";
@@ -220,6 +229,13 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.HeliActiveColor)) config.HeliActiveColor = "#FF4D4D";
             if (string.IsNullOrEmpty(config.BradleyLabel)) config.BradleyLabel = "BRAD";
             if (config.BradleyActiveColor == null) config.BradleyActiveColor = "";
+            if (IsHttp(config.LogoUrl))
+            {
+                skippedLogoUrl = config.LogoUrl.Trim();
+                config.LogoUrl = "";
+            }
+            if (!SafeLogoName(config.LogoImage)) config.LogoImage = "logo.png";
+            else config.LogoImage = config.LogoImage.Trim();
             if (config.TeleportTitle == null) config.TeleportTitle = "Teleportation";
             if (string.IsNullOrEmpty(config.TeleportTitleColor)) config.TeleportTitleColor = "#50A0FF";
             if (string.IsNullOrEmpty(config.TeleportFormat)) config.TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
@@ -275,6 +291,7 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            timer.Once(1f, QueueLogo);
             if (zoneFallback)
                 PrintWarning("Time zone '" + config.TimeZoneId + "' was not found. Using a built-in US Eastern zone.");
             if (ServerMgr.Instance != null)
@@ -581,6 +598,8 @@ namespace Oxide.Plugins
             IconOrigin(state, out left, out top);
             float x = left - originLeft;
             float y = top - originTop;
+            string logo = LogoPng();
+            if (string.IsNullOrEmpty(logo)) return;
             container.Add(new CuiElement
             {
                 Name = Icon,
@@ -590,13 +609,120 @@ namespace Oxide.Plugins
                 {
                     new CuiRawImageComponent
                     {
-                        Url = config.LogoUrl,
+                        Png = logo,
                         Color = "1 1 1 1",
                         Sprite = "assets/content/textures/generic/fulltransparent.tga"
                     },
                     new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(x, y - config.IconSize), OffsetMax = Px(x + config.IconSize, y) }
                 }
             });
+        }
+
+        private static bool IsHttp(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SafeLogoName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim();
+            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string LogoPath()
+        {
+            string name = config == null || !SafeLogoName(config.LogoImage) ? "logo.png" : config.LogoImage.Trim();
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeHud", name);
+        }
+
+        private void QueueLogo()
+        {
+            if (logoQueued || logoGaveUp || logoWaiting) return;
+            string path = LogoPath();
+            if (!File.Exists(path))
+            {
+                logoGaveUp = true;
+                string skipped = string.IsNullOrEmpty(skippedLogoUrl) ? "" : " Not downloading " + skippedLogoUrl + ".";
+                WarnLogo("Logo file is missing (" + path + ")." + skipped + " The HUD stays up without it.");
+                return;
+            }
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                logoTries++;
+                if (logoTries >= 4)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary is not loaded. The HUD stays up without its logo.");
+                    return;
+                }
+                logoWaiting = true;
+                float delay = logoTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    logoWaiting = false;
+                    QueueLogo();
+                });
+                return;
+            }
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > LogoMaxBytes || !IsPng(bytes))
+                {
+                    logoGaveUp = true;
+                    WarnLogo("Logo file is empty, not a png, or larger than 3 MB (" + path + "). The HUD stays up without it.");
+                    return;
+                }
+                object added = ImageLibrary.Call("AddImageData", LogoImageKey, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary did not accept the HUD logo. The HUD stays up without it.");
+                    return;
+                }
+                logoQueued = true;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("Could not read the HUD logo: " + ex.Message + ". The HUD stays up without it.");
+            }
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private void WarnLogo(string message)
+        {
+            if (logoWarned) return;
+            logoWarned = true;
+            PrintWarning(message);
+        }
+
+        private string LogoPng()
+        {
+            if (!logoQueued && !logoGaveUp) QueueLogo();
+            if (logoGaveUp || !logoQueued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object stored = ImageLibrary.Call("HasImage", LogoImageKey, 0UL);
+                if (!(stored is bool) || !(bool)stored) return null;
+                string png = ImageLibrary.Call<string>("GetImage", LogoImageKey, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("ImageLibrary could not return the HUD logo: " + ex.Message);
+                return null;
+            }
         }
 
         private void AddBadge(CuiElementContainer container, string state, float originLeft, float originTop)
@@ -1391,7 +1517,17 @@ namespace Oxide.Plugins
         private void OnPluginLoaded(Plugin plugin)
         {
             if (plugin == null) return;
-            if (plugin.Name == "ImageLibrary") LoadBorder();
+            if (plugin.Name == "ImageLibrary")
+            {
+                if (!logoQueued)
+                {
+                    logoGaveUp = false;
+                    logoTries = 0;
+                    logoWaiting = false;
+                    QueueLogo();
+                }
+                LoadBorder();
+            }
             if (scanning) return;
             timer.Once(1f, () => RefreshFromPlugin(plugin.Name));
         }
