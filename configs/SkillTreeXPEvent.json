@@ -646,10 +646,10 @@
     }
   },
   "UI anchor settings": {
-    "anchor_min": "1 1",
-    "anchor_max": "1 1",
-    "offset_min": "-164.865 -52",
-    "offset_max": "-7.135 -8"
+    "anchor_min": "1 0",
+    "anchor_max": "1 0",
+    "offset_min": "-378.365 46",
+    "offset_max": "-220.635 90"
   },
   "UI color settings": {
     "mainPanelCol": "0.245283 0.245283 0.245283 0.8",
