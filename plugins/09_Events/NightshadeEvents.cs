@@ -16,6 +16,9 @@
 // Vanilla names and prefabs were checked against developer/patched_assemblies/Assembly-CSharp.dll.
 // EventsManager (plugins/09_Events/EventsManager.cs, commands /em and em_spawn) is a separate
 // plugin. This one uses /nsevents and nightshadeevents.admin and does not edit that file.
+//
+// The panel logo is logo.png in data/Nightshade/NightshadeEvents/. ImageLibrary stores those
+// bytes with AddImageData. The panel does not download a URL. A missing file is logged once.
 
 using System;
 using System.Collections;
@@ -24,13 +27,14 @@ using System.Globalization;
 using System.IO;
 using Newtonsoft.Json;
 using Oxide.Core;
+using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeEvents", "Nightshade", "1.1.2")]
+    [Info("NightshadeEvents", "Nightshade", "1.1.3")]
     [Description("Schedules vanilla, seasonal, and custom events from a compact admin panel.")]
     public class NightshadeEvents : RustPlugin
     {
@@ -40,7 +44,8 @@ namespace Oxide.Plugins
         private const string UiCmd = "nsevents.ui";
         private const string FontReg = "robotocondensed-regular.ttf";
         private const string FontBold = "robotocondensed-bold.ttf";
-        private const string DefaultLogo = "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png";
+        private const string LogoImageKey = "NightshadeEvents.Logo";
+        private const int LogoMaxBytes = 3145728;
         private const string HeliPrefab = "assets/prefabs/npc/patrol helicopter/patrolhelicopter.prefab";
         private const string CargoPrefab = "assets/content/vehicles/boats/cargoship/cargoshiptest.prefab";
         private const string ChinookPrefab = "assets/Prefabs/NPC/CH47/ch47scientists.entity.prefab";
@@ -82,6 +87,16 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, string> editing = new Dictionary<ulong, string>();
         private readonly Dictionary<ulong, string> notice = new Dictionary<ulong, string>();
         private readonly Dictionary<string, float> warnAt = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        private int logoTries;
+        private bool logoQueued;
+        private bool logoWaiting;
+        private bool logoGaveUp;
+        private bool logoWarned;
+        private string skippedLogoUrl = "";
+
+#pragma warning disable 0649
+        [PluginReference] private Plugin ImageLibrary;
+#pragma warning restore 0649
 
         private class Configuration
         {
@@ -94,7 +109,8 @@ namespace Oxide.Plugins
             [JsonProperty("Theme mode (Shop, Auto, or a theme name)")] public string ThemeMode = "Shop";
             [JsonProperty("Theme source config file")] public string ThemeFile = "NightshadeShop.json";
             [JsonProperty("Logo source config file")] public string LogoFile = "NightshadeInfo.json";
-            [JsonProperty("Logo URL fallback")] public string LogoUrl = DefaultLogo;
+            [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
+            [JsonProperty("Logo URL fallback")] public string LogoUrl = "";
             [JsonProperty("Window width")] public float WindowWidth = 572f;
             [JsonProperty("Window height")] public float WindowHeight = 448f;
             [JsonProperty("Custom events to add when that id is missing from saved data")] public List<EventDef> CustomSeeds = new List<EventDef>();
@@ -210,6 +226,7 @@ namespace Oxide.Plugins
                 PrintWarning("HeliSignals is loaded. If its no-vanilla-heli option is on, it kills patrol helicopters spawned by the event schedule, including ones this plugin starts that way.");
             Puts("Data file: data/Nightshade/NightshadeEvents/Store.json. It is kept across reloads, restarts, and map wipes. Missed events: " + MissedMode() + ". Minimum gap between starts: " + GapMinutes() + " minutes.");
             timer.Once(1f, BindWhenReady);
+            timer.Once(1f, QueueLogo);
         }
 
         private void OnServerSave() => SaveStore();
@@ -269,6 +286,9 @@ namespace Oxide.Plugins
             if (config.MinStartGapMinutes > 180) config.MinStartGapMinutes = 180;
             if (config.WindowWidth < 480f) config.WindowWidth = 572f;
             if (config.WindowHeight < 360f) config.WindowHeight = 448f;
+            if (!SafeLogoName(config.LogoImage)) config.LogoImage = "logo.png";
+            else config.LogoImage = config.LogoImage.Trim();
+            NoteRemoteLogoSkipped();
             SaveConfig();
         }
 
@@ -2281,16 +2301,20 @@ namespace Oxide.Plugins
             });
             string header = Box(c, frame, palette.Header, "0 0", "0 0", 0, h - 40f, w, h);
             Box(c, frame, palette.Accent, "0 0", "0 0", 0, h - 42f, w, h - 40f);
-            c.Add(new CuiElement
+            string logo = LogoPng();
+            if (!string.IsNullOrEmpty(logo))
             {
-                Name = CuiHelper.GetGuid(),
-                Parent = header,
-                Components =
+                c.Add(new CuiElement
                 {
-                    new CuiRawImageComponent { Url = Logo(), Color = "1 1 1 1", BlocksRaycast = false },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "10 8", OffsetMax = "34 32" }
-                }
-            });
+                    Name = CuiHelper.GetGuid(),
+                    Parent = header,
+                    Components =
+                    {
+                        new CuiRawImageComponent { Png = logo, Color = "1 1 1 1", BlocksRaycast = false },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "0 0", OffsetMin = "10 8", OffsetMax = "34 32" }
+                    }
+                });
+            }
             Label(c, header, "Events", 15, palette.Text, TextAnchor.MiddleLeft, 40, 16, 150, 36, true);
             Label(c, header, palette.Tagline + "  " + zoneLabel, 10, palette.SubText, TextAnchor.MiddleLeft, 40, 2, w - 80f, 16, false);
             string note;
@@ -2779,20 +2803,141 @@ namespace Oxide.Plugins
             return string.IsNullOrEmpty(value) ? fallback : value;
         }
 
-        private string Logo()
+        private void NoteRemoteLogoSkipped()
+        {
+            string fromInfo = ReadInfoLogoUrl(config == null ? null : config.LogoFile);
+            string fromConfig = config == null || config.LogoUrl == null ? "" : config.LogoUrl.Trim();
+            if (IsHttp(fromConfig) && config != null) config.LogoUrl = "";
+            if (IsHttp(fromInfo)) skippedLogoUrl = fromInfo;
+            else if (IsHttp(fromConfig)) skippedLogoUrl = fromConfig;
+        }
+
+        private static string ReadInfoLogoUrl(string fileName)
         {
             try
             {
-                string path = Path.Combine(Interface.Oxide.ConfigDirectory, string.IsNullOrEmpty(config.LogoFile) ? "NightshadeInfo.json" : config.LogoFile);
-                if (File.Exists(path))
-                {
-                    var root = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
-                    var url = root.Value<string>("Logo URL");
-                    if (!string.IsNullOrEmpty(url)) return url;
-                }
+                if (string.IsNullOrEmpty(fileName)) fileName = "NightshadeInfo.json";
+                fileName = fileName.Trim();
+                if (fileName.IndexOf("..", StringComparison.Ordinal) >= 0 || fileName.IndexOf('/') >= 0 || fileName.IndexOf('\\') >= 0) return "";
+                if (!fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return "";
+                string path = Path.Combine(Interface.Oxide.ConfigDirectory, fileName);
+                if (!File.Exists(path)) return "";
+                var root = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
+                return (root.Value<string>("Logo URL") ?? "").Trim();
             }
-            catch { }
-            return string.IsNullOrEmpty(config.LogoUrl) ? DefaultLogo : config.LogoUrl;
+            catch
+            {
+                return "";
+            }
+        }
+
+        private static bool IsHttp(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool SafeLogoName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim();
+            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private string LogoPath()
+        {
+            string name = config == null || !SafeLogoName(config.LogoImage) ? "logo.png" : config.LogoImage.Trim();
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeEvents", name);
+        }
+
+        // Local bytes only. This never calls webrequest and never runs from the schedule tick.
+        private void QueueLogo()
+        {
+            if (logoQueued || logoGaveUp || logoWaiting) return;
+            string path = LogoPath();
+            if (!File.Exists(path))
+            {
+                logoGaveUp = true;
+                string skipped = string.IsNullOrEmpty(skippedLogoUrl) ? "" : " Not downloading " + skippedLogoUrl + ".";
+                WarnLogo("Logo file is missing (" + path + ")." + skipped + " The panel opens without it, and the schedule does not wait.");
+                return;
+            }
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                logoTries++;
+                if (logoTries >= 4)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary is not loaded. The events panel opens without a logo. The schedule is unchanged.");
+                    return;
+                }
+                logoWaiting = true;
+                float delay = logoTries * 5f;
+                timer.Once(delay, () =>
+                {
+                    logoWaiting = false;
+                    QueueLogo();
+                });
+                return;
+            }
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > LogoMaxBytes || !IsPng(bytes))
+                {
+                    logoGaveUp = true;
+                    WarnLogo("Logo file is empty, not a png, or larger than 3 MB (" + path + "). The panel opens without it.");
+                    return;
+                }
+                object added = ImageLibrary.Call("AddImageData", LogoImageKey, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    logoGaveUp = true;
+                    WarnLogo("ImageLibrary did not accept the events logo. The panel opens without it. The schedule is unchanged.");
+                    return;
+                }
+                logoQueued = true;
+                Puts("Events logo loaded from " + path + " (local file, no web request).");
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("Could not read the events logo: " + ex.Message + ". The panel opens without it.");
+            }
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private void WarnLogo(string message)
+        {
+            if (logoWarned) return;
+            logoWarned = true;
+            PrintWarning(message);
+        }
+
+        private string LogoPng()
+        {
+            if (!logoQueued && !logoGaveUp) QueueLogo();
+            if (logoGaveUp || !logoQueued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object stored = ImageLibrary.Call("HasImage", LogoImageKey, 0UL);
+                if (!(stored is bool) || !(bool)stored) return null;
+                string png = ImageLibrary.Call<string>("GetImage", LogoImageKey, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch (Exception ex)
+            {
+                logoGaveUp = true;
+                WarnLogo("ImageLibrary could not return the events logo: " + ex.Message + ". The panel opens without it.");
+                return null;
+            }
         }
 
         #endregion
