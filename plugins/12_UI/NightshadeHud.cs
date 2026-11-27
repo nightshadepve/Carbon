@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Oxide.Core;
@@ -13,8 +12,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.2.1")]
-    [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, raid protection, teleport prices, and event labels.")]
+    [Info("NightshadeHud", "Nightshade", "1.3.0")]
+    [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
         private const string Root = "NightshadeHud";
@@ -23,18 +22,45 @@ namespace Oxide.Plugins
         private const string IconHit = "NightshadeHud.IconHit";
         private const string IconDrag = "NightshadeHud.IconDrag";
         private const string Half = "NightshadeHud.Half";
-        private const string Events = "NightshadeHud.Events";
         private const string BorderName = "NightshadeHud.Border";
-        private const string BorderKey = "NightshadeHud.Border";
         private const string TeleportTitleName = "NightshadeHud.TeleportTitle";
         private const string TeleportPriceName = "NightshadeHud.TeleportPrice";
+        private const string CountdownName = "NightshadeHud.Countdown";
+        private const string StatusSepName = "NightshadeHud.StatusSep";
+        private const string ShieldName = "NightshadeHud.ShieldQueue";
         private const string DataPath = "Nightshade/NightshadeHud/State";
+        private const string ArtDir = "Nightshade/NightshadeHud";
         private const string DefaultBorderFile = "Nightshade/NightshadeHud/hud_border.png";
-        private const float Pad = 6f;
-        private const float Line = 15f;
+        private const string DefaultBackgroundFile = "Nightshade/NightshadeHud/hud_bg.png";
+        private const float Pad = 16f;
+        private const float NameGap = 8f;
+        private const float NameTop = 17f;
+        private const float NameH = 16f;
+        private const float OnlineTop = 37f;
+        private const float OnlineH = 14f;
+        private const float StatusTop = 53f;
+        private const float StatusH = 16f;
+        private const float TeleTitleTop = 80f;
+        private const float TeleTitleH = 14f;
+        private const float TelePriceTop = 95f;
+        private const float TelePriceH = 12f;
+        private const int NameFont = 14;
+        private const int TagFont = 11;
+        private const int ClockFont = 12;
+        private const int OnlineFont = 11;
+        private const int StatusFont = 12;
+        private const int ShieldFont = 11;
+        private const int TeleTitleFont = 11;
+        private const int TelePriceFont = 10;
         private const int BadgeFont = 8;
         private const string BadgeBgName = "NightshadeHud.BadgeBg";
         private const string BadgeName = "NightshadeHud.Badge";
+        private const string LogoImageKey = "NightshadeHud.Logo";
+        private const string PurgeImageKey = "NightshadeHud.PurgeLogo";
+        private const string BorderKey = "NightshadeHud.Border";
+        private const string BackgroundKey = "NightshadeHud.Background";
+        private const int ImageMaxBytes = 3145728;
+        private const int ImageTries = 4;
 
         [PluginReference] private Plugin NightshadePVPWeekend;
 
@@ -46,25 +72,19 @@ namespace Oxide.Plugins
             if (legacy != null && legacy.IsLoaded) return legacy;
             return null;
         }
+
         [PluginReference("Nightshade Purge Status")] private Plugin PurgeStatus;
-        [PluginReference("Raidable Bases")] private Plugin RaidableBases;
-        [PluginReference] private Plugin ArmoredTrain;
-        [PluginReference] private Plugin Convoy;
-        [PluginReference] private Plugin DefendableHomes;
         [PluginReference] private Plugin ImageLibrary;
 
         private Settings config;
         private Stored stored;
         private TimeZoneInfo zone;
         private bool zoneFallback;
-        private bool scanning;
-        private bool eventsDirty;
-        private bool popDirty;
+        private bool purge;
         private Timer clockTimer;
         private Timer priceTimer;
-        private Timer borderTimer;
+        private Timer artTimer;
         private Coroutine startupRoutine;
-        private Coroutine convoyRoutine;
 
         private readonly Dictionary<ulong, string> mode = new Dictionary<ulong, string>();
         private readonly Dictionary<ulong, float> dragX = new Dictionary<ulong, float>();
@@ -73,47 +93,31 @@ namespace Oxide.Plugins
         private readonly Dictionary<ulong, string> shown = new Dictionary<ulong, string>();
         private readonly HashSet<ulong> station = new HashSet<ulong>();
         private readonly Dictionary<ulong, string> shieldCache = new Dictionary<ulong, string>();
-        private readonly Dictionary<string, string> eventCache = new Dictionary<string, string>();
         private string badgeCache = "\0";
         private string clockCache = "\0";
         private string onlineCache = "\0";
         private string countdownCache = "\0";
-        private string deepSeaCache = "\0";
-        private const string LogoImageKey = "NightshadeHud.Logo";
-        private const int LogoMaxBytes = 3145728;
-        private int logoTries;
-        private bool logoQueued;
-        private bool logoWaiting;
-        private bool logoGaveUp;
-        private bool logoWarned;
-        private string skippedLogoUrl = "";
         private int outpostPrice = 150;
         private int banditPrice = 200;
         private bool priceFileWarned;
-        private int borderTries;
-        private string drawnBorderCrc;
 
-        private readonly HashSet<ulong> bradleys = new HashSet<ulong>();
-        private readonly HashSet<ulong> helis = new HashSet<ulong>();
-        private readonly HashSet<ulong> chinooks = new HashSet<ulong>();
-        private readonly HashSet<ulong> drops = new HashSet<ulong>();
-        private readonly HashSet<ulong> cargoSailing = new HashSet<ulong>();
-        private readonly HashSet<ulong> cargoDocked = new HashSet<ulong>();
-        private readonly Dictionary<ulong, string> oilCrates = new Dictionary<ulong, string>();
-        private readonly HashSet<ulong> oilHacking = new HashSet<ulong>();
-        private bool deepSea;
-        private bool convoy;
-        private bool train;
-        private bool sputnik;
-        private bool harborEvent;
-        private bool purge;
-        private int raids;
-        private int dungeons;
-        private int defend;
-        private Vector3 smallOil;
-        private Vector3 largeOil;
-        private bool smallOilFound;
-        private bool largeOilFound;
+        private Art logoArt;
+        private Art purgeArt;
+        private Art borderArt;
+        private Art backgroundArt;
+
+        private class Art
+        {
+            public string Key;
+            public string Label;
+            public string Path;
+            public int Tries;
+            public bool Queued;
+            public bool Waiting;
+            public bool GaveUp;
+            public bool Warned;
+            public string Shown;
+        }
 
         private class Settings
         {
@@ -123,16 +127,16 @@ namespace Oxide.Plugins
             [JsonProperty("Anchor")] public string Anchor = "1 1";
             [JsonProperty("Left anchor (under the missions bar)")] public string LeftAnchor = "0.008 0.905";
             [JsonProperty("Inset from the right (px)")] public float Right = 16f;
-            [JsonProperty("Inset from the top (px)")] public float Top = 58f;
-            [JsonProperty("Width (px)")] public float Width = 252f;
-            [JsonProperty("Icon size (px)")] public float IconSize = 34f;
-            [JsonProperty("Event columns")] public int Columns = 3;
+            [JsonProperty("Inset from the top (px)")] public float Top = 12f;
+            [JsonProperty("Width (px)")] public float Width = 268f;
+            [JsonProperty("Height (px)")] public float Height = 120f;
+            [JsonProperty("Icon size (px)")] public float IconSize = 36f;
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
-            [JsonProperty("Logo URL")] public string LogoUrl = "";
             [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
+            [JsonProperty("Purge logo image file")] public string PurgeLogoImage = "purge_logo.png";
             [JsonProperty("Server name")] public string ServerName = "Nightshade";
             [JsonProperty("Tag text")] public string TagText = "Solo/Duo";
-            [JsonProperty("Tag color")] public string TagColor = "#C4A6E0";
+            [JsonProperty("Tag color")] public string TagColor = "#9A9692";
             [JsonProperty("Use 24-hour clock")] public bool Use24Hour = false;
             [JsonProperty("Time zone id")] public string TimeZoneId = "America/New_York";
             [JsonProperty("Show ET label")] public bool ShowZoneLabel = true;
@@ -141,7 +145,6 @@ namespace Oxide.Plugins
             [JsonProperty("Count admins in online")] public bool CountAdmins = false;
             [JsonProperty("Show PvP countdown")] public bool ShowCountdown = true;
             [JsonProperty("Show shield line")] public bool ShowShield = true;
-            [JsonProperty("Hide shield line when none")] public bool HideShieldWhenNone = false;
             [JsonProperty("Show teleportation block")] public bool ShowTeleport = true;
             [JsonProperty("Teleportation title")] public string TeleportTitle = "Teleportation";
             [JsonProperty("Teleportation title color")] public string TeleportTitleColor = "#50A0FF";
@@ -150,24 +153,16 @@ namespace Oxide.Plugins
             [JsonProperty("Default Bandit price")] public int DefaultBanditPrice = 200;
             [JsonProperty("Show border")] public bool ShowBorder = true;
             [JsonProperty("Border image file")] public string BorderImage = DefaultBorderFile;
+            [JsonProperty("Background image file")] public string BackgroundImage = DefaultBackgroundFile;
             [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 8f;
             [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 8f;
-            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 6f;
+            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 12f;
             [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 8f;
             [JsonProperty("Panel color")] public string PanelColor = "#0E0E12";
             [JsonProperty("Panel opacity (0-100)")] public float PanelOpacity = 78f;
             [JsonProperty("Name color")] public string NameColor = "#A267D3";
             [JsonProperty("Clock color")] public string ClockColor = "#E7E2F2";
             [JsonProperty("Muted text color")] public string MutedColor = "#8A8A8A";
-            [JsonProperty("Inactive event alpha (0-1)")] public float InactiveAlpha = 0.55f;
-            [JsonProperty("Active event color")] public string ActiveColor = "#3DDC84";
-            [JsonProperty("Contested event color")] public string ContestedColor = "#FFB020";
-            [JsonProperty("Deep Sea open color")] public string DeepSeaOpenColor = "#7EC8FF";
-            [JsonProperty("Patrol heli label")] public string HeliLabel = "KAREN";
-            [JsonProperty("Patrol heli active color")] public string HeliActiveColor = "#FF4D4D";
-            [JsonProperty("Bradley label")] public string BradleyLabel = "BRAD";
-            [JsonProperty("Bradley active color")] public string BradleyActiveColor = "";
-            [JsonProperty("Event font size")] public int EventFontSize = 9;
             [JsonProperty("PvE badge text")] public string BadgePveText = "PVE";
             [JsonProperty("PvP badge text")] public string BadgePvpText = "PVP";
             [JsonProperty("PvE badge color")] public string BadgePveColor = "#3DDC84";
@@ -175,22 +170,9 @@ namespace Oxide.Plugins
             [JsonProperty("PvE badge background")] public string BadgePveBg = "#143528";
             [JsonProperty("PvP badge background")] public string BadgePvpBg = "#3A1212";
             [JsonProperty("Countdown color while PvP is active")] public string CountdownActive = "#FF4D4D";
-            [JsonProperty("Countdown color while PvP is waiting")] public string CountdownIdle = "#C8C8C8";
+            [JsonProperty("Countdown color while PvP is waiting")] public string CountdownIdle = "#FF4D4D";
             [JsonProperty("Shield active color")] public string ShieldActive = "#69D8A0";
             [JsonProperty("Shield queued color")] public string ShieldQueued = "#E2B968";
-            [JsonProperty("Dungeon portal owner id")] public ulong DungeonPortalOwner = 10203040505UL;
-            [JsonProperty("Oil rig crate radius")] public float OilRadius = 50f;
-            [JsonProperty("Events", ObjectCreationHandling = ObjectCreationHandling.Replace)]
-            public List<EventCfg> Events = new List<EventCfg>();
-        }
-
-        private class EventCfg
-        {
-            [JsonProperty("Key")] public string Key;
-            [JsonProperty("Label")] public string Label;
-            [JsonProperty("Enabled")] public bool Enabled = true;
-            [JsonProperty("Show count")] public bool ShowCount;
-            [JsonProperty("Order")] public int Order;
         }
 
         private class Stored
@@ -202,7 +184,6 @@ namespace Oxide.Plugins
         protected override void LoadDefaultConfig()
         {
             config = new Settings();
-            config.Events = DefaultEvents();
         }
 
         protected override void LoadConfig()
@@ -214,65 +195,40 @@ namespace Oxide.Plugins
                 PrintWarning("Invalid config, using defaults: " + ex.Message);
                 config = new Settings();
             }
-            if (config.Events == null) config.Events = new List<EventCfg>();
-            if (config.Columns < 1) config.Columns = 3;
-            if (config.Width < 120f) config.Width = 120f;
-            if (config.IconSize < 16f) config.IconSize = 16f;
-            if (config.EventFontSize < 8 || config.EventFontSize > 16) config.EventFontSize = 9;
-            if (string.IsNullOrEmpty(config.DeepSeaOpenColor)) config.DeepSeaOpenColor = "#7EC8FF";
+            if (config.Width < 180f) config.Width = 268f;
+            if (config.Height < 80f) config.Height = 120f;
+            if (config.IconSize < 16f) config.IconSize = 36f;
             if (string.IsNullOrEmpty(config.NameColor) || string.Equals(config.NameColor, "#F4F1EA", StringComparison.OrdinalIgnoreCase))
                 config.NameColor = "#A267D3";
             if (config.TagText == null) config.TagText = "Solo/Duo";
-            if (string.IsNullOrEmpty(config.TagColor)) config.TagColor = "#C4A6E0";
+            // The approved 1.3 layout uses grey for the tag. #C4A6E0 was the 1.2 default.
+            if (string.IsNullOrEmpty(config.TagColor) || string.Equals(config.TagColor, "#C4A6E0", StringComparison.OrdinalIgnoreCase))
+                config.TagColor = "#9A9692";
             if (string.IsNullOrEmpty(config.LeftAnchor)) config.LeftAnchor = "0.008 0.905";
-            if (string.IsNullOrEmpty(config.HeliLabel)) config.HeliLabel = "KAREN";
-            if (string.IsNullOrEmpty(config.HeliActiveColor)) config.HeliActiveColor = "#FF4D4D";
-            if (string.IsNullOrEmpty(config.BradleyLabel)) config.BradleyLabel = "BRAD";
-            if (config.BradleyActiveColor == null) config.BradleyActiveColor = "";
-            if (IsHttp(config.LogoUrl))
-            {
-                skippedLogoUrl = config.LogoUrl.Trim();
-                config.LogoUrl = "";
-            }
-            if (!SafeLogoName(config.LogoImage)) config.LogoImage = "logo.png";
+            if (string.IsNullOrEmpty(config.Anchor)) config.Anchor = "1 1";
+            // 58 cleared the old top-right skill panel. That panel now sits at the bottom.
+            if (Mathf.Abs(config.Top - 58f) < 0.1f) config.Top = 12f;
+            if (Mathf.Abs(config.Width - 252f) < 0.1f) config.Width = 268f;
+            if (Mathf.Abs(config.IconSize - 34f) < 0.1f) config.IconSize = 36f;
+            // The rounded border is drawn for a 12px top outset. 6 was the 1.2 default.
+            if (Mathf.Abs(config.BorderOutsetTop - 6f) < 0.1f) config.BorderOutsetTop = 12f;
+            if (string.Equals(config.CountdownIdle, "#C8C8C8", StringComparison.OrdinalIgnoreCase))
+                config.CountdownIdle = "#FF4D4D";
+            if (string.IsNullOrEmpty(config.CountdownActive)) config.CountdownActive = "#FF4D4D";
+            if (string.IsNullOrEmpty(config.CountdownIdle)) config.CountdownIdle = "#FF4D4D";
+            if (!SafeArtName(config.LogoImage, true)) config.LogoImage = "logo.png";
             else config.LogoImage = config.LogoImage.Trim();
+            if (!SafeArtName(config.PurgeLogoImage, true)) config.PurgeLogoImage = "purge_logo.png";
+            else config.PurgeLogoImage = config.PurgeLogoImage.Trim();
             if (config.TeleportTitle == null) config.TeleportTitle = "Teleportation";
             if (string.IsNullOrEmpty(config.TeleportTitleColor)) config.TeleportTitleColor = "#50A0FF";
             if (string.IsNullOrEmpty(config.TeleportFormat)) config.TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
             if (config.DefaultOutpostPrice < 0) config.DefaultOutpostPrice = 150;
             if (config.DefaultBanditPrice < 0) config.DefaultBanditPrice = 200;
-            if (string.IsNullOrEmpty(config.BorderImage)) config.BorderImage = DefaultBorderFile;
-            bool added = false;
-            foreach (var known in DefaultEvents())
-            {
-                if (config.Events.Exists(e => e != null && e.Key == known.Key)) continue;
-                config.Events.Add(known);
-                added = true;
-            }
-            config.Events.RemoveAll(e => e == null || string.IsNullOrEmpty(e.Key));
-            foreach (var entry in config.Events)
-            {
-                string updated;
-                if (entry != null && OldLabels.TryGetValue(entry.Key + "|" + entry.Label, out updated))
-                {
-                    entry.Label = updated;
-                    added = true;
-                }
-            }
-            EventCfg heli = null;
-            EventCfg brad = null;
-            foreach (var entry in config.Events)
-            {
-                if (entry == null) continue;
-                if (entry.Key == "PatrolHeli") heli = entry;
-                else if (entry.Key == "Bradley") brad = entry;
-            }
-            if (heli != null && brad != null && heli.Order == 20 && brad.Order == 10)
-            {
-                heli.Order = 10;
-                brad.Order = 20;
-                added = true;
-            }
+            if (!SafeArtName(config.BorderImage, false)) config.BorderImage = DefaultBorderFile;
+            if (!SafeArtName(config.BackgroundImage, false)) config.BackgroundImage = DefaultBackgroundFile;
+            if (string.IsNullOrEmpty(config.ShieldActive)) config.ShieldActive = "#69D8A0";
+            if (string.IsNullOrEmpty(config.ShieldQueued)) config.ShieldQueued = "#E2B968";
             SaveConfig();
         }
 
@@ -287,13 +243,17 @@ namespace Oxide.Plugins
             if (stored.Players == null) stored.Players = new Dictionary<string, string>(StringComparer.Ordinal);
             if (stored.Sides == null) stored.Sides = new Dictionary<string, string>(StringComparer.Ordinal);
             zone = ResolveZone(config.TimeZoneId, out zoneFallback);
+            logoArt = new Art { Key = LogoImageKey, Label = "HUD logo" };
+            purgeArt = new Art { Key = PurgeImageKey, Label = "purge logo" };
+            borderArt = new Art { Key = BorderKey, Label = "HUD border" };
+            backgroundArt = new Art { Key = BackgroundKey, Label = "HUD background" };
         }
 
         private void OnServerInitialized()
         {
-            timer.Once(1f, QueueLogo);
+            timer.Once(1f, QueueImages);
             if (zoneFallback)
-                PrintWarning("Time zone '" + config.TimeZoneId + "' was not found. Using a built-in US Eastern zone.");
+                PrintWarning("Time zone '" + config.TimeZoneId + "' was not found. Using " + zone.Id + ".");
             if (ServerMgr.Instance != null)
                 startupRoutine = ServerMgr.Instance.StartCoroutine(BootHud());
             else
@@ -304,17 +264,13 @@ namespace Oxide.Plugins
         {
             clockTimer?.Destroy();
             priceTimer?.Destroy();
-            borderTimer?.Destroy();
+            artTimer?.Destroy();
             foreach (var pending in dragCommit.Values)
                 if (pending != null) pending.Destroy();
             dragCommit.Clear();
-            if (ServerMgr.Instance != null)
-            {
-                if (startupRoutine != null) ServerMgr.Instance.StopCoroutine(startupRoutine);
-                if (convoyRoutine != null) ServerMgr.Instance.StopCoroutine(convoyRoutine);
-            }
+            if (ServerMgr.Instance != null && startupRoutine != null)
+                ServerMgr.Instance.StopCoroutine(startupRoutine);
             startupRoutine = null;
-            convoyRoutine = null;
             SaveData();
             foreach (var player in BasePlayer.activePlayerList)
                 if (player != null) CuiHelper.DestroyUi(player, Root);
@@ -371,6 +327,7 @@ namespace Oxide.Plugins
         private void OnPlayerGainedBuildingPrivilege(BasePlayer player) => RefreshShield(player);
         private void OnPlayerLostBuildingPrivilege(BasePlayer player) => RefreshShield(player);
 
+        // Chat args are string[]. ConsoleSystem.Arg.Args is Facepunch.StringView[] on this host.
         private void CmdHud(BasePlayer player, string command, string[] args)
         {
             if (player == null) return;
@@ -400,6 +357,7 @@ namespace Oxide.Plugins
             SetState(player, requested == "cycle" ? Cycle(StateOf(player)) : requested);
         }
 
+        // Chat args are string[]. ConsoleSystem.Arg.Args is Facepunch.StringView[]; read them with GetString.
         private void CmdUi(ConsoleSystem.Arg arg)
         {
             var player = arg.Player();
@@ -464,6 +422,11 @@ namespace Oxide.Plugins
             }
         }
 
+        private static bool IsOpen(string state)
+        {
+            return state != "minimized";
+        }
+
         private void Show(BasePlayer player)
         {
             if (player == null || !player.IsConnected) return;
@@ -478,49 +441,42 @@ namespace Oxide.Plugins
             string state = StateOf(player);
             var container = new CuiElementContainer();
             AddRoot(container, player, state);
-            if (state != "minimized")
+            if (IsOpen(state))
             {
                 AddBackground(container);
-                AddBorder(container, player, state);
-                AddHalf(container, player);
-                if (state == "full") AddEvents(container, player);
+                AddBorder(container);
+                AddBody(container, player);
             }
             AddIconGroup(container, state);
             CuiHelper.AddUi(player, container);
             shown[player.userID] = state;
+            if (IsOpen(state)) shieldCache[player.userID] = ShieldSignature(player);
         }
 
         private void Transition(BasePlayer player, string from, string to)
         {
             if (from == to) return;
             Resize(player, to);
-            if (from == "minimized")
+            bool fromOpen = IsOpen(from);
+            bool toOpen = IsOpen(to);
+            if (!fromOpen && toOpen)
             {
                 var add = new CuiElementContainer();
                 AddBackground(add);
-                AddBorder(add, player, to);
-                AddHalf(add, player);
-                if (to == "full") AddEvents(add, player);
+                AddBorder(add);
+                AddBody(add, player);
                 CuiHelper.AddUi(player, add);
             }
-            else if (to == "minimized")
+            else if (fromOpen && !toOpen)
             {
                 CuiHelper.DestroyUi(player, Bg);
                 CuiHelper.DestroyUi(player, BorderName);
                 CuiHelper.DestroyUi(player, Half);
-                CuiHelper.DestroyUi(player, Events);
+                CuiHelper.DestroyUi(player, CountdownName);
+                CuiHelper.DestroyUi(player, StatusSepName);
+                CuiHelper.DestroyUi(player, ShieldName);
             }
-            else if (from == "half" && to == "full")
-            {
-                var add = new CuiElementContainer();
-                AddEvents(add, player);
-                CuiHelper.AddUi(player, add);
-            }
-            else if (from == "full" && to == "half")
-            {
-                CuiHelper.DestroyUi(player, Events);
-            }
-            if (from == "minimized")
+            if (!fromOpen)
             {
                 var icon = new CuiElementContainer();
                 AddIconGroup(icon, to);
@@ -529,7 +485,7 @@ namespace Oxide.Plugins
             else
                 MoveIconGroup(player, to);
             shown[player.userID] = to;
-            if (to != "minimized") shieldCache[player.userID] = ShieldSignature(player);
+            if (toOpen) shieldCache[player.userID] = ShieldSignature(player);
         }
 
         private void AddRoot(CuiElementContainer container, BasePlayer player, string state)
@@ -550,6 +506,26 @@ namespace Oxide.Plugins
 
         private void AddBackground(CuiElementContainer container)
         {
+            string png = ArtPng(backgroundArt);
+            if (!string.IsNullOrEmpty(png))
+            {
+                container.Add(new CuiElement
+                {
+                    Name = Bg,
+                    Parent = Root,
+                    Components =
+                    {
+                        new CuiRawImageComponent
+                        {
+                            Png = png,
+                            Color = "1 1 1 1",
+                            Sprite = "assets/content/textures/generic/fulltransparent.tga"
+                        },
+                        new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" }
+                    }
+                });
+                return;
+            }
             container.Add(new CuiElement
             {
                 Name = Bg,
@@ -618,111 +594,14 @@ namespace Oxide.Plugins
             });
         }
 
-        private static bool IsHttp(string url)
-        {
-            if (string.IsNullOrEmpty(url)) return false;
-            return url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool SafeLogoName(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return false;
-            string text = name.Trim();
-            if (text.IndexOf('/') >= 0 || text.IndexOf('\\') >= 0 || text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
-            return text.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private string LogoPath()
-        {
-            string name = config == null || !SafeLogoName(config.LogoImage) ? "logo.png" : config.LogoImage.Trim();
-            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeHud", name);
-        }
-
-        private void QueueLogo()
-        {
-            if (logoQueued || logoGaveUp || logoWaiting) return;
-            string path = LogoPath();
-            if (!File.Exists(path))
-            {
-                logoGaveUp = true;
-                string skipped = string.IsNullOrEmpty(skippedLogoUrl) ? "" : " Not downloading " + skippedLogoUrl + ".";
-                WarnLogo("Logo file is missing (" + path + ")." + skipped + " The HUD stays up without it.");
-                return;
-            }
-            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
-            {
-                logoTries++;
-                if (logoTries >= 4)
-                {
-                    logoGaveUp = true;
-                    WarnLogo("ImageLibrary is not loaded. The HUD stays up without its logo.");
-                    return;
-                }
-                logoWaiting = true;
-                float delay = logoTries * 5f;
-                timer.Once(delay, () =>
-                {
-                    logoWaiting = false;
-                    QueueLogo();
-                });
-                return;
-            }
-            try
-            {
-                byte[] bytes = File.ReadAllBytes(path);
-                if (bytes == null || bytes.Length < 8 || bytes.Length > LogoMaxBytes || !IsPng(bytes))
-                {
-                    logoGaveUp = true;
-                    WarnLogo("Logo file is empty, not a png, or larger than 3 MB (" + path + "). The HUD stays up without it.");
-                    return;
-                }
-                object added = ImageLibrary.Call("AddImageData", LogoImageKey, bytes, 0UL);
-                if (!(added is bool) || !(bool)added)
-                {
-                    logoGaveUp = true;
-                    WarnLogo("ImageLibrary did not accept the HUD logo. The HUD stays up without it.");
-                    return;
-                }
-                logoQueued = true;
-            }
-            catch (Exception ex)
-            {
-                logoGaveUp = true;
-                WarnLogo("Could not read the HUD logo: " + ex.Message + ". The HUD stays up without it.");
-            }
-        }
-
-        private static bool IsPng(byte[] bytes)
-        {
-            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
-                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
-        }
-
-        private void WarnLogo(string message)
-        {
-            if (logoWarned) return;
-            logoWarned = true;
-            PrintWarning(message);
-        }
-
         private string LogoPng()
         {
-            if (!logoQueued && !logoGaveUp) QueueLogo();
-            if (logoGaveUp || !logoQueued || ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
-            try
+            if (PurgeActive())
             {
-                object stored = ImageLibrary.Call("HasImage", LogoImageKey, 0UL);
-                if (!(stored is bool) || !(bool)stored) return null;
-                string png = ImageLibrary.Call<string>("GetImage", LogoImageKey, 0UL);
-                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
-                return png;
+                string purgePng = ArtPng(purgeArt);
+                if (!string.IsNullOrEmpty(purgePng)) return purgePng;
             }
-            catch (Exception ex)
-            {
-                logoGaveUp = true;
-                WarnLogo("ImageLibrary could not return the HUD logo: " + ex.Message);
-                return null;
-            }
+            return ArtPng(logoArt);
         }
 
         private void AddBadge(CuiElementContainer container, string state, float originLeft, float originTop)
@@ -860,82 +739,80 @@ namespace Oxide.Plugins
             return "chat.say /" + command + " cycle";
         }
 
-        private void AddHalf(CuiElementContainer container, BasePlayer player)
+        private float NameX()
         {
-            float top = -Pad;
-            string parent = HalfParent(container);
-            float nameX = Pad + config.IconSize + 3f;
+            return Pad + config.IconSize + NameGap;
+        }
+
+        private void AddBody(CuiElementContainer container, BasePlayer player)
+        {
+            string parent = BodyParent(container);
+            float nameX = NameX();
             float edge = config.Width - Pad;
-            const float clockW = 68f;
-            float clockLeft = edge - clockW;
-            float textLimit = clockLeft - 4f;
             string name = string.IsNullOrEmpty(config.ServerName) ? "Nightshade" : config.ServerName;
-            float nameInk = TextWidth(name, 12, true);
-            float nameRight = Mathf.Min(nameX + nameInk + 1f, textLimit);
-            AddLabel(container, "NightshadeHud.Name", parent, name, Hex(config.NameColor), 12, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, top - 16f), Px(nameRight, top), true);
-            float tagX = nameX + nameInk + 4f;
-            if (!string.IsNullOrEmpty(config.TagText) && tagX < textLimit - 8f)
-                AddLabel(container, "NightshadeHud.Tag", parent, config.TagText, Hex(config.TagColor), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(tagX, top - 16f), Px(textLimit, top));
-            AddLabel(container, "NightshadeHud.Clock", parent, ClockText(), Hex(config.ClockColor), 11, TextAnchor.MiddleRight, "0 1", "0 1", Px(clockLeft, top - 16f), Px(edge, top));
-            float row2 = top - 18f;
-            AddLabel(container, "NightshadeHud.Online", parent, OnlineText(), Hex(config.MutedColor, 0.95f), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, row2 - 16f), Px(edge, row2));
-            float y = -(Pad + config.IconSize + BadgeHang() + 2f);
-            bool shield = ShieldVisible(player);
-            bool teleport = ShowTeleport();
-            float teleLeft = edge;
-            float teleRight = edge;
-            if (teleport) TeleportSpan(out teleLeft, out teleRight);
+            float nameInk = TextWidth(name, NameFont, true);
+            string clock = ClockText();
+            float clockInk = TextWidth(clock, ClockFont, true) + 2f;
+            float clockLeft = edge - clockInk;
+            float nameRight = Mathf.Min(nameX + nameInk + 1f, clockLeft - 2f);
+            AddLabel(container, "NightshadeHud.Name", parent, name, Hex(config.NameColor), NameFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, -(NameTop + NameH)), Px(nameRight, -NameTop), true);
+            float tagX = nameX + nameInk + NameGap;
+            if (!string.IsNullOrEmpty(config.TagText) && tagX < clockLeft - 8f)
+                AddLabel(container, "NightshadeHud.Tag", parent, config.TagText, Hex(config.TagColor), TagFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(tagX, -(NameTop + NameH)), Px(clockLeft - 2f, -NameTop));
+            AddLabel(container, "NightshadeHud.Clock", parent, clock, Hex(config.ClockColor), ClockFont, TextAnchor.MiddleRight, "0 1", "0 1", Px(clockLeft, -(NameTop + NameH)), Px(edge, -NameTop), true);
+            AddLabel(container, "NightshadeHud.Online", parent, OnlineText(), Hex(config.MutedColor, 0.95f), OnlineFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, -(OnlineTop + OnlineH)), Px(edge, -OnlineTop));
+            AddStatusRow(container, parent, player);
+            if (ShowTeleport())
+            {
+                string titleColor = Hex(string.IsNullOrEmpty(config.TeleportTitleColor) ? "#50A0FF" : config.TeleportTitleColor);
+                AddLabel(container, TeleportTitleName, parent, TeleportTitleText(), titleColor, TeleTitleFont, TextAnchor.MiddleCenter, "0 1", "0 1", Px(0f, -(TeleTitleTop + TeleTitleH)), Px(config.Width, -TeleTitleTop), true);
+                AddLabel(container, TeleportPriceName, parent, TeleportPriceText(), Hex(config.ClockColor), TelePriceFont, TextAnchor.MiddleCenter, "0 1", "0 1", Px(0f, -(TelePriceTop + TelePriceH)), Px(config.Width, -TelePriceTop));
+            }
+            clockCache = clock;
+            onlineCache = OnlineText();
+        }
+
+        private void AddStatusRow(CuiElementContainer container, string parent, BasePlayer player)
+        {
+            float x = NameX();
+            float edge = config.Width - Pad;
+            float top = -StatusTop;
+            float bottom = -(StatusTop + StatusH);
             string countText, countColor;
             Countdown(out countText, out countColor);
-            float countRight = teleport && !shield ? Mathf.Max(Pad + 8f, teleLeft - 4f) : edge;
-            AddLabel(container, "NightshadeHud.Countdown", parent, countText, countColor, 11, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(countRight, y));
-            y -= Line;
+            float countW = TextWidth(countText, StatusFont, true) + 2f;
+            float room = edge - x;
+            if (countW > room) countW = room;
+            if (!string.IsNullOrEmpty(countText) && countW >= 8f)
+            {
+                AddLabel(container, CountdownName, parent, countText, countColor, StatusFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(x, bottom), Px(x + countW, top), true);
+                x += TextWidth(countText, StatusFont, true);
+            }
+            string shieldText = string.Empty;
+            string shieldColor = Hex(config.ShieldActive);
+            if (player != null)
+                RaidLine(player, out shieldText, out shieldColor);
+            bool shield = !string.IsNullOrEmpty(shieldText) && x < edge - 12f;
             if (shield)
             {
-                float shieldRight = teleport ? Mathf.Max(Pad + 8f, teleLeft - 4f) : edge;
-                string shieldText, shieldColor;
-                RaidLine(player, out shieldText, out shieldColor);
-                shieldText = FitWidth(shieldText, 10, false, Mathf.Max(8f, shieldRight - Pad));
-                AddLabel(container, "NightshadeHud.ShieldQueue", parent, shieldText, shieldColor, 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(shieldRight, y));
-                if (teleport) AddTeleportTitle(container, parent, y, teleLeft, teleRight);
-                y -= Line;
+                const string sep = " \u00B7 ";
+                float sepW = TextWidth(sep, StatusFont, true);
+                if (x + sepW + 8f < edge)
+                {
+                    AddLabel(container, StatusSepName, parent, sep, Hex(config.MutedColor), StatusFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(x, bottom), Px(x + sepW + 1f, top), true);
+                    x += sepW;
+                    float shieldRoom = Mathf.Max(8f, edge - x);
+                    shieldText = FitWidth(shieldText, ShieldFont, true, shieldRoom);
+                    float shieldW = Mathf.Min(shieldRoom, TextWidth(shieldText, ShieldFont, true) + 2f);
+                    if (!string.IsNullOrEmpty(shieldText) && shieldW >= 8f)
+                        AddLabel(container, ShieldName, parent, shieldText, shieldColor, ShieldFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(x, bottom), Px(x + shieldW, top), true);
+                }
             }
-            else if (teleport)
-                AddTeleportTitle(container, parent, y + Line, teleLeft, teleRight);
-            AddStatusLine(container, parent, y, teleport, teleLeft);
-            if (player != null) shieldCache[player.userID] = ShieldSignature(player);
-            clockCache = ClockText();
-            onlineCache = OnlineText();
+            if (player != null) shieldCache[player.userID] = countText + "|" + countColor + "|" + ShieldSignature(player);
             countdownCache = countText + "|" + countColor;
         }
 
-        private void AddStatusLine(CuiElementContainer container, string parent, float y, bool teleport, float teleLeft)
-        {
-            float x = Pad;
-            float limit = config.Width - Pad;
-            if (teleport) limit = Mathf.Max(x + 8f, teleLeft - 6f);
-            const float gap = 10f;
-            const int font = 11;
-            if (ShowDeepSea())
-            {
-                string text, color;
-                DeepSeaLine(out text, out color);
-                x = AddChip(container, "NightshadeHud.DeepSea", parent, text, color, font, x, TextWidth(text, font, false) + 2f, limit, y) + gap;
-                deepSeaCache = text + "|" + color;
-            }
-            if (teleport) AddTeleportPrice(container, parent, y);
-        }
-
-        private float AddChip(CuiElementContainer container, string name, string parent, string text, string color, int font, float x, float width, float limit, float y)
-        {
-            float end = x + width;
-            if (end > limit) end = limit;
-            if (end - x < 8f) return x;
-            AddLabel(container, name, parent, text, color, font, TextAnchor.MiddleLeft, "0 1", "0 1", Px(x, y - Line), Px(end, y));
-            return end;
-        }
-
-        private string HalfParent(CuiElementContainer container)
+        private string BodyParent(CuiElementContainer container)
         {
             container.Add(new CuiElement
             {
@@ -948,39 +825,6 @@ namespace Oxide.Plugins
                 }
             });
             return Half;
-        }
-
-        private void AddEvents(CuiElementContainer container, BasePlayer player)
-        {
-            var enabled = EnabledEvents();
-            float top = HalfHeight(player) + EventGap();
-            container.Add(new CuiElement
-            {
-                Name = Events,
-                Parent = Root,
-                Components =
-                {
-                    new CuiImageComponent { Color = "0 0 0 0" },
-                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(0f, -PanelHeight(player, "full")), OffsetMax = Px(config.Width, -top) }
-                }
-            });
-            int columns = Math.Max(1, config.Columns);
-            float colW = (config.Width - Pad * 2f) / columns;
-            for (int i = 0; i < enabled.Count; i++)
-            {
-                var entry = enabled[i];
-                int count;
-                bool on, contested;
-                ReadEvent(entry.Key, out count, out on, out contested);
-                string text = EventText(entry, count, on);
-                string color = EventColorFor(entry, on, contested);
-                eventCache[entry.Key] = text + "|" + color;
-                int col = i % columns;
-                int row = i / columns;
-                float x = Pad + col * colW;
-                float y = -row * Line;
-                AddLabel(container, "NightshadeHud.Ev." + entry.Key, Events, text, color, EventFont(), TextAnchor.MiddleLeft, "0 1", "0 1", Px(x, y - Line), Px(x + colW, y));
-            }
         }
 
         private void Resize(BasePlayer player, string state)
@@ -1036,7 +880,7 @@ namespace Oxide.Plugins
 
         private string OffsetMin(BasePlayer player, string state)
         {
-            float height = PanelHeight(player, state);
+            float height = PanelHeight(state);
             if (!OnLeft(player))
             {
                 float width = state == "minimized" ? config.IconSize : config.Width;
@@ -1112,30 +956,10 @@ namespace Oxide.Plugins
             SetSide(player, x < 0.5f ? "left" : "right");
         }
 
-        private float HalfHeight(BasePlayer player)
-        {
-            float height = Pad + config.IconSize + BadgeHang() + 2f + Line;
-            if (ShieldVisible(player)) height += Line;
-            if (HasStatusLine()) height += Line;
-            return height + Pad;
-        }
-
-        // Keeps the border's bottom flowers off the event labels in the full view.
-        private float EventGap()
-        {
-            if (config == null || !config.ShowBorder) return 0f;
-            return Mathf.Max(0f, config.BorderOutsetBottom);
-        }
-
-        private float PanelHeight(BasePlayer player, string state)
+        private float PanelHeight(string state)
         {
             if (state == "minimized") return config.IconSize + BadgeHang();
-            if (state != "full") return HalfHeight(player);
-            int count = EnabledEvents().Count;
-            int columns = Math.Max(1, config.Columns);
-            int rows = count == 0 ? 0 : (count + columns - 1) / columns;
-            float gap = rows > 0 ? EventGap() : 0f;
-            return HalfHeight(player) + gap + rows * Line + (rows > 0 ? 4f : 0f);
+            return config.Height;
         }
 
         #endregion
@@ -1145,8 +969,7 @@ namespace Oxide.Plugins
         private void ScheduleClock()
         {
             clockTimer?.Destroy();
-            float delay = 12f;
-            clockTimer = timer.Once(delay, () =>
+            clockTimer = timer.Once(12f, () =>
             {
                 TickShared(true);
                 ScheduleClock();
@@ -1170,29 +993,17 @@ namespace Oxide.Plugins
             if (onlineChanged) onlineCache = online;
             if (countChanged) countdownCache = countSig;
             if (badgeChanged) badgeCache = badge;
-            string seaText = null;
-            string seaColor = null;
-            bool seaChanged = false;
-            if (ShowDeepSea())
-            {
-                DeepSeaLine(out seaText, out seaColor);
-                string seaSig = seaText + "|" + seaColor;
-                seaChanged = seaSig != deepSeaCache;
-                if (seaChanged) deepSeaCache = seaSig;
-            }
-            if (!clockChanged && !onlineChanged && !countChanged && !badgeChanged && !includeShield && !seaChanged) return;
+            if (!clockChanged && !onlineChanged && !countChanged && !badgeChanged && !includeShield) return;
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (player == null || !player.IsConnected) continue;
                 string state;
                 if (!shown.TryGetValue(player.userID, out state)) continue;
                 if (badgeChanged) PushBadge(player, pvp);
-                if (state == "minimized") continue;
-                if (clockChanged) PushText(player, "NightshadeHud.Clock", clock, Hex(config.ClockColor), TextAnchor.MiddleRight, 11);
-                if (onlineChanged) PushText(player, "NightshadeHud.Online", online, Hex(config.MutedColor, 0.95f), TextAnchor.MiddleLeft, 10);
-                if (countChanged) PushText(player, "NightshadeHud.Countdown", countText, countColor, TextAnchor.MiddleLeft);
-                if (includeShield) PushShield(player, false);
-                if (seaChanged) PushText(player, "NightshadeHud.DeepSea", seaText, seaColor, TextAnchor.MiddleLeft);
+                if (!IsOpen(state)) continue;
+                if (clockChanged) PushText(player, "NightshadeHud.Clock", clock, Hex(config.ClockColor), TextAnchor.MiddleRight, ClockFont, true);
+                if (onlineChanged) PushText(player, "NightshadeHud.Online", online, Hex(config.MutedColor, 0.95f), TextAnchor.MiddleLeft, OnlineFont, false);
+                if (countChanged || includeShield) RefreshStatus(player, false);
             }
         }
 
@@ -1205,52 +1016,33 @@ namespace Oxide.Plugins
 
         private void MarkPop()
         {
-            if (popDirty) return;
-            popDirty = true;
-            NextTick(() =>
-            {
-                popDirty = false;
-                onlineCache = "\0";
-                TickShared(false);
-            });
+            onlineCache = "\0";
+            NextTick(() => TickShared(false));
         }
 
         private void RefreshShield(BasePlayer player)
         {
             if (player == null) return;
-            NextTick(() => PushShield(player, true));
+            NextTick(() => RefreshStatus(player, true));
         }
 
-        private void PushShield(BasePlayer player, bool force)
+        private void RefreshStatus(BasePlayer player, bool force)
         {
             if (player == null) return;
             string state;
-            if (!shown.TryGetValue(player.userID, out state) || state == "minimized") return;
-            string sig = ShieldSignature(player);
+            if (!shown.TryGetValue(player.userID, out state) || !IsOpen(state)) return;
+            string countText, countColor;
+            Countdown(out countText, out countColor);
+            string row = countText + "|" + countColor + "|" + ShieldSignature(player);
             string previous;
-            bool had = shieldCache.TryGetValue(player.userID, out previous);
-            if (!force && had && previous == sig) return;
-            bool wasVisible = had && previous.StartsWith("1|", StringComparison.Ordinal);
-            bool nowVisible = sig.StartsWith("1|", StringComparison.Ordinal);
-            if (had && wasVisible != nowVisible)
-            {
-                Show(player);
-                return;
-            }
-            shieldCache[player.userID] = sig;
-            if (!nowVisible) return;
-            string text, color;
-            RaidLine(player, out text, out color);
-            float edge = config.Width - Pad;
-            float shieldRight = edge;
-            if (ShowTeleport())
-            {
-                float teleLeft, teleRight;
-                TeleportSpan(out teleLeft, out teleRight);
-                shieldRight = Mathf.Max(Pad + 8f, teleLeft - 4f);
-            }
-            text = FitWidth(text, 10, false, Mathf.Max(8f, shieldRight - Pad));
-            PushText(player, "NightshadeHud.ShieldQueue", text, color, TextAnchor.MiddleLeft, 10);
+            if (!force && shieldCache.TryGetValue(player.userID, out previous) && previous == row) return;
+            shieldCache[player.userID] = row;
+            CuiHelper.DestroyUi(player, CountdownName);
+            CuiHelper.DestroyUi(player, StatusSepName);
+            CuiHelper.DestroyUi(player, ShieldName);
+            var container = new CuiElementContainer();
+            AddStatusRow(container, Half, player);
+            CuiHelper.AddUi(player, container);
         }
 
         private void PushBadge(BasePlayer player, bool pvp)
@@ -1281,84 +1073,41 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void PushText(BasePlayer player, string name, string text, string color, TextAnchor align, int fontSize = 11)
+        private void PushText(BasePlayer player, string name, string text, string color, TextAnchor align, int fontSize, bool bold)
         {
             var container = new CuiElementContainer();
             container.Add(new CuiElement
             {
                 Name = name,
                 Update = true,
-                Components = { new CuiTextComponent { Text = text ?? string.Empty, FontSize = fontSize, Align = align, Color = color, Font = "robotocondensed-regular.ttf" } }
+                Components =
+                {
+                    new CuiTextComponent
+                    {
+                        Text = text ?? string.Empty,
+                        FontSize = fontSize,
+                        Align = align,
+                        Color = color,
+                        Font = bold ? "robotocondensed-bold.ttf" : "robotocondensed-regular.ttf"
+                    }
+                }
             });
             CuiHelper.AddUi(player, container);
-        }
-
-        private void MarkEvents()
-        {
-            if (scanning || eventsDirty) return;
-            eventsDirty = true;
-            timer.Once(0.5f, FlushEvents);
-        }
-
-        private void FlushEvents()
-        {
-            eventsDirty = false;
-            var enabled = EnabledEvents();
-            var dirty = new List<EventCfg>();
-            foreach (var entry in enabled)
-            {
-                int count;
-                bool on, contested;
-                ReadEvent(entry.Key, out count, out on, out contested);
-                string sig = EventText(entry, count, on) + "|" + EventColorFor(entry, on, contested);
-                string previous;
-                if (eventCache.TryGetValue(entry.Key, out previous) && previous == sig) continue;
-                eventCache[entry.Key] = sig;
-                dirty.Add(entry);
-            }
-            if (dirty.Count == 0) return;
-            foreach (var player in BasePlayer.activePlayerList)
-            {
-                if (player == null) continue;
-                string state;
-                if (!shown.TryGetValue(player.userID, out state) || state == "minimized") continue;
-                if (state == "full" && dirty.Count > 0)
-                {
-                    var container = new CuiElementContainer();
-                    foreach (var entry in dirty)
-                    {
-                        int count;
-                        bool on, contested;
-                        ReadEvent(entry.Key, out count, out on, out contested);
-                        container.Add(new CuiElement
-                        {
-                            Name = "NightshadeHud.Ev." + entry.Key,
-                            Update = true,
-                            Components =
-                            {
-                                new CuiTextComponent
-                                {
-                                    Text = EventText(entry, count, on),
-                                    FontSize = EventFont(),
-                                    Align = TextAnchor.MiddleLeft,
-                                    Color = EventColorFor(entry, on, contested),
-                                    Font = "robotocondensed-bold.ttf"
-                                }
-                            }
-                        });
-                    }
-                    CuiHelper.AddUi(player, container);
-                }
-            }
         }
 
         #endregion
 
         #region Text
 
-        private bool CombatPvp()
+        private bool PurgeActive()
         {
             if (purge) return true;
+            return CallBool(PurgeStatus, "API_IsPurgeActive");
+        }
+
+        private bool CombatPvp()
+        {
+            if (PurgeActive()) return true;
             return CallBool(WeekendPlugin(), "API_IsPvPActive");
         }
 
@@ -1405,10 +1154,17 @@ namespace Oxide.Plugins
                 color = Hex(config.CountdownIdle);
                 return;
             }
+            if (PurgeActive())
+            {
+                double remain = PurgeRemaining();
+                text = remain < 0d ? "PVP" : "PVP \u00B7 ends in " + FormatDur(remain);
+                color = Hex(config.CountdownActive);
+                return;
+            }
             if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
             {
                 text = "PvP unavailable";
-                color = Hex(config.MutedColor, config.InactiveAlpha);
+                color = Hex(config.MutedColor);
                 return;
             }
             bool active = CallBool(WeekendPlugin(), "API_IsPvPActive");
@@ -1419,16 +1175,23 @@ namespace Oxide.Plugins
             color = Hex(active ? config.CountdownActive : config.CountdownIdle);
         }
 
-        private double CountdownSeconds()
+        private double PurgeRemaining()
         {
-            if (WeekendPlugin() == null || !WeekendPlugin().IsLoaded) return 3600d;
-            return Math.Max(0d, ToDouble(WeekendPlugin().Call("API_SecondsUntilPvPChange")));
+            if (PurgeStatus == null || !PurgeStatus.IsLoaded) return -1d;
+            double end = ToDouble(PurgeStatus.Call("API_GetPurgeEndTimestamp"));
+            if (end <= 0d) return -1d;
+            double now;
+            try { now = Network.TimeEx.currentTimestamp; }
+            catch { return -1d; }
+            double remain = end - now;
+            if (double.IsNaN(remain) || double.IsInfinity(remain)) return -1d;
+            return remain;
         }
 
         private void RaidLine(BasePlayer player, out string text, out string color)
         {
             text = string.Empty;
-            color = Hex(config.MutedColor, config.InactiveAlpha);
+            color = Hex(config.MutedColor);
             if (config == null || !config.ShowShield || player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
                 return;
             object raw = WeekendPlugin().Call("API_GetPlayerShield", player);
@@ -1438,7 +1201,7 @@ namespace Oxide.Plugins
             if (seconds <= 0d) return;
             bool draining = DictBool(raw, "draining") || state == "active";
             int hours = HoursLeft(seconds);
-            text = "RaidProtection: " + hours.ToString(CultureInfo.InvariantCulture) + "h left";
+            text = "PvP Shield: " + hours.ToString(CultureInfo.InvariantCulture) + "h left";
             color = draining ? Hex(config.ShieldActive) : Hex(config.ShieldQueued);
         }
 
@@ -1448,13 +1211,6 @@ namespace Oxide.Plugins
             int total = (int)Math.Ceiling(seconds);
             if (total < 0) return 0;
             return total / 3600;
-        }
-
-        private bool ShieldVisible(BasePlayer player)
-        {
-            string text, color;
-            RaidLine(player, out text, out color);
-            return !string.IsNullOrEmpty(text);
         }
 
         private string FitWidth(string text, int font, bool bold, float limit)
@@ -1487,7 +1243,8 @@ namespace Oxide.Plugins
             bool authed = tc != null && tc.authorizedPlayers != null && tc.authorizedPlayers.Contains(player.userID);
             string ruleset = DictString(weekendRaw, "ruleset") ?? "(no weekend result)";
             player.ChatMessage("<color=#b084ff>[Nightshade HUD]</color> mode " + StateOf(player)
-                + " | pvp weekend plugin " + (WeekendPlugin() != null && WeekendPlugin().IsLoaded ? "loaded" : "MISSING"));
+                + " | pvp weekend plugin " + (WeekendPlugin() != null && WeekendPlugin().IsLoaded ? "loaded" : "MISSING")
+                + " | purge " + (PurgeActive() ? "active" : "off"));
             player.ChatMessage("PvP active raw: " + (activeRaw == null ? "null" : activeRaw.GetType().Name + " " + activeRaw)
                 + " | seconds raw: " + (secondsRaw == null ? "null" : secondsRaw.GetType().Name + " " + secondsRaw)
                 + " | ruleset: " + ruleset);
@@ -1512,220 +1269,13 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Events
-
-        private void OnPluginLoaded(Plugin plugin)
-        {
-            if (plugin == null) return;
-            if (plugin.Name == "ImageLibrary")
-            {
-                if (!logoQueued)
-                {
-                    logoGaveUp = false;
-                    logoTries = 0;
-                    logoWaiting = false;
-                    QueueLogo();
-                }
-                LoadBorder();
-            }
-            if (scanning) return;
-            timer.Once(1f, () => RefreshFromPlugin(plugin.Name));
-        }
-
-        private void RefreshFromPlugin(string name)
-        {
-            if (scanning) return;
-            if (name == "Raidable Bases") RefreshRaids();
-            else if (name == "ArmoredTrain") { train = CallBool(ArmoredTrain, "IsArmoredTrainActive"); MarkEvents(); }
-            else if (name == "Convoy" && ServerMgr.Instance != null)
-            {
-                convoy = false;
-                if (convoyRoutine != null) ServerMgr.Instance.StopCoroutine(convoyRoutine);
-                convoyRoutine = ServerMgr.Instance.StartCoroutine(CollectConvoyVehicles());
-            }
-            else if (name == "Dungeon Events") RefreshDungeons();
-            else if (name == "DefendableHomes") { defend = CountDefend(); MarkEvents(); }
-            else if (name == "Nightshade Purge Status") { purge = CallBool(PurgeStatus, "API_IsPurgeActive"); MarkEvents(); PushModeLine(); }
-            else if (name == "NightshadePVPWeekend" || name == "NightshadeRaidProtection") PushModeLine();
-        }
-
-        private void OnNightshadePvPStarted(long startUtcTicks, long endUtcTicks) => PushModeLine();
-        private void OnNightshadePvPEnded(long startUtcTicks, long endUtcTicks) => PushModeLine();
-        private void OnPurgeStarted(double endTimestamp) { purge = true; MarkEvents(); PushModeLine(); }
-        private void OnPurgeEnded() { purge = false; MarkEvents(); PushModeLine(); }
-
-        private void OnEntitySpawned(BradleyAPC entity) => NoteId(bradleys, entity, true, entity == null || entity.OwnerID != 0);
-        private void OnEntityKill(BradleyAPC entity) => NoteId(bradleys, entity, false, false);
-        private void OnEntitySpawned(PatrolHelicopter entity) => NoteId(helis, entity, true, entity == null || entity.OwnerID != 0);
-        private void OnEntityKill(PatrolHelicopter entity) => NoteId(helis, entity, false, false);
-        private void OnEntitySpawned(CH47Helicopter entity) => NoteId(chinooks, entity, true, entity == null || entity.OwnerID != 0);
-        private void OnEntityKill(CH47Helicopter entity) => NoteId(chinooks, entity, false, false);
-        private void OnEntitySpawned(SupplyDrop entity) => NoteId(drops, entity, true, entity == null);
-        private void OnEntityKill(SupplyDrop entity) => NoteId(drops, entity, false, false);
-        private void OnEntitySpawned(CargoShip entity) { if (!scanning) NoteCargo(entity, true); }
-        private void OnEntityKill(CargoShip entity) { if (!scanning) NoteCargo(entity, false); }
-        private void OnCargoShipHarborArrived(CargoShip entity) => NextTick(RecountCargo);
-        private void OnCargoShipHarborLeave(CargoShip entity) => NextTick(RecountCargo);
-        private void OnEntitySpawned(HackableLockedCrate entity) { if (!scanning) NoteOil(entity, true); }
-        private void OnEntityKill(HackableLockedCrate entity) { if (!scanning) NoteOil(entity, false); }
-        private void OnCrateHack(HackableLockedCrate entity) { if (entity != null && entity.net != null) oilHacking.Add(entity.net.ID.Value); MarkEvents(); }
-        private void OnCrateHackEnd(HackableLockedCrate entity) { if (entity != null && entity.net != null) oilHacking.Remove(entity.net.ID.Value); MarkEvents(); }
-        private void OnDeepSeaOpened(DeepSeaManager manager) { deepSea = true; deepSeaCache = "\0"; PushDeepSeaAll(); }
-        private void OnDeepSeaClosed(DeepSeaManager manager) { deepSea = false; deepSeaCache = "\0"; PushDeepSeaAll(); }
-
-        private void PushDeepSeaAll()
-        {
-            if (!ShowDeepSea()) return;
-            string text, color;
-            DeepSeaLine(out text, out color);
-            string sig = text + "|" + color;
-            deepSeaCache = sig;
-            if (BasePlayer.activePlayerList == null) return;
-            foreach (var player in BasePlayer.activePlayerList)
-            {
-                string state;
-                if (player == null || !player.IsConnected) continue;
-                if (!shown.TryGetValue(player.userID, out state) || state == "minimized") continue;
-                PushText(player, "NightshadeHud.DeepSea", text, color, TextAnchor.MiddleLeft);
-            }
-        }
-        private void OnConvoyStart() { convoy = true; MarkEvents(); }
-        private void OnConvoyStop() { convoy = false; MarkEvents(); }
-        private void OnArmoredTrainEventStart() { train = true; MarkEvents(); }
-        private void OnArmoredTrainEventStop() { train = false; MarkEvents(); }
-        private void OnSputnikEventStart() { sputnik = true; MarkEvents(); }
-        private void OnSputnikEventStop() { sputnik = false; MarkEvents(); }
-        private void OnHarborEventStart() { harborEvent = true; MarkEvents(); }
-        private void OnHarborEventEnd() { harborEvent = false; MarkEvents(); }
-        private void OnRaidableBaseStarted(object raid) => RefreshRaids();
-        private void OnRaidableBaseEnded(object raid) => RefreshRaids();
-        private void OnRaidableBaseDespawn(object raid) => RefreshRaids();
-        private void OnDungeonSpawn(ulong owner, Vector3 portal, string grid, string tier) => RefreshDungeons();
-        private void OnDungeonDespawn(ulong owner, Vector3 portal, string grid, string tier) => RefreshDungeons();
-        private void OnDefendableHomesStart(Vector3 position, float radius) { if (!scanning) { defend++; MarkEvents(); } }
-        private void OnDefendableHomesEnd(Vector3 position) { if (!scanning) { defend = Math.Max(0, defend - 1); MarkEvents(); } }
-
-        private void NoteId(HashSet<ulong> set, BaseEntity entity, bool alive, bool ignore)
-        {
-            if (scanning || entity == null || entity.net == null || ignore) return;
-            if (alive) set.Add(entity.net.ID.Value);
-            else set.Remove(entity.net.ID.Value);
-            MarkEvents();
-        }
-
-        private void NoteCargo(CargoShip ship, bool alive)
-        {
-            if (scanning || ship == null || ship.net == null) return;
-            ulong id = ship.net.ID.Value;
-            cargoSailing.Remove(id);
-            cargoDocked.Remove(id);
-            if (alive)
-            {
-                if (ship.IsShipDocked) cargoDocked.Add(id);
-                else cargoSailing.Add(id);
-            }
-            MarkEvents();
-        }
-
-        private void RecountCargo()
-        {
-            if (scanning) return;
-            cargoSailing.Clear();
-            cargoDocked.Clear();
-            var ships = UnityEngine.Object.FindObjectsOfType<CargoShip>();
-            if (ships == null) { MarkEvents(); return; }
-            foreach (var ship in ships)
-                if (ship != null && !ship.IsDestroyed) NoteCargo(ship, true);
-        }
-
-        private void NoteOil(HackableLockedCrate crate, bool alive)
-        {
-            if (scanning || crate == null || crate.net == null) return;
-            ulong id = crate.net.ID.Value;
-            oilCrates.Remove(id);
-            if (!alive) oilHacking.Remove(id);
-            else
-            {
-                string rig = OilRig(crate.transform.position);
-                if (rig != null) oilCrates[id] = rig;
-                if (crate.IsBeingHacked()) oilHacking.Add(id);
-            }
-            MarkEvents();
-        }
-
-        private string OilRig(Vector3 position)
-        {
-            float radius = Mathf.Max(1f, config.OilRadius);
-            if (smallOilFound && (position - smallOil).sqrMagnitude <= radius * radius) return "SmallOil";
-            if (largeOilFound && (position - largeOil).sqrMagnitude <= radius * radius) return "LargeOil";
-            return null;
-        }
-
-        private void FindOilRigs()
-        {
-            smallOilFound = false;
-            largeOilFound = false;
-            var path = TerrainMeta.Path;
-            if (path == null) return;
-            object raw = null;
-            try
-            {
-                var field = typeof(TerrainPath).GetField("Monuments", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                if (field != null) raw = field.GetValue(path);
-            }
-            catch
-            {
-                return;
-            }
-            var monuments = raw as System.Collections.IEnumerable;
-            if (monuments == null) return;
-            foreach (var entry in monuments)
-            {
-                var monument = entry as MonumentInfo;
-                if (monument == null || string.IsNullOrEmpty(monument.name)) continue;
-                if (monument.name.Contains("oilrig_2")) { smallOil = monument.transform.position; smallOilFound = true; }
-                else if (monument.name.Contains("oilrig_1")) { largeOil = monument.transform.position; largeOilFound = true; }
-            }
-        }
+        #region Images
 
         private IEnumerator BootHud()
         {
-            // Return from OnServerInitialized before any scene query or CUI build.
             yield return null;
-            FindOilRigs();
-            yield return null;
-            scanning = true;
-            bradleys.Clear(); helis.Clear(); chinooks.Clear(); drops.Clear();
-            cargoSailing.Clear(); cargoDocked.Clear(); oilCrates.Clear(); oilHacking.Clear();
-            dungeons = 0;
-            convoy = false;
-            var steps = new IEnumerator[]
-            {
-                CollectOwned<BradleyAPC>(bradleys),
-                CollectHelis(),
-                CollectOwned<CH47Helicopter>(chinooks),
-                CollectAll<SupplyDrop>(drops),
-                CollectCargoShips(),
-                CollectOilCrates(),
-                CollectPortals(),
-                CollectConvoyVehicles()
-            };
-            for (int s = 0; s < steps.Length; s++)
-            {
-                var step = steps[s];
-                while (step != null && step.MoveNext()) yield return step.Current;
-            }
-            yield return null;
-            train = CallBool(ArmoredTrain, "IsArmoredTrainActive");
-            raids = RaidableBases != null && RaidableBases.IsLoaded ? (int)ToDouble(RaidableBases.Call("GetAllEventsCount")) : 0;
-            deepSea = DeepSeaOpen();
             purge = CallBool(PurgeStatus, "API_IsPurgeActive");
-            defend = CountDefend();
-            scanning = false;
-            eventCache.Clear();
             RefreshTeleportPrices(false);
-            LoadBorder();
-            MarkEvents();
             var players = new List<BasePlayer>();
             if (BasePlayer.activePlayerList != null)
                 foreach (var connected in BasePlayer.activePlayerList)
@@ -1742,325 +1292,226 @@ namespace Oxide.Plugins
             startupRoutine = null;
         }
 
-
-        private IEnumerator CollectOwned<T>(HashSet<ulong> set) where T : BaseEntity
+        private void OnPluginLoaded(Plugin plugin)
         {
-            var entities = UnityEngine.Object.FindObjectsOfType<T>();
-            yield return null;
-            if (entities == null) yield break;
-            for (int i = 0; i < entities.Length; i++)
+            if (plugin == null) return;
+            if (plugin.Name == "ImageLibrary")
             {
-                var entity = entities[i];
-                if (entity != null && !entity.IsDestroyed && entity.net != null && entity.OwnerID == 0)
-                    set.Add(entity.net.ID.Value);
-                if ((i + 1) % 40 == 0) yield return null;
+                ResetArt(logoArt);
+                ResetArt(purgeArt);
+                ResetArt(borderArt);
+                ResetArt(backgroundArt);
+                QueueImages();
             }
+            if (plugin.Name == "Nightshade Purge Status")
+            {
+                purge = CallBool(PurgeStatus, "API_IsPurgeActive");
+                RedrawAll();
+            }
+            else if (plugin.Name == "NightshadePVPWeekend" || plugin.Name == "NightshadeRaidProtection")
+                PushModeLine();
         }
 
-        private IEnumerator CollectAll<T>(HashSet<ulong> set) where T : BaseEntity
+        private void OnNightshadePvPStarted(long startUtcTicks, long endUtcTicks) => PushModeLine();
+        private void OnNightshadePvPEnded(long startUtcTicks, long endUtcTicks) => PushModeLine();
+
+        private void OnPurgeStarted(double endTimestamp)
         {
-            var entities = UnityEngine.Object.FindObjectsOfType<T>();
-            yield return null;
-            if (entities == null) yield break;
-            for (int i = 0; i < entities.Length; i++)
-            {
-                var entity = entities[i];
-                if (entity != null && !entity.IsDestroyed && entity.net != null)
-                    set.Add(entity.net.ID.Value);
-                if ((i + 1) % 40 == 0) yield return null;
-            }
+            purge = true;
+            RedrawAll();
         }
 
-        private IEnumerator CollectHelis()
+        private void OnPurgeEnded()
         {
-            var found = UnityEngine.Object.FindObjectsOfType<PatrolHelicopter>();
-            yield return null;
-            if (found == null) yield break;
-            for (int i = 0; i < found.Length; i++)
+            purge = false;
+            RedrawAll();
+        }
+
+        private void ResetArt(Art art)
+        {
+            if (art == null || art.Queued) return;
+            art.GaveUp = false;
+            art.Tries = 0;
+            art.Waiting = false;
+        }
+
+        private void QueueImages()
+        {
+            PrepareArt(logoArt, LogoPath(config.LogoImage));
+            PrepareArt(purgeArt, LogoPath(config.PurgeLogoImage));
+            PrepareArt(borderArt, DataPathOf(config.BorderImage, DefaultBorderFile));
+            PrepareArt(backgroundArt, DataPathOf(config.BackgroundImage, DefaultBackgroundFile));
+            QueueArt(logoArt);
+            QueueArt(purgeArt);
+            QueueArt(borderArt);
+            QueueArt(backgroundArt);
+        }
+
+        private void PrepareArt(Art art, string path)
+        {
+            if (art == null) return;
+            art.Path = path;
+        }
+
+        private void QueueArt(Art art)
+        {
+            if (art == null || art.Queued || art.GaveUp || art.Waiting) return;
+            if (string.IsNullOrEmpty(art.Path) || !File.Exists(art.Path))
             {
-                var heli = found[i];
-                if (heli != null && !heli.IsDestroyed && heli.net != null)
+                art.GaveUp = true;
+                WarnArt(art, art.Label + " file is missing (" + art.Path + "). The HUD stays up without it.");
+                return;
+            }
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded)
+            {
+                art.Tries++;
+                if (art.Tries >= ImageTries)
                 {
-                    if (heli.OwnerID == 0) helis.Add(heli.net.ID.Value);
-                    if (!convoy && Convoy != null && Convoy.IsLoaded && Convoy.Call("IsConvoyHeli", heli) is bool yes && yes)
-                        convoy = true;
+                    art.GaveUp = true;
+                    WarnArt(art, "ImageLibrary is not loaded. The HUD stays up without its " + art.Label + ".");
+                    return;
                 }
-                if ((i + 1) % 20 == 0) yield return null;
-            }
-        }
-
-        private IEnumerator CollectCargoShips()
-        {
-            var ships = UnityEngine.Object.FindObjectsOfType<CargoShip>();
-            yield return null;
-            if (ships == null) yield break;
-            for (int i = 0; i < ships.Length; i++)
-            {
-                var ship = ships[i];
-                if (ship == null || ship.IsDestroyed || ship.net == null) continue;
-                if (ship.IsShipDocked) cargoDocked.Add(ship.net.ID.Value);
-                else cargoSailing.Add(ship.net.ID.Value);
-            }
-        }
-
-        private IEnumerator CollectOilCrates()
-        {
-            var crates = UnityEngine.Object.FindObjectsOfType<HackableLockedCrate>();
-            yield return null;
-            if (crates == null) yield break;
-            for (int i = 0; i < crates.Length; i++)
-            {
-                var crate = crates[i];
-                if (crate == null || crate.IsDestroyed || crate.net == null) continue;
-                string rig = OilRig(crate.transform.position);
-                if (rig == null) continue;
-                oilCrates[crate.net.ID.Value] = rig;
-                if (crate.IsBeingHacked()) oilHacking.Add(crate.net.ID.Value);
-                if ((i + 1) % 20 == 0) yield return null;
-            }
-        }
-
-        private IEnumerator CollectPortals()
-        {
-            var portals = UnityEngine.Object.FindObjectsOfType<BasePortal>();
-            yield return null;
-            if (portals == null) yield break;
-            int count = 0;
-            for (int i = 0; i < portals.Length; i++)
-            {
-                var portal = portals[i];
-                if (portal != null && !portal.IsDestroyed && portal.OwnerID == config.DungeonPortalOwner) count++;
-                if ((i + 1) % 40 == 0) yield return null;
-            }
-            dungeons = count;
-        }
-
-        private IEnumerator CollectConvoyVehicles()
-        {
-            if (convoy || Convoy == null || !Convoy.IsLoaded) yield break;
-            var vehicles = UnityEngine.Object.FindObjectsOfType<BaseVehicle>();
-            yield return null;
-            if (vehicles == null) yield break;
-            for (int i = 0; i < vehicles.Length && !convoy; i++)
-            {
-                var vehicle = vehicles[i];
-                if (vehicle != null && !vehicle.IsDestroyed && Convoy.Call("IsConvoyVehicle", vehicle) is bool yes && yes)
+                art.Waiting = true;
+                float delay = art.Tries * 5f;
+                timer.Once(delay, () =>
                 {
-                    convoy = true;
-                    if (!scanning) MarkEvents();
-                    yield break;
-                }
-                if ((i + 1) % 25 == 0) yield return null;
+                    art.Waiting = false;
+                    QueueArt(art);
+                });
+                return;
             }
-            if (!scanning) MarkEvents();
-        }
-
-        private void RefreshRaids()
-        {
-            if (scanning) return;
-            raids = RaidableBases != null && RaidableBases.IsLoaded ? (int)ToDouble(RaidableBases.Call("GetAllEventsCount")) : Math.Max(0, raids);
-            MarkEvents();
-        }
-
-        private void RefreshDungeons()
-        {
-            if (scanning) return;
-            int count = 0;
-            var portals = UnityEngine.Object.FindObjectsOfType<BasePortal>();
-            if (portals != null)
-            {
-                foreach (var portal in portals)
-                    if (portal != null && !portal.IsDestroyed && portal.OwnerID == config.DungeonPortalOwner) count++;
-            }
-            dungeons = count;
-            MarkEvents();
-        }
-
-        private static bool DeepSeaOpen()
-        {
-            DeepSeaManager manager = PointEntity<DeepSeaManager>.ServerInstance;
-            return manager != null && (manager.IsOpen() || manager.IsBusy());
-        }
-
-        private int CountDefend()
-        {
-            if (DefendableHomes == null || !DefendableHomes.IsLoaded) return defend;
             try
             {
-                var property = DefendableHomes.GetType().GetProperty("Controllers", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-                var value = property == null ? null : property.GetValue(DefendableHomes, null);
-                var collection = value as System.Collections.ICollection;
-                if (collection != null) return collection.Count;
+                byte[] bytes = File.ReadAllBytes(art.Path);
+                if (bytes == null || bytes.Length < 8 || bytes.Length > ImageMaxBytes || !IsPng(bytes))
+                {
+                    art.GaveUp = true;
+                    WarnArt(art, art.Label + " is empty, not a png, or larger than 3 MB (" + art.Path + "). The HUD stays up without it.");
+                    return;
+                }
+                object added = ImageLibrary.Call("AddImageData", art.Key, bytes, 0UL);
+                if (!(added is bool) || !(bool)added)
+                {
+                    art.GaveUp = true;
+                    WarnArt(art, "ImageLibrary did not accept the " + art.Label + ". The HUD stays up without it.");
+                    return;
+                }
+                art.Queued = true;
+                ScheduleArtPoll();
             }
-            catch { }
-            return defend;
-        }
-
-        private void ReadEvent(string key, out int count, out bool on, out bool contested)
-        {
-            contested = false;
-            switch (key)
+            catch (Exception ex)
             {
-                case "Bradley": count = bradleys.Count; break;
-                case "PatrolHeli": count = helis.Count; break;
-                case "CH47": count = chinooks.Count; break;
-                case "Cargo": count = cargoSailing.Count; break;
-                case "AirDrop": count = drops.Count; break;
-                case "Harbor": count = cargoDocked.Count; break;
-                case "SmallOil": count = OilCount("SmallOil", out contested); break;
-                case "LargeOil": count = OilCount("LargeOil", out contested); break;
-                case "DeepSea": count = deepSea ? 1 : 0; break;
-                case "Convoy": count = convoy ? 1 : 0; break;
-                case "ArmoredTrain": count = train ? 1 : 0; break;
-                case "Sputnik": count = sputnik ? 1 : 0; break;
-                case "HarborEvent": count = harborEvent ? 1 : 0; break;
-                case "Raids": count = raids; break;
-                case "Dungeon": count = dungeons; break;
-                case "Defend": count = defend; break;
-                case "Purge": count = purge ? 1 : 0; break;
-                default: count = 0; break;
+                art.GaveUp = true;
+                WarnArt(art, "Could not read the " + art.Label + ": " + ex.Message + ". The HUD stays up without it.");
             }
-            on = count > 0;
         }
 
-        private int OilCount(string key, out bool contested)
+        private void WarnArt(Art art, string message)
         {
-            int count = 0;
-            contested = false;
-            foreach (var pair in oilCrates)
+            if (art == null || art.Warned) return;
+            art.Warned = true;
+            PrintWarning(message);
+        }
+
+        private static bool IsPng(byte[] bytes)
+        {
+            return bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47
+                && bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+        }
+
+        private int artPolls;
+
+        private void ScheduleArtPoll()
+        {
+            if (artTimer != null) return;
+            artTimer = timer.Once(1f, PollArt);
+        }
+
+        private void PollArt()
+        {
+            artTimer = null;
+            bool ready = NoteArt(logoArt) | NoteArt(purgeArt) | NoteArt(borderArt) | NoteArt(backgroundArt);
+            if (ready) RedrawAll();
+            artPolls++;
+            if (artPolls >= 8) return;
+            if ((logoArt.Queued && string.IsNullOrEmpty(logoArt.Shown))
+                || (purgeArt.Queued && string.IsNullOrEmpty(purgeArt.Shown))
+                || (borderArt.Queued && string.IsNullOrEmpty(borderArt.Shown))
+                || (backgroundArt.Queued && string.IsNullOrEmpty(backgroundArt.Shown)))
+                ScheduleArtPoll();
+        }
+
+        private bool NoteArt(Art art)
+        {
+            if (art == null || !art.Queued) return false;
+            string png = ReadArt(art);
+            if (string.IsNullOrEmpty(png) || png == art.Shown) return false;
+            art.Shown = png;
+            return true;
+        }
+
+        private string ArtPng(Art art)
+        {
+            if (art == null) return null;
+            if (!art.Queued && !art.GaveUp) QueueArt(art);
+            if (art.GaveUp || !art.Queued) return null;
+            string png = ReadArt(art);
+            if (!string.IsNullOrEmpty(png)) art.Shown = png;
+            return png;
+        }
+
+        private string ReadArt(Art art)
+        {
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
             {
-                if (pair.Value != key) continue;
-                count++;
-                if (oilHacking.Contains(pair.Key)) contested = true;
+                object has = ImageLibrary.Call("HasImage", art.Key, 0UL);
+                if (!(has is bool) || !(bool)has) return null;
+                string png = ImageLibrary.Call<string>("GetImage", art.Key, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
             }
-            return count;
-        }
-
-        private List<EventCfg> EnabledEvents()
-        {
-            var list = new List<EventCfg>();
-            foreach (var entry in config.Events)
+            catch (Exception ex)
             {
-                if (entry == null || !entry.Enabled || string.IsNullOrEmpty(entry.Key)) continue;
-                if (entry.Key == "DeepSea") continue;
-                list.Add(entry);
+                art.GaveUp = true;
+                WarnArt(art, "ImageLibrary could not return the " + art.Label + ": " + ex.Message);
+                return null;
             }
-            list.Sort((a, b) => a.Order.CompareTo(b.Order));
-            return list;
         }
 
-        private bool ShowDeepSea() => ShowChip("DeepSea");
-
-        private bool HasStatusLine()
+        private void RedrawAll()
         {
-            return ShowDeepSea() || ShowTeleport();
-        }
-
-        private bool ShowChip(string key)
-        {
-            EventCfg entry = FindEvent(key);
-            return entry == null || entry.Enabled;
-        }
-
-        private EventCfg FindEvent(string key)
-        {
-            if (config.Events == null || string.IsNullOrEmpty(key)) return null;
-            foreach (var entry in config.Events)
-                if (entry != null && entry.Key == key) return entry;
-            return null;
-        }
-
-        private string DeepSeaLabel()
-        {
-            if (config.Events != null)
+            if (BasePlayer.activePlayerList == null) return;
+            foreach (var player in BasePlayer.activePlayerList)
             {
-                foreach (var entry in config.Events)
-                    if (entry != null && entry.Key == "DeepSea" && !string.IsNullOrEmpty(entry.Label)) return entry.Label;
+                if (player == null || !player.IsConnected) continue;
+                if (!shown.ContainsKey(player.userID)) continue;
+                Show(player);
             }
-            return "DEEP SEA";
         }
 
-        private void DeepSeaLine(out string text, out string color)
+        private static bool SafeArtName(string name, bool filenameOnly)
         {
-            text = DeepSeaLabel();
-            bool open = false;
-            DeepSeaManager manager = PointEntity<DeepSeaManager>.ServerInstance;
-            if (manager != null) open = manager.IsOpen() || manager.IsBusy();
-            deepSea = open;
-            color = open ? Hex(config.DeepSeaOpenColor) : Hex(config.MutedColor, config.InactiveAlpha);
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string text = name.Trim().Replace('\\', '/');
+            if (text.IndexOf("..", StringComparison.Ordinal) >= 0) return false;
+            if (!text.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) return false;
+            if (filenameOnly && text.IndexOf('/') >= 0) return false;
+            if (Path.IsPathRooted(text)) return false;
+            return true;
         }
 
-        private string EventLabel(EventCfg entry)
+        private string LogoPath(string name)
         {
-            if (entry == null) return string.Empty;
-            if (entry.Key == "PatrolHeli") return string.IsNullOrEmpty(config.HeliLabel) ? "KAREN" : config.HeliLabel;
-            if (entry.Key == "Bradley") return string.IsNullOrEmpty(config.BradleyLabel) ? "BRAD" : config.BradleyLabel;
-            return entry.Label ?? string.Empty;
+            string file = SafeArtName(name, true) ? name.Trim() : "logo.png";
+            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeHud", file);
         }
 
-        private string EventColorFor(EventCfg entry, bool on, bool contested)
+        private string DataPathOf(string file, string fallback)
         {
-            if (contested) return Hex(config.ContestedColor);
-            if (!on) return Hex(config.MutedColor, config.InactiveAlpha);
-            if (entry != null && entry.Key == "PatrolHeli") return Hex(string.IsNullOrEmpty(config.HeliActiveColor) ? "#FF4D4D" : config.HeliActiveColor);
-            if (entry != null && entry.Key == "Bradley")
-            {
-                string active = string.IsNullOrEmpty(config.BradleyActiveColor) ? config.ActiveColor : config.BradleyActiveColor;
-                return Hex(active);
-            }
-            return Hex(config.ActiveColor);
-        }
-
-        private int EventFont()
-        {
-            int size = config.EventFontSize;
-            if (size < 8) return 9;
-            if (size > 16) return 9;
-            return size;
-        }
-
-        private string EventText(EventCfg entry, int count, bool on)
-        {
-            string label = EventLabel(entry);
-            if (entry == null || !on || !entry.ShowCount) return label;
-            return label + " " + count.ToString(CultureInfo.InvariantCulture);
-        }
-
-        private static List<EventCfg> DefaultEvents()
-        {
-            return new List<EventCfg>
-            {
-                Ev("PatrolHeli", "HELI", true, true, 10),
-                Ev("Bradley", "BRADLEY", true, true, 20),
-                Ev("Cargo", "CARGO", true, true, 30),
-                Ev("Harbor", "HARBOR", true, false, 40),
-                Ev("AirDrop", "AIRDROP", true, true, 50),
-                Ev("CH47", "CH47", false, true, 60),
-                Ev("SmallOil", "OIL-S", false, false, 70),
-                Ev("LargeOil", "OIL-L", false, false, 80),
-                Ev("DeepSea", "DEEP SEA", true, false, 90),
-                Ev("Convoy", "CONVOY", true, false, 100),
-                Ev("ArmoredTrain", "TRAIN", true, false, 110),
-                Ev("Raids", "RAIDS", true, true, 120),
-                Ev("Dungeon", "DUNGEON", true, true, 130),
-                Ev("Defend", "DEFENDABLE", true, true, 140),
-                Ev("Purge", "PURGE", true, false, 150),
-                Ev("Sputnik", "SPUTNIK", false, false, 160),
-                Ev("HarborEvent", "HARBOR-EV", false, false, 170)
-            };
-        }
-
-        private static readonly Dictionary<string, string> OldLabels = new Dictionary<string, string>
-        {
-            { "Bradley|BRAD", "BRADLEY" },
-            { "AirDrop|DROP", "AIRDROP" },
-            { "DeepSea|DEEP", "DEEP SEA" },
-            { "Defend|DEFEND", "DEFENDABLE" }
-        };
-
-        private static EventCfg Ev(string key, string label, bool enabled, bool count, int order)
-        {
-            return new EventCfg { Key = key, Label = label, Enabled = enabled, ShowCount = count, Order = order };
+            if (!SafeArtName(file, false)) file = fallback;
+            file = file.Replace('\\', '/').Trim().TrimStart('/');
+            return Path.Combine(Interface.Oxide.DataDirectory, file);
         }
 
         #endregion
@@ -2085,30 +1536,6 @@ namespace Oxide.Plugins
             return format
                 .Replace("{outpost}", outpostPrice.ToString(CultureInfo.InvariantCulture))
                 .Replace("{bandit}", banditPrice.ToString(CultureInfo.InvariantCulture));
-        }
-
-        private void TeleportSpan(out float left, out float right)
-        {
-            right = config.Width - Pad;
-            float width = Mathf.Max(TextWidth(TeleportPriceText(), 11, false), TextWidth(TeleportTitleText(), 11, false));
-            left = right - width;
-            float minLeft = Pad + 48f;
-            if (left < minLeft) left = minLeft;
-        }
-
-        private void AddTeleportTitle(CuiElementContainer container, string parent, float y, float left, float right)
-        {
-            if (right - left < 8f) return;
-            string color = Hex(string.IsNullOrEmpty(config.TeleportTitleColor) ? "#50A0FF" : config.TeleportTitleColor);
-            AddLabel(container, TeleportTitleName, parent, TeleportTitleText(), color, 11, TextAnchor.MiddleCenter, "0 1", "0 1", Px(left, y - Line), Px(right, y));
-        }
-
-        private void AddTeleportPrice(CuiElementContainer container, string parent, float y)
-        {
-            float left, right;
-            TeleportSpan(out left, out right);
-            if (right - left < 8f) return;
-            AddLabel(container, TeleportPriceName, parent, TeleportPriceText(), Hex(config.ClockColor), 11, TextAnchor.MiddleCenter, "0 1", "0 1", Px(left, y - Line), Px(right, y));
         }
 
         private void RefreshTeleportPrices(bool redraw)
@@ -2201,15 +1628,15 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private void AddBorder(CuiElementContainer container, BasePlayer player, string state)
+        private void AddBorder(CuiElementContainer container)
         {
-            if (state == "minimized") return;
-            string png = BorderPng();
+            if (config == null || !config.ShowBorder) return;
+            string png = ArtPng(borderArt);
             if (string.IsNullOrEmpty(png)) return;
             float left = -config.BorderOutsetLeft;
             float right = config.Width + config.BorderOutsetRight;
             float top = config.BorderOutsetTop;
-            float bottom = HalfHeight(player) + Mathf.Max(0f, config.BorderOutsetBottom);
+            float bottom = config.Height + config.BorderOutsetBottom;
             container.Add(new CuiElement
             {
                 Name = BorderName,
@@ -2233,85 +1660,6 @@ namespace Oxide.Plugins
             });
         }
 
-        private string BorderPng()
-        {
-            if (config == null || !config.ShowBorder) return null;
-            if (ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
-            try
-            {
-                object has = ImageLibrary.Call("HasImage", BorderKey, 0UL);
-                if (!(has is bool ready) || !ready) return null;
-                string png = ImageLibrary.Call<string>("GetImage", BorderKey, 0UL);
-                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
-                return png;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private string BorderFilePath()
-        {
-            string file = config == null ? null : config.BorderImage;
-            if (string.IsNullOrEmpty(file)) file = DefaultBorderFile;
-            file = file.Replace('\\', '/').Trim();
-            if (Path.IsPathRooted(file)) return file;
-            return Path.Combine(Interface.Oxide.DataDirectory, file.TrimStart('/'));
-        }
-
-        // ImageLibrary downloads http(s) only, so the frame is stored from the local file bytes.
-        private void LoadBorder()
-        {
-            borderTries = 0;
-            borderTimer?.Destroy();
-            borderTimer = null;
-            if (config == null || !config.ShowBorder) return;
-            if (ImageLibrary == null || !ImageLibrary.IsLoaded) return;
-            byte[] bytes;
-            try
-            {
-                string path = BorderFilePath();
-                if (string.IsNullOrEmpty(path) || !File.Exists(path))
-                {
-                    PrintWarning("HUD border image was not found at " + path);
-                    return;
-                }
-                bytes = File.ReadAllBytes(path);
-            }
-            catch (Exception ex)
-            {
-                PrintWarning("HUD border image could not be read: " + ex.Message);
-                return;
-            }
-            if (bytes == null || bytes.Length == 0) return;
-            try
-            {
-                ImageLibrary.Call("AddImageData", BorderKey, bytes, 0UL);
-            }
-            catch (Exception ex)
-            {
-                PrintWarning("ImageLibrary rejected the HUD border: " + ex.Message);
-                return;
-            }
-            borderTimer = timer.Once(1f, CheckBorder);
-        }
-
-        private void CheckBorder()
-        {
-            borderTimer = null;
-            if (config == null || !config.ShowBorder) return;
-            string png = BorderPng();
-            if (!string.IsNullOrEmpty(png) && png != drawnBorderCrc)
-            {
-                drawnBorderCrc = png;
-                RedrawBoxed();
-            }
-            borderTries++;
-            if (borderTries >= 8) return;
-            borderTimer = timer.Once(2f, CheckBorder);
-        }
-
         private void RedrawBoxed()
         {
             if (BasePlayer.activePlayerList == null) return;
@@ -2319,7 +1667,7 @@ namespace Oxide.Plugins
             {
                 if (player == null || !player.IsConnected) continue;
                 string state;
-                if (!shown.TryGetValue(player.userID, out state) || state == "minimized") continue;
+                if (!shown.TryGetValue(player.userID, out state) || !IsOpen(state)) continue;
                 Show(player);
             }
         }
@@ -2327,20 +1675,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region Helpers
-
-        private void AddImage(CuiElementContainer container, string name, string parent, string color, string offsetMin, string offsetMax)
-        {
-            container.Add(new CuiElement
-            {
-                Name = name,
-                Parent = parent,
-                Components =
-                {
-                    new CuiImageComponent { Color = color },
-                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = offsetMin, OffsetMax = offsetMax }
-                }
-            });
-        }
 
         private void AddLabel(CuiElementContainer container, string name, string parent, string text, string color, int size, TextAnchor align, string anchorMin, string anchorMax, string offsetMin, string offsetMax, bool bold = false)
         {
