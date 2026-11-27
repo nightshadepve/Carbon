@@ -13,6 +13,7 @@ using System.Globalization;
 #if !NIGHTSHADE_SORT_TESTS
 using Newtonsoft.Json;
 using Oxide.Core;
+using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
 using UnityEngine;
 #endif
@@ -1134,7 +1135,8 @@ namespace Carbon.Plugins
             if (player != null && player.inventory != null && player.inventory.containerMain != null
                 && item.MoveToContainer(player.inventory.containerMain, -1, true, false, player, false))
                 return;
-            if (player != null && player.GiveItem(item)) return;
+            // BasePlayer.GiveItem returns void on this host. PlayerInventory.GiveItem returns bool.
+            if (player != null && player.inventory != null && player.inventory.GiveItem(item)) return;
             Vector3 pos = player != null ? player.transform.position + Vector3.up : Vector3.zero;
             item.Drop(pos, Vector3.zero);
         }
