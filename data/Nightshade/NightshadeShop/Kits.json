@@ -1,6 +1,8 @@
 {
   "Migrated From VIPPerks": false,
   "NextId": 5,
+  "Placeholders Added": true,
+  "Colored Id Tag Placeholders Added": true,
   "Kits": [
     {
       "Id": "vip-daily",
@@ -9,6 +11,7 @@
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
       "Cooldown (seconds)": 86400,
       "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
       "Items": [
         {
           "Shortname": "advanceharvestingtea",
@@ -99,6 +102,7 @@
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
       "Cooldown (seconds)": 86400,
       "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
       "Items": [
         {
           "Shortname": "radiationresisttea.pure",
@@ -164,6 +168,7 @@
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipperk",
       "Cooldown (seconds)": 345600,
       "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
       "Items": [
         {
           "Shortname": "hazmatsuit",
@@ -214,6 +219,7 @@
       "Required Permission (empty = anyone who can open Kits)": "nightshadeshop.vipxperk",
       "Cooldown (seconds)": 345600,
       "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
       "Items": [
         {
           "Shortname": "explosive.timed",
@@ -258,6 +264,158 @@
         {
           "Shortname": "syringe.medical",
           "Amount": 40,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "wipe-day",
+      "Name": "PLACEHOLDER Wipe Day Kit",
+      "Icon (URL, skin ID or shortname)": "box.wooden",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 0,
+      "Max Uses Per Wipe (0 = no cap)": 1,
+      "Wipe Day": true,
+      "Items": [
+        {
+          "Shortname": "wood",
+          "Amount": 100,
+          "Skin": 0
+        },
+        {
+          "Shortname": "stones",
+          "Amount": 100,
+          "Skin": 0
+        },
+        {
+          "Shortname": "cloth",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-bluedogtags",
+      "Name": "PLACEHOLDER Blue Dog Tags",
+      "Icon (URL, skin ID or shortname)": "bluedogtags",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "bluedogtags",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-reddogtags",
+      "Name": "PLACEHOLDER Red Dog Tags",
+      "Icon (URL, skin ID or shortname)": "reddogtags",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "reddogtags",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-dogtagneutral",
+      "Name": "PLACEHOLDER Dog Tag",
+      "Icon (URL, skin ID or shortname)": "dogtagneutral",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "dogtagneutral",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-lavenderidtag",
+      "Name": "PLACEHOLDER Lavender ID Tag",
+      "Icon (URL, skin ID or shortname)": "lavenderidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "lavenderidtag",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-purpleidtag",
+      "Name": "PLACEHOLDER Purple ID Tag",
+      "Icon (URL, skin ID or shortname)": "purpleidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "purpleidtag",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-pinkidtag",
+      "Name": "PLACEHOLDER Pink ID Tag",
+      "Icon (URL, skin ID or shortname)": "pinkidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "pinkidtag",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
           "Skin": 0
         }
       ]
