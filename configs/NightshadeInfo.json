@@ -4,7 +4,8 @@
     "start"
   ],
   "Show on first join": false,
-  "Logo URL": "https://raw.githubusercontent.com/nightshadepve/Nightshadeserver/refs/heads/main/260625_Logo_75_nobg.png",
+  "Logo URL": "",
+  "Logo image file": "logo.png",
   "Server name": "Nightshade",
   "Server tag": "Solo/Duo",
   "Panel width": 800.0,
@@ -314,7 +315,7 @@
             }
           ],
           "Discord invite": "discord.gg/dFmeweQmsy",
-          "Discord QR URL": "https://i.ibb.co/fz03Kqzb/discord.png",
+          "Discord QR URL": "",
           "Discord QR invite min": "0.2379 0.3154",
           "Discord QR invite max": "0.5849 0.4096",
           "Buttons": []
