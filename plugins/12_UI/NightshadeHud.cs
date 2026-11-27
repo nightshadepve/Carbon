@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.3.1")]
+    [Info("NightshadeHud", "Nightshade", "1.3.2")]
     [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
@@ -269,10 +269,11 @@ namespace Oxide.Plugins
                 text += ".0";
                 dots++;
             }
-            Version have;
-            Version need;
-            if (!Version.TryParse(text, out have)) return true;
-            if (!Version.TryParse(ConfigVersion, out need)) return true;
+            System.Version have;
+            System.Version need;
+            // System.Version, not the plugin instance Version from BaseHookable.
+            if (!System.Version.TryParse(text, out have)) return true;
+            if (!System.Version.TryParse(ConfigVersion, out need)) return true;
             return have < need;
         }
 
