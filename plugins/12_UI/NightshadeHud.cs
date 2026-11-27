@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.3.2")]
+    [Info("NightshadeHud", "Nightshade", "1.3.3")]
     [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
@@ -34,10 +34,12 @@ namespace Oxide.Plugins
         private const string DefaultBackgroundFile = "Nightshade/NightshadeHud/hud_bg.png";
         private const string DefaultLogoFile = "logo.png";
         private const string DefaultPurgeLogoFile = "purge_logo.png";
-        private const string ConfigVersion = "1.3.1";
-        private const float DefaultScale = 0.5f;
+        private const string ConfigVersion = "1.3.3";
+        private const float DefaultScale = 0.75f;
+        private const float DefaultLogoScale = 1.3f;
+        private const float StockHalfScale = 0.5f;
         // Design space is the 1.3.0 box (268x120) with the rows pulled together.
-        // Scale 0.5 draws that box at about 134x60. Padding and row positions are tighter than 1.3.0.
+        // Scale 0.75 draws that box at about 201x90. Logo scale multiplies the icon on top of Scale.
         private const float DesignWidth = 268f;
         private const float DesignHeight = 120f;
         private const float DesignIcon = 32f;
@@ -141,6 +143,18 @@ namespace Oxide.Plugins
             return n < min ? min : n;
         }
 
+        private float LogoScaleOf
+        {
+            get
+            {
+                if (config == null || float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale)) return DefaultLogoScale;
+                return Mathf.Clamp(config.LogoScale, 0.5f, 2f);
+            }
+        }
+
+        // Drawn logo. Icon size in the config is the Scale-derived base; Logo scale multiplies it.
+        private float LogoSize => Mathf.Max(8f, config.IconSize * LogoScaleOf);
+
         private float Pad => D(DesignPad);
         private float NameGap => D(DesignNameGap);
         private float NameTop => D(DesignNameTop);
@@ -167,6 +181,7 @@ namespace Oxide.Plugins
         {
             [JsonProperty("Config version")] public string Version = ConfigVersion;
             [JsonProperty("Scale")] public float Scale = DefaultScale;
+            [JsonProperty("Logo scale")] public float LogoScale = DefaultLogoScale;
             [JsonProperty("Chat command")] public string Command = "hud";
             [JsonProperty("Default state for new players (minimized, half, full)")] public string DefaultState = "full";
             [JsonProperty("Layer (Overlay shows in the inventory)")] public string Layer = "Overlay";
@@ -174,9 +189,9 @@ namespace Oxide.Plugins
             [JsonProperty("Left anchor (under the missions bar)")] public string LeftAnchor = "0.008 0.905";
             [JsonProperty("Inset from the right (px)")] public float Right = 16f;
             [JsonProperty("Inset from the top (px)")] public float Top = 12f;
-            [JsonProperty("Width (px)")] public float Width = 134f;
-            [JsonProperty("Height (px)")] public float Height = 60f;
-            [JsonProperty("Icon size (px)")] public float IconSize = 16f;
+            [JsonProperty("Width (px)")] public float Width = 201f;
+            [JsonProperty("Height (px)")] public float Height = 90f;
+            [JsonProperty("Icon size (px)")] public float IconSize = 24f;
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
             [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
             [JsonProperty("Purge logo image file")] public string PurgeLogoImage = "purge_logo.png";
@@ -185,6 +200,9 @@ namespace Oxide.Plugins
             [JsonProperty("Tag color")] public string TagColor = "#9A9692";
             [JsonProperty("Use 24-hour clock")] public bool Use24Hour = false;
             [JsonProperty("Time zone id")] public string TimeZoneId = "America/New_York";
+            [JsonProperty("Wipe day of week")] public string WipeDay = "Thursday";
+            [JsonProperty("Wipe time (24h HH:mm)")] public string WipeTime = "14:00";
+            [JsonProperty("Wipe time zone id")] public string WipeTimeZoneId = "America/New_York";
             [JsonProperty("Show ET label")] public bool ShowZoneLabel = true;
             [JsonProperty("Show online count")] public bool ShowOnline = true;
             [JsonProperty("Show sleepers")] public bool ShowSleepers = true;
@@ -200,10 +218,10 @@ namespace Oxide.Plugins
             [JsonProperty("Show border")] public bool ShowBorder = true;
             [JsonProperty("Border image file")] public string BorderImage = DefaultBorderFile;
             [JsonProperty("Background image file")] public string BackgroundImage = DefaultBackgroundFile;
-            [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 4f;
-            [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 4f;
-            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 6f;
-            [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 4f;
+            [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 6f;
+            [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 6f;
+            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 9f;
+            [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 6f;
             [JsonProperty("Panel color")] public string PanelColor = "#0E0E12";
             [JsonProperty("Panel opacity (0-100)")] public float PanelOpacity = 78f;
             [JsonProperty("Name color")] public string NameColor = "#A267D3";
@@ -291,6 +309,15 @@ namespace Oxide.Plugins
                 bool stock = Mathf.Abs(oldWidth - 252f) < 0.6f || Mathf.Abs(oldWidth - DesignWidth) < 0.6f;
                 config.Scale = stock ? DefaultScale : Mathf.Clamp(oldWidth / DesignWidth, 0.35f, 1.25f);
             }
+            else
+            {
+                float stored;
+                if (float.TryParse(raw["Scale"].ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out stored)
+                    && Mathf.Abs(stored - StockHalfScale) < 0.001f)
+                    config.Scale = DefaultScale;
+            }
+            if (float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale) || config.LogoScale <= 0f)
+                config.LogoScale = DefaultLogoScale;
             // 58 cleared the old top-right skill panel. 12 is the 1.3 corner inset.
             if (Mathf.Abs(config.Top - 58f) < 0.1f) config.Top = 12f;
             if (string.IsNullOrEmpty(config.NameColor) || string.Equals(config.NameColor, "#F4F1EA", StringComparison.OrdinalIgnoreCase))
@@ -331,6 +358,12 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.ShieldQueued)) config.ShieldQueued = "#E2B968";
             if (string.IsNullOrEmpty(config.Command)) config.Command = "hud";
             if (string.IsNullOrEmpty(config.Layer)) config.Layer = "Overlay";
+            if (string.IsNullOrEmpty(config.WipeDay)) config.WipeDay = "Thursday";
+            if (string.IsNullOrEmpty(config.WipeTime)) config.WipeTime = "14:00";
+            if (string.IsNullOrEmpty(config.WipeTimeZoneId)) config.WipeTimeZoneId = "America/New_York";
+            if (float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale) || config.LogoScale <= 0f)
+                config.LogoScale = DefaultLogoScale;
+            config.LogoScale = Mathf.Clamp(config.LogoScale, 0.5f, 2f);
         }
 
         private void ApplyScale()
@@ -704,7 +737,7 @@ namespace Oxide.Plugins
                         Color = "1 1 1 1",
                         Sprite = "assets/content/textures/generic/fulltransparent.tga"
                     },
-                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(x, y - config.IconSize), OffsetMax = Px(x + config.IconSize, y) }
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(x, y - LogoSize), OffsetMax = Px(x + LogoSize, y) }
                 }
             });
         }
@@ -823,10 +856,10 @@ namespace Oxide.Plugins
             float iconLeft, iconTop, width, height, hang;
             IconOrigin(state, out iconLeft, out iconTop);
             BadgeMetrics(out width, out height, out hang);
-            float center = iconLeft + config.IconSize * 0.5f;
+            float center = iconLeft + LogoSize * 0.5f;
             left = center - width * 0.5f;
             right = left + width;
-            bottom = iconTop - config.IconSize - hang;
+            bottom = iconTop - LogoSize - hang;
             top = bottom + height;
         }
 
@@ -843,9 +876,9 @@ namespace Oxide.Plugins
             IconOrigin(state, out iconLeft, out iconTop);
             BadgeRect(state, out badgeLeft, out badgeBottom, out badgeRight, out badgeTop);
             left = Mathf.Min(iconLeft, badgeLeft);
-            right = Mathf.Max(iconLeft + config.IconSize, badgeRight);
+            right = Mathf.Max(iconLeft + LogoSize, badgeRight);
             top = iconTop;
-            bottom = Mathf.Min(iconTop - config.IconSize, badgeBottom);
+            bottom = Mathf.Min(iconTop - LogoSize, badgeBottom);
         }
 
         private string IconCommand()
@@ -856,7 +889,7 @@ namespace Oxide.Plugins
 
         private float NameX()
         {
-            return Pad + config.IconSize + NameGap;
+            return Pad + LogoSize + NameGap;
         }
 
         private void AddBody(CuiElementContainer container, BasePlayer player)
@@ -989,7 +1022,7 @@ namespace Oxide.Plugins
         private string OffsetMax(BasePlayer player, string state)
         {
             if (!OnLeft(player)) return Px(-config.Right, -config.Top);
-            float width = state == "minimized" ? config.IconSize : config.Width;
+            float width = state == "minimized" ? LogoSize : config.Width;
             return Px(width, 0f);
         }
 
@@ -998,7 +1031,7 @@ namespace Oxide.Plugins
             float height = PanelHeight(state);
             if (!OnLeft(player))
             {
-                float width = state == "minimized" ? config.IconSize : config.Width;
+                float width = state == "minimized" ? LogoSize : config.Width;
                 return Px(-config.Right - width, -config.Top - height);
             }
             return Px(0f, -height);
@@ -1073,7 +1106,7 @@ namespace Oxide.Plugins
 
         private float PanelHeight(string state)
         {
-            if (state == "minimized") return config.IconSize + BadgeHang();
+            if (state == "minimized") return LogoSize + BadgeHang();
             return config.Height;
         }
 
@@ -1271,8 +1304,7 @@ namespace Oxide.Plugins
             }
             if (PurgeActive())
             {
-                double remain = PurgeRemaining();
-                text = remain < 0d ? "PVP" : "PVP \u00B7 ends in " + FormatDur(remain);
+                text = "Server wipe in " + FormatWipe(SecondsUntilWipe());
                 color = Hex(config.CountdownActive);
                 return;
             }
@@ -1290,17 +1322,67 @@ namespace Oxide.Plugins
             color = Hex(active ? config.CountdownActive : config.CountdownIdle);
         }
 
-        private double PurgeRemaining()
+        // Same schedule Nightshade Purge Status uses for an automatic purge: Thursday 14:00 America/New_York.
+        private double SecondsUntilWipe()
         {
-            if (PurgeStatus == null || !PurgeStatus.IsLoaded) return -1d;
-            double end = ToDouble(PurgeStatus.Call("API_GetPurgeEndTimestamp"));
-            if (end <= 0d) return -1d;
-            double now;
-            try { now = Network.TimeEx.currentTimestamp; }
-            catch { return -1d; }
-            double remain = end - now;
-            if (double.IsNaN(remain) || double.IsInfinity(remain)) return -1d;
-            return remain;
+            bool ignored;
+            string zoneId = string.IsNullOrEmpty(config.WipeTimeZoneId) ? "America/New_York" : config.WipeTimeZoneId;
+            TimeZoneInfo tz = ResolveZone(zoneId, out ignored);
+            int hour = 14;
+            int minute = 0;
+            ParseWipeClock(config.WipeTime, ref hour, ref minute);
+            DayOfWeek day = ParseWipeDay(config.WipeDay);
+            DateTime utc = DateTime.UtcNow;
+            DateTime local;
+            try { local = TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), tz); }
+            catch { local = utc; }
+            int days = ((int)day - (int)local.DayOfWeek + 7) % 7;
+            DateTime target = local.Date.AddDays(days).AddHours(hour).AddMinutes(minute);
+            if (local >= target) target = target.AddDays(7);
+            DateTime targetUtc;
+            try { targetUtc = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(target, DateTimeKind.Unspecified), tz); }
+            catch { targetUtc = DateTime.SpecifyKind(target, DateTimeKind.Utc); }
+            double seconds = (targetUtc - utc).TotalSeconds;
+            if (double.IsNaN(seconds) || double.IsInfinity(seconds) || seconds < 0d) return 0d;
+            return seconds;
+        }
+
+        private static DayOfWeek ParseWipeDay(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return DayOfWeek.Thursday;
+            switch (name.Trim().ToLowerInvariant())
+            {
+                case "sunday": return DayOfWeek.Sunday;
+                case "monday": return DayOfWeek.Monday;
+                case "tuesday": return DayOfWeek.Tuesday;
+                case "wednesday": return DayOfWeek.Wednesday;
+                case "thursday": return DayOfWeek.Thursday;
+                case "friday": return DayOfWeek.Friday;
+                case "saturday": return DayOfWeek.Saturday;
+                default: return DayOfWeek.Thursday;
+            }
+        }
+
+        private static void ParseWipeClock(string text, ref int hour, ref int minute)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            string[] parts = text.Trim().Split(':');
+            int h;
+            int m = 0;
+            if (parts.Length < 1 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out h)) return;
+            if (parts.Length > 1 && !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out m)) return;
+            if (h < 0 || h > 23 || m < 0 || m > 59) return;
+            hour = h;
+            minute = m;
+        }
+
+        private static string FormatWipe(double seconds)
+        {
+            if (seconds < 0d) seconds = 0d;
+            var span = TimeSpan.FromSeconds(Math.Ceiling(seconds));
+            if (span.TotalDays >= 1d)
+                return ((int)span.TotalDays) + "d " + span.Hours.ToString("00", CultureInfo.InvariantCulture) + "h";
+            return ((int)span.TotalHours) + "h " + span.Minutes.ToString("00", CultureInfo.InvariantCulture) + "m";
         }
 
         private void RaidLine(BasePlayer player, out string text, out string color)
