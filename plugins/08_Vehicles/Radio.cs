@@ -4,10 +4,11 @@ using Oxide.Core;
 using ProtoBuf;
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Radio", "Karuza", "1.3.0")]
+    [Info("Radio", "Karuza", "1.3.1")]
     public class Radio : RustPlugin
     {
         const string GLOBAL_PHONE = "Radio.GiveGlobalPhone";
@@ -56,7 +57,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var telephone = GameManager.server.CreateEntity("assets/bundled/prefabs/autospawn/phonebooth/phonebooth.static.prefab") as Telephone;
+            var telephone = GameManager.server.CreateEntity("assets/bundled/prefabs/autospawn/phonebooth/phonebooth.static.prefab", configuration.GlobalPhoneSpawnPosition) as Telephone;
             telephone.Spawn();
             TelephoneManager.DeregisterTelephone(telephone.Controller);
             telephone.Controller.PhoneNumber = configuration.GlobalRadioPhoneNumber;
@@ -277,6 +278,7 @@ namespace Oxide.Plugins
         {
             public int GlobalRadioPhoneNumber { get; set; } = 99994444;
             public string GlobalRadioPhoneName { get; set; } = "Global Radio";
+            public Vector3 GlobalPhoneSpawnPosition { get; set; } = Vector3.zero;
         }
 
         protected override void LoadConfig()

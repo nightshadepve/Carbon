@@ -23,7 +23,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-    [Info("BetterTC", "ninco90", "1.7.2")]
+    [Info("BetterTC", "ninco90", "1.7.3")]
     internal class BetterTC : RustPlugin
     {
     	#if CARBON
@@ -109,6 +109,16 @@ namespace Oxide.Plugins
             : "https://cdn.rustspain.com/plugins/bettertc/staging.json";
         private Dictionary<BuildingPrivlidge, TCConfig> BuildingCupboard = new Dictionary<BuildingPrivlidge, TCConfig>();
         private Dictionary<ulong, BoatWallpaperConfig> playerBoatWallpaper = new Dictionary<ulong, BoatWallpaperConfig>();
+        private sealed class BuildingMenuView {
+            public readonly Dictionary<string, (List<ulong> Items, ulong Selected)> WallpaperLists = new();
+            public string WallpaperCategory;
+            public BuildingPrivlidge Cup;
+            public List<ItemInfo> Items;
+            public readonly List<(bool locked, bool owned, bool upgrade, bool reskin, bool wallpaper, bool wall,
+                bool working, bool reskinning, bool papering, bool wallActive, uint colour)> Cards = new();
+            public (bool levels, bool effect, bool showDowngrade, bool downgrade, bool tcSkin) Footer;
+        }
+        private readonly Dictionary<ulong, BuildingMenuView> buildingMenuViews = new();
         private Dictionary<ulong, float> authListRequestCooldowns = new Dictionary<ulong, float>();
         private BUTTON wallpaperToolMenuButton = BUTTON.FIRE_THIRD;
         private int maxGradeTier;
@@ -180,16 +190,6 @@ namespace Oxide.Plugins
             "0.68 0.61 0.56 1"
         };
         
-        private static readonly List<(int start, int end, int dlcSteamItemId)> skinIdRanges = new(){
-            (10244, 10268, 10265), // DLC WP
-            (10272, 10279, 10280), // DLC LUNAR YEAR
-            (10311, 10313, 10273), // DLC JUNGLE
-            (10360, 10409, 10387), // DLC FLOOR
-            (10483, 10488, 10473), // DLC INDUSTRIAL
-            (10513, 10514, 10508), // DLC BAR GAMES
-            (10521, 10557, 10520), // DLC GLOWING WP
-        };
-      
         private static readonly List<ulong> whitelistedSkins = new List<ulong> {
             2,
             10242,
@@ -397,7 +397,9 @@ namespace Oxide.Plugins
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason){
-            if (player != null) manualExteriorCooldowns.Remove(player.userID);
+            if (player == null) return;
+            manualExteriorCooldowns.Remove(player.userID);
+            buildingMenuViews.Remove(player.userID);
         }
 
         private bool ManualExteriorEnabled => config != null && config.manualExteriorWallpaper;
@@ -550,22 +552,22 @@ namespace Oxide.Plugins
         {
             if (buildings){
                 CuiHelper.DestroyUi(player, "building_wp_btn_internal");
-                CuiHelper.DestroyUi(player, "building_wp_label_internal");
+
                 CuiHelper.DestroyUi(player, "building_wp_btn_external");
-                CuiHelper.DestroyUi(player, "building_wp_label_external");
+
                 CuiHelper.DestroyUi(player, "building_wp_btn_grade");
                 CuiHelper.DestroyUi(player, "building_wp_btn_all");
             }
             if (boats){
                 CuiHelper.DestroyUi(player, "boat_wp_btn_internal");
-                CuiHelper.DestroyUi(player, "boat_wp_label_internal");
+
                 CuiHelper.DestroyUi(player, "boat_wp_btn_external");
-                CuiHelper.DestroyUi(player, "boat_wp_label_external");
+
                 CuiHelper.DestroyUi(player, "boat_wp_btn_apply");
             }
             if (all){
                 CuiHelper.DestroyUi(player, buttons_0);
-                CuiHelper.DestroyUi(player, upgrade_0);
+                DestroyBuildingMenu(player);
                 CuiHelper.DestroyUi(player, color_0);
                 CuiHelper.DestroyUi(player, tcskin_0);
                 CuiHelper.DestroyUi(player, authlist_0);
@@ -1492,19 +1494,12 @@ namespace Oxide.Plugins
 
         private bool IsWallAllowed(BasePlayer player, int wallId){
             if (!WallPrefabs.ContainsKey(wallId)) return false;
-            // Values 0, 1 and 2 identify basic wall types; the remaining values are DLC item IDs.
             return (wallId >= 0 && wallId <= 2) || IsSkinAllowed(player, wallId);
         }
         
         private bool IsWallpaperAllowed(BasePlayer player, int skinId){
-            if (skinId <= 0 || config.allowAllSkins || whitelistedSkins.Contains((ulong)skinId) || player.blueprints.steamInventory.HasItem(skinId)) return true;
-
-            foreach (var (start, end, dlcId) in skinIdRanges){
-                if (skinId >= start && skinId <= end){
-                    return player.blueprints.steamInventory.HasItem(dlcId);
-                }
-            }
-            return false;
+            return skinId <= 0 || config.allowAllSkins || whitelistedSkins.Contains((ulong)skinId)
+                || player.blueprints.CheckSkinOwnership(skinId, player);
         }
         
         private List<ulong> GetAuthPlayers(BuildingPrivlidge cup){
@@ -1535,8 +1530,7 @@ namespace Oxide.Plugins
         
         private (int itemId, List<ulong> skinIds) GetWallpaperItems(BasePlayer player, string category){
             List<ulong> list = new List<ulong>();
-            int itemId = category switch
-            {
+            int itemId = category switch {
                 "Wall" => 553967074,
                 "Floor" => -551431036,
                 "Ceiling" => 1730664641,
@@ -1690,6 +1684,7 @@ namespace Oxide.Plugins
                         : new List<ItemInfo>();
 
                     Dictionary<string, string> imageListCraft = new Dictionary<string, string>();
+                    var additions = new List<string>();
                     bool configUpdated = false;
                     bool dataUpdated = false;
 
@@ -1738,6 +1733,7 @@ namespace Oxide.Plugins
                                 itemID2 = newItem.itemID2,
                                 permission = newItem.permission
                             });
+                            additions.Add(string.IsNullOrWhiteSpace(newItem.name) ? $"Item #{newItem.ID}" : newItem.name);
 
                             if (!string.IsNullOrEmpty(newItem.img) && !imageListCraft.ContainsKey(newItem.img))
                                 imageListCraft[newItem.img] = newItem.img;
@@ -1762,8 +1758,10 @@ namespace Oxide.Plugins
                             foreach (var skinid in remoteList)
                             {
                                 if (tcData.RemovedWallpapers.TryGetValue(category, out var removedSkins) && removedSkins.Contains(skinid)) continue;
-                                if (tcData.CustomWallpapers[category].Add(skinid))
+                                if (tcData.CustomWallpapers[category].Add(skinid)){
+                                    additions.Add($"{category} wallpaper #{skinid}");
                                     dataUpdated = true;
+                                }
                             }
                         }
                     }
@@ -1784,14 +1782,22 @@ namespace Oxide.Plugins
                     if (dataUpdated) SaveData();
 
                     if (configUpdated || dataUpdated){
-                        if (player != null){
+                        if (player != null && player.IsConnected){
                             var soundEffect = new Effect(fxfinish, player.transform.position, Vector3.zero);
                             EffectNetwork.Send(soundEffect, player.net.connection);
                             player.ShowToast(GameTip.Styles.Blue_Normal, "Items updated from web.");
+                            if (additions.Count == 0)
+                                PrintToChat(player, "Existing items updated. No new items added.");
+                            for (int i = 0; i < additions.Count; i += 5)
+                                PrintToChat(player, "Added: " + string.Join(", ", additions.GetRange(i, Math.Min(5, additions.Count - i))));
                         }
                         Puts("CheckUpdate: Web items imported and saved.");
                     } else {
-                        player?.ShowToast(GameTip.Styles.Blue_Normal, "No new items found.");
+                        if (player != null && player.IsConnected){
+                            const string message = "No new items found.";
+                            player.ShowToast(GameTip.Styles.Blue_Normal, message);
+                            PrintToChat(player, message);
+                        }
                         Puts("CheckUpdate: No new items found in remote data.");
                     }
                 }
@@ -2099,13 +2105,13 @@ namespace Oxide.Plugins
                     if ((config.useNoEscape && NoEscape != null) || (config.useRaidBlock && RaidBlock != null)) {
                         if (config.useNoEscape && NoEscape != null && NoEscape.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                         if (config.useRaidBlock && RaidBlock != null && RaidBlock.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
@@ -2130,7 +2136,7 @@ namespace Oxide.Plugins
                             ServerMgr.Instance.StopCoroutine(BuildingCupboard[cup].workupgrade);
                         }
                     }
-                    CuiHelper.DestroyUi(player, upgrade_0);
+                    DestroyBuildingMenu(player);
                     CuiHelper.DestroyUi(player, color_0);
                     ShowButtonTC(player, cup);
                     break;
@@ -2147,7 +2153,7 @@ namespace Oxide.Plugins
                     if(grade == "armored") bg = BuildingGrade.Enum.TopTier;
                     BuildingCupboard[cup].grade = bg;
                     ServerMgr.Instance.StartCoroutine(UpdateCost(player, cup));
-                    CuiHelper.DestroyUi(player, upgrade_0);
+                    DestroyBuildingMenu(player);
                     CuiHelper.DestroyUi(player, color_0);
                     ShowButtonTC(player, cup);
                     break;
@@ -2161,13 +2167,13 @@ namespace Oxide.Plugins
                     if ((config.useNoEscape && NoEscape != null) || (config.useRaidBlock && RaidBlock != null)) {
                         if (config.useNoEscape && NoEscape != null && NoEscape.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                         if (config.useRaidBlock && RaidBlock != null && RaidBlock.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
@@ -2188,13 +2194,14 @@ namespace Oxide.Plugins
                 case "STOP":
                 {
                 	CuiHelper.DestroyUi(player, color_0);
+                    if (arg.Args.Length > 5) SetBuildingMenuActive(player, true);
                 	var page = int.Parse(arg.Args[4]);
                     BuildingCupboard[cup].work = !BuildingCupboard[cup].work;
                     if (BuildingCupboard[cup].work){
                         if (!HasPermission(player.UserIDString, permupgrade)){
                             BuildingCupboard[cup].work = false;
                             CreateGameTip(null, Lan("UpgradeLock", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            ShowMenu(player, cup, page);
+                            ShowMenu(player, cup, page, refreshContents: true);
                             break;
                         }
                         BuildingCupboard[cup].workupgrade = ServerMgr.Instance.StartCoroutine(UpdateProgress(player, cup));
@@ -2212,14 +2219,14 @@ namespace Oxide.Plugins
                             BuildingCupboard[cup].workupwall = null;
                         }
                     }
-                    ShowMenu(player, cup, page);
+                    ShowMenu(player, cup, page, refreshContents: true);
                     break;
                 }
                 case "EFFECT":
                 {
                     var page = int.Parse(arg.Args[1]);
                     BuildingCupboard[cup].effect = !BuildingCupboard[cup].effect;
-                    ShowMenu(player, cup, page);
+                    ShowMenu(player, cup, page, refreshContents: true);
                     break;
                 }
                 case "DOWNGRADE":
@@ -2227,14 +2234,14 @@ namespace Oxide.Plugins
                     var page = int.Parse(arg.Args[1]);
                     if (!IsDowngradeEnabledFor(player)) break;
                     BuildingCupboard[cup].downgrade = !BuildingCupboard[cup].downgrade;
-                    ShowMenu(player, cup, page);
+                    ShowMenu(player, cup, page, refreshContents: true);
                     break;
                 }
                 case "TCSKIN":
                 {
                     var page = int.Parse(arg.Args[1]);
+                    SetBuildingMenuActive(player, false);
                     ShowMenuTCSkin(player, cup, page);
-                    CuiHelper.DestroyUi(player, upgrade_0);
                     break;
                 }
                 case "TCSKINSELECT":
@@ -2246,6 +2253,7 @@ namespace Oxide.Plugins
                         selectedSkin = TCSkin.Default;
                     }
                     playerSelectedSkins[player.userID] = selectedSkin;
+                    DestroyBuildingMenu(player);
                     TCSkinReplace(cup, player, selectedSkin);
                     CuiHelper.DestroyUi(player, tcskin_0);
                     CuiHelper.DestroyUi(player, buttons_0);
@@ -2253,7 +2261,7 @@ namespace Oxide.Plugins
                 }
                 case "COLOR":
                 {
-                	CuiHelper.DestroyUi(player, upgrade_0);
+                	SetBuildingMenuActive(player, false);
                     string id = arg.Args[1].ToString();
                     string grade = arg.Args[2].ToString();
                     string skinid = arg.Args[3].ToString();
@@ -2264,7 +2272,7 @@ namespace Oxide.Plugins
                 }
                 case "COLORSELECT":
                 {
-                	CuiHelper.DestroyUi(player, upgrade_0);
+
                     string id = arg.Args[1].ToString();
                     string grade = arg.Args[2].ToString();
                     string skinid = arg.Args[3].ToString();
@@ -2275,10 +2283,9 @@ namespace Oxide.Plugins
                     break;
                 }
                 case "WALLPAPER":
+                case "WALLPAPERCATEGORY":
                 {
-                    CuiHelper.DestroyUi(player, upgrade_0);
-                    CuiHelper.DestroyUi(player, color_0);
-                    DestroyAllUI(player, buildings: true, boats: false, all: false);
+                    bool changeCategory = arg.Args[0] == "WALLPAPERCATEGORY";
 
                     string id = arg.Args[1].ToString();
                     string grade = arg.Args[2].ToString();
@@ -2287,12 +2294,14 @@ namespace Oxide.Plugins
 
                     string category = arg.Args.Length > 5 ? arg.Args[5].ToString() : "Wall";
 
-                    ShowMenuWallpaper(player, cup, id, grade, skinid, page, category);
+                    if (category != "Wall" && category != "Floor" && category != "Ceiling") return;
+                    if (!changeCategory) SetBuildingMenuActive(player, false);
+                    ShowMenuWallpaper(player, cup, id, grade, skinid, page, category, changeCategory);
                     break;
                 }
                 case "WALLPAPERSELECT":
                 {
-                    CuiHelper.DestroyUi(player, upgrade_0);
+
 
                     string id = arg.Args[1].ToString();
                     string grade = arg.Args[2].ToString();
@@ -2308,10 +2317,13 @@ namespace Oxide.Plugins
                         BuildingCupboard[cup].workwallpaper = null;
                     }
 
-                    var oldWallid = BuildingCupboard[cup].wallpaperid;
                     BuildingCupboard[cup].wallpaperid = uint.Parse(color);
 
-                    UpdateBuildingWallpaperSelection(player, cup, oldWallid, uint.Parse(color), category, id, grade, skinid, page);
+                    if (buildingMenuViews.TryGetValue(player.userID, out var view)){
+                        var selection = new CuiElementContainer();
+                        UpdateBuildingWallpaperSelection(selection, view, category, BuildingCupboard[cup].wallpaperid);
+                        if (selection.Count > 0) CuiHelper.AddUi(player, selection);
+                    }
                     UpdateBuildingWallpaperControls(player, cup, id, grade, skinid, page, category);
                     break;
                 }
@@ -2330,7 +2342,7 @@ namespace Oxide.Plugins
                     string grade = arg.Args[4].ToString();
                     string skinidArg = arg.Args[5].ToString();
                     int page = int.Parse(arg.Args[6]);
-                    ShowMenuWallpaper(player, cup, id, grade, skinidArg, page, category);
+                    ShowMenuWallpaper(player, cup, id, grade, skinidArg, page, category, changeCategory: true);
                     break;
                 }
                 case "WALLPAPERON":
@@ -2362,7 +2374,7 @@ namespace Oxide.Plugins
                             BuildingCupboard[cup].workwallpaper = null;
                         }
                     }
-                    CuiHelper.DestroyUi(player, upgrade_0);
+
                     UpdateBuildingWallpaperControls(player, cup, arg.Args[1].ToString(), grade, arg.Args[3].ToString(), page, category);
                     break;
                 }
@@ -2378,7 +2390,7 @@ namespace Oxide.Plugins
                         ServerMgr.Instance.StopCoroutine(BuildingCupboard[cup].workwallpaper);
                         BuildingCupboard[cup].workwallpaper = null;
                     }
-                    CuiHelper.DestroyUi(player, upgrade_0);
+
                     UpdateBuildingWallpaperControls(player, cup, id, grade, skinid, page, category);
                     break;
                 }
@@ -2414,20 +2426,19 @@ namespace Oxide.Plugins
                     if ((config.useNoEscape && NoEscape != null) || (config.useRaidBlock && RaidBlock != null)) {
                         if (config.useNoEscape && NoEscape != null && NoEscape.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                         if (config.useRaidBlock && RaidBlock != null && RaidBlock.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                     }
 
-                	CuiHelper.DestroyUi(player, upgrade_0);
-                    var id = int.Parse(arg.Args[1]);
+                	var id = int.Parse(arg.Args[1]);
                     string grade = arg.Args[2].ToString();
                     var skinid = int.Parse(arg.Args[3]);
                     var page = int.Parse(arg.Args[4]);
@@ -2447,7 +2458,7 @@ namespace Oxide.Plugins
                             ServerMgr.Instance.StopCoroutine(BuildingCupboard[cup].workreskin);
                         }
                     }
-                    ShowMenu(player, cup, page);
+                    ShowMenu(player, cup, page, refreshContents: true);
                     break;
                 }
                 case "UPWALL":
@@ -2459,20 +2470,19 @@ namespace Oxide.Plugins
                     if ((config.useNoEscape && NoEscape != null) || (config.useRaidBlock && RaidBlock != null)) {
                         if (config.useNoEscape && NoEscape != null && NoEscape.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                         if (config.useRaidBlock && RaidBlock != null && RaidBlock.Call<bool>("IsRaidBlocked", player.UserIDString)) {
                             CreateGameTip(cup, Lan("RaidBlocked", player.UserIDString), player, fxerror, 10, GameTip.Styles.Error);
-                            CuiHelper.DestroyUi(player, upgrade_0);
+                            DestroyBuildingMenu(player);
                             CuiHelper.DestroyUi(player, color_0);
                             return;
                         }
                     }
 
-                	CuiHelper.DestroyUi(player, upgrade_0);
-                    var id = int.Parse(arg.Args[1]);
+                	var id = int.Parse(arg.Args[1]);
                     string grade = arg.Args[2].ToString();
                     var skinid = int.Parse(arg.Args[3]);
                     var page = int.Parse(arg.Args[4]);
@@ -2495,7 +2505,7 @@ namespace Oxide.Plugins
                             ServerMgr.Instance.StopCoroutine(BuildingCupboard[cup].workupwall);
                         }
                     }
-                    ShowMenu(player, cup, page);
+                    ShowMenu(player, cup, page, refreshContents: true);
                     break;
                 }
                 case "REFRESH":
@@ -2533,7 +2543,7 @@ namespace Oxide.Plugins
                 }
                 case "CLOSE":
                 {
-                    CuiHelper.DestroyUi(player, upgrade_0);
+                    DestroyBuildingMenu(player);
                     CuiHelper.DestroyUi(player, authlist_0);
                     ShowButtonTC(player, cup);
                     break;
@@ -2543,7 +2553,13 @@ namespace Oxide.Plugins
                 	var page = int.Parse(arg.Args[1]);
                     CuiHelper.DestroyUi(player, color_0);
                     CuiHelper.DestroyUi(player, tcskin_0);
-                    ShowMenu(player, cup, page);
+                    if (arg.Args.Length > 2 && arg.Args[2] == "tc"){
+                        SetBuildingMenuActive(player, true);
+                        break;
+                    }
+                    bool resumeGrid = arg.Args.Length > 2 && arg.Args[2] == "resume";
+                    if (resumeGrid) SetBuildingMenuActive(player, true);
+                    ShowMenu(player, cup, page, refreshContents: resumeGrid);
                     break;
                 }
                 case "ERROR":
@@ -2800,8 +2816,19 @@ namespace Oxide.Plugins
         #endregion
         
         #region CUI
-        private void ShowMenu(BasePlayer player, BuildingPrivlidge cup, int page = 0){
+        private void DestroyBuildingMenu(BasePlayer player){
+            buildingMenuViews.Remove(player.userID);
             CuiHelper.DestroyUi(player, upgrade_0);
+        }
+
+        private void SetBuildingMenuActive(BasePlayer player, bool active){
+            var update = new CuiElementContainer {
+                new CuiElement { Name = upgrade_0, Update = true, ActiveSelf = active }
+            };
+            CuiHelper.AddUi(player, update);
+        }
+
+        private void ShowMenu(BasePlayer player, BuildingPrivlidge cup, int page = 0, bool refreshContents = false){
             
             if (TiersMode != null) {
                 object maxGradeTierObject = TiersMode.Call("GetMaxGradeBuild");
@@ -2812,116 +2839,165 @@ namespace Oxide.Plugins
                 maxGradeTier = 4;
             }
 
-            var BuildingItems = GetBuildingItems(player).Skip(12 * page).Take(12).ToList();
-            var container = new CuiElementContainer();
-            container.Add(new CuiElement {
-                Name = upgrade_0,
-                Parent = "OverlayNonScaled",
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0 0 0 0.8",
-                        Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-1000 -800",
-                        OffsetMax = "1000 800"
-                    },
-                    new CuiNeedsCursorComponent()
-                }
-            });
-
-            container.Add(new CuiButton {
-                Button = { Color = "0 0 0 0", Command = "SENDCMD CLOSE" },
-                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
-                Text = { Text = "" }
-            }, upgrade_0, "upgrade.dismiss");
-
-			container.Add(new CuiElement {
-                Name = "title",
-                Parent = upgrade_0,
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0.10 0.15 0.10 0.9",
-                        Material = "assets/content/ui/namefontmaterial.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-450 230",
-                        OffsetMax = "450 260"
-                    }
-                }
-            });
-            
-            UI.Label(ref container, "title", Lan("title1", player.UserIDString), 16, "0.022 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
-            UI.Button(ref container, "title", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.89 0", "0.999 0.982", "SENDCMD CLOSE", tooltip: Lan("TooltipClose", player.UserIDString));
-            
-            if (HasPermission(player.UserIDString, permadmin)){
-                UI.Button(ref container, "title", "0.35 0.35 0.60 0.90", Lan("CheckUpdate", player.UserIDString), 13, "0.73 0", "0.885 0.982", $"SENDCMD REFRESH {page}", tooltip: Lan("TooltipCheckUpdate", player.UserIDString));
-                UI.Image3(ref container, "title", "assets/icons/picked up.png", "1 1 1 0.6", "0.737 0.30", "0.752 0.70", false);
+            const int columns = 6;
+            bool threeRows = config.threeRowBuildingMenu;
+            int visibleRows = threeRows ? 3 : 2;
+            var buildingItems = GetBuildingItems(player);
+            buildingMenuViews.TryGetValue(player.userID, out var view);
+            refreshContents = refreshContents && view != null && view.Cup == cup && view.Items.SequenceEqual(buildingItems);
+            if (!refreshContents){
+                DestroyBuildingMenu(player);
+                view = new BuildingMenuView { Cup = cup, Items = buildingItems };
+                buildingMenuViews[player.userID] = view;
             }
-            
-            container.Add(new CuiElement {
-                Name = upgrade_1,
-                Parent = upgrade_0,
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0.2 0.23 0.2 0.40",
-                        Material = "assets/content/ui/namefontmaterial.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-450 -190",
-                        OffsetMax = "450 230"
+            var container = new CuiElementContainer();
+            if (!refreshContents){
+                container.Add(new CuiElement {
+                    Name = upgrade_0,
+                    Parent = "OverlayNonScaled",
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0 0 0 0.8",
+                            Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = "-1000 -800",
+                            OffsetMax = "1000 800"
+                        },
+                        new CuiNeedsCursorComponent()
                     }
+                });
+
+                container.Add(new CuiButton {
+                    Button = { Color = "0 0 0 0", Command = "SENDCMD CLOSE" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    Text = { Text = "" }
+                }, upgrade_0, "upgrade.dismiss");
+
+    			container.Add(new CuiElement {
+                    Name = "title",
+                    Parent = upgrade_0,
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0.10 0.15 0.10 0.9",
+                            Material = "assets/content/ui/namefontmaterial.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = threeRows ? "-450 275" : "-450 230",
+                            OffsetMax = threeRows ? "450 305" : "450 260"
+                        }
+                    }
+                });
+
+                UI.ModalTitle(ref container, "title", Lan("title1", player.UserIDString), "0.022 0", "0.8 1");
+                UI.Button(ref container, "title", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.89 0", "0.999 0.982", "SENDCMD CLOSE", tooltip: Lan("TooltipClose", player.UserIDString));
+
+                if (HasPermission(player.UserIDString, permadmin)){
+                    UI.Button(ref container, "title", "0.35 0.35 0.60 0.50", Lan("CheckUpdate", player.UserIDString), 13, "0.73 0", "0.885 0.982", $"SENDCMD REFRESH {page}", tooltip: Lan("TooltipCheckUpdate", player.UserIDString));
+                    UI.Image3(ref container, "title", "assets/icons/picked up.png", "1 1 1 0.6", "0.737 0.30", "0.752 0.70", false);
                 }
-            });
-            
+
+                container.Add(new CuiElement {
+                    Name = upgrade_1,
+                    Parent = upgrade_0,
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0.2 0.23 0.2 0.40",
+                            Material = "assets/content/ui/namefontmaterial.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = threeRows ? "-450 -305" : "-450 -190",
+                            OffsetMax = threeRows ? "450 275" : "450 230"
+                        }
+                    }
+                });
+
+            }
+
             bool canUpgrade = HasPermission(player.UserIDString, permupgrade);
             bool canReskin = HasPermission(player.UserIDString, permreskin);
             bool canWallpaper = HasPermission(player.UserIDString, permwallpaper);
             
-            var list_sizeX = 135;
-            var list_sizeY = 135;
-            var list_startX = -430;
-            var list_startY = 190;
-            var list_x = list_startX;
-            var list_y = list_startY;
-            var po = 0;
-            var e = 0;
-         
-            foreach (var list_entry in BuildingItems){
-                var perm = list_entry.permission;
-                if (po != 0 && po % 6 == 0){
-                    list_x = list_startX;
-                    list_y -= list_sizeY + 35;
+            const int list_sizeX = 135, list_sizeY = 135;
+            const int gap = 10, rowHeight = list_sizeY + 25 + gap;
+            const string grid = "bettertc.upgrade.grid";
+            int rows = (buildingItems.Count + columns - 1) / columns;
+            int viewportHeight = visibleRows * rowHeight - gap;
+            string gridBottom = $"0 {-20 - viewportHeight}";
+            const string cards = "bettertc.upgrade.cards";
+            const string footer = "bettertc.upgrade.footer";
+            if (!refreshContents){
+                if (rows > visibleRows){
+                    UI.AddScrollView(ref container, upgrade_1, grid, "0 0 0 0", "0 1", "1 1",
+                        0, rows * rowHeight - gap, gridBottom, "0 -20", 10, useUpgradeGreen: true);
+                } else {
+                    container.Add(new CuiElement {
+                        Name = grid, Parent = upgrade_1,
+                        Components = { new CuiRectTransformComponent {
+                            AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = gridBottom, OffsetMax = "0 -20"
+                        } }
+                    });
                 }
-                po++;
-                
+                container.Add(new CuiElement {
+                    Name = cards, Parent = grid,
+                    Components = { new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1" } }
+                });
+            }
+            var state = BuildingCupboard[cup];
+            for (int index = 0; index < buildingItems.Count; index++){
+                var list_entry = buildingItems[index];
+                var perm = list_entry.permission;
+                int list_x = 20 + index % columns * (list_sizeX + gap);
+                int list_y = -(index / columns) * rowHeight;
+                string card = $"{upgrade_2}.{index}";
+                string preview = $"{upgrade_3}.{index}";
+
                 string list_name = list_entry.name;
                 string list_img = list_entry.img;
                 int ID = list_entry.ID;
                 
                 bool unlock = (!HasPermission(player.UserIDString, perm) || !Unlock(maxGradeTier, list_entry.grade));
-                bool up = (BuildingCupboard[cup].work && BuildingCupboard[cup].id == ID);
-                
+                bool selected = state.id == ID;
+                bool up = selected && state.work;
+                bool hasSkin = IsSkinAllowed(player, list_entry.skinid);
+                bool showWall = config.reskinwall && IsWallAllowed(player, list_entry.wall);
+                bool showWallpaper = config.wallpaper && !cup.HasParent();
+                bool showReskin = config.reskin && canReskin && hasSkin;
+                bool reskin = showReskin && selected && state.reskin;
+                bool wallpaper = showWallpaper && selected && state.workwallpaper != null;
+                bool wall = showWall && selected && state.upwall;
+                var appearance = (unlock, hasSkin, canUpgrade, canReskin, canWallpaper, showWall,
+                    up, reskin, wallpaper, wall, list_entry.color && hasSkin ? state.colour : 0u);
+                if (refreshContents){
+                    if (view.Cards[index].Equals(appearance)) continue;
+                    view.Cards[index] = appearance;
+                    CuiHelper.DestroyUi(player, card);
+                    CuiHelper.DestroyUi(player, $"{card}.background");
+                    CuiHelper.DestroyUi(player, preview);
+                } else {
+                    view.Cards.Add(appearance);
+                }
+
                 container.Add(new CuiElement {
-                    Name = upgrade_2,
-                    Parent = upgrade_1,
+                    Name = card,
+                    Parent = cards,
                     Components = {
                         new CuiImageComponent {
                             Color = "0.2 0.30 0.2 0.60",
                             Material = "assets/content/ui/namefontmaterial.mat"
                         },
                         new CuiRectTransformComponent {
-                            AnchorMin = "0.5 0.5",
-                            AnchorMax = "0.5 0.5",
+                            AnchorMin = "0 1",
+                            AnchorMax = "0 1",
                             OffsetMin = $"{list_x} {list_y-list_sizeY-25}",
                             OffsetMax = $"{list_x + list_sizeX} {list_y}"
                         }
@@ -2929,16 +3005,16 @@ namespace Oxide.Plugins
                 });
                 
                 container.Add(new CuiElement {
-                    Name = "bggreen",
-                    Parent = upgrade_1,
+                    Name = $"{card}.background",
+                    Parent = cards,
                     Components = {
                         new CuiImageComponent {
                             Color = "0.2 0.30 0.2 0.80",
                             Material = "assets/content/ui/namefontmaterial.mat"
                         },
                         new CuiRectTransformComponent {
-                            AnchorMin = "0.5 0.5",
-                            AnchorMax = "0.5 0.5",
+                            AnchorMin = "0 1",
+                            AnchorMax = "0 1",
                             OffsetMin = $"{list_x} {list_y-list_sizeY}",
                             OffsetMax = $"{list_x + list_sizeX} {list_y}"
                         }
@@ -2947,13 +3023,13 @@ namespace Oxide.Plugins
 
                 if (list_entry.itemID == 0){
                     container.Add(new CuiElement {
-                        Name = upgrade_3, Parent = upgrade_1, Components = {
+                        Name = preview, Parent = cards, Components = {
                             new CuiRawImageComponent{
                                 Png = GetImageLibrary(list_img)
                             },
                             new CuiRectTransformComponent{
-                                AnchorMin = "0.5 0.5",
-                                AnchorMax = "0.5 0.5",
+                                AnchorMin = "0 1",
+                                AnchorMax = "0 1",
                                 OffsetMin = $"{list_x} {list_y-list_sizeY}",
                                 OffsetMax = $"{list_x + list_sizeX} {list_y}"
                             }
@@ -2961,14 +3037,14 @@ namespace Oxide.Plugins
                     });
                 } else {
                     container.Add(new CuiElement {
-                        Name = upgrade_3, Parent = upgrade_1, Components = {
+                        Name = preview, Parent = cards, Components = {
                             new CuiImageComponent {
                                 ItemId = list_entry.itemID,
                                 SkinId = (ulong)list_entry.skinid
                             },
                             new CuiRectTransformComponent{
-                                AnchorMin = "0.5 0.5",
-                                AnchorMax = "0.5 0.5",
+                                AnchorMin = "0 1",
+                                AnchorMax = "0 1",
                                 OffsetMin = $"{list_x} {list_y-list_sizeY}",
                                 OffsetMax = $"{list_x + list_sizeX} {list_y}"
                             }
@@ -2976,52 +3052,48 @@ namespace Oxide.Plugins
                     });
                 }
 
-                if (unlock) UI.Image(ref container, upgrade_3, GetImageLibrary("lock5"), "0.1 0.1", "0.9 0.9");
-                if (BuildingCupboard[cup].work && BuildingCupboard[cup].id == ID) UI.Image(ref container, upgrade_3, GetImageLibrary("upgrade2"), "0.1 0.1", "0.9 0.9");
-				UI.Label(ref container, upgrade_2, list_name, 12, "0.05 0", "0.55 0.15", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
-                UI.Panel(ref container, upgrade_3, "0.40 0.40 0.40 0.30", "0.82 0.82", "0.95 0.95");
-                UI.Image3(ref container, upgrade_3, "assets/icons/info.png", "1 1 1 0.6", "0.83 0.835", "0.93 0.935", false);
-                UI.Button(ref container, upgrade_3, "0 0 0 0", "", 10, "0.82 0.82", "0.95 0.95", $"SENDCMD COSTUPGRADE {ID} {list_entry.grade} {list_entry.skinid} {page}", tooltip: Lan("TooltipUpgradeCost", player.UserIDString));
+                if (unlock) UI.Image(ref container, preview, GetImageLibrary("lock5"), "0.1 0.1", "0.9 0.9");
+                if (BuildingCupboard[cup].work && BuildingCupboard[cup].id == ID) UI.Image(ref container, preview, GetImageLibrary("upgrade2"), "0.1 0.1", "0.9 0.9");
+				UI.Label(ref container, card, list_name, 12, "0.05 0", "0.55 0.15", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
+                UI.Panel(ref container, preview, "0.40 0.40 0.40 0.30", "0.82 0.82", "0.95 0.95");
+                UI.Image3(ref container, preview, "assets/icons/info.png", "1 1 1 0.6", "0.83 0.835", "0.93 0.935", false);
+                UI.Button(ref container, preview, "0 0 0 0", "", 10, "0.82 0.82", "0.95 0.95", $"SENDCMD COSTUPGRADE {ID} {list_entry.grade} {list_entry.skinid} {page}", tooltip: Lan("TooltipUpgradeCost", player.UserIDString));
                 float yMin = 0.66f;
                 float yStep = 0.16f;
 
-                bool hasSkin = IsSkinAllowed(player, list_entry.skinid);
 				bool colour = list_entry.color && canReskin;
                 if (colour && hasSkin){
-                	UI.Panel(ref container, upgrade_3, "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
-                    UI.Image(ref container, upgrade_3, GetImageLibrary("color_" + BuildingCupboard[cup].colour), $"0.83 {yMin + 0.01f}", $"0.94 {yMin + 0.12f}");
-                    UI.Button(ref container, upgrade_3, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", $"SENDCMD COLOR {ID} {list_entry.grade} {list_entry.skinid} {BuildingCupboard[cup].colour} {page}", tooltip: Lan("TooltipColor", player.UserIDString));
+                	UI.Panel(ref container, preview, "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
+                    UI.Image(ref container, preview, GetImageLibrary("color_" + BuildingCupboard[cup].colour), $"0.83 {yMin + 0.01f}", $"0.94 {yMin + 0.12f}");
+                    UI.Button(ref container, preview, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", $"SENDCMD COLOR {ID} {list_entry.grade} {list_entry.skinid} {BuildingCupboard[cup].colour} {page}", tooltip: Lan("TooltipColor", player.UserIDString));
                     yMin -= yStep;
                 }
 
-                if (config.reskin && canReskin && hasSkin){
-                    bool reskin = BuildingCupboard[cup].reskin && BuildingCupboard[cup].id == ID;
-                    UI.Panel(ref container, upgrade_3, reskin ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
-                    UI.Image2(ref container, upgrade_3, -596876839, 0, $"0.825 {yMin + 0.005f}", $"0.94 {yMin + 0.115f}");
-                    UI.Button(ref container, upgrade_3, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canReskin ? $"SENDCMD RESKIN {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}" : $"SENDCMD ERROR", tooltip: Lan("TooltipReskinOption", player.UserIDString));
+                if (showReskin){
+                    UI.Panel(ref container, preview, reskin ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
+                    UI.Image2(ref container, preview, -596876839, 0, $"0.825 {yMin + 0.005f}", $"0.94 {yMin + 0.115f}");
+                    UI.Button(ref container, preview, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canReskin ? $"SENDCMD RESKIN {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}" : $"SENDCMD ERROR", tooltip: Lan("TooltipReskinOption", player.UserIDString));
                     yMin -= yStep;
 				}
                 
-                if(config.wallpaper && !cup.HasParent()){
-                    bool wallpaper = BuildingCupboard[cup].workwallpaper != null && BuildingCupboard[cup].id == ID;
-                    UI.Panel(ref container, upgrade_3, wallpaper ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
-                    UI.Image2(ref container, upgrade_3, 1629564540, 0, $"0.825 {yMin + 0.005f}", $"0.945 {yMin + 0.12f}");
-                    UI.Button(ref container, upgrade_3, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canWallpaper ? $"SENDCMD WALLPAPER {ID} {list_entry.grade} {list_entry.skinid} {page}" : $"SENDCMD ERROR", tooltip: Lan("TooltipWallpaperOption", player.UserIDString));
+                if (showWallpaper){
+                    UI.Panel(ref container, preview, wallpaper ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
+                    UI.Image2(ref container, preview, 1629564540, 0, $"0.825 {yMin + 0.005f}", $"0.945 {yMin + 0.12f}");
+                    UI.Button(ref container, preview, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canWallpaper ? $"SENDCMD WALLPAPER {ID} {list_entry.grade} {list_entry.skinid} {page}" : $"SENDCMD ERROR", tooltip: Lan("TooltipWallpaperOption", player.UserIDString));
                     yMin -= yStep;
                 }
                 
-                if (config.reskinwall && IsWallAllowed(player, list_entry.wall)){
-                    bool wall = BuildingCupboard[cup].upwall && BuildingCupboard[cup].id == ID;
-                    UI.Panel(ref container, upgrade_3, wall ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
-                    UI.Image2(ref container, upgrade_3, list_entry.itemID2, 0, $"0.825 {yMin + 0.005f}", $"0.945 {yMin + 0.12f}");
-                    UI.Button(ref container, upgrade_3, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canWallpaper ? $"SENDCMD UPWALL {ID} {list_entry.grade} {list_entry.wall} {page}" : $"SENDCMD ERROR", tooltip: Lan("TooltipExternalWallOption", player.UserIDString));
+                if (showWall){
+                    UI.Panel(ref container, preview, wall ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.30", $"0.82 {yMin}", $"0.95 {yMin + 0.13f}");
+                    UI.Image2(ref container, preview, list_entry.itemID2, 0, $"0.825 {yMin + 0.005f}", $"0.945 {yMin + 0.12f}");
+                    UI.Button(ref container, preview, "0 0 0 0", "", 10, $"0.82 {yMin}", $"0.95 {yMin + 0.13f}", canWallpaper ? $"SENDCMD UPWALL {ID} {list_entry.grade} {list_entry.wall} {page}" : $"SENDCMD ERROR", tooltip: Lan("TooltipExternalWallOption", player.UserIDString));
                     yMin -= yStep;
                 }
                 
                 if (!hasSkin){
-                    UI.Button(ref container, upgrade_2, "0 0 0 0.2", "NO DLC", 10, "0.6 0", "0.993 0.15", "SENDCMD NODLC", tooltip: Lan("TooltipNoDLC", player.UserIDString));
+                    UI.Button(ref container, card, "0 0 0 0.2", "NO DLC", 10, "0.6 0", "0.993 0.15", "SENDCMD NODLC", tooltip: Lan("TooltipNoDLC", player.UserIDString));
                 } else if(list_entry.disablebarges && cup.HasParent()){
-                    UI.Button(ref container, upgrade_2, "0 0 0 0.2", Lan("DisableBarges", player.UserIDString), 10, "0.6 0", "0.993 0.15", "SENDCMD DISABLEBARGES", tooltip: Lan("TooltipBargeDisabled", player.UserIDString));
+                    UI.Button(ref container, card, "0 0 0 0.2", Lan("DisableBarges", player.UserIDString), 10, "0.6 0", "0.993 0.15", "SENDCMD DISABLEBARGES", tooltip: Lan("TooltipBargeDisabled", player.UserIDString));
                 }
                 else if (canUpgrade && !unlock){
                     string buttonColor, buttonText, command, buttonTooltip;
@@ -3043,39 +3115,51 @@ namespace Oxide.Plugins
                             : $"SENDCMD UPGRADE {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}";
                         buttonTooltip = Lan("TooltipUpgradeOption", player.UserIDString, list_name);
                     }
-                    UI.Button(ref container, upgrade_2, buttonColor, buttonText, 10, "0.6 0", "0.993 0.15", command, tooltip: buttonTooltip);
+                    UI.Button(ref container, card, buttonColor, buttonText, 10, "0.6 0", "0.993 0.15", command, tooltip: buttonTooltip);
                 } else if (canReskin){
-                    UI.Button(ref container, upgrade_2, "0.80 1.00 0.50 0.10", Lan("Reskin", player.UserIDString), 10, "0.6 0", "0.993 0.15", $"SENDCMD RESKIN {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}", tooltip: Lan("TooltipReskinOption", player.UserIDString));
+                    UI.Button(ref container, card, "0.80 1.00 0.50 0.10", Lan("Reskin", player.UserIDString), 10, "0.6 0", "0.993 0.15", $"SENDCMD RESKIN {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}", tooltip: Lan("TooltipReskinOption", player.UserIDString));
                 }
- 
-                //if (HasPermission(player.UserIDString, permupgrade)) UI.Button(ref container, upgrade_2, unlock ? "0.20 0.20 0.20 0.80" : up ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.10", Lan(unlock ? "LOCK" : up ? "STOP" : "UPGRADE", player.UserIDString), 10, "0.6 0", "0.993 0.15", up ? $"SENDCMD STOP {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}" : unlock ? $"SENDCMD ERROR" : list_entry.color ? $"SENDCMD COLOR {ID} {list_entry.grade} {list_entry.skinid} {BuildingCupboard[cup].colour} {page}" : $"SENDCMD UPGRADE {ID} {list_entry.grade} {list_entry.skinid} {page} {list_entry.color}");
-                
-                list_x += list_sizeX + 10;
-                e++;
             }
             
-            if (config.itemsList.Count > 12 || page != 0){
-                UI.Button(ref container, upgrade_1, page > 0 ? "0.30 0.30 0.80 0.90" : "0.5 0.5 0.5 0.1", Lan("Back", player.UserIDString), 14, "0.35 0.05", "0.495 0.12", page > 0 ? $"SENDCMD PAGE {page - 1}": "", tooltip: Lan("TooltipPreviousPage", player.UserIDString));
-                UI.Button(ref container, upgrade_1, GetBuildingItems(player).Skip(12 * (page + 1)).Count() > 0 ? "0.30 0.30 0.80 0.90" : "0.5 0.5 0.5 0.1"  , Lan("Next", player.UserIDString), 14, "0.505 0.05", "0.65 0.12", GetBuildingItems(player).Skip(12 * (page + 1)).Count() > 0 ? $"SENDCMD PAGE {page + 1}": $"", tooltip: Lan("TooltipNextPage", player.UserIDString));
+            bool showDowngrade = IsDowngradeEnabledFor(player);
+            bool showTcSkin = HasPermission(player.UserIDString, permtcskin);
+            var footerState = (TCLevels != null, config.playfx && state.effect, showDowngrade,
+                showDowngrade && state.downgrade, showTcSkin);
+            if (refreshContents && view.Footer.Equals(footerState)){
+                if (container.Count > 0) CuiHelper.AddUi(player, container);
+                return;
             }
+            view.Footer = footerState;
+            if (refreshContents) CuiHelper.DestroyUi(player, footer);
 
-            if (TCLevels != null) UI.Button(ref container, upgrade_1, "0.35 0.60 0.35 0.90", "TC Levels Upgrades", 14, "0.82 0.05", "0.976 0.12", $"tclevels.show {cup.net.ID.Value}", tooltip: Lan("TooltipTCLevels", player.UserIDString));
+            container.Add(new CuiElement {
+                Name = footer,
+                Parent = upgrade_1,
+                Components = {
+                    new CuiRectTransformComponent {
+                        AnchorMin = "0 0", AnchorMax = "1 0",
+                        OffsetMin = "0 0", OffsetMax = "0 420"
+                    }
+                }
+            });
+
+            if (TCLevels != null) UI.Button(ref container, footer, "0.35 0.60 0.35 0.90", "TC Levels Upgrades", 14, "0.82 0.05", "0.976 0.12", $"tclevels.show {cup.net.ID.Value}", tooltip: Lan("TooltipTCLevels", player.UserIDString));
             
             if (config.playfx){
-                UI.Panel(ref container, upgrade_1, "1.0 1.0 1.0 0.05", "0.02 0.06", "0.043 0.11");
-                UI.Button(ref container, upgrade_1, BuildingCupboard[cup].effect ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", "", 10, "0.023 0.065", "0.040 0.102", $"SENDCMD EFFECT {page}", tooltip: Lan("TooltipEffects", player.UserIDString));
-                UI.Label(ref container, upgrade_1, Lan(BuildingCupboard[cup].effect ? "EffectON" : "EffectOFF", player.UserIDString), 10, "0.05 0.06", "0.3 0.11", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
+                UI.Panel(ref container, footer, "1.0 1.0 1.0 0.05", "0.02 0.06", "0.043 0.11");
+                UI.Button(ref container, footer, BuildingCupboard[cup].effect ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", "", 10, "0.023 0.065", "0.040 0.102", $"SENDCMD EFFECT {page}", tooltip: Lan("TooltipEffects", player.UserIDString));
+                UI.Label(ref container, footer, Lan(BuildingCupboard[cup].effect ? "EffectON" : "EffectOFF", player.UserIDString), 10, "0.05 0.06", "0.3 0.11", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
             }
 
-            if (IsDowngradeEnabledFor(player)){
-                UI.Panel(ref container, upgrade_1, "1.0 1.0 1.0 0.05", "0.12 0.06", "0.143 0.11");
-                UI.Button(ref container, upgrade_1, BuildingCupboard[cup].downgrade ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", "", 10, "0.123 0.065", "0.140 0.102", $"SENDCMD DOWNGRADE {page}", tooltip: Lan("TooltipDowngrade", player.UserIDString));
-                UI.Label(ref container, upgrade_1, Lan(BuildingCupboard[cup].downgrade ? "DowngradeON" : "DowngradeOFF", player.UserIDString), 10, "0.15 0.06", "0.4 0.11", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
+            if (showDowngrade){
+                UI.Panel(ref container, footer, "1.0 1.0 1.0 0.05", "0.12 0.06", "0.143 0.11");
+                UI.Button(ref container, footer, BuildingCupboard[cup].downgrade ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", "", 10, "0.123 0.065", "0.140 0.102", $"SENDCMD DOWNGRADE {page}", tooltip: Lan("TooltipDowngrade", player.UserIDString));
+                UI.Label(ref container, footer, Lan(BuildingCupboard[cup].downgrade ? "DowngradeON" : "DowngradeOFF", player.UserIDString), 10, "0.15 0.06", "0.4 0.11", "0.70 0.70 0.70 1.00", TextAnchor.MiddleLeft, true);
             }
 
-            if(HasPermission(player.UserIDString, permtcskin)){
-                UI.Button(ref container, upgrade_1, "0.80 1.00 0.50 0.10", Lan("TCSkin", player.UserIDString), 14, "0.83 0.05", "0.976 0.12", $"SENDCMD TCSKIN {page}", tooltip: Lan("TooltipTCSkin", player.UserIDString));
-                UI.Image2(ref container, upgrade_1, 1488606552, 0, "0.84 0.065", "0.86 0.11");
+            if (showTcSkin){
+                UI.Button(ref container, footer, "0.80 1.00 0.50 0.10", Lan("TCSkin", player.UserIDString), 14, "0.83 0.05", "0.976 0.12", $"SENDCMD TCSKIN {page}", tooltip: Lan("TooltipTCSkin", player.UserIDString));
+                UI.Image2(ref container, footer, 1488606552, 0, "0.84 0.065", "0.86 0.11");
             }
 
             CuiHelper.AddUi(player, container);
@@ -3121,8 +3205,8 @@ namespace Oxide.Plugins
                 }
             });
             
-            UI.Label(ref container, "title2", Lan("title2", player.UserIDString), 16, "0.03 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
-            UI.Button(ref container, "title2", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.982", $"SENDCMD CLOSE2 {page}");
+            UI.ModalTitle(ref container, "title2", Lan("title2", player.UserIDString), "0.03 0", "0.8 1");
+            UI.Button(ref container, "title2", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.982", $"SENDCMD CLOSE2 {page} resume");
             
             container.Add(new CuiElement {
                 Name = color_1,
@@ -3289,7 +3373,7 @@ namespace Oxide.Plugins
                 }
             });
 
-            UI.Label(ref container, "manualwallpaper.title", Lan("ManualWallpaperTitle", player.UserIDString), 16, "0.03 0.05", "0.78 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
+            UI.ModalTitle(ref container, "manualwallpaper.title", Lan("ManualWallpaperTitle", player.UserIDString), "0.03 0", "0.78 1");
             UI.Button(ref container, "manualwallpaper.title", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.80 0", "0.999 0.981", "BETTERTCWP CLOSE", tooltip: Lan("TooltipManualWallpaperClose", player.UserIDString));
 
             container.Add(new CuiElement {
@@ -3336,7 +3420,7 @@ namespace Oxide.Plugins
             int totalHeight = loops * (itemSize + itemSpacing);
             int listStartY = (totalHeight / 2) - 10;
 
-            UI.AddScrollView(ref container, manualWallpaper_0, manualWallpaperScroll, "0 0 0 0", "0.305 0.39", "0.695 0.618", 0, totalHeight);
+            UI.AddScrollView(ref container, manualWallpaper_0, manualWallpaperScroll, "0 0 0 0", "0.305 0.39", "0.695 0.618", 0, totalHeight, useUpgradeGreen: true);
 
             int row = 0;
             int col = 0;
@@ -3378,77 +3462,87 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void ShowMenuWallpaper(BasePlayer player, BuildingPrivlidge cup, string id, string grade, string skinid, int page = 0, string category = "Wall"){
-            CuiHelper.DestroyUi(player, color_0);
+        private void ShowMenuWallpaper(BasePlayer player, BuildingPrivlidge cup, string id, string grade, string skinid, int page = 0, string category = "Wall", bool changeCategory = false){
+            if (!buildingMenuViews.TryGetValue(player.userID, out var view) || view.Cup != cup) return;
             var container = new CuiElementContainer();
-            container.Add(new CuiElement {
-                Name = color_0,
-                Parent = "OverlayNonScaled",
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0 0 0 0.8",
-                        Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-1000 -800",
-                        OffsetMax = "1000 800"
-                    },
-                    new CuiNeedsCursorComponent()
+            string scroll = $"building_wp_scroll_{category}";
+            if (changeCategory){
+                if (view.WallpaperCategory != null && view.WallpaperCategory != category){
+                    container.Add(new CuiElement { Name = $"building_wp_scroll_{view.WallpaperCategory}", Update = true, ActiveSelf = false });
                 }
-            });
-
-            container.Add(new CuiButton {
-                Button = { Color = "0 0 0 0", Command = $"SENDCMD CLOSE2 {page}" },
-                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
-                Text = { Text = "" }
-            }, color_0, "buildingwallpaper.dismiss");
-
-			container.Add(new CuiElement {
-                Name = "title5",
-                Parent = color_0,
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0.10 0.15 0.10 0.9",
-                        Material = "assets/content/ui/namefontmaterial.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-400 230",
-                        OffsetMax = "400 260"
+                DestroyAllUI(player, buildings: true, boats: false, all: false);
+            } else {
+                view.WallpaperLists.Clear();
+                CuiHelper.DestroyUi(player, color_0);
+                container.Add(new CuiElement {
+                    Name = color_0,
+                    Parent = "OverlayNonScaled",
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0 0 0 0.8",
+                            Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = "-1000 -800",
+                            OffsetMax = "1000 800"
+                        },
+                        new CuiNeedsCursorComponent()
                     }
-                }
-            });
-            
-            UI.Label(ref container, "title5", Lan("title5", player.UserIDString), 16, "0.03 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
-            UI.Button(ref container, "title5", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.981", $"SENDCMD CLOSE2 {page}");
-            
-            container.Add(new CuiElement {
-                Name = color_1,
-                Parent = color_0,
-                Components = {
-                    new CuiImageComponent {
-                        FadeIn = 0.2f,
-                        Color = "0.2 0.23 0.2 0.40",
-                        Material = "assets/content/ui/namefontmaterial.mat"
-                    },
-                    new CuiRectTransformComponent {
-                        AnchorMin = "0.5 0.5",
-                        AnchorMax = "0.5 0.5",
-                        OffsetMin = "-400 -190",
-                        OffsetMax = "400 230"
+                });
+
+                container.Add(new CuiButton {
+                    Button = { Color = "0 0 0 0", Command = $"SENDCMD CLOSE2 {page} resume" },
+                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
+                    Text = { Text = "" }
+                }, color_0, "buildingwallpaper.dismiss");
+
+    			container.Add(new CuiElement {
+                    Name = "title5",
+                    Parent = color_0,
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0.10 0.15 0.10 0.9",
+                            Material = "assets/content/ui/namefontmaterial.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = "-400 230",
+                            OffsetMax = "400 260"
+                        }
                     }
-                }
-            });
-            
-            float buttonHeight = 0.05f;
+                });
+
+                UI.ModalTitle(ref container, "title5", Lan("title5", player.UserIDString), "0.03 0", "0.8 1");
+                UI.Button(ref container, "title5", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.981", $"SENDCMD CLOSE2 {page} resume");
+
+                container.Add(new CuiElement {
+                    Name = color_1,
+                    Parent = color_0,
+                    Components = {
+                        new CuiImageComponent {
+                            FadeIn = 0.2f,
+                            Color = "0.2 0.23 0.2 0.40",
+                            Material = "assets/content/ui/namefontmaterial.mat"
+                        },
+                        new CuiRectTransformComponent {
+                            AnchorMin = "0.5 0.5",
+                            AnchorMax = "0.5 0.5",
+                            OffsetMin = "-400 -190",
+                            OffsetMax = "400 230"
+                        }
+                    }
+                });
+            }
+
+            float buttonHeight = 0.055f;
             float buttonWidth = 0.292f;
             float startX = 0.042f;
-            float startY = 0.92f;
+            float startY = 0.9175f;
             float spacing = 0.02f;
 
             var categories = new[] { "Wall", "Floor", "Ceiling" };
@@ -3458,73 +3552,110 @@ namespace Oxide.Plugins
                 float xMin = startX + i * (buttonWidth + spacing);
                 float xMax = xMin + buttonWidth;
 
-                UI.Button(ref container, color_1,
-                    cat == category ? "0.80 1.00 0.50 0.10" : "0.2 0.3 0.2 0.6", Lan(cat.ToUpper(), player.UserIDString), 12,
-                    $"{xMin} {startY}", $"{xMax} {startY + buttonHeight}",
-                    $"SENDCMD WALLPAPER {id} {grade} {skinid} {page} {cat}"
-                );
+                string tabName = $"building_wp_tab_{cat}";
+                string tabColor = cat == category ? "0.80 1.00 0.50 0.10" : "0.2 0.3 0.2 0.6";
+                string command = cat == category ? "" : $"SENDCMD WALLPAPERCATEGORY {id} {grade} {skinid} {page} {cat}";
+                if (changeCategory){
+                    container.Add(new CuiElement {
+                        Name = tabName, Update = true,
+                        Components = { new CuiButtonComponent { Color = tabColor, Command = command } }
+                    });
+                } else {
+                    container.Add(new CuiButton {
+                        Button = { Color = tabColor, Command = command, Material = "assets/content/ui/namefontmaterial.mat" },
+                        RectTransform = { AnchorMin = $"{xMin} {startY}", AnchorMax = $"{xMax} {startY + buttonHeight}" },
+                        Text = { Text = Lan(cat.ToUpperInvariant(), player.UserIDString), FontSize = 12,
+                            Font = "robotocondensed-bold.ttf", Align = TextAnchor.MiddleCenter }
+                    }, color_1, tabName);
+                    container.Add(new CuiElement {
+                        Name = $"{tabName}.icon", Parent = tabName,
+                        Components = {
+                            new CuiImageComponent {
+                                Sprite = cat switch {
+                                    "Wall" => "assets/prefabs/building core/wall/wall.png",
+                                    "Floor" => "assets/prefabs/building core/floor/floor.png",
+                                    _ => "assets/prefabs/building core/roof/roof.png"
+                                },
+                                Color = "1 1 1 0.7"
+                            },
+                            new CuiRectTransformComponent {
+                                AnchorMin = "0 0.5", AnchorMax = "0 0.5",
+                                OffsetMin = "8 -8", OffsetMax = "24 8"
+                            }
+                        }
+                    });
+                }
             }
             
             var (itemId, WallpaperItems) = GetWallpaperItems(player, category);
-            var customSkins = tcData.CustomWallpapers.TryGetValue(category, out var customList) ? customList : new HashSet<ulong>();
+            view.WallpaperCategory = category;
+            bool visited = view.WallpaperLists.TryGetValue(category, out var cached);
+            if (visited && cached.Items.SequenceEqual(WallpaperItems)){
+                container.Add(new CuiElement { Name = scroll, Update = true, ActiveSelf = true });
+                UpdateBuildingWallpaperSelection(container, view, category, BuildingCupboard[cup].wallpaperid);
+            } else {
+                if (visited) CuiHelper.DestroyUi(player, scroll);
+                view.WallpaperLists[category] = (WallpaperItems, BuildingCupboard[cup].wallpaperid);
+                var customSkins = tcData.CustomWallpapers.TryGetValue(category, out var customList) ? customList : new HashSet<ulong>();
 
-            var list_sizeX = BuildingWallpaperItemSize;
-            var list_sizeY = BuildingWallpaperItemSize;
-            var list_startX = BuildingWallpaperGridStartX;
-            int itemsPerRow = BuildingWallpaperItemsPerRow;
+                var list_sizeX = BuildingWallpaperItemSize;
+                var list_sizeY = BuildingWallpaperItemSize;
+                var list_startX = BuildingWallpaperGridStartX;
+                int itemsPerRow = BuildingWallpaperItemsPerRow;
 
-            int loops = (int)Math.Ceiling((double)WallpaperItems.Count / itemsPerRow);
-            int totalHeight = loops * (list_sizeY + BuildingWallpaperItemSpacing);
-            int list_startY = (totalHeight/2) - 10; 
+                int loops = (int)Math.Ceiling((double)WallpaperItems.Count / itemsPerRow);
+                int totalHeight = loops * (list_sizeY + BuildingWallpaperItemSpacing);
+                int list_startY = (totalHeight/2) - 10; 
 
-            UI.AddScrollView(ref container, color_0, "scrollitems", "0 0 0 0", "0.305 0.418", "0.695 0.618", 0, totalHeight);
+                UI.AddScrollView(ref container, color_0, scroll, "0 0 0 0", "0.305 0.418", "0.695 0.618", 0, totalHeight, useUpgradeGreen: true, fadeIn: visited ? 0f : 0.2f);
 
-			var list_x = list_startX;
-            var list_y = list_startY;
-            int row = 0;
-            int col = 0;
-            
-            foreach (var skin in WallpaperItems){
-                ulong wallid = skin;
+    			var list_x = list_startX;
+                var list_y = list_startY;
+                int row = 0;
+                int col = 0;
 
-                list_x = list_startX + (col * (list_sizeX + BuildingWallpaperItemSpacing));
-                list_y = list_startY - (row * (list_sizeY + BuildingWallpaperItemSpacing));
+                foreach (var skin in WallpaperItems){
+                    ulong wallid = skin;
 
-                string wallpaperElementName = $"building_wallpaper_{wallid}";
-                container.Add(new CuiElement {
-                    Name = wallpaperElementName,
-                    Parent = "scrollitems",
-                    Components = {
-                        new CuiImageComponent {
-                            Color = BuildingCupboard[cup].wallpaperid == wallid ? "1 1 1 0.70" : "0.2 0.30 0.2 0.60",
-                            Material = "assets/content/ui/namefontmaterial.mat"
-                        },
-                        new CuiRectTransformComponent {
-                            AnchorMin = "0.5 0.5",
-                            AnchorMax = "0.5 0.5",
-                            OffsetMin = $"{list_x} {list_y - list_sizeY}",
-                            OffsetMax = $"{list_x + list_sizeX} {list_y}"
+                    list_x = list_startX + (col * (list_sizeX + BuildingWallpaperItemSpacing));
+                    list_y = list_startY - (row * (list_sizeY + BuildingWallpaperItemSpacing));
+
+                    string wallpaperElementName = $"building_wallpaper_{category}_{wallid}";
+                    container.Add(new CuiElement {
+                        Name = wallpaperElementName,
+                        Parent = scroll,
+                        Components = {
+                            new CuiImageComponent {
+                                Color = BuildingCupboard[cup].wallpaperid == wallid ? "1 1 1 0.70" : "0.2 0.30 0.2 0.60",
+                                Material = "assets/content/ui/namefontmaterial.mat"
+                            },
+                            new CuiRectTransformComponent {
+                                AnchorMin = "0.5 0.5",
+                                AnchorMax = "0.5 0.5",
+                                OffsetMin = $"{list_x} {list_y - list_sizeY}",
+                                OffsetMax = $"{list_x + list_sizeX} {list_y}"
+                            }
                         }
+                    });
+
+                    if(wallid == 1){
+                        UI.Image(ref container, wallpaperElementName, GetImageLibrary("nowp"), "0.1 0.1", "0.9 0.9");
+                    } else {
+                        UI.Image2(ref container, wallpaperElementName, itemId, wallid, "0.1 0.1", "0.9 0.9");
                     }
-                });
 
-                if(wallid == 1){
-                    UI.Image(ref container, wallpaperElementName, GetImageLibrary("nowp"), "0.1 0.1", "0.9 0.9");
-                } else {
-                    UI.Image2(ref container, wallpaperElementName, itemId, wallid, "0.1 0.1", "0.9 0.9");
-                }
-   
-                UI.Button(ref container, wallpaperElementName, "0 0 0 0", "", 10, "0 0", "1 1", $"SENDCMD WALLPAPERSELECT {id} {grade} {skinid} {wallid} {page} {category}");
+                    UI.Button(ref container, wallpaperElementName, "0 0 0 0", "", 10, "0 0", "1 1", $"SENDCMD WALLPAPERSELECT {id} {grade} {skinid} {wallid} {page} {category}");
 
-                if (customSkins.Contains(wallid)){
-                	UI.Image3(ref container, wallpaperElementName, "assets/icons/vote_up.png", "1 1 1 0.3", "0.75 0.75", "0.90 0.90", false);
-                	if (HasPermission(player.UserIDString, permadmin)) UI.Button(ref container, wallpaperElementName, "1.0 0.2 0.2 0.6", "✖", 10, "0.0 0.8", "0.20 0.99", $"SENDCMD DELCUSTOMWP {wallid} {category} {id} {grade} {skinid} {page}");
-                }
-                
-                col++;
-                if (col >= itemsPerRow){
-                    col = 0;
-                    row++;
+                    if (customSkins.Contains(wallid)){
+                    	UI.Image3(ref container, wallpaperElementName, "assets/icons/vote_up.png", "1 1 1 0.3", "0.75 0.75", "0.90 0.90", false);
+                    	if (HasPermission(player.UserIDString, permadmin)) UI.Button(ref container, wallpaperElementName, "1.0 0.2 0.2 0.6", "✖", 10, "0.0 0.8", "0.20 0.99", $"SENDCMD DELCUSTOMWP {wallid} {category} {id} {grade} {skinid} {page}");
+                    }
+
+                    col++;
+                    if (col >= itemsPerRow){
+                        col = 0;
+                        row++;
+                    }
                 }
             }
 
@@ -3534,29 +3665,13 @@ namespace Oxide.Plugins
                 bool external = BuildingCupboard[cup].wpExternal;
                 bool internalFlag = BuildingCupboard[cup].wpInternal;
 
-                container.Add(new CuiButton{
-                    Button = { Color = internalFlag ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.045 0.0354", AnchorMax = "0.085 0.0926"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "building_wp_btn_internal");
-                UI.Tooltip(ref container, "building_wp_btn_internal", Lan("TooltipWallpaperInternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.10 0.04", AnchorMax = "0.3 0.09"}
-                }, color_1, "building_wp_label_internal");
+                UI.WallpaperSideToggle(ref container, color_1, "building_wp_btn_internal", "0.045 0.065", internalFlag,
+                    Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString),
+                    $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", Lan("TooltipWallpaperInternal", player.UserIDString));
             
-                container.Add(new CuiButton{
-                    Button = { Color = external ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.265 0.0354", AnchorMax = "0.305 0.0926"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "building_wp_btn_external");
-                UI.Tooltip(ref container, "building_wp_btn_external", Lan("TooltipWallpaperExternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.32 0.04", AnchorMax = "0.52 0.09"}
-                }, color_1, "building_wp_label_external");
+                UI.WallpaperSideToggle(ref container, color_1, "building_wp_btn_external", "0.265 0.065", external,
+                    Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString),
+                    $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", Lan("TooltipWallpaperExternal", player.UserIDString));
 
                 container.Add(new CuiButton{
                     Button = { Color = up ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.10", Material = "assets/content/ui/namefontmaterial.mat", Command = up ? $"SENDCMD STOP {id} {grade} {skinid} {page} {category}" : $"SENDCMD WALLPAPERON {id} {grade} {skinid} {page} false {category}", FadeIn = 0f},
@@ -3635,7 +3750,7 @@ namespace Oxide.Plugins
                 }
             });
             
-            UI.Label(ref container, "title5", Lan("BoatWallpaperTitle", player.UserIDString), 16, "0.03 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
+            UI.ModalTitle(ref container, "title5", Lan("BoatWallpaperTitle", player.UserIDString), "0.03 0", "0.8 1");
             UI.Button(ref container, "title5", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.981", "BOATCMD BOATWALLPAPERCLOSE");
             
             container.Add(new CuiElement {
@@ -3688,7 +3803,7 @@ namespace Oxide.Plugins
             int totalHeight = loops * (list_sizeY + 10);
             int list_startY = (totalHeight/2) - 10; 
 
-            UI.AddScrollView(ref container, color_0, "scrollitems", "0 0 0 0", "0.25 0.418", "0.595 0.618", 0, totalHeight);
+            UI.AddScrollView(ref container, color_0, "scrollitems", "0 0 0 0", "0.25 0.418", "0.595 0.618", 0, totalHeight, useUpgradeGreen: true);
 
             var list_x = list_startX;
             var list_y = list_startY;
@@ -3745,29 +3860,13 @@ namespace Oxide.Plugins
                 bool external = boatConfig.wpExternal;
                 bool internalFlag = boatConfig.wpInternal;
 
-                container.Add(new CuiButton{
-                    Button = { Color = internalFlag ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERSIDES {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.045 0.045", AnchorMax = "0.085 0.083"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "boat_wp_btn_internal");
-                UI.Tooltip(ref container, "boat_wp_btn_internal", Lan("TooltipWallpaperInternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.10 0.04", AnchorMax = "0.3 0.09"}
-                }, color_1, "boat_wp_label_internal");
+                UI.WallpaperSideToggle(ref container, color_1, "boat_wp_btn_internal", "0.045 0.065", internalFlag,
+                    Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString),
+                    $"BOATCMD BOATWALLPAPERSIDES {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", Lan("TooltipWallpaperInternal", player.UserIDString));
             
-                container.Add(new CuiButton{
-                    Button = { Color = external ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERSIDES {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.265 0.045", AnchorMax = "0.305 0.083"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "boat_wp_btn_external");
-                UI.Tooltip(ref container, "boat_wp_btn_external", Lan("TooltipWallpaperExternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.32 0.04", AnchorMax = "0.52 0.09"}
-                }, color_1, "boat_wp_label_external");
+                UI.WallpaperSideToggle(ref container, color_1, "boat_wp_btn_external", "0.265 0.065", external,
+                    Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString),
+                    $"BOATCMD BOATWALLPAPERSIDES {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", Lan("TooltipWallpaperExternal", player.UserIDString));
 
                 container.Add(new CuiButton{
                     Button = { Color = up ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.10", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERAPPLY {page} {category}", FadeIn = 0f},
@@ -3793,9 +3892,9 @@ namespace Oxide.Plugins
             if (!BuildingCupboard.ContainsKey(cup)) return;
             
             CuiHelper.DestroyUi(player, "building_wp_btn_internal");
-            CuiHelper.DestroyUi(player, "building_wp_label_internal");
+
             CuiHelper.DestroyUi(player, "building_wp_btn_external");
-            CuiHelper.DestroyUi(player, "building_wp_label_external");
+
             CuiHelper.DestroyUi(player, "building_wp_btn_grade");
             CuiHelper.DestroyUi(player, "building_wp_btn_all");
             
@@ -3808,29 +3907,13 @@ namespace Oxide.Plugins
                 bool external = BuildingCupboard[cup].wpExternal;
                 bool internalFlag = BuildingCupboard[cup].wpInternal;
 
-                container.Add(new CuiButton{
-                    Button = { Color = internalFlag ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.045 0.0354", AnchorMax = "0.085 0.0926"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "building_wp_btn_internal");
-                UI.Tooltip(ref container, "building_wp_btn_internal", Lan("TooltipWallpaperInternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.10 0.04", AnchorMax = "0.3 0.09"}
-                }, color_1, "building_wp_label_internal");
+                UI.WallpaperSideToggle(ref container, color_1, "building_wp_btn_internal", "0.045 0.065", internalFlag,
+                    Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString),
+                    $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", Lan("TooltipWallpaperInternal", player.UserIDString));
             
-                container.Add(new CuiButton{
-                    Button = { Color = external ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.265 0.0354", AnchorMax = "0.305 0.0926"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "building_wp_btn_external");
-                UI.Tooltip(ref container, "building_wp_btn_external", Lan("TooltipWallpaperExternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.32 0.04", AnchorMax = "0.52 0.09"}
-                }, color_1, "building_wp_label_external");
+                UI.WallpaperSideToggle(ref container, color_1, "building_wp_btn_external", "0.265 0.065", external,
+                    Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString),
+                    $"SENDCMD WALLPAPERSIDES {id} {grade} {skinid} {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", Lan("TooltipWallpaperExternal", player.UserIDString));
 
                 container.Add(new CuiButton{
                     Button = { Color = up ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.10", Material = "assets/content/ui/namefontmaterial.mat", Command = up ? $"SENDCMD WALLPAPEROFF {id} {grade} {skinid} {page} {category}" : $"SENDCMD WALLPAPERON {id} {grade} {skinid} {page} false {category}", FadeIn = 0f},
@@ -3870,9 +3953,9 @@ namespace Oxide.Plugins
             if (!playerBoatWallpaper.ContainsKey(player.userID)) return;
             
             CuiHelper.DestroyUi(player, "boat_wp_btn_internal");
-            CuiHelper.DestroyUi(player, "boat_wp_label_internal");
+
             CuiHelper.DestroyUi(player, "boat_wp_btn_external");
-            CuiHelper.DestroyUi(player, "boat_wp_label_external");
+
             CuiHelper.DestroyUi(player, "boat_wp_btn_apply");
             
             var boatConfig = playerBoatWallpaper[player.userID];
@@ -3885,29 +3968,13 @@ namespace Oxide.Plugins
                 bool external = boatConfig.wpExternal;
                 bool internalFlag = boatConfig.wpInternal;
 
-                container.Add(new CuiButton{
-                    Button = { Color = internalFlag ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERSIDES {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.045 0.045", AnchorMax = "0.085 0.083"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "boat_wp_btn_internal");
-                UI.Tooltip(ref container, "boat_wp_btn_internal", Lan("TooltipWallpaperInternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.10 0.04", AnchorMax = "0.3 0.09"}
-                }, color_1, "boat_wp_label_internal");
+                UI.WallpaperSideToggle(ref container, color_1, "boat_wp_btn_internal", "0.045 0.065", internalFlag,
+                    Lan(internalFlag ? "InternalON" : "InternalOFF", player.UserIDString),
+                    $"BOATCMD BOATWALLPAPERSIDES {page} {external.ToString().ToLower()} {(!internalFlag).ToString().ToLower()} {category}", Lan("TooltipWallpaperInternal", player.UserIDString));
             
-                container.Add(new CuiButton{
-                    Button = { Color = external ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERSIDES {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", FadeIn = 0f},
-                    RectTransform = { AnchorMin = "0.265 0.045", AnchorMax = "0.305 0.083"},
-                    Text = { Text = "", Font = "robotocondensed-bold.ttf", FontSize = 10, Align = TextAnchor.MiddleCenter}
-                }, color_1, "boat_wp_btn_external");
-                UI.Tooltip(ref container, "boat_wp_btn_external", Lan("TooltipWallpaperExternal", player.UserIDString));
-                
-                container.Add(new CuiLabel{
-                    Text = { FontSize = 10, Font = "robotocondensed-bold.ttf", Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft, Text = Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString)},
-                    RectTransform = { AnchorMin = "0.32 0.04", AnchorMax = "0.52 0.09"}
-                }, color_1, "boat_wp_label_external");
+                UI.WallpaperSideToggle(ref container, color_1, "boat_wp_btn_external", "0.265 0.065", external,
+                    Lan(external ? "ExternalON" : "ExternalOFF", player.UserIDString),
+                    $"BOATCMD BOATWALLPAPERSIDES {page} {(!external).ToString().ToLower()} {internalFlag.ToString().ToLower()} {category}", Lan("TooltipWallpaperExternal", player.UserIDString));
 
                 container.Add(new CuiButton{
                     Button = { Color = up ? "0.90 0.20 0.20 0.50" : "0.80 1.00 0.50 0.10", Material = "assets/content/ui/namefontmaterial.mat", Command = $"BOATCMD BOATWALLPAPERAPPLY {page} {category}", FadeIn = 0f},
@@ -3929,110 +3996,16 @@ namespace Oxide.Plugins
             CuiHelper.AddUi(player, container);
         }
 
-        private void UpdateBuildingWallpaperSelection(BasePlayer player, BuildingPrivlidge cup, ulong oldWallid, ulong newWallid, string category, string id, string grade, string skinid, int page){
-            if (!BuildingCupboard.ContainsKey(cup)) return;
-            
-            var (itemId, WallpaperItems) = GetWallpaperItems(player, category);
-            var customSkins = tcData.CustomWallpapers.TryGetValue(category, out var customList) ? customList : new HashSet<ulong>();
-            
-            var list_sizeX = BuildingWallpaperItemSize;
-            var list_sizeY = BuildingWallpaperItemSize;
-            var list_startX = BuildingWallpaperGridStartX;
-            int itemsPerRow = BuildingWallpaperItemsPerRow;
-            
-            int loops = (int)Math.Ceiling((double)WallpaperItems.Count / itemsPerRow);
-            int totalHeight = loops * (list_sizeY + BuildingWallpaperItemSpacing);
-            int list_startY = (totalHeight/2) - 10;
-            
-            if (oldWallid != newWallid && WallpaperItems.Contains(oldWallid)){
-                CuiHelper.DestroyUi(player, $"building_wallpaper_{oldWallid}");
-                
-                int oldIndex = WallpaperItems.IndexOf(oldWallid);
-                int oldRow = oldIndex / itemsPerRow;
-                int oldCol = oldIndex % itemsPerRow;
-                
-                int list_x = list_startX + (oldCol * (list_sizeX + BuildingWallpaperItemSpacing));
-                int list_y = list_startY - (oldRow * (list_sizeY + BuildingWallpaperItemSpacing));
-                
-                var container = new CuiElementContainer();
-                string wallpaperElementName = $"building_wallpaper_{oldWallid}";
+        private static void UpdateBuildingWallpaperSelection(CuiElementContainer container, BuildingMenuView view, string category, ulong selected){
+            if (!view.WallpaperLists.TryGetValue(category, out var cached) || cached.Selected == selected) return;
+            foreach (ulong skin in new[] { cached.Selected, selected }){
+                if (!cached.Items.Contains(skin)) continue;
                 container.Add(new CuiElement {
-                    Name = wallpaperElementName,
-                    Parent = "scrollitems",
-                    Components = {
-                        new CuiImageComponent {
-                            Color = "0.2 0.30 0.2 0.60",
-                            Material = "assets/content/ui/namefontmaterial.mat"
-                        },
-                        new CuiRectTransformComponent {
-                            AnchorMin = "0.5 0.5",
-                            AnchorMax = "0.5 0.5",
-                            OffsetMin = $"{list_x} {list_y - list_sizeY}",
-                            OffsetMax = $"{list_x + list_sizeX} {list_y}"
-                        }
-                    }
+                    Name = $"building_wallpaper_{category}_{skin}", Update = true,
+                    Components = { new CuiImageComponent { Color = skin == selected ? "1 1 1 0.70" : "0.2 0.30 0.2 0.60" } }
                 });
-                
-                if(oldWallid == 1){
-                    UI.Image(ref container, wallpaperElementName, GetImageLibrary("nowp"), "0.1 0.1", "0.9 0.9");
-                } else {
-                    UI.Image2(ref container, wallpaperElementName, itemId, oldWallid, "0.1 0.1", "0.9 0.9");
-                }
-                
-                UI.Button(ref container, wallpaperElementName, "0 0 0 0", "", 10, "0 0", "1 1", $"SENDCMD WALLPAPERSELECT {id} {grade} {skinid} {oldWallid} {page} {category}");
-                
-                if (customSkins.Contains(oldWallid)){
-                    UI.Image3(ref container, wallpaperElementName, "assets/icons/vote_up.png", "1 1 1 0.3", "0.75 0.75", "0.90 0.90", false);
-                    if (HasPermission(player.UserIDString, permadmin)) UI.Button(ref container, wallpaperElementName, "1.0 0.2 0.2 0.6", "✖", 10, "0.0 0.8", "0.20 0.99", $"SENDCMD DELCUSTOMWP {oldWallid} {category} {id} {grade} {skinid} {page}");
-                }
-                
-                CuiHelper.AddUi(player, container);
             }
-            
-            if (WallpaperItems.Contains(newWallid)){
-                CuiHelper.DestroyUi(player, $"building_wallpaper_{newWallid}");
-                
-                int newIndex = WallpaperItems.IndexOf(newWallid);
-                int newRow = newIndex / itemsPerRow;
-                int newCol = newIndex % itemsPerRow;
-                
-                int list_x = list_startX + (newCol * (list_sizeX + BuildingWallpaperItemSpacing));
-                int list_y = list_startY - (newRow * (list_sizeY + BuildingWallpaperItemSpacing));
-                
-                var container = new CuiElementContainer();
-                string wallpaperElementName = $"building_wallpaper_{newWallid}";
-                container.Add(new CuiElement {
-                    Name = wallpaperElementName,
-                    Parent = "scrollitems",
-                    Components = {
-                        new CuiImageComponent {
-                            Color = "1 1 1 0.70",
-                            Material = "assets/content/ui/namefontmaterial.mat"
-                        },
-                        new CuiRectTransformComponent {
-                            AnchorMin = "0.5 0.5",
-                            AnchorMax = "0.5 0.5",
-                            OffsetMin = $"{list_x} {list_y - list_sizeY}",
-                            OffsetMax = $"{list_x + list_sizeX} {list_y}"
-                        }
-                    }
-                });
-                
-                if(newWallid == 1){
-                    UI.Image(ref container, wallpaperElementName, GetImageLibrary("nowp"), "0.1 0.1", "0.9 0.9");
-                } else {
-                    UI.Image2(ref container, wallpaperElementName, itemId, newWallid, "0.1 0.1", "0.9 0.9");
-                }
-                
-                UI.Button(ref container, wallpaperElementName, "0 0 0 0", "", 10, "0 0", "1 1", $"SENDCMD WALLPAPERSELECT {id} {grade} {skinid} {newWallid} {page} {category}");
-                
-                if (customSkins.Contains(newWallid)){
-                    UI.Image3(ref container, wallpaperElementName, "assets/icons/vote_up.png", "1 1 1 0.3", "0.75 0.75", "0.90 0.90", false);
-                    if (HasPermission(player.UserIDString, permadmin)) UI.Button(ref container, wallpaperElementName, "1.0 0.2 0.2 0.6", "✖", 10, "0.0 0.8", "0.20 0.99", $"SENDCMD DELCUSTOMWP {newWallid} {category} {id} {grade} {skinid} {page}");
-                }
-                
-                CuiHelper.AddUi(player, container);
-            }
+            view.WallpaperLists[category] = (cached.Items, selected);
         }
 
         private void UpdateWallpaperSelection(BasePlayer player, ulong oldWallid, ulong newWallid, string category){
@@ -4165,7 +4138,7 @@ namespace Oxide.Plugins
             });
 
             container.Add(new CuiButton {
-                Button = { Color = "0 0 0 0", Command = $"SENDCMD CLOSE2 {page}" },
+                Button = { Color = "0 0 0 0", Command = $"SENDCMD CLOSE2 {page} tc" },
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1" },
                 Text = { Text = "" }
             }, tcskin_0, "tcskin.dismiss");
@@ -4188,8 +4161,8 @@ namespace Oxide.Plugins
                 }
             });
             
-            UI.Label(ref container, "title4", Lan("title4", player.UserIDString), 16, "0.03 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
-            UI.Button(ref container, "title4", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.982", $"SENDCMD CLOSE2 {page}");
+            UI.ModalTitle(ref container, "title4", Lan("title4", player.UserIDString), "0.03 0", "0.8 1");
+            UI.Button(ref container, "title4", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.982", $"SENDCMD CLOSE2 {page} tc");
             
             container.Add(new CuiElement {
                 Name = tcskin_1,
@@ -4341,7 +4314,7 @@ namespace Oxide.Plugins
                 }
             });
 
-            UI.Label(ref container, "title3", Lan("title3", player.UserIDString), 16, "0.03 0.05", "0.8 0.95", "1.00 1.00 1.00 0.9", TextAnchor.MiddleLeft, true);
+            UI.ModalTitle(ref container, "title3", Lan("title3", player.UserIDString), "0.03 0", "0.8 1");
             UI.Button(ref container, "title3", "0.90 0.20 0.20 0.50", Lan("CLOSE", player.UserIDString), 13, "0.775 0", "0.999 0.982", $"SENDCMD CLOSE", tooltip: Lan("TooltipClose", player.UserIDString));
 
             container.Add(new CuiElement
@@ -4366,7 +4339,7 @@ namespace Oxide.Plugins
             int size = 50;
             int offset = visiblePlayers - (int)(visiblePlayers * 0.01f);
 
-            UI.AddScrollView(ref container, authlist_1, "scrollbarauth", "0 0 0 0", showPagination ? "0 0.12" : "0 0", "0.99 0.996", visiblePlayers, size);
+            UI.AddScrollView(ref container, authlist_1, "scrollbarauth", "0 0 0 0", showPagination ? "0 0.12" : "0 0", "0.99 0.996", visiblePlayers, size, useUpgradeGreen: true);
 
             if (showPagination){
                 bool hasPreviousPage = page > 0;
@@ -4585,6 +4558,26 @@ namespace Oxide.Plugins
                 panel);
             }
 
+            static public void WallpaperSideToggle(ref CuiElementContainer container, string panel, string name, string anchor, bool enabled, string label, string command, string tooltip){
+                container.Add(new CuiPanel {
+                    Image = { Color = "1 1 1 0.05", Material = "assets/content/ui/namefontmaterial.mat" },
+                    RectTransform = { AnchorMin = anchor, AnchorMax = anchor, OffsetMin = "0 -10.5", OffsetMax = "21 10.5" }
+                }, panel, name);
+                Button(ref container, name, enabled ? "0.2 0.5 0.2 0.9" : "0.5 0.2 0.2 0.9",
+                    "", 10, "0.13 0.13", "0.87 0.87", command, tooltip: tooltip);
+                container.Add(new CuiLabel {
+                    Text = { Text = label, Font = "robotocondensed-bold.ttf", FontSize = 10, Color = "0.70 0.70 0.70 1.00", Align = TextAnchor.MiddleLeft },
+                    RectTransform = { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = "6 0", OffsetMax = "80 0" }
+                }, name);
+            }
+
+            static public void ModalTitle(ref CuiElementContainer container, string panel, string text, string aMin, string aMax){
+                container.Add(new CuiLabel {
+                    Text = { Text = text, FontSize = 16, Font = "robotocondensed-bold.ttf", Align = TextAnchor.MiddleLeft, Color = "1 1 1 0.9" },
+                    RectTransform = { AnchorMin = aMin, AnchorMax = aMax, OffsetMin = "0 -1", OffsetMax = "0 -1" }
+                }, panel);
+            }
+
             static public void Label(ref CuiElementContainer container, string panel, string text, int size, string aMin, string aMax, string color = "1 1 1 0.6", TextAnchor align = TextAnchor.MiddleCenter, bool font = false){
                 container.Add(new CuiLabel{
                     Text = { FontSize = size, Font = font? "robotocondensed-bold.ttf" : "robotocondensed-regular.ttf", Color = color, Align = align, Text = text},
@@ -4615,13 +4608,13 @@ namespace Oxide.Plugins
                 }
             }
              
-            static public void AddScrollView(ref CuiElementContainer container, string panel, string scrollViewId, string panelColor, string aMin, string aMax, int loops, int size){
+            static public void AddScrollView(ref CuiElementContainer container, string panel, string scrollViewId, string panelColor, string aMin, string aMax, int loops, int size, string offsetMin = "0 0", string offsetMax = "0 0", int scrollbarSize = 20, bool useUpgradeGreen = false, float fadeIn = 0.2f){
                 container.Add(new CuiElement{
                     Name = scrollViewId,
                     Parent = panel,
                     Components = {
                         new CuiImageComponent {
-                            FadeIn = 0.2f,
+                            FadeIn = fadeIn,
                             Color = panelColor
                         },
                         new CuiScrollViewComponent {
@@ -4642,15 +4635,15 @@ namespace Oxide.Plugins
                                 Invert = false,
                                 AutoHide = false,
                                 HandleSprite = "assets/content/ui/ui.rounded.tga",
-                                HandleColor = "0.15 0.25 0.15 0.8",
-                                HighlightColor = "0.17 0.17 0.17 1",
-                                PressedColor = "0.2 0.2 0.2 1",
+                                HandleColor = useUpgradeGreen ? "0.3294 0.4235 0.2510 1" : "0.15 0.25 0.15 0.8",
+                                HighlightColor = useUpgradeGreen ? "0.38 0.48 0.29 1" : "0.17 0.17 0.17 1",
+                                PressedColor = useUpgradeGreen ? "0.29 0.37 0.22 1" : "0.2 0.2 0.2 1",
                                 TrackSprite = "assets/content/ui/ui.background.tile.psd",
                                 TrackColor = "0.09 0.09 0.09 0",
-                                Size = 20
+                                Size = scrollbarSize
                             }
                         },
-                        new CuiRectTransformComponent {AnchorMin = aMin, AnchorMax = aMax}
+                        new CuiRectTransformComponent {AnchorMin = aMin, AnchorMax = aMax, OffsetMin = offsetMin, OffsetMax = offsetMax}
                     }
                 });
             }
@@ -4717,10 +4710,10 @@ namespace Oxide.Plugins
             public string btntccolora = "0.90 0.20 0.20 0.50";
             
             [JsonProperty("GUI Buttons TC - OffsetMin")]
-            public string OffsetMin = "280 621";
+            public string OffsetMin = "280 625";
 
             [JsonProperty("GUI Buttons TC - OffsetMax")]
-            public string OffsetMax = "573 643";
+            public string OffsetMax = "573 647";
             
             [JsonProperty("GUI Buttons TC - AnchorMin")]
             public string AnchorMin = "0.5 0";
@@ -4864,6 +4857,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("Auto Sort Items by Grade")]
             public bool autoSortItems = true;
+
+            [JsonProperty("Use three rows in the building upgrade menu")]
+            public bool threeRowBuildingMenu = false;
 
             [JsonProperty("Items")]
             public List<ItemInfo> itemsList = new List<ItemInfo>();

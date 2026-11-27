@@ -17,7 +17,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Custom Entities", "Nikedemos", "1.0.21")]
+    [Info("Custom Entities", "Nikedemos", "1.0.22")]
     [Description("A robust framework for registering, spawning, loading and saving entity prefabs")]
 
     public class CustomEntities : RustPlugin
@@ -1133,7 +1133,6 @@ namespace Oxide.Plugins
                 //in this case, it will help identify the modified prefab in the dictionary, given its full prefab name.
 
                 newEntity.prefabID = modifiedPrefabStringPoolID;
-                newEntity._prefabName = recipe.FullPrefabName;
 
                 ICustomEntity asInterface = (newEntity as ICustomEntity);
 
@@ -1206,9 +1205,6 @@ namespace Oxide.Plugins
                 newEntity.impactEffect = _emptyImpactGameObjectRef;
 
                 newEntity.prefabID = AddToStringPool(recipe.FullPrefabName);
-
-                //naughty reflection
-                newEntity._prefabName = recipe.FullPrefabName;
 
                 ICustomEntity asInterface = (newEntity as ICustomEntity);
 
@@ -1371,6 +1367,7 @@ namespace Oxide.Plugins
                     value = fullPrefabName.ManifestHash();
                     StringPool.toString.Add(value, fullPrefabName);
                     StringPool.toNumber.Add(fullPrefabName, value);
+                    StringPool.toShortName.Add(value, Path.GetFileNameWithoutExtension(fullPrefabName));
                 }
 
                 return value;
@@ -1388,8 +1385,11 @@ namespace Oxide.Plugins
                 if (StringPool.toString.ContainsKey(value))
                 {
                     StringPool.toString.Remove(value);
+                }
 
-                    return;
+                if (StringPool.toShortName.ContainsKey(value))
+                {
+                    StringPool.toShortName.Remove(value);
                 }
             }
 
@@ -2397,11 +2397,6 @@ namespace Oxide.Plugins
                 }
 
                 modifiedEntity = GetComponent<BaseEntity>();
-
-                if (modifiedEntity.PrefabName != RecipeFullPrefabName)
-                {
-                    modifiedEntity._prefabName = RecipeFullPrefabName;
-                }
             }
 
             //this won't happen unless instantiated. Start() so the entity has time to populate inventory, spawn subentities etc.

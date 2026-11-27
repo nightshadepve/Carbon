@@ -1,0 +1,95 @@
+{
+  "key": "warehouse",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-19 15:06",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -33.0,
+      "y": -33.0,
+      "z": -33.0
+    },
+    "localMax": {
+      "x": 33.0,
+      "y": 33.0,
+      "z": 33.0
+    },
+    "tilesX": 7,
+    "tilesZ": 7,
+    "tilesBuilt": 16,
+    "polys": 388,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 12,
+  "nodes": [
+    {
+      "id": 7,
+      "lp": {
+        "x": -7.75000334,
+        "y": 0.39100036,
+        "z": -3.80303812
+      },
+      "auto": "door",
+      "ents": [
+        {
+          "t": "door",
+          "lp": {
+            "x": -7.750033,
+            "y": 0.208000183,
+            "z": -3.80302739
+          }
+        }
+      ],
+      "out": [
+        {
+          "to": 8,
+          "h": 8
+        },
+        {
+          "to": 9,
+          "h": 8
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "lp": {
+        "x": -7.750007,
+        "y": 0.333334446,
+        "z": -2.603038
+      },
+      "mesh": true,
+      "auto": "door",
+      "out": [
+        {
+          "to": 7,
+          "h": 4
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "lp": {
+        "x": -7.74999952,
+        "y": 0.08333433,
+        "z": -5.00303841
+      },
+      "mesh": true,
+      "auto": "door",
+      "out": [
+        {
+          "to": 7,
+          "h": 4
+        }
+      ]
+    }
+  ]
+}

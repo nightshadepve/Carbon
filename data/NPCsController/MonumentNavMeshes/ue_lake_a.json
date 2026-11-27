@@ -1,0 +1,33 @@
+{
+  "key": "ue_lake_a",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-27 11:35",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": 39.100914,
+      "y": -56.5543022,
+      "z": -84.092514
+    },
+    "localMax": {
+      "x": 196.807465,
+      "y": 8.8997,
+      "z": 137.526611
+    },
+    "tilesX": 15,
+    "tilesZ": 21,
+    "tilesBuilt": 262,
+    "polys": 4013,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 117,
+  "nodes": []
+}

@@ -22,7 +22,7 @@ using Random = UnityEngine.Random;
 
 namespace Oxide.Plugins
 {
-    [Info("ArmoredTrain", "Adem", "2.0.9")]
+    [Info("ArmoredTrain", "Adem", "2.1.0")]
     public class ArmoredTrain : RustPlugin
     {
         #region Variables
@@ -5128,6 +5128,9 @@ namespace Oxide.Plugins
                     object value = field.GetValue(src);
                     field.SetValue(dst, value);
                 }
+                
+                if (src is BaseNetworkable source && dst is BaseNetworkable target) 
+                    target.prefabID = source.prefabID;
             }
         }
 
@@ -7376,7 +7379,7 @@ namespace Oxide.Plugins
             {
                 return new PluginConfig()
                 {
-                    VersionConfig = new VersionNumber(2, 0, 9),
+                    VersionConfig = new VersionNumber(2, 1, 0),
                     Prefix = "[ArmoredTrain]",
                     MainConfig = new MainConfig
                     {

@@ -1,0 +1,33 @@
+{
+  "key": "train_tunnel_double_entrance_b_72m",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-27 11:35",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -58.0,
+      "y": -18.0,
+      "z": -58.0
+    },
+    "localMax": {
+      "x": 58.0,
+      "y": 19.2501,
+      "z": 58.0
+    },
+    "tilesX": 11,
+    "tilesZ": 11,
+    "tilesBuilt": 39,
+    "polys": 290,
+    "terrain": "none"
+  },
+  "nextId": 27,
+  "nodes": []
+}

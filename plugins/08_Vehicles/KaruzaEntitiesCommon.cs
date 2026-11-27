@@ -46,7 +46,7 @@ using static SeekerTarget;
 
 namespace Oxide.Plugins
 {
-    [Info("KaruzaEntitiesCommon", "Karuza", "1.13.01")]
+    [Info("KaruzaEntitiesCommon", "Karuza", "1.13.02")]
     public class KaruzaEntitiesCommon : RustPlugin
     {
         [PluginReference]
@@ -3863,6 +3863,8 @@ namespace Oxide.Plugins
 
             public override void ServerInit()
             {
+                this.KaruzaCustomEntity = this.GetComponentInParent<IKaruzaCustomEntity>();
+
                 networkEntityScale = true;
 
                 canBeDemolished = false;
@@ -3870,7 +3872,6 @@ namespace Oxide.Plugins
                 BuildingManager.server.Remove(this);
 
                 maxUseAngle = 180;
-                this.KaruzaCustomEntity = this.GetComponentInParent<IKaruzaCustomEntity>();
 
                 HasKaruzaEntity = this.KaruzaCustomEntity != null;
 
@@ -7980,13 +7981,6 @@ namespace Oxide.Plugins
                 limitNetworking = !state;
             }
 
-            public override void ResetState()
-            {
-                _prefab = this;
-                base.ResetState();
-                _prefab = null;
-            }
-
             protected bool CustomHasChanged
             {
                 get
@@ -10848,7 +10842,7 @@ namespace Oxide.Plugins
             {
                 if (UpdateManualAim(inputState))
                 {
-                    ClientRPC(RpcTarget.NetworkGroup("CLIENT_ReceiveAimDir"), aimDir);
+                    ClientRPC(RpcTarget.NetworkGroup("CLIENT_ReceiveAimDir"), aimDir, aimDir);
                 }
             }
 
@@ -10858,7 +10852,7 @@ namespace Oxide.Plugins
 
                 if (init)
                 {
-                    ClientRPC(RpcTarget.NetworkGroup("CLIENT_ReceiveAimDir"), aimDir);
+                    ClientRPC(RpcTarget.NetworkGroup("CLIENT_ReceiveAimDir"), aimDir, aimDir);
                 }
 
                 return init;
@@ -14103,7 +14097,7 @@ namespace Oxide.Plugins
                                     rPCMessage.player = player;
                                     rPCMessage.read = msg.read;
                                     BaseEntity.RPCMessage msg3 = rPCMessage;
-                                    RPC_UnloadAnimal(msg3);
+                                    RPC_CustomUnloadAnimal(msg3);
                                 }
                             }
                             catch (Exception exception2)
@@ -14118,6 +14112,49 @@ namespace Oxide.Plugins
                 }
 
                 return base.OnRpcMessage(player, rpc, msg);
+            }
+
+
+            [BaseEntity.RPC_Server]
+            [BaseEntity.RPC_Server.MaxDistance(3f)]
+            [BaseEntity.RPC_Server.CallsPerSecond(1uL)]
+            public void RPC_CustomUnloadAnimal(BaseEntity.RPCMessage msg)
+            {
+                if (!(msg.player == null) && !CustomTryDismountOne(msg.player.transform.position, out var noDismountPoint) && noDismountPoint)
+                {
+                    msg.player.ShowToast(GameTip.Styles.Error, NoRoomToUnloadPhrase, false);
+                    return;
+                }
+            }
+
+            public bool CustomTryDismountOne(Vector3? towards, out bool noDismountPoint)
+            {
+                noDismountPoint = false;
+                if (occupants == null)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < occupants.Length; i++)
+                {
+                    BaseNPC2 baseNPC = occupants[i].Get(serverside: true);
+                    if (baseNPC == null)
+                    {
+                        occupants[i] = default(EntityRef<BaseNPC2>);
+                        dismountTowards[i] = null;
+                    }
+                    else if (!baseNPC.IsDismounting)
+                    {
+                        if (RequestDismount(baseNPC, towards))
+                        {
+                            return true;
+                        }
+
+                        noDismountPoint = true;
+                    }
+                }
+
+                return false;
             }
 
             [BaseEntity.RPC_Server]
@@ -14319,8 +14356,6 @@ namespace Oxide.Plugins
                     if (baseNPC != null)
                     {
                         DismountImmediate(baseNPC);
-                        baseNPC.transform.localScale = new Vector3(1, 1, 1);
-                        baseNPC.SendNetworkUpdateImmediate();
                     }
                 }
             }
@@ -19471,16 +19506,17 @@ namespace Oxide.Plugins
             {
                 if (!string.IsNullOrEmpty(strName))
                 {
-                    Effect.reusableInstance.Init(Effect.Type.Generic, ent, boneID, posLocal, normLocal, sourceConnection);
-                    Effect.reusableInstance.upDir = up;
-                    Effect.reusableInstance.pooledString = strName;
+                    using Effect effect = Facepunch.Pool.Get<Effect>();
+                    effect.Init(Effect.Type.Generic, ent, boneID, posLocal, normLocal, sourceConnection);
+                    effect.upDir = up;
+                    effect.pooledString = strName;
 
                     if (sendToNetworkGroupOnly)
                     {
-                        Effect.reusableInstance.targets = ent.net.group.subscribers;
+                        effect.targets = ent.net.group.subscribers;
                     }
 
-                    EffectNetwork.Send(Effect.reusableInstance);
+                    EffectNetwork.Send(effect);
                 }
             }
 

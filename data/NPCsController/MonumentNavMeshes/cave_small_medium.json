@@ -1,0 +1,33 @@
+{
+  "key": "cave_small_medium",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:41",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -47.0238,
+      "y": -62.697998,
+      "z": -61.5618172
+    },
+    "localMax": {
+      "x": 69.4895,
+      "y": 26.2579117,
+      "z": 35.8128166
+    },
+    "tilesX": 11,
+    "tilesZ": 10,
+    "tilesBuilt": 54,
+    "polys": 3576,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 117,
+  "nodes": []
+}

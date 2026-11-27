@@ -1,0 +1,33 @@
+{
+  "key": "swamp_b",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:41",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -59.7540359,
+      "y": -10.2199993,
+      "z": -29.2442
+    },
+    "localMax": {
+      "x": 31.7686081,
+      "y": 36.78856,
+      "z": 38.92343
+    },
+    "tilesX": 9,
+    "tilesZ": 7,
+    "tilesBuilt": 57,
+    "polys": 707,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 3,
+  "nodes": []
+}

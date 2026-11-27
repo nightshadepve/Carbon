@@ -1,0 +1,33 @@
+{
+  "key": "power_sub_small_1",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:41",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -17.90942,
+      "y": -8.120747,
+      "z": -17.899374
+    },
+    "localMax": {
+      "x": 15.9206429,
+      "y": 14.9685135,
+      "z": 16.522337
+    },
+    "tilesX": 4,
+    "tilesZ": 4,
+    "tilesBuilt": 7,
+    "polys": 125,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 3,
+  "nodes": []
+}

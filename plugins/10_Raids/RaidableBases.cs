@@ -56,7 +56,7 @@ using static Oxide.Plugins.RaidableBasesExtensions.Methods;
 
 namespace Oxide.Plugins
 {
-    [Info("Raidable Bases", "nivex", "3.2.3")]
+    [Info("Raidable Bases", "nivex", "3.2.5")]
     [Description("Create fully automated raidable bases with npcs.")]
     public class RaidableBases : RustPlugin
     {
@@ -4920,7 +4920,7 @@ namespace Oxide.Plugins
 
         public class Raider
         {
-            public bool HasDestroyed, IsAdmin, IsFlying, IsVanished, IsAlly, IsAllowed, IsParticipant, PreEnter = true, eligible = true, rewards = true;
+            public bool EnteredAsSpectator, HasDestroyed, IsAdmin, IsFlying, IsVanished, IsAlly, IsAllowed, IsParticipant, PreEnter = true, eligible = true, rewards = true;
             public float participantTime, TotalDamage;
             public double lastActiveTime;
             public string id, displayName;
@@ -5052,7 +5052,9 @@ namespace Oxide.Plugins
             public ulong ownerId;
             public string ownerName;
             public float loadTime;
-            public DateTime spawnDateTime, despawnDateTime = DateTime.MaxValue;
+            public DateTime spawnDateTime;
+            private double despawnDeadline = double.PositiveInfinity;
+            public DateTime despawnDateTime => despawnDeadline == double.PositiveInfinity ? DateTime.MaxValue : DateTime.Now.AddSeconds(despawnDeadline - Time.realtimeSinceStartupAsDouble);
             public float AddNearTime;
             public bool AllowPVP;
             public BuildingOptions Options;
@@ -5714,6 +5716,7 @@ namespace Oxide.Plugins
 
                 Raider ri = GetRaider(target);
 
+                ri.EnteredAsSpectator = target.IsFlying || IsVanished(target);
                 ri.CheckInput(target, this);
 
                 if (!intruders.Add(target.userID) && raiders.ContainsKey(target.userID))
@@ -5740,7 +5743,6 @@ namespace Oxide.Plugins
 
                 ri.PreEnter = false;
 
-                UpdateTime(target, true);
                 HolsterWeapon(target);
                 SwitchToState();
 
@@ -5786,14 +5788,12 @@ namespace Oxide.Plugins
 
                 if (IsUnloading)
                 {
-                    UpdateTime(target, false);
                     return;
                 }
 
                 Raider ri = GetRaider(target);
 
                 ri.DestroyInput();
-                UpdateTime(target, false);
                 DestroyUi(target, UiType.Status);
                 intruders.Remove(target.userID);
 
@@ -6248,7 +6248,7 @@ namespace Oxide.Plugins
                     HandleAwards();
                 }
 
-                if (DateTime.Now >= despawnDateTime)
+                if (Time.realtimeSinceStartupAsDouble >= despawnDeadline)
                 {
                     Despawn();
                     return;
@@ -6608,30 +6608,6 @@ namespace Oxide.Plugins
                 IsPrivDestroyed = true;
                 CreateSpheres();
                 TryToEnd();
-            }
-
-            public void UpdateTime(BasePlayer player, bool state)
-            {
-                if (!player.IsConnected || !player.HasPermission("raidablebases.time") || player.HasPermission("raidablebases.timebypass"))
-                {
-                    return;
-                }
-
-                int time = state ? Options.ForcedTime : -1;
-
-                if (player.IsAdmin)
-                {
-                    player.SendConsoleCommand("admintime", time);
-                }
-                else if (!player.IsFlying)
-                {
-                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, true);
-                    player.SendNetworkUpdateImmediate();
-                    player.SendConsoleCommand("admintime", time);
-                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, false);
-                }
-
-                player.SendNetworkUpdateImmediate();
             }
 
             public bool IsOwnerConnected() => ownerId.IsSteamId() && RustCore.FindPlayerById(ownerId).IsOnline();
@@ -7146,7 +7122,7 @@ namespace Oxide.Plugins
 
                 foreach (var ri in raiders.Values)
                 {
-                    if (CancelOnServerRestart() || !IsEligible || RewardsForfeit)
+                    if (CancelOnServerRestart() || !IsEligible || RewardsForfeit || (ri.EnteredAsSpectator && !ri.IsParticipant))
                     {
                         ri.eligible = false;
                         continue;
@@ -7889,7 +7865,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (DespawnMinutesInactiveReset || despawnDateTime == DateTime.MaxValue)
+                if (DespawnMinutesInactiveReset || double.IsPositiveInfinity(despawnDeadline))
                 {
                     UpdateDespawnDateTime(DespawnMinutesInactive);
                 }
@@ -7898,14 +7874,7 @@ namespace Oxide.Plugins
             private bool despawnTimeUpdated;
             public void UpdateDespawnDateTime(float time)
             {
-                if (time > 0f)
-                {
-                    despawnDateTime = DateTime.Now.AddSeconds(time * 60f);
-                }
-                else
-                {
-                    despawnDateTime = DateTime.Now;
-                }
+                despawnDeadline = Time.realtimeSinceStartupAsDouble + Math.Max(0d, time * 60d);
                 despawnTimeUpdated = true;
             }
 
@@ -8813,12 +8782,8 @@ namespace Oxide.Plugins
                     }
                     else if (e is TreeEntity t)
                     {
-                        if (!Entities.Contains(e))
-                        {
-                            if (Options.DeleteRadius > 0f && e.Distance(Location) <= Options.DeleteRadius) ScheduledRespawn(e);
-                            else if (Options.TreeRadius > 0f) { Eject(t, Location, Options.TreeRadius, true); HandleHiveAt(t, false); }
-                            else if (Options.DeleteRadius <= 0f) ScheduledRespawn(e);
-                        }
+                        if (Entities.Contains(e)) continue;
+                        if (Options.DeleteRadius <= 0f || e.Distance(Location) <= Options.DeleteRadius) ScheduledRespawn(e);
                     }
                     else if ((e is ResourceEntity || e is CollectibleEntity) && NearFoundation(e.transform.position))
                     {
@@ -12407,10 +12372,7 @@ namespace Oxide.Plugins
                 QueueNotification(player, "EjectedYourCorpse");
                 if (config.Settings.Management.DrawTime > 0)
                 {
-                    using (AdminCommand(player))
-                    {
-                        DrawText(player, config.Settings.Management.DrawTime, Color.red, position, mx("YourCorpse", player.UserIDString));
-                    }
+                    DrawText(player, config.Settings.Management.DrawTime, Color.red, position, mx("YourCorpse", player.UserIDString));
                 }
             }
 
@@ -13326,6 +13288,7 @@ namespace Oxide.Plugins
 
                 int scientistCount = ScientistBrain.Count;
                 CopySerializableFields(scientistNpc, npc);
+                npc.prefabID = scientistNpc.prefabID;
                 DestroyImmediate(scientistBrain, true);
                 DestroyImmediate(scientistNpc, true);
                 ScientistBrain.Count = scientistCount;
@@ -14022,9 +13985,10 @@ namespace Oxide.Plugins
                 }
             }
 
-            public string DespawnString => despawnDateTime == DateTime.MaxValue ? string.Empty : $"[{DespawnTime}m]";
+            public string DespawnString => double.IsPositiveInfinity(despawnDeadline) ? string.Empty : $"[{DespawnTime}m]";
 
-            public double DespawnTime => despawnDateTime != DateTime.MaxValue && DespawnMinutesInactive > 0 && despawnDateTime.Subtract(DateTime.Now).TotalSeconds > 0 ? Math.Ceiling(despawnDateTime.Subtract(DateTime.Now).TotalMinutes) : 0;
+            public double DespawnTime => DespawnSecondsRemaining > 0d ? Math.Ceiling(DespawnSecondsRemaining / 60d) : 0d;
+            internal double DespawnSecondsRemaining => double.IsPositiveInfinity(despawnDeadline) ? 0d : Math.Max(0d, despawnDeadline - Time.realtimeSinceStartupAsDouble);
 
             public string MarkerName => string.IsNullOrWhiteSpace(Options.Setup.MarkerName) ? config.Settings.Markers.MarkerName : Options.Setup.MarkerName;
 
@@ -16765,7 +16729,7 @@ namespace Oxide.Plugins
 
         private void OnLootEntityEnd(BasePlayer player, StorageContainer container)
         {
-            if (player == null || IsVanished(player) || container == null || container.inventory == null || container.OwnerID.IsSteamId() || !Get(container, out var raid))
+            if (player == null || IsVanished(player) || container == null || container is Recycler || container.inventory == null || container.OwnerID.IsSteamId() || !Get(container, out var raid))
             {
                 return;
             }
@@ -17724,7 +17688,7 @@ namespace Oxide.Plugins
                 raid.IsEngaged = true;
                 raid.CheckDespawn();
             }
-            if (info.Initiator.Is(out BaseEntity initiator) && raid.Owns(initiator) && raid.Owns(entity))
+            if (info.Initiator.Is(out BaseEntity initiator) && raid.Owns(initiator) && raid.Owns(entity) && raid.IsWeapon(entity))
             {
                 info.damageTypes.Clear();
                 return DamageResult.None;
@@ -19819,16 +19783,16 @@ namespace Oxide.Plugins
             if (moveUI)
             {
                 UI.TrySetMoveUi(player, type, true);
-                moveUI = false;
+                UI.UpdateUi(player, type);
+                return;
             }
-            else moveUI = true;
             switch (type)
             {
-                case UiType.Buyable: UI.ShowBuyableUi(player, moveUI); break;
-                case UiType.Cooldown: UI.ShowBuyableCooldownsUi(player, moveUI); break;
-                case UiType.Delay: UI.ShowDelayUi(player, moveUI); break;
-                case UiType.Lockout: UI.ShowLockoutsUi(player, moveUI); break;
-                case UiType.Status: UI.ShowStatusUi(player, moveUI); break;
+                case UiType.Buyable: UI.ShowBuyableUi(player, true); break;
+                case UiType.Cooldown: UI.ShowBuyableCooldownsUi(player, true); break;
+                case UiType.Delay: UI.ShowDelayUi(player, true); break;
+                case UiType.Lockout: UI.ShowLockoutsUi(player, true); break;
+                case UiType.Status: UI.ShowStatusUi(player, true); break;
             }
         }
 
@@ -20693,15 +20657,9 @@ namespace Oxide.Plugins
                 nearest.AddHintCooldown(player, opt.Cooldown);
             }
 
-            if (objects.Count > 0)
+            foreach (var obj in objects)
             {
-                using (AdminCommand(player))
-                {
-                    foreach (var obj in objects)
-                    {
-                        player.SendConsoleCommand("ddraw.text", obj[0], obj[1], obj[2], obj[3]);
-                    }
-                }
+                player.SendConsoleCommand("ddraw.text", obj[0], obj[1], obj[2], obj[3]);
             }
 
             Message(player, objects.Count > 0 ? "Hints Drawn On Screen" : "Hints None Available");
@@ -20772,26 +20730,23 @@ namespace Oxide.Plugins
 
             if (hasPerm)
             {
-                using (AdminCommand(player))
+                foreach (var raid in Raids)
                 {
-                    foreach (var raid in Raids)
+                    int num = BasePlayer.activePlayerList.Count(x => x.HasNetworkId() && x.Distance(raid.Location) <= raid.ProtectionRadius * 3f);
+                    int distance = Mathf.CeilToInt(player.transform.position.Distance(raid.Location));
+                    string message = mx("RaidMessage", player.UserIDString, distance, num);
+                    string flag = mx(raid.GetAllowKey(), player.UserIDString);
+
+                    DrawText(player, 15f, Color.yellow, raid.Location, string.Format("<size=24>{0}{1} {2} [{3} {4}] {5}</size>", raid.BaseName, flag, raid.Type + ":" + raid.Mode(player.UserIDString, true), message, FormatGridReference(player, raid.Location), raid.Location));
+
+                    foreach (var ri in raid.raiders.Values.Where(x => x.IsAlly && x.player.HasNetworkId()))
                     {
-                        int num = BasePlayer.activePlayerList.Count(x => x.HasNetworkId() && x.Distance(raid.Location) <= raid.ProtectionRadius * 3f);
-                        int distance = Mathf.CeilToInt(player.transform.position.Distance(raid.Location));
-                        string message = mx("RaidMessage", player.UserIDString, distance, num);
-                        string flag = mx(raid.GetAllowKey(), player.UserIDString);
+                        DrawText(player, 15f, Color.yellow, ri.player.transform.position, $"<size=24>{mx("Ally", player.UserIDString).Replace(":", string.Empty)}</size>");
+                    }
 
-                        DrawText(player, 15f, Color.yellow, raid.Location, string.Format("<size=24>{0}{1} {2} [{3} {4}] {5}</size>", raid.BaseName, flag, raid.Type + ":" + raid.Mode(player.UserIDString, true), message, FormatGridReference(player, raid.Location), raid.Location));
-
-                        foreach (var ri in raid.raiders.Values.Where(x => x.IsAlly && x.player.HasNetworkId()))
-                        {
-                            DrawText(player, 15f, Color.yellow, ri.player.transform.position, $"<size=24>{mx("Ally", player.UserIDString).Replace(":", string.Empty)}</size>");
-                        }
-
-                        if (raid.ownerId.IsSteamId() && raid.GetOwner() is BasePlayer owner)
-                        {
-                            DrawText(player, 15f, Color.yellow, owner.transform.position, $"<size=24>{mx("Owner", player.UserIDString).Replace(":", string.Empty)}</size>");
-                        }
+                    if (raid.ownerId.IsSteamId() && raid.GetOwner() is BasePlayer owner)
+                    {
+                        DrawText(player, 15f, Color.yellow, owner.transform.position, $"<size=24>{mx("Owner", player.UserIDString).Replace(":", string.Empty)}</size>");
                     }
                 }
             }
@@ -21085,26 +21040,23 @@ namespace Oxide.Plugins
 
         protected void ShowGrid(BasePlayer player, bool showAll, string profile)
         {
-            using (AdminCommand(player))
+            foreach (var (type, spawns) in GridController.Spawns)
             {
-                foreach (var (type, spawns) in GridController.Spawns)
-                {
-                    ShowSpawns(player, spawns, showAll, type == RaidableType.Grid ? 500f : 0f, profile);
-                }
+                ShowSpawns(player, spawns, showAll, type == RaidableType.Grid ? 500f : 0f, profile);
+            }
 
-                foreach (var raid in Raids)
+            foreach (var raid in Raids)
+            {
+                if (raid != null && raid.spawns != null && raid.spawns.IsCustomSpawn)
                 {
-                    if (raid != null && raid.spawns != null && raid.spawns.IsCustomSpawn)
-                    {
-                        ShowSpawns(player, raid.spawns, showAll, 0f, profile);
-                    }
+                    ShowSpawns(player, raid.spawns, showAll, 0f, profile);
                 }
+            }
 
-                foreach (var cmi in SpawnsController.Monuments)
-                {
-                    DrawSphere(player, 30f, Color.blue, cmi.position, cmi.radius);
-                    DrawText(player, 30f, Color.cyan, cmi.position, $"<size=16>{cmi.text} ({cmi.radius})</size>");
-                }
+            foreach (var cmi in SpawnsController.Monuments)
+            {
+                DrawSphere(player, 30f, Color.blue, cmi.position, cmi.radius);
+                DrawText(player, 30f, Color.cyan, cmi.position, $"<size=16>{cmi.text} ({cmi.radius})</size>");
             }
         }
 
@@ -21811,12 +21763,9 @@ namespace Oxide.Plugins
         {
             if (isAllowed || player.HasPermission("raidablebases.ddraw"))
             {
-                using (AdminCommand(player))
+                foreach (var raid in Raids)
                 {
-                    foreach (var raid in Raids)
-                    {
-                        DrawSphere(player, 30f, Color.blue, raid.Location, raid.ProtectionRadius);
-                    }
+                    DrawSphere(player, 30f, Color.blue, raid.Location, raid.ProtectionRadius);
                 }
             }
         }
@@ -22697,7 +22646,7 @@ namespace Oxide.Plugins
 
         public static bool IsCustomEntity(BaseEntity m) => m.PrefabName.StartsWith("assets/custom/");
         public static PooledList<T> DisposableList<T>() => Pool.Get<PooledList<T>>();
-        public static PooledIgnoreCaseSet DisposableIgnoreCaseSet() => Pool.Get<PooledIgnoreCaseSet>(); 
+        public static PooledIgnoreCaseSet DisposableIgnoreCaseSet() => Pool.Get<PooledIgnoreCaseSet>();
         public static PooledIgnoreCaseSet DisposableIgnoreCaseSet(IEnumerable<string> other)
         {
             PooledIgnoreCaseSet set = Pool.Get<PooledIgnoreCaseSet>();
@@ -22789,8 +22738,6 @@ namespace Oxide.Plugins
             permission.RegisterPermission("raidablebases.block.fauxadmin", this);
             permission.RegisterPermission("raidablebases.elevators.bypass.building", this);
             permission.RegisterPermission("raidablebases.elevators.bypass.card", this);
-            permission.RegisterPermission("raidablebases.time", this);
-            permission.RegisterPermission("raidablebases.timebypass", this);
             permission.RegisterPermission("raidablebases.buyraid", this);
             permission.RegisterPermission("raidablebases.buyraid.free", this);
             permission.RegisterPermission("raidablebases.buyraid.banned", this);
@@ -22813,6 +22760,7 @@ namespace Oxide.Plugins
         {
             try { data = Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Name); } catch (Exception ex) { Puts(ex); }
             data ??= new();
+            data.RustNavigationBuilds ??= new();
             data.Players ??= new();
             data.BuyableCooldowns ??= new();
             data.RustNavigationBuilds ??= new();
@@ -23372,35 +23320,6 @@ namespace Oxide.Plugins
                 }
             }
         }
-
-        private struct TemporaryAdmin : IDisposable
-        {
-            private BasePlayer Player;
-            private bool isAdmin;
-
-            public TemporaryAdmin(BasePlayer player)
-            {
-                Player = player;
-                isAdmin = player.IsAdmin;
-
-                if (!isAdmin)
-                {
-                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, true);
-                    player.SendNetworkUpdateImmediate();
-                }
-            }
-
-            public void Dispose()
-            {
-                if (!isAdmin && Player != null && !Player.IsDestroyed && Player.IsAdmin)
-                {
-                    Player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, false);
-                    Player.SendNetworkUpdateImmediate();
-                }
-            }
-        }
-
-        private static TemporaryAdmin AdminCommand(BasePlayer player) => new(player);
 
         private static IClan GetClan(BasePlayer player)
         {
@@ -25547,6 +25466,10 @@ namespace Oxide.Plugins
                 if (ti.shortname == "chocholate")
                 {
                     ti.shortname = "chocolate";
+                }
+                if (ti.shortname == "mini fridge")
+                {
+                    ti.shortname = "minifridge";
                 }
                 if (ti.shortname.EndsWith(".bp"))
                 {
@@ -29456,9 +29379,6 @@ namespace Oxide.Plugins
             [JsonProperty(PropertyName = en ? "Eject Enemies From Locked PVP Raids" : "Изгонять врагов из закрытых PvP рейдов")]
             public bool EjectLockedPVP;
 
-            [JsonProperty(PropertyName = en ? "Eject Tree Radius When Spawning Base" : "Радиус изгнания деревьев при появлении базы")]
-            public float TreeRadius;
-
             [JsonProperty(PropertyName = en ? "Delete Tree Radius When Spawning Base" : "Удалить радиус дерева при создании базы")]
             public float DeleteRadius;
 
@@ -29515,9 +29435,6 @@ namespace Oxide.Plugins
 
             [JsonProperty(PropertyName = en ? "Bear Traps Are Immune To Timed Explosives" : "Капканы устойчивы к взрывчатым устройствам с таймером")]
             public bool BearTrapsImmuneToExplosives;
-
-            [JsonProperty(PropertyName = en ? "Force Time In Dome To (requires raidablebases.time)" : "Принудительно установить время в куполе на (требуется raidablebases.time)")]
-            public int ForcedTime = -1;
 
             [JsonProperty(PropertyName = en ? "Remove Locks When Event Is Completed" : "Удалять замки после завершения события")]
             public bool UnlockEverything;
@@ -31215,6 +31132,12 @@ namespace Oxide.Plugins
 
             public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
             {
+                if (reader.TokenType == JsonToken.StartObject)
+                {
+                    JObject obj = JObject.Load(reader);
+                    return new Vector3(obj.Value<float>("x"), obj.Value<float>("y"), obj.Value<float>("z"));
+                }
+
                 if (reader.TokenType != JsonToken.String) return Vector3.zero;
 
                 string[] values = reader.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -31872,6 +31795,14 @@ namespace Oxide.Plugins
 
             public float GetBoundSize(BaseEntity ent) => ent == null ? 0f : ent.bounds.size.Max();
 
+            private static string FormatStatusTime(double seconds)
+            {
+                if (seconds <= 0d) return string.Empty;
+                TimeSpan remaining = TimeSpan.FromSeconds(Math.Ceiling(seconds));
+                if (remaining.TotalHours < 1d) return FormattableString.Invariant($"{remaining.Minutes:00}:{remaining.Seconds:00}");
+                return FormattableString.Invariant($"{(int)remaining.TotalHours:00}:{remaining.Minutes:00}:{remaining.Seconds:00}");
+            }
+
             public bool ShowStatusUi(BasePlayer player, bool moveUI)
             {
                 float parentRadius = player.HasParent() ? GetBoundSize(player.GetParentEntity()) : 0f;
@@ -31917,7 +31848,7 @@ namespace Oxide.Plugins
                 AddCuiPanel(container, colorPanel, "0.5 0.5", "0.5 0.5", "-53.432 -10.288", "53.432 10.288", "ST_TITLE_PANEL", "ST_PVP_PANEL");
                 if (raid.DespawnTime > 0)
                 {
-                    AddCuiButton(container, colorPanel, $"rb_ui_move {UiType.Status}", mx("UIFormatLockoutMinutes", player.UserIDString, raid.DespawnTime), "1 1 1 1", ui.FontSize, TextAnchor.MiddleCenter, "0 0", "1 1", "55.871 0.697", "0.333 0", "ST_PVP_PANEL", "ST_DESPAWN_LABEL");
+                    AddCuiButton(container, colorPanel, $"rb_ui_move {UiType.Status}", FormatStatusTime(raid.DespawnSecondsRemaining), "1 1 1 1", ui.FontSize, TextAnchor.MiddleCenter, "0 0", "1 1", "55.871 0.697", "0.333 0", "ST_PVP_PANEL", "ST_DESPAWN_LABEL");
                 }
                 AddCuiButton(container, colorPanel, $"rb_ui_move {UiType.Status}", textAllow + " " + dir, colorAllow, ui.FontSize, TextAnchor.MiddleCenter, "0.5 0.5", "0.5 0.5", "-53.429 -10.288", "2.439 10.288", "ST_PVP_PANEL", "ST_PVP_LABEL");
                 AddCuiElement(container, raid.IsOpened ? mx("Owner", player.UserIDString) : ownerName, ui.FontSize, TextAnchor.MiddleLeft, "1 0.87 0.05 1", "0 0", "1 1", "9.853 2.775", "-85.197 -38.414", "RB_UI_Status", "ST_OWNER_LABEL");

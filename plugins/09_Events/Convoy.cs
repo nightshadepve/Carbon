@@ -22,7 +22,7 @@ using Time = UnityEngine.Time;
 
 namespace Oxide.Plugins
 {
-    [Info("Convoy", "Adem", "3.0.7")]
+    [Info("Convoy", "Adem", "3.0.8")]
     internal class Convoy : RustPlugin
     {
         #region Variables
@@ -2051,8 +2051,7 @@ namespace Oxide.Plugins
                 foreach (PresetLocationConfig presetLocationConfig in vehicleConfig.CrateLocations)
                     SpawnCrate(presetLocationConfig, convoyVehicle.baseEntity);
 
-                InitialSpawnVehicleNpc(vehicleConfig, convoyVehicle.baseEntity);
-
+                convoyVehicle.Invoke(() => InitialSpawnVehicleNpc(vehicleConfig, convoyVehicle.baseEntity), 1f);
                 return convoyVehicle;
             }
 
@@ -5679,6 +5678,9 @@ namespace Oxide.Plugins
                     object value = field.GetValue(src);
                     field.SetValue(dst, value);
                 }
+                
+                if (src is BaseNetworkable source && dst is BaseNetworkable target) 
+                    target.prefabID = source.prefabID;
             }
         }
 
@@ -8127,7 +8129,7 @@ namespace Oxide.Plugins
             {
                 return new PluginConfig()
                 {
-                    Version = "3.0.7",
+                    Version = "3.0.8",
                     Prefix = "[Convoy]",
                     MainConfig = new MainConfig
                     {

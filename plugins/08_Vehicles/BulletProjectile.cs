@@ -9,7 +9,7 @@ using static Facepunch.Pool;
 
 namespace Oxide.Plugins
 {
-    [Info("BulletProjectile", "Karuza", "1.8.0")]
+    [Info("BulletProjectile", "Karuza", "1.9.0")]
     public class BulletProjectile : RustPlugin
     {
         const string DEFAULT_PROJECTILE = "assets/prefabs/npc/autoturret/sentrybullet.prefab";
@@ -554,7 +554,7 @@ namespace Oxide.Plugins
 
             internal void Launch()
             {
-                var reusableInstance = Effect.reusableInstance;
+                using Effect reusableInstance = Facepunch.Pool.Get<Effect>();
 
                 reusableInstance.Init(Effect.Type.Projectile, this.currentPosition, this.currentVelocity, null);
                 reusableInstance.scale = 1f;

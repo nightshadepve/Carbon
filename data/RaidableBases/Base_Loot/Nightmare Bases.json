@@ -2,7 +2,6 @@
   {
     "shortname": "ammo.shotgun",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 75,
@@ -13,7 +12,6 @@
   {
     "shortname": "ammo.shotgun.fire",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 90,
@@ -24,7 +22,6 @@
   {
     "shortname": "ammo.shotgun.slug",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 90,
@@ -35,7 +32,6 @@
   {
     "shortname": "ammo.grenadelauncher.he",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -46,7 +42,6 @@
   {
     "shortname": "ammo.grenadelauncher.buckshot",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 20,
@@ -57,7 +52,6 @@
   {
     "shortname": "ammo.grenadelauncher.smoke",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -68,7 +62,6 @@
   {
     "shortname": "ammo.rifle",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 900,
@@ -79,7 +72,6 @@
   {
     "shortname": "weapon.mod.small.scope",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8,
@@ -90,7 +82,6 @@
   {
     "shortname": "apple",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 65,
@@ -101,7 +92,6 @@
   {
     "shortname": "door.hinged.toptier",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -112,7 +102,6 @@
   {
     "shortname": "door.double.hinged.toptier",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -123,7 +112,6 @@
   {
     "shortname": "rifle.ak",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -134,7 +122,6 @@
   {
     "shortname": "autoturret",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -145,7 +132,6 @@
   {
     "shortname": "bandage",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 50,
@@ -156,7 +142,6 @@
   {
     "shortname": "grenade.beancan",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 44,
@@ -167,7 +152,6 @@
   {
     "shortname": "bed",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -178,7 +162,6 @@
   {
     "shortname": "black.raspberries",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 40,
@@ -189,7 +172,6 @@
   {
     "shortname": "blue.berry",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -200,7 +182,6 @@
   {
     "shortname": "keycard_blue",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 4,
@@ -211,7 +192,6 @@
   {
     "shortname": "blueberries",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 40,
@@ -222,7 +202,6 @@
   {
     "shortname": "rifle.bolt",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -233,7 +212,6 @@
   {
     "shortname": "shoes.boots",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8,
@@ -244,7 +222,6 @@
   {
     "shortname": "can.beans",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -255,7 +232,6 @@
   {
     "shortname": "can.tuna",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -266,7 +242,6 @@
   {
     "shortname": "cctv.camera",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 55,
@@ -277,7 +252,6 @@
   {
     "shortname": "chainsaw",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 9,
@@ -288,7 +262,6 @@
   {
     "shortname": "charcoal",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 50000,
@@ -299,7 +272,6 @@
   {
     "shortname": "chocolate",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -310,7 +282,6 @@
   {
     "shortname": "cloth",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 35000,
@@ -321,7 +292,6 @@
   {
     "shortname": "computerstation",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -332,7 +302,6 @@
   {
     "shortname": "bearmeat.cooked",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -343,7 +312,6 @@
   {
     "shortname": "chicken.cooked",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -354,7 +322,6 @@
   {
     "shortname": "horsemeat.cooked",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -365,7 +332,6 @@
   {
     "shortname": "meat.pork.cooked",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -376,7 +342,6 @@
   {
     "shortname": "wolfmeat.cooked",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -387,7 +352,6 @@
   {
     "shortname": "corn",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 300,
@@ -398,7 +362,6 @@
   {
     "shortname": "crude.oil",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 4000,
@@ -409,7 +372,6 @@
   {
     "shortname": "smg.2",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10,
@@ -420,7 +382,6 @@
   {
     "shortname": "diesel_barrel",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -431,7 +392,6 @@
   {
     "shortname": "diving.fins",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -442,7 +402,6 @@
   {
     "shortname": "diving.mask",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -453,7 +412,6 @@
   {
     "shortname": "diving.tank",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 1,
@@ -464,7 +422,6 @@
   {
     "shortname": "drone",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -475,7 +432,6 @@
   {
     "shortname": "fuse",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 122,
@@ -486,7 +442,6 @@
   {
     "shortname": "propanetank",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 111,
@@ -497,7 +452,6 @@
   {
     "shortname": "ammo.rifle.explosive",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 700,
@@ -508,7 +462,6 @@
   {
     "shortname": "explosives",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -519,7 +472,6 @@
   {
     "shortname": "furnace",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10,
@@ -530,7 +482,6 @@
   {
     "shortname": "wall.frame.garagedoor",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -541,7 +492,6 @@
   {
     "shortname": "gears",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -552,7 +502,6 @@
   {
     "shortname": "granolabar",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -563,7 +512,6 @@
   {
     "shortname": "green.berry",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -574,7 +522,6 @@
   {
     "shortname": "keycard_green",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -585,7 +532,6 @@
   {
     "shortname": "gunpowder",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25000,
@@ -600,7 +546,6 @@
     },
     "shortname": "hazmatsuit",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 13,
@@ -611,7 +556,6 @@
   {
     "shortname": "heavy.plate.helmet",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -622,7 +566,6 @@
   {
     "shortname": "heavy.plate.jacket",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -633,7 +576,6 @@
   {
     "shortname": "heavy.plate.pants",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -644,7 +586,6 @@
   {
     "shortname": "revolver.hc",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 4,
@@ -655,7 +596,6 @@
   {
     "shortname": "gates.external.high.stone",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -666,7 +606,6 @@
   {
     "shortname": "wall.external.high.stone",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -677,7 +616,6 @@
   {
     "shortname": "metal.refined",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 1200,
@@ -688,7 +626,6 @@
   {
     "shortname": "metal.refined",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3200,
@@ -699,7 +636,6 @@
   {
     "shortname": "hq.metal.ore",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3000,
@@ -710,7 +646,6 @@
   {
     "shortname": "ammo.rocket.hv",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -721,7 +656,6 @@
   {
     "shortname": "ammo.rocket.seeker",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -732,7 +666,6 @@
   {
     "shortname": "homingmissile.launcher",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 1,
@@ -743,7 +676,6 @@
   {
     "shortname": "hoodie",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 20,
@@ -754,7 +686,6 @@
   {
     "shortname": "ammo.rifle.hv",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -765,7 +696,6 @@
   {
     "shortname": "ammo.pistol.hv",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -776,7 +706,6 @@
   {
     "shortname": "ammo.rifle.incendiary",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -787,7 +716,6 @@
   {
     "shortname": "ammo.pistol.fire",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 150,
@@ -798,7 +726,6 @@
   {
     "shortname": "ammo.rocket.fire",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -813,7 +740,6 @@
     },
     "shortname": "jacket",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -824,7 +750,6 @@
   {
     "shortname": "jackhammer",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 9,
@@ -835,7 +760,6 @@
   {
     "shortname": "rifle.l96",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -846,7 +770,6 @@
   {
     "shortname": "floor.ladder.hatch",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -857,7 +780,6 @@
   {
     "shortname": "largebackpack",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -868,7 +790,6 @@
   {
     "shortname": "furnace.large",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8,
@@ -879,7 +800,6 @@
   {
     "shortname": "largemedkit",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 40,
@@ -890,7 +810,6 @@
   {
     "shortname": "electric.battery.rechargable.large",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -901,7 +820,6 @@
   {
     "shortname": "electric.solarpanel.large",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -912,7 +830,6 @@
   {
     "shortname": "leather",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5000,
@@ -923,7 +840,6 @@
   {
     "shortname": "locker",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -934,7 +850,6 @@
   {
     "shortname": "lowgradefuel",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10000,
@@ -945,7 +860,6 @@
   {
     "shortname": "rifle.lr300",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -956,7 +870,6 @@
   {
     "shortname": "lmg.m249",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -967,7 +880,6 @@
   {
     "shortname": "rifle.m39",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -978,7 +890,6 @@
   {
     "shortname": "pistol.m92",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -989,7 +900,6 @@
   {
     "shortname": "syringe.medical",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 100,
@@ -1000,7 +910,6 @@
   {
     "shortname": "barricade.metal",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8,
@@ -1011,7 +920,6 @@
   {
     "shortname": "metalblade",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -1026,7 +934,6 @@
     },
     "shortname": "metal.plate.torso",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10,
@@ -1041,7 +948,6 @@
     },
     "shortname": "metal.facemask",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10,
@@ -1052,7 +958,6 @@
   {
     "shortname": "metal.fragments",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 100000,
@@ -1063,7 +968,6 @@
   {
     "shortname": "metal.fragments",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 125000,
@@ -1074,7 +978,6 @@
   {
     "shortname": "metal.ore",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 80000,
@@ -1085,7 +988,6 @@
   {
     "shortname": "metalpipe",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 300,
@@ -1096,7 +998,6 @@
   {
     "shortname": "metalspring",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 223,
@@ -1107,7 +1008,6 @@
   {
     "shortname": "minigun",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1118,7 +1018,6 @@
   {
     "shortname": "mixingtable",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -1129,7 +1028,6 @@
   {
     "shortname": "aiming.module.mlrs",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1140,7 +1038,6 @@
   {
     "shortname": "ammo.rocket.mlrs",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -1151,7 +1048,6 @@
   {
     "shortname": "smg.mp5",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -1162,7 +1058,6 @@
   {
     "shortname": "multiplegrenadelauncher",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1173,7 +1068,6 @@
   {
     "shortname": "mushroom",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 54,
@@ -1184,7 +1078,6 @@
   {
     "shortname": "nightvisiongoggles",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1195,7 +1088,6 @@
   {
     "shortname": "pants",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 20,
@@ -1206,7 +1098,6 @@
   {
     "shortname": "parachute",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 1,
@@ -1217,7 +1108,6 @@
   {
     "shortname": "ammo.pistol",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 900,
@@ -1228,7 +1118,6 @@
   {
     "shortname": "potato",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200,
@@ -1239,7 +1128,6 @@
   {
     "shortname": "ptz.cctv.camera",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1250,7 +1138,6 @@
   {
     "shortname": "pumpkin",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 300,
@@ -1261,7 +1148,6 @@
   {
     "shortname": "pistol.python",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 10,
@@ -1272,7 +1158,6 @@
   {
     "shortname": "red.berry",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -1283,7 +1168,6 @@
   {
     "shortname": "keycard_red",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1294,7 +1178,6 @@
   {
     "shortname": "wall.window.bars.toptier",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1305,7 +1188,6 @@
   {
     "shortname": "riflebody",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 35,
@@ -1320,7 +1202,6 @@
     },
     "shortname": "roadsign.jacket",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -1335,7 +1216,6 @@
     },
     "shortname": "roadsign.kilt",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 11,
@@ -1346,7 +1226,6 @@
   {
     "shortname": "roadsigns",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 225,
@@ -1357,7 +1236,6 @@
   {
     "shortname": "roadsign.gloves",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -1368,7 +1246,6 @@
   {
     "shortname": "ammo.rocket.basic",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -1379,7 +1256,6 @@
   {
     "shortname": "rocket.launcher",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -1390,7 +1266,6 @@
   {
     "shortname": "rope",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 550,
@@ -1401,7 +1276,6 @@
   {
     "shortname": "ammo.rocket.sam",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 90,
@@ -1412,7 +1286,6 @@
   {
     "shortname": "samsite",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1423,7 +1296,6 @@
   {
     "shortname": "explosive.satchel",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 50,
@@ -1434,7 +1306,6 @@
   {
     "shortname": "scrap",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8000,
@@ -1445,7 +1316,6 @@
   {
     "shortname": "semibody",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 255,
@@ -1456,7 +1326,6 @@
   {
     "shortname": "rifle.semiauto",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 15,
@@ -1467,7 +1336,6 @@
   {
     "shortname": "sewingkit",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 400,
@@ -1478,7 +1346,6 @@
   {
     "shortname": "sheetmetal",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 190,
@@ -1489,7 +1356,6 @@
   {
     "shortname": "guntrap",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 5,
@@ -1500,7 +1366,6 @@
   {
     "shortname": "weapon.mod.silencer",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -1511,7 +1376,6 @@
   {
     "shortname": "rifle.sks",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -1522,7 +1386,6 @@
   {
     "shortname": "small.oil.refinery",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 4,
@@ -1533,7 +1396,6 @@
   {
     "shortname": "smallwaterbottle",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1544,7 +1406,6 @@
   {
     "shortname": "smgbody",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 35,
@@ -1555,7 +1416,6 @@
   {
     "shortname": "stones",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200000,
@@ -1566,7 +1426,6 @@
   {
     "shortname": "stones",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 200000,
@@ -1577,7 +1436,6 @@
   {
     "shortname": "sulfur",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 35000,
@@ -1588,7 +1446,6 @@
   {
     "shortname": "sulfur.ore",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 55000,
@@ -1599,7 +1456,6 @@
   {
     "shortname": "supply.signal",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 4,
@@ -1610,7 +1466,6 @@
   {
     "shortname": "tactical.gloves",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 11,
@@ -1621,7 +1476,6 @@
   {
     "shortname": "targeting.computer",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 55,
@@ -1632,7 +1486,6 @@
   {
     "shortname": "tarp",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 65,
@@ -1643,7 +1496,6 @@
   {
     "shortname": "techparts",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 100,
@@ -1654,7 +1506,6 @@
   {
     "shortname": "smg.thompson",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -1665,7 +1516,6 @@
   {
     "shortname": "explosive.timed",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 40,
@@ -1676,7 +1526,6 @@
   {
     "shortname": "cupboard.tool",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 1,
@@ -1687,7 +1536,6 @@
   {
     "shortname": "floor.triangle.ladder.hatch",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1698,7 +1546,6 @@
   {
     "shortname": "weapon.mod.8x.scope",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 7,
@@ -1709,7 +1556,6 @@
   {
     "shortname": "vending.machine",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 3,
@@ -1720,7 +1566,6 @@
   {
     "shortname": "waterjug",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1731,7 +1576,6 @@
   {
     "shortname": "weapon.mod.flashlight",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 8,
@@ -1742,7 +1586,6 @@
   {
     "shortname": "weapon.mod.lasersight",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -1753,7 +1596,6 @@
   {
     "shortname": "white.berry",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,
@@ -1764,7 +1606,6 @@
   {
     "shortname": "generator.wind.scrap",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 6,
@@ -1775,7 +1616,6 @@
   {
     "shortname": "wood",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 250000,
@@ -1786,7 +1626,6 @@
   {
     "shortname": "ladder.wooden.wall",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 12,
@@ -1797,7 +1636,6 @@
   {
     "shortname": "workbench2",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1808,7 +1646,6 @@
   {
     "shortname": "workbench3",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 2,
@@ -1819,7 +1656,6 @@
   {
     "shortname": "yellow.berry",
     "name": null,
-    "text": null,
     "blueprint": false,
     "skin": 0,
     "amount": 25,

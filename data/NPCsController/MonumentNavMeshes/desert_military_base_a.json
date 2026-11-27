@@ -1,0 +1,33 @@
+{
+  "key": "desert_military_base_a",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:35",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -60.7500763,
+      "y": -9.93129349,
+      "z": -56.7500153
+    },
+    "localMax": {
+      "x": 58.5725861,
+      "y": 15.0132847,
+      "z": 63.3034134
+    },
+    "tilesX": 12,
+    "tilesZ": 12,
+    "tilesBuilt": 92,
+    "polys": 2901,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 79,
+  "nodes": []
+}

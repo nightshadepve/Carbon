@@ -21,7 +21,7 @@ using static SeekerTarget;
 
 namespace Oxide.Plugins
 {
-    [Info("RustCar", "Karuza", "1.27.01")]
+    [Info("RustCar", "Karuza", "1.27.02")]
     public class RustCar : RustPlugin, IKaruzaEntityPlugin
     {
         public static RustCar Instance;
@@ -1503,9 +1503,10 @@ namespace Oxide.Plugins
                 Hurt(info);
                 if (CarConfig.DoHitEffect && info.Initiator is BasePlayer attacker)
                 {
-                    Effect.reusableInstance.Init(Effect.Type.Generic, attacker.transform.position, Vector3.zero);
-                    Effect.reusableInstance.pooledString = Instance.configuration.PlayerHitMarkerFx;
-                    EffectNetwork.Send(Effect.reusableInstance, attacker.net.connection);
+                    using Effect effect = Facepunch.Pool.Get<Effect>();
+                    effect.Init(Effect.Type.Generic, attacker.transform.position, Vector3.zero);
+                    effect.pooledString = Instance.configuration.PlayerHitMarkerFx;
+                    EffectNetwork.Send(effect, attacker.net.connection);
                 }
             }
 

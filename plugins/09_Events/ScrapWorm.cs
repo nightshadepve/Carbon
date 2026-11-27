@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 using Oxide.Core;
 using Newtonsoft.Json;
@@ -12,7 +13,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins;
 
-[Info("Scrap Worm", "crash", "1.1.0")]
+[Info("Scrap Worm", "crash", "1.3.2")]
 [Description("A giant scrap worm hunts under your map: it breaches under the loudest noise, and when you kill it, it drops burning crates.")]
 public class ScrapWorm : RustPlugin
 {
@@ -50,6 +51,21 @@ public class ScrapWorm : RustPlugin
     private BasePlayer _biteTarget;
     private float _biteSince;
     private float _nextBite;
+    private readonly Dictionary<ulong, float> _biteSkipUntil = new();
+    private ulong _bitten;
+    private float _bittenUntil;
+    private const float BittenSeconds = 1.5f;
+    private const float CoverSeconds = 1f;
+    private const float FightSeconds = 60f;
+    private struct Cover { public float Until; public bool Covered; }
+    private readonly Dictionary<ulong, Cover> _cover = new();
+    private Dictionary<ulong, float>[] _coreBy = Array.Empty<Dictionary<ulong, float>>();
+    private float _lastDamageAt = float.NegativeInfinity;
+    private int _hurtFaults;
+    private int _crushFaults;
+    private Vector3 _raidAsk;
+    private float _raidAskAt = float.NegativeInfinity;
+    private bool _raidAskIn;
     private readonly List<Territory> _territories = new();
     private readonly HashSet<string> _warned = new(StringComparer.Ordinal);
     private readonly Dictionary<NetworkableId, float> _crushedAt = new();
@@ -64,9 +80,18 @@ public class ScrapWorm : RustPlugin
     private readonly Dictionary<BaseEntity, PerHitPiece> _pieces = new();
     private readonly List<BaseEntity> _stalePieces = new();
     private readonly List<Vector3> _stuckFrom = new();
+    private readonly List<TimedExplosive> _stuck = new();
+    private readonly BaseEntity[] _anchors = new BaseEntity[Segments];
+    private readonly Vector3[] _framePos = new Vector3[Segments];
+    private readonly Quaternion[] _frameRot = new Quaternion[Segments];
+    private float _nextGroupCheck;
     private const int CoverMask = Rust.Layers.Mask.Construction | Rust.Layers.Mask.Deployed;
     private const int StuckMask = Rust.Layers.Mask.Terrain | Rust.Layers.Mask.World | Rust.Layers.Mask.Construction | Rust.Layers.Mask.Deployed;
     private const float MonumentClearance = 20f;
+    private const float NoiseRingMeters = 6f;
+    private const int NoiseTestBudget = 44;
+    private const float ArcRetrySeconds = 5f;
+    private int _buildingTests;
     private const string NotifySeePermission = "notify.see";
     private int _life;
     private bool _killQueued;
@@ -97,7 +122,6 @@ public class ScrapWorm : RustPlugin
         public float Radius;
         public MapMarkerGenericRadius Marker;
         public bool Temporary;
-        public bool Generated;
     }
 
     private sealed class LootLockEntry
@@ -180,6 +204,8 @@ public class ScrapWorm : RustPlugin
     private const int History = 4;
     private const int MaxDebris = 64;
     private const float TeethSpeed = 220f;
+    private const float AnchorScale = 0.1f;
+    private const string AnchorGib = "ScrapHeliGibs_Part033";
     private const float RocketCheckSeconds = 0.02f;
     private const float CrushSeconds = 0.2f;
     private const int CrushPerTick = 8;
@@ -187,7 +213,9 @@ public class ScrapWorm : RustPlugin
     private static readonly Collider[] CrushHits = new Collider[64];
     private float _nextCrush;
     private static readonly Effect Sfx = new();
-    [PluginReference] private Plugin AlphaLoot, Economics, ServerRewards, NCP, Notify;
+    [PluginReference] private Plugin AlphaLoot, Economics, ServerRewards, NCP, Notify, RaidableBases;
+    private const float RaidBaseStartMargin = 10f;
+    private int _raidBlockedStarts;
     private const string AdminPermission = "scrapworm.admin";
     private static readonly string[] WebhookPrefixes = { "https://discord.com/api/webhooks/", "https://discordapp.com/api/webhooks/", "https://ptb.discord.com/api/webhooks/", "https://canary.discord.com/api/webhooks/" };
     private static readonly Dictionary<string, string> JsonHeaders = new() { ["Content-Type"] = "application/json" };
@@ -225,7 +253,9 @@ public class ScrapWorm : RustPlugin
     private float[] _coreBlast = Array.Empty<float>();
     private readonly List<BaseEntity> _parts = new();
     private readonly HashSet<BaseEntity> _owned = new();
+    private readonly List<BaseEntity> _heldChildren = new();
     private readonly List<BaseEntity> _debris = new();
+    private readonly List<Collider> _debrisBatch = new();
     private readonly Dictionary<string, Bounds> _gibBounds = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Mesh> _gibMeshes = new(StringComparer.Ordinal);
     private int[] _coreParts = Array.Empty<int>();
@@ -243,6 +273,10 @@ public class ScrapWorm : RustPlugin
     private readonly List<Vector3> _rocketLast = new();
     private int _historyCursor;
     private Timer _tick;
+    private bool _roarOn, _roarListening;
+    private float _roarSeconds;
+    private readonly HashSet<ulong> _roarEarly = new();
+    private float _roarAt;
     private Settings _settings;
     private bool _ready;
     private bool _breaching;
@@ -351,7 +385,10 @@ public class ScrapWorm : RustPlugin
         public float BodyDamage = 0.3f;
         public float CoreDamage = 2f;
         public float CoreHealth = 400f;
+        public float CoverDamageScale = 0.25f;
+        public float CoverBaseRadius = 10f;
         public bool ScreenShake = true;
+        public bool ShedArmor = true;
         public int Crates = 4;
         public string CrateType = "heli";
         public bool HackableCrate = true;
@@ -361,7 +398,9 @@ public class ScrapWorm : RustPlugin
         public float HealthBarRadius = 150f;
         public float HealthBarScale = 0.75f;
         public bool DestroyBuildings = false;
+        public bool SpareRaidableBases = true;
         public float RunOverDamage = 1000f;
+        public bool ForceDamageThroughTruePVE = true;
         public float BuildingDamage = 250f;
         public bool HuntNoise = true;
         public float NoiseMemorySeconds = 30f;
@@ -377,7 +416,11 @@ public class ScrapWorm : RustPlugin
         public List<double> RewardEconomics = new() { 1000, 500, 250 };
         [JsonProperty(ObjectCreationHandling = ObjectCreationHandling.Replace)]
         public List<int> RewardServerRewards = new() { 0, 0, 0 };
+        public float MinRewardShare = 0.03f;
         public string DiscordWebhook = "";
+        public string RoarSound = "";
+        public float SoundRadius = 150f;
+        public float RoarSoundPeak = 0f;
         public bool AutoStart = true;
         public float FirstStartMinutes = 20f;
         public float IntervalMinutes = 90f;
@@ -418,6 +461,7 @@ public class ScrapWorm : RustPlugin
         public const string AdminOnly = nameof(AdminOnly);
         public const string NotReady = nameof(NotReady);
         public const string Occupied = nameof(Occupied);
+        public const string OtherColossus = nameof(OtherColossus);
         public const string BadGround = nameof(BadGround);
         public const string Spawned = nameof(Spawned);
         public const string Missing = nameof(Missing);
@@ -459,22 +503,23 @@ public class ScrapWorm : RustPlugin
             if (!InRange(_settings.Scale, 1f, 2.5f) || !InRange(_settings.Speed, 3f, 16f) || !InRange(_settings.Height, 2f, 14f) ||
                 !InRange(_settings.Length, 14f, 60f) || !InRange(_settings.Depth, 2f, 8f) ||
                 !InRange(_settings.CoreHealth, 50f, 10000f) || !InRange(_settings.WormHealth, 100f, 100000f) ||
-                !InRange(_settings.BodyDamage, 0f, 1f) || !InRange(_settings.CoreDamage, 1f, 10f) || _settings.Crates < 0 || _settings.Crates > 8 || CratePrefab(_settings.CrateType) is null ||
+                !InRange(_settings.BodyDamage, 0f, 1f) || !InRange(_settings.CoreDamage, 1f, 10f) || !InRange(_settings.CoverDamageScale, 0f, 1f) || !InRange(_settings.CoverBaseRadius, 0f, 50f) || _settings.Crates < 0 || _settings.Crates > 8 || CratePrefab(_settings.CrateType) is null ||
                 !InRange(_settings.LootLockSeconds, 0f, 3600f) || _settings.AlphaLootProfile is null ||
                 !InRange(_settings.HealthBarRadius, 10f, 1000f) || !InRange(_settings.HealthBarScale, 0.5f, 1.5f) || !InRange(_settings.RunOverDamage, 0f, 10000f) ||
                 !InRange(_settings.BuildingDamage, 1f, 10000f) || !InRange(_settings.NoiseMemorySeconds, 5f, 300f) ||
                 !InRange(_settings.SlamRadius, 2f, 20f) || !InRange(_settings.SlamDamage, 0f, 1000f) || !InRange(_settings.BiteRange, 0f, 40f) || !InRange(_settings.BiteDamage, 0f, 1000f) ||
                 !InRange(_settings.TailRange, 0f, 20f) || !InRange(_settings.TailDamage, 0f, 1000f) || !InRange(_settings.HealthPerExtraPlayer, 0f, 5f) || !InRange(_settings.MaxHealthMultiplier, 1f, 20f) ||
                 _settings.RewardEconomics is null || _settings.RewardEconomics.Count > 10 || _settings.RewardEconomics.Exists(static v => double.IsNaN(v) || v < 0 || v > 1e9) ||
-                _settings.RewardServerRewards is null || _settings.RewardServerRewards.Count > 10 || _settings.RewardServerRewards.Exists(static v => v < 0) ||
+                _settings.RewardServerRewards is null || _settings.RewardServerRewards.Count > 10 || _settings.RewardServerRewards.Exists(static v => v < 0) || !InRange(_settings.MinRewardShare, 0f, 1f) ||
                 _settings.DiscordWebhook is null || _settings.DiscordWebhook.Length > 0 && !ValidWebhook(_settings.DiscordWebhook) || !InRange(_settings.FirstStartMinutes, 1f, 1440f) || !InRange(_settings.IntervalMinutes, 10f, 1440f) ||
                 _settings.MinPlayers < 0 || _settings.MinPlayers > 1000 || !InRange(_settings.LifetimeMinutes, 2f, 180f) || !InRange(_settings.IdleMinutes, 1f, 60f) ||
                 !InRange(_settings.IdleRadius, 50f, 1000f) || _settings.AutoTerritories < 0 || _settings.AutoTerritories > 10 || !InRange(_settings.TerritoryRadius, 100f, 1000f) ||
                 BadTerritories(_settings.Territories) ||
+                !InRange(_settings.SoundRadius, 30f, 500f) || !InRange(_settings.RoarSoundPeak, 0f, 30f) ||
                 !InRange(_settings.SurfaceMarkerRadius, 20f, 500f) || _settings.NCPType < 0 || _settings.NCPType > 100 || _settings.NotifyType < 0 || _settings.NotifyType > 100 ||
                 BadCommands(_settings.WinnerCommands) ||
                 _settings.DebrisLoot is null || _settings.DebrisLoot.Count > 10 || _settings.DebrisLoot.Exists(static d => d is null || string.IsNullOrWhiteSpace(d.ShortName) || d.Amount < 0 || d.Amount > 100000 || d.AmountPerHit < 0 || d.AmountPerHit > 100000 || !InRange(d.MinPieceSize, 0f, 1f)))
-                throw new InvalidOperationException("Scale 1-2.5, Speed 3-16, Height 2-14, Length 14-60, Depth 2-8, CoreHealth 50-10000, WormHealth 100-100000, BodyDamage 0-1, CoreDamage 1-10, Crates 0-8, CrateType heli or bradley, LootLockSeconds 0-3600, AlphaLootProfile a string, HealthBarRadius 10-1000, HealthBarScale 0.5-1.5, RunOverDamage 0-10000, BuildingDamage 1-10000, NoiseMemorySeconds 5-300, SlamRadius 2-20, SlamDamage 0-1000, BiteRange 0-40, BiteDamage 0-1000, TailRange 0-20, TailDamage 0-1000, HealthPerExtraPlayer 0-5, MaxHealthMultiplier 1-20, RewardEconomics/RewardServerRewards up to 10 non-negative amounts, DiscordWebhook empty or a discord.com webhook URL, FirstStartMinutes 1-1440, IntervalMinutes 10-1440, MinPlayers 0-1000, LifetimeMinutes 2-180, IdleMinutes 1-60, IdleRadius 50-1000, AutoTerritories 0-10, TerritoryRadius 100-1000, Territories with a Name, X/Z inside the map and Radius 100-1000, SurfaceMarkerRadius 20-500, NCPType/NotifyType 0-100, WinnerCommands up to 20 single-line commands of 512 characters, DebrisLoot up to 10 items with a ShortName, Amount and AmountPerHit 0-100000 and MinPieceSize 0-1; finite numbers only.");
+                throw new InvalidOperationException("Scale 1-2.5, Speed 3-16, Height 2-14, Length 14-60, Depth 2-8, CoreHealth 50-10000, WormHealth 100-100000, BodyDamage 0-1, CoreDamage 1-10, CoverDamageScale 0-1, CoverBaseRadius 0-50, Crates 0-8, CrateType heli or bradley, LootLockSeconds 0-3600, AlphaLootProfile a string, HealthBarRadius 10-1000, HealthBarScale 0.5-1.5, RunOverDamage 0-10000, BuildingDamage 1-10000, NoiseMemorySeconds 5-300, SlamRadius 2-20, SlamDamage 0-1000, BiteRange 0-40, BiteDamage 0-1000, TailRange 0-20, TailDamage 0-1000, HealthPerExtraPlayer 0-5, MaxHealthMultiplier 1-20, RewardEconomics/RewardServerRewards up to 10 non-negative amounts, MinRewardShare 0-1, DiscordWebhook empty or a discord.com webhook URL, FirstStartMinutes 1-1440, IntervalMinutes 10-1440, MinPlayers 0-1000, LifetimeMinutes 2-180, IdleMinutes 1-60, IdleRadius 50-1000, AutoTerritories 0-10, TerritoryRadius 100-1000, Territories with a Name, X/Z inside the map and Radius 100-1000, SurfaceMarkerRadius 20-500, SoundRadius 30-500, RoarSoundPeak 0-30, NCPType/NotifyType 0-100, WinnerCommands up to 20 single-line commands of 512 characters, DebrisLoot up to 10 items with a ShortName, Amount and AmountPerHit 0-100000 and MinPieceSize 0-1; finite numbers only.");
         }
         catch (Exception ex)
         {
@@ -485,6 +530,12 @@ public class ScrapWorm : RustPlugin
         }
         try { Config.WriteObject(_settings, true); }
         catch (Exception ex) { PrintWarning("Could not write the configuration back: " + ex.Message); }
+        float minDepth = 1.35f * _settings.Scale + 0.5f;
+        if (_settings.Depth < minDepth)
+        {
+            PrintWarning($"Depth {_settings.Depth} is too shallow for Scale {_settings.Scale}: using {minDepth:0.##} so the buried worm does not show.");
+            _settings.Depth = minDepth;
+        }
     }
 
     private bool _configBroken;
@@ -552,6 +603,7 @@ public class ScrapWorm : RustPlugin
                 if (Model[i].Gib is null) { cores++; continue; }
                 if (!_gibBounds.ContainsKey(Model[i].Gib)) throw new InvalidOperationException("Missing ServerGib mesh: " + Model[i].Gib);
             }
+            if (!_gibBounds.ContainsKey(AnchorGib)) throw new InvalidOperationException("Missing ServerGib mesh: " + AnchorGib);
             if (GameManager.server.FindPrefab(CorePrefab)?.GetComponent<CeilingLight>() is null) throw new InvalidOperationException("Missing core light prefab");
             if (GameManager.server.FindPrefab(CratePrefab(_settings.CrateType))?.GetComponent<LockedByEntCrate>() is null ||
                 GameManager.server.FindPrefab(FireBallPrefab)?.GetComponent<FireBall>() is null ||
@@ -561,6 +613,8 @@ public class ScrapWorm : RustPlugin
                 if (StringPool.Get(effect) == 0) throw new InvalidOperationException("Missing effect prefab: " + effect);
             _coreParts = new int[cores];
             _coreHealth = new float[cores];
+            _coreBy = new Dictionary<ulong, float>[cores];
+            for (int core = 0; core < cores; core++) _coreBy[core] = new Dictionary<ulong, float>();
             _coreBlast = new float[cores];
             _nextSpark = new float[cores];
             _coreHistory = new Vector3[cores * History];
@@ -569,6 +623,7 @@ public class ScrapWorm : RustPlugin
         }
         catch (Exception ex) { PrintError("Worm assets unavailable: " + ex.Message); }
         if (!_ready) return;
+        LoadRoarSound();
         LoadWarned();
         ResolveDebrisLoot();
         if (_settings.RandomLocationEachEvent) Puts("Random location mode: Territories and AutoTerritories are ignored, every event picks a new spot away from monuments.");
@@ -579,6 +634,8 @@ public class ScrapWorm : RustPlugin
         RunPendingForAwake();
         if (_settings.UseNCP && Live(NCP, nameof(NCP)) is null) PrintWarning("UseNCP is on but NCP is not loaded: messages go to chat until it loads.");
         if (_settings.UseNotify && Live(Notify, nameof(Notify)) is null) PrintWarning("UseNotify is on but Notify is not loaded: messages go to chat until it loads.");
+        if (_settings.RewardEconomics.Exists(static v => v > 0) && Live(Economics, nameof(Economics)) is null) PrintWarning("RewardEconomics has amounts but Economics is not loaded: that money is not paid until it loads.");
+        if (_settings.RewardServerRewards.Exists(static v => v > 0) && Live(ServerRewards, nameof(ServerRewards)) is null) PrintWarning("RewardServerRewards has amounts but ServerRewards is not loaded: those points are not paid until it loads.");
         ScheduleEvent(_settings.FirstStartMinutes);
     }
 
@@ -590,6 +647,7 @@ public class ScrapWorm : RustPlugin
             [LangKeys.AdminOnly] = "Server administrators only.",
             [LangKeys.NotReady] = "The worm is unavailable. Check the server log for configuration errors.",
             [LangKeys.Occupied] = "A worm already exists. Remove it first.",
+            [LangKeys.OtherColossus] = "Another Colossus is out. Wait until it is gone.",
             [LangKeys.BadGround] = "Find dry, fairly flat open ground: the breach needs a straight strip of land ahead of you.",
             [LangKeys.Spawned] = "Scrap worm placed underground 15 m ahead. Shoot it while it is above ground: the glowing cores take much more damage.",
             [LangKeys.Missing] = "There is no active worm.",
@@ -625,6 +683,7 @@ public class ScrapWorm : RustPlugin
             [LangKeys.AdminOnly] = "Solo administradores del servidor.",
             [LangKeys.NotReady] = "El gusano no está disponible. Revisa el registro del servidor.",
             [LangKeys.Occupied] = "Ya existe un gusano. Elimínalo primero.",
+            [LangKeys.OtherColossus] = "Ya hay otro Coloso afuera. Espera a que se vaya.",
             [LangKeys.BadGround] = "Busca terreno seco, abierto y bastante plano: la embestida necesita una franja recta delante de ti.",
             [LangKeys.Spawned] = "Gusano de chatarra colocado bajo tierra 15 m adelante. Dispárale mientras está fuera: los núcleos brillantes reciben mucho más daño.",
             [LangKeys.Missing] = "No hay un gusano activo.",
@@ -660,6 +719,7 @@ public class ScrapWorm : RustPlugin
             [LangKeys.AdminOnly] = "Apenas administradores do servidor.",
             [LangKeys.NotReady] = "O verme não está disponível. Verifique o log do servidor.",
             [LangKeys.Occupied] = "Já existe um verme. Remova-o primeiro.",
+            [LangKeys.OtherColossus] = "Já há outro Colosso solto. Espere até ele sumir.",
             [LangKeys.BadGround] = "Procure um terreno seco, aberto e bem plano: a investida precisa de uma faixa reta à sua frente.",
             [LangKeys.Spawned] = "Verme de sucata colocado sob a terra 15 m à frente. Atire nele enquanto estiver fora: os núcleos brilhantes recebem muito mais dano.",
             [LangKeys.Missing] = "Não há nenhum verme ativo.",
@@ -695,6 +755,7 @@ public class ScrapWorm : RustPlugin
             [LangKeys.AdminOnly] = "Только для администраторов сервера.",
             [LangKeys.NotReady] = "Червь недоступен. Проверьте лог сервера.",
             [LangKeys.Occupied] = "Червь уже существует. Сначала удалите его.",
+            [LangKeys.OtherColossus] = "Другой Колосс уже на свободе. Дождитесь, пока он исчезнет.",
             [LangKeys.BadGround] = "Найдите сухую, открытую и достаточно ровную землю: для броска нужна прямая полоса перед вами.",
             [LangKeys.Spawned] = "Мусорный червь появился под землёй в 15 м впереди. Стреляйте, пока он снаружи: светящиеся ядра получают гораздо больше урона.",
             [LangKeys.Missing] = "Активного червя нет.",
@@ -838,6 +899,162 @@ public class ScrapWorm : RustPlugin
         EffectNetwork.Send(Sfx, player.net.connection);
     }
 
+    private static bool SafeSoundName(string name)
+    {
+        foreach (char c in name)
+            if (!char.IsLetterOrDigit(c) && c != '_' && c != '-') return false;
+        return name.Length <= 64;
+    }
+
+    private const string RoarKey = "roar";
+    private const string SoundExtension = "CrashExtensions";
+    private const float RoarKeepFactor = 1.25f;
+    private static readonly VersionNumber SoundFloor = new(1, 12, 16);
+
+    private void LoadRoarSound()
+    {
+        DropRoar();
+        string name = _settings.RoarSound?.Trim() ?? "";
+        if (name.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase)) name = name.Substring(0, name.Length - 4);
+        if (name.Length == 0) return;
+        if (!SafeSoundName(name)) { PrintWarning($"Custom roar off, using the vanilla roar: RoarSound must be letters, digits, _ or - (up to 64), got '{_settings.RoarSound}'"); return; }
+        VersionNumber? loaded = Interface.Oxide.GetExtension(SoundExtension)?.Version;
+        if (loaded is null || loaded.Value < SoundFloor)
+        {
+            PrintWarning($"Custom roar off, using the vanilla roar: it needs {SoundExtension} {SoundFloor} or newer and this server is running {(loaded is null ? "none" : loaded.Value.ToString())}. Put {SoundExtension} {SoundFloor} or newer in place and restart the server (a DLL replaced on disk loads only at the next restart).");
+            return;
+        }
+        string path = System.IO.Path.Combine(Interface.Oxide.DataDirectory, "ScrapWorm", "sounds", name + ".ogg");
+        try
+        {
+            if (!RegisterRoar(path, out float seconds, out string error)) { PrintWarning($"Custom roar off, using the vanilla roar: {error}"); return; }
+            _roarOn = true;
+            _roarSeconds = seconds;
+            Puts($"Custom roar loaded: {name}.ogg ({seconds:0.0} s), heard within {_settings.SoundRadius} m" + (_settings.RoarSoundPeak > 0f ? $", peak at {_settings.RoarSoundPeak:0.00} s" : ""));
+            if (_settings.RoarSoundPeak >= seconds) PrintWarning($"RoarSoundPeak {_settings.RoarSoundPeak} s is past the end of the {seconds:0.0} s clip");
+        }
+        catch (Exception ex) { PrintWarning($"Custom roar off, using the vanilla roar: CUISound is not usable in the loaded {SoundExtension} {loaded.Value} ({ex.GetType().Name}: {ex.Message})"); }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private bool RegisterRoar(string path, out float seconds, out string error)
+    {
+        seconds = 0f;
+        if (!CUISound.Register(this, RoarKey, path, out error)) return false;
+        seconds = CUISound.Length(this, RoarKey);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private bool ListenRoar(Vector3 center, Vector3? source, out string broken)
+    {
+        if (CUISound.IsBroken(this, RoarKey, out broken)) return false;
+        CUISound.Listen(this, RoarKey, center, _settings.SoundRadius, RoarKeepFactor);
+        if (source.HasValue) CUISound.MoveSource(this, RoarKey, source.Value);
+        return true;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private bool CuiPlayRoar(BasePlayer player, Vector3 source) => CUISound.Play(this, player, RoarKey, source);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private bool RoarPlaying(BasePlayer player) => CUISound.IsPlaying(this, player, RoarKey);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ReleaseRoar() => CUISound.Release(this, RoarKey);
+
+    private void TickSound(float now)
+    {
+        if (!_roarOn) return;
+        try
+        {
+            Vector3 center = _origin + _heading * (_arcLength * 0.5f);
+            Vector3? source = _breaching && _parts.Count > 0 ? (now < _warnUntil ? EntryPoint + Vector3.up * 4f : _segmentHistory[_historyCursor]) : null;
+            if (ListenRoar(center, source, out string broken)) { _roarListening = true; return; }
+            PrintWarning("Custom roar off, back to the vanilla roar until reload: " + broken);
+            DropRoar();
+        }
+        catch (Exception ex) { PrintError("Custom roar failed, back to the vanilla roar: " + ex.Message); DropRoar(); }
+    }
+
+    private bool PlayRoar(BasePlayer player, Vector3 source)
+    {
+        if (!_roarOn) return false;
+        try { return CuiPlayRoar(player, source) || RoarPlaying(player); }
+        catch (Exception ex) { PrintError("Custom roar failed, back to the vanilla roar: " + ex.Message); DropRoar(); return false; }
+    }
+
+    private bool SafePlaying(BasePlayer player)
+    {
+        if (!_roarOn) return false;
+        try { return RoarPlaying(player); }
+        catch (Exception ex) { PrintError("Custom roar failed, back to the vanilla roar: " + ex.Message); DropRoar(); return false; }
+    }
+
+    private void Roar(Vector3 source)
+    {
+        _roarAt = 0f;
+        if (!_roarOn) { Effect.server.Run(RoarEffect, source, Vector3.up); return; }
+        bool early = _settings.RoarSoundPeak > 0f && _settings.RoarSoundPeak < _roarSeconds;
+        foreach (BasePlayer player in BasePlayer.activePlayerList)
+        {
+            if (player is null || !player.IsConnected || !Near(player.transform.position, source, _settings.SoundRadius)) continue;
+            if (early)
+            {
+                if (!_roarEarly.Contains(player.userID.Get()) || !SafePlaying(player)) SendLocal(player, RoarEffect, source);
+                continue;
+            }
+            if (!PlayRoar(player, source)) SendLocal(player, RoarEffect, source);
+        }
+        if (early) _roarEarly.Clear();
+    }
+
+    private void ScheduleEarlyRoar(float now)
+    {
+        _roarEarly.Clear();
+        _roarAt = 0f;
+        if (!_roarOn || _settings.RoarSoundPeak <= 0f || _settings.RoarSoundPeak >= _roarSeconds) return;
+        _roarAt = now + Mathf.Max(0f, WarnSeconds + SecondsToEruption() - _settings.RoarSoundPeak);
+    }
+
+    private float SecondsToEruption()
+    {
+        float entryCross = _settings.Depth / (_arcHeight + _settings.Depth) * _arcLength / Mathf.PI;
+        float headS = -1f, t = 0f;
+        while (SegmentS(0, headS) < entryCross && t < 10f)
+        {
+            headS += PaceAt(headS) * TickSeconds;
+            t += TickSeconds;
+        }
+        return t;
+    }
+
+    private void EarlyRoar()
+    {
+        if (!_roarOn) return;
+        Vector3 source = EntryPoint + Vector3.up * 4f;
+        foreach (BasePlayer player in BasePlayer.activePlayerList)
+        {
+            if (player is null || !player.IsConnected || !Near(player.transform.position, source, _settings.SoundRadius)) continue;
+            if (PlayRoar(player, source)) _roarEarly.Add(player.userID.Get());
+            if (!_roarOn) { _roarEarly.Clear(); return; }
+        }
+    }
+
+    private void RetireRoar()
+    {
+        if (!_roarOn || !_roarListening) return;
+        _roarListening = false;
+        try { ReleaseRoar(); }
+        catch (Exception ex) { PrintError("Custom roar cleanup failed: " + ex.Message); DropRoar(); }
+    }
+
+    private void DropRoar()
+    {
+        _roarAt = 0f;
+        _roarOn = _roarListening = false;
+    }
+
     [ChatCommand(Command)]
     private void WormCommand(BasePlayer player, string command, string[] args)
     {
@@ -848,6 +1065,7 @@ public class ScrapWorm : RustPlugin
         {
             case "start":
                 if (_parts.Count > 0) { Reply(player, LangKeys.Occupied); return; }
+                if (OtherColossusActive()) { Reply(player, LangKeys.OtherColossus); return; }
                 if (!HasPlaces) { Reply(player, LangKeys.NoTerritory); return; }
                 if (!StartEvent()) Reply(player, LangKeys.BadGround);
                 return;
@@ -859,9 +1077,10 @@ public class ScrapWorm : RustPlugin
                 return;
             case "spawn":
                 if (_parts.Count > 0) { Reply(player, LangKeys.Occupied); return; }
+                if (OtherColossusActive()) { Reply(player, LangKeys.OtherColossus); return; }
                 Vector3 heading = Quaternion.Euler(0f, player.eyes.rotation.eulerAngles.y, 0f) * Vector3.forward;
                 RollArc();
-                if (!TryPlaceArc(player.transform.position + heading * 15f, heading, null)) { Reply(player, LangKeys.BadGround); return; }
+                if (!TryPlaceArc(player.transform.position + heading * 15f, heading, null, !_settings.DestroyBuildings)) { Reply(player, LangKeys.BadGround); return; }
                 _territory = FindTerritory(player.transform.position) ?? new Territory { Name = MapHelper.PositionToString(player.transform.position), Center = player.transform.position, Radius = _settings.TerritoryRadius, Temporary = true };
                 _eventEndsAt = 0f;
                 try
@@ -916,6 +1135,7 @@ public class ScrapWorm : RustPlugin
         if (arg.Connection is not null && !CanManage(arg.Player())) return;
         if (!_ready) { arg.ReplyWith("Scrap Worm is not ready; check the log."); return; }
         if (_parts.Count > 0) { arg.ReplyWith("A worm already exists."); return; }
+        if (OtherColossusActive()) { arg.ReplyWith("Another Colossus is out; wait until it is gone."); return; }
         arg.ReplyWith(StartEvent() ? $"Scrap Worm event started in {_territory?.Name} at {MapHelper.PositionToString(_origin)}." : "No territory had room for a breach.");
     }
 
@@ -944,7 +1164,7 @@ public class ScrapWorm : RustPlugin
         return _arcSpeed * (1f + 0.3f * Mathf.Sin(phase * Mathf.PI * 3f));
     }
 
-    private bool TryPlaceArc(Vector3 start, Vector3 heading, Territory bounds)
+    private bool TryPlaceArc(Vector3 start, Vector3 heading, Territory bounds, bool avoidBuildings)
     {
         if (TerrainMeta.HeightMap is null) return false;
         heading.y = 0f;
@@ -957,16 +1177,54 @@ public class ScrapWorm : RustPlugin
             Vector3 point = start + heading * (_arcLength * i / 10f);
             float height = TerrainMeta.HeightMap.GetHeight(point);
             point.y = height;
-            if (WaterLevel.Test(point + Vector3.up * 0.5f, false, false)) return false;
+            if (Flooded(point)) return false;
             min = Mathf.Min(min, height);
             max = Mathf.Max(max, height);
         }
         if (max - min > MaxGroundVariation) return false;
-        if (bounds is { Generated: true } && NearMonument(start, start + heading * _arcLength)) return false;
+        if (bounds is not null && NearMonument(start, start + heading * _arcLength)) return false;
+        if (ArcNearRaidBase(start, heading)) { _raidBlockedStarts++; return false; }
+        if (avoidBuildings)
+        {
+            float sweep = Mathf.Max(SegmentRadius(0), _arcLength * 0.05f + 1f), rise = _arcHeight + _settings.Depth;
+            for (int i = 0; i <= 10; i++)
+            {
+                Vector3 point = start + heading * (_arcLength * i / 10f);
+                point.y = TerrainMeta.HeightMap.GetHeight(point);
+                _buildingTests++;
+                if (BuildingAt(point, rise * Mathf.Sin(Mathf.PI * i / 10f) - _settings.Depth, sweep)) return false;
+            }
+        }
         _origin = new Vector3(start.x, min, start.z);
         _heading = heading;
         return true;
     }
+
+    private static bool Flooded(Vector3 ground) => WaterLevel.Test(ground + Vector3.up * 0.5f, false, false);
+
+    private bool BuildingAt(Vector3 ground, float top, float radius)
+    {
+        int count = Physics.OverlapCapsuleNonAlloc(ground + Vector3.up, ground + Vector3.up * Mathf.Max(1f, top), radius, CrushHits, CrushMask, QueryTriggerInteraction.Ignore);
+        bool found = false;
+        for (int i = 0; i < count && !found; i++) found = IsBase(CrushHits[i]);
+        Array.Clear(CrushHits, 0, count);
+        return found || CommunityEntity.ServerInstance is { IsDestroyed: false } probe && Privileged(probe, ground);
+    }
+
+    private bool BaseNear(Vector3 at)
+    {
+        float radius = _settings.CoverBaseRadius;
+        if (radius <= 0f) return false;
+        int count = Physics.OverlapSphereNonAlloc(at, radius, CrushHits, CrushMask, QueryTriggerInteraction.Ignore);
+        bool found = false;
+        for (int i = 0; i < count && !found; i++) found = IsBase(CrushHits[i]);
+        Array.Clear(CrushHits, 0, count);
+        return found;
+    }
+
+    private bool IsBase(Collider hit)
+        => hit.ToBaseEntity() is DecayEntity { IsDestroyed: false } piece && !_owned.Contains(piece) &&
+           (piece is BuildingBlock || piece.OwnerID != 0 && piece.buildingID != 0 && piece.GetBuilding() is { } building && building.HasBuildingBlocks());
 
     private static bool NearMonument(Vector3 from, Vector3 to)
     {
@@ -988,25 +1246,23 @@ public class ScrapWorm : RustPlugin
     {
         Vector3 exit = _origin + _heading * _arcLength;
         Vector3 heading = _heading;
+        float length = _arcLength, height = _arcHeight, speed = _arcSpeed;
         RollArc();
         _slamArmed = false;
+        _buildingTests = 0;
         if (_settings.HuntNoise && Time.realtimeSinceStartup - _noiseAt <= _settings.NoiseMemorySeconds)
         {
             Vector3 toward = _noise - exit;
             toward.y = 0f;
-            _noiseAt = float.NegativeInfinity;
             if (toward.sqrMagnitude < 4f) toward = heading;
-            for (int i = 0; i < 6; i++)
-            {
-                Vector3 aim = Quaternion.Euler(0f, i switch { 0 => 0f, 1 => 35f, 2 => -35f, 3 => 70f, 4 => -70f, _ => 180f }, 0f) * toward.normalized;
-                if (TryPlaceArc(_noise, aim, _territory)) { _slamArmed = true; return true; }
-            }
+            if (TryNoiseArc(toward.normalized)) { _noiseAt = float.NegativeInfinity; _slamArmed = true; return true; }
         }
+        bool avoidBuildings = !_settings.DestroyBuildings;
         if (_territory is not null && !Near(exit, _territory.Center, _territory.Radius * 0.75f))
         {
             Vector3 home = _territory.Center - exit;
             home.y = 0f;
-            if (home.sqrMagnitude > 1f && TryPlaceArc(exit + home.normalized * 4f, home, _territory)) return true;
+            if (home.sqrMagnitude > 1f && TryPlaceArc(exit + home.normalized * 4f, home, _territory, avoidBuildings)) return true;
         }
         float sign = UnityEngine.Random.value < 0.5f ? -1f : 1f;
         float first = UnityEngine.Random.Range(15f, 75f);
@@ -1014,7 +1270,31 @@ public class ScrapWorm : RustPlugin
         {
             float angle = i switch { 0 => first * sign, 1 => -first * sign, 2 => 100f * sign, 3 => -100f * sign, 4 => 0f, _ => 180f };
             Vector3 turned = Quaternion.Euler(0f, angle, 0f) * heading;
-            if (TryPlaceArc(exit + turned * 4f, turned, _territory)) return true;
+            if (TryPlaceArc(exit + turned * 4f, turned, _territory, avoidBuildings)) return true;
+        }
+        _arcLength = length; _arcHeight = height; _arcSpeed = speed;
+        return false;
+    }
+
+    private bool TryNoiseArc(Vector3 toward)
+    {
+        bool middle = !NearRaidBase(_noise, _arcLength * 0.25f + RaidBaseStartMargin);
+        for (int i = 0; middle && i < 6; i++)
+        {
+            if (_buildingTests >= NoiseTestBudget) return false;
+            Vector3 aim = Quaternion.Euler(0f, i switch { 0 => 0f, 1 => 35f, 2 => -35f, 3 => 70f, 4 => -70f, _ => 180f }, 0f) * toward;
+            if (TryPlaceArc(_noise, aim, _territory, true)) return true;
+        }
+        float turn = UnityEngine.Random.Range(0f, 360f);
+        for (int i = 0; i < 12; i++)
+        {
+            Vector3 side = Quaternion.Euler(0f, turn + i * 60f + (i < 6 ? 0f : 30f), 0f) * Vector3.forward;
+            Vector3 start = _noise + side * (i < 6 ? NoiseRingMeters : NoiseRingMeters * 2f);
+            if (_territory is not null && !Near(start, _territory.Center, _territory.Radius)) continue;
+            if (_buildingTests >= NoiseTestBudget) return false;
+            if (TryPlaceArc(start, new Vector3(-side.z, 0f, side.x), _territory, true)) return true;
+            if (_buildingTests >= NoiseTestBudget) return false;
+            if (TryPlaceArc(start, side, _territory, true)) return true;
         }
         return false;
     }
@@ -1045,12 +1325,23 @@ public class ScrapWorm : RustPlugin
         _killQueued = false;
         _life++;
         _headS = -1f;
+        for (int segment = 0; segment < Segments; segment++)
+        {
+            CurvePoint(SegmentS(segment, _headS), out _framePos[segment], out _frameRot[segment]);
+            BaseEntity anchor = SpawnPiece(GibPrefab, AnchorGib, _framePos[segment], _frameRot[segment], Vector3.one * AnchorScale, false);
+            _anchors[segment] = anchor;
+            if (segment > 0) anchor.SetParent(_anchors[segment - 1], true, true);
+        }
         for (int i = 0; i < Model.Length; i++)
         {
-            CurvePoint(SegmentS(Model[i].Segment, _headS), out Vector3 frame, out Quaternion rotation);
-            CreatePart(Model[i], frame + rotation * (Model[i].Position * _settings.Scale), rotation * Model[i].Rotation);
+            int segment = Model[i].Segment;
+            Vector3 frame = _framePos[segment];
+            Quaternion rotation = _frameRot[segment];
+            BaseEntity part = SpawnPiece(Model[i].Gib is null ? CorePrefab : GibPrefab, Model[i].Gib, frame + rotation * (Model[i].Position * _settings.Scale), rotation * Model[i].Rotation, Model[i].Scale * _settings.Scale, false);
+            _parts.Add(part);
+            part.SetParent(_anchors[segment], true, true);
         }
-        for (int core = 0; core < _coreHealth.Length; core++) { _coreHealth[core] = _settings.CoreHealth; _nextSpark[core] = 0f; }
+        Regroup();
         _coresAlive = _coreHealth.Length;
         int around = 0;
         Vector3 hub = _territory?.Center ?? _origin;
@@ -1058,10 +1349,18 @@ public class ScrapWorm : RustPlugin
         foreach (BasePlayer player in BasePlayer.activePlayerList) if (player is not null && player.IsConnected && Near(player.transform.position, hub, reach)) around++;
         _maxHealth = _settings.WormHealth * Mathf.Min(_settings.MaxHealthMultiplier, 1f + _settings.HealthPerExtraPlayer * Mathf.Max(0, around - 1));
         _health = _maxHealth;
+        float coreHealth = _settings.CoreHealth * (_maxHealth / _settings.WormHealth);
+        for (int core = 0; core < _coreHealth.Length; core++) { _coreHealth[core] = coreHealth; _nextSpark[core] = 0f; _coreBy[core].Clear(); }
+        _cover.Clear();
+        _lastDamageAt = float.NegativeInfinity;
+        _hurtFaults = _crushFaults = 0;
         _noiseAt = float.NegativeInfinity;
         _slamArmed = false;
         _biteTarget = null;
         _nextBite = 0f;
+        _bitten = 0;
+        _bittenUntil = 0f;
+        _biteSkipUntil.Clear();
         _tailHitAt.Clear();
         _teethAngle = 0f;
         _damageBy.Clear();
@@ -1077,18 +1376,16 @@ public class ScrapWorm : RustPlugin
         StartBreach();
     }
 
-    private void CreatePart(PartSpec spec, Vector3 position, Quaternion rotation)
+    private BaseEntity SpawnPiece(string prefab, string gibName, Vector3 position, Quaternion rotation, Vector3 scale, bool syncPosition)
     {
-        string prefab = spec.Gib is null ? CorePrefab : GibPrefab;
         BaseEntity entity = GameManager.server.CreateEntity(prefab, position, rotation);
         if (entity is null) throw new InvalidOperationException("Missing network entity prefab: " + prefab);
-        _parts.Add(entity);
         _owned.Add(entity);
         entity.enableSaving = false;
-        entity.syncPosition = true;
+        entity.syncPosition = syncPosition;
         entity.networkEntityScale = true;
-        entity.transform.localScale = spec.Scale * _settings.Scale;
-        if (spec.Gib is not null && entity is ServerGib gib) { gib._gibName = spec.Gib; gib.bounds = _gibBounds[spec.Gib]; }
+        entity.transform.localScale = scale;
+        if (gibName is not null && entity is ServerGib gib) { gib._gibName = gibName; gib.bounds = _gibBounds[gibName]; }
         if (entity is CeilingLight ceiling) ceiling.shouldAffectGrowables = false;
         UnityEngine.Object.DestroyImmediate(entity.GetComponent<GroundWatch>());
         UnityEngine.Object.DestroyImmediate(entity.GetComponent<DestroyOnGroundMissing>());
@@ -1107,6 +1404,7 @@ public class ScrapWorm : RustPlugin
         for (int i = 0; i < colliders.Length; i++) colliders[i].enabled = false;
         Rigidbody[] bodies = entity.GetComponentsInChildren<Rigidbody>();
         for (int i = 0; i < bodies.Length; i++) { bodies[i].isKinematic = true; bodies[i].useGravity = false; }
+        return entity;
     }
 
     private void StartBreach()
@@ -1117,6 +1415,7 @@ public class ScrapWorm : RustPlugin
         _warnUntil = now + WarnSeconds;
         _nextPulse = now;
         _nextGrind = now + WarnSeconds + 1f;
+        ScheduleEarlyRoar(now);
         if (_settings.BreachMessage) NotifyNearby(LangKeys.Breach, EntryPoint);
     }
 
@@ -1128,6 +1427,8 @@ public class ScrapWorm : RustPlugin
         try
         {
             if (now >= _nextWatch && WatchEvent(now)) return;
+            TickSound(now);
+            if (_roarAt > 0f && now >= _roarAt) { _roarAt = 0f; EarlyRoar(); }
             if (now >= _nextHud) { _nextHud = now + HudSeconds; RefreshHud(); }
             if (!_breaching)
             {
@@ -1135,7 +1436,8 @@ public class ScrapWorm : RustPlugin
                 if (_resumeAt <= 0f) _resumeAt = now + PauseSeconds;
                 if (now < _resumeAt) return;
                 _resumeAt = 0f;
-                if (WatchEvent(now) || !TryNextArc()) return;
+                if (WatchEvent(now)) return;
+                if (!TryNextArc()) { _resumeAt = now + ArcRetrySeconds; return; }
                 StartBreach();
             }
             if (now < _warnUntil) { Rumble(now); return; }
@@ -1164,10 +1466,19 @@ public class ScrapWorm : RustPlugin
     {
         if (!_settings.HuntNoise || _dead || _parts.Count == 0 || _territory is null || !Near(position, _territory.Center, _territory.Radius)) return;
         float now = Time.realtimeSinceStartup;
-        if (weight < _noiseWeight && now - _noiseAt < 5f) return;
+        if (weight < _noiseWeight && now - _noiseAt < 5f || HeardInRaidBase(position, now)) return;
         _noise = position;
         _noiseAt = now;
         _noiseWeight = weight;
+    }
+
+    private bool HeardInRaidBase(Vector3 position, float now)
+    {
+        if (!_settings.SpareRaidableBases) return false;
+        if (now - _raidAskAt < 1f && Near(position, _raidAsk, 3f)) return _raidAskIn;
+        _raidAsk = position;
+        _raidAskAt = now;
+        return _raidAskIn = NearRaidBase(position, 0f);
     }
 
     private void OnDispenserGather(ResourceDispenser dispenser, BasePlayer player, Item item)
@@ -1257,7 +1568,7 @@ public class ScrapWorm : RustPlugin
             if (before < entryCross && after >= entryCross)
             {
                 Effect.server.Run(DirtEffect, EntryPoint, Vector3.up);
-                if (segment == 0) { Effect.server.Run(EruptEffect, EntryPoint, Vector3.up); Effect.server.Run(RoarEffect, EntryPoint + Vector3.up * 4f, Vector3.up); Slam(); }
+                if (segment == 0) { Effect.server.Run(EruptEffect, EntryPoint, Vector3.up); Roar(EntryPoint + Vector3.up * 4f); Slam(); }
             }
             if (before < length - entryCross && after >= length - entryCross)
             {
@@ -1274,33 +1585,102 @@ public class ScrapWorm : RustPlugin
 
     private void ApplyPose()
     {
+        _stuck.Clear();
+        _stuckFrom.Clear();
         for (int i = 0; i < Model.Length; i++)
         {
             if (_shed[i]) continue;
             BaseEntity part = _parts[i];
             if (part is null || part.IsDestroyed) throw new InvalidOperationException("A worm part was lost");
-            CurvePoint(SegmentS(Model[i].Segment, _headS), out Vector3 frame, out Quaternion rotation);
-            if (Model[i].Spin) rotation *= Quaternion.AngleAxis(_teethAngle, Vector3.forward);
             List<BaseEntity> children = part.children;
-            if (children.Count > 0)
+            for (int c = 0; c < children.Count; c++)
             {
-                _stuckFrom.Clear();
-                for (int c = 0; c < children.Count; c++) _stuckFrom.Add(children[c].transform.position);
+                if (children[c] is not TimedExplosive explosive || explosive.IsDestroyed) continue;
+                _stuck.Add(explosive);
+                _stuckFrom.Add(explosive.transform.position);
             }
-            part.transform.SetPositionAndRotation(frame + rotation * (Model[i].Position * _settings.Scale), rotation * Model[i].Rotation);
-            if (children.Count > 0) GuardStuck(children);
         }
+        for (int segment = 0; segment < Segments; segment++)
+        {
+            BaseEntity anchor = _anchors[segment];
+            if (anchor is null || anchor.IsDestroyed) throw new InvalidOperationException("A worm anchor was lost");
+            CurvePoint(SegmentS(segment, _headS), out _framePos[segment], out _frameRot[segment]);
+            if (segment == 0)
+            {
+                anchor.transform.SetPositionAndRotation(_framePos[0], _frameRot[0]);
+                float now = Time.realtimeSinceStartup;
+                if (now >= _nextGroupCheck) { _nextGroupCheck = now + 1f; Regroup(); }
+            }
+            else
+            {
+                Quaternion inverse = Quaternion.Inverse(_frameRot[segment - 1]);
+                anchor.transform.localPosition = inverse * (_framePos[segment] - _framePos[segment - 1]) / AnchorScale;
+                anchor.transform.localRotation = inverse * _frameRot[segment];
+            }
+            SendPose(anchor);
+        }
+        Quaternion teeth = Quaternion.AngleAxis(_teethAngle, Vector3.forward);
+        for (int i = 0; i < Model.Length; i++)
+        {
+            if (_shed[i] || !Model[i].Spin) continue;
+            Transform spin = _parts[i].transform;
+            spin.localPosition = teeth * (Model[i].Position * _settings.Scale) / AnchorScale;
+            spin.localRotation = teeth * Model[i].Rotation;
+            SendPose(_parts[i]);
+        }
+        GuardStuck();
     }
 
-    private void GuardStuck(List<BaseEntity> children)
+    private void Regroup()
     {
-        for (int c = Math.Min(children.Count, _stuckFrom.Count) - 1; c >= 0; c--)
+        Network.Visibility.Group group = BodyGroup(_anchors[0], _anchors[0] is null ? default : _anchors[0].transform.position);
+        if (group is null) return;
+        for (int segment = 0; segment < Segments; segment++) MoveGroup(_anchors[segment], group);
+        for (int i = 0; i < _parts.Count; i++) MoveGroup(_parts[i], group);
+    }
+
+    private void MoveGroup(BaseEntity piece, Network.Visibility.Group group)
+    {
+        if (piece is null || piece.IsDestroyed || piece.net is null || piece.net.group == group) return;
+        List<BaseEntity> children = piece.children;
+        _heldChildren.Clear();
+        _heldChildren.AddRange(children);
+        children.Clear();
+        bool moved;
+        try { moved = piece.net.SwitchGroup(group); }
+        finally { children.AddRange(_heldChildren); }
+        if (!moved) return;
+        piece.SendNetworkGroupChange();
+        for (int c = 0; c < _heldChildren.Count; c++)
+            if (_heldChildren[c] is { IsDestroyed: false } child && !_owned.Contains(child)) child.UpdateNetworkGroup();
+    }
+
+    private static Network.Visibility.Group BodyGroup(BaseEntity root, Vector3 at)
+    {
+        if (root is null || root.IsDestroyed || root.net is null || TerrainMeta.HeightMap is null || Network.Net.sv?.visibility is null) return null;
+        at.y = Mathf.Max(at.y, TerrainMeta.HeightMap.GetHeight(at) + 1f);
+        Network.Visibility.Manager visibility = Network.Net.sv.visibility;
+        if (root.net.group is { } current && visibility.IsInside(current, at, root.networkRange)) return current;
+        return visibility.GetGroup(at, root.networkRange);
+    }
+
+    private static void SendPose(BaseEntity entity)
+    {
+        entity.InvalidateNetworkCache();
+        entity.SendNetworkUpdate_Position();
+    }
+
+    private void GuardStuck()
+    {
+        for (int c = _stuck.Count - 1; c >= 0; c--)
         {
-            if (children[c] is not TimedExplosive explosive || explosive.IsDestroyed) continue;
+            TimedExplosive explosive = _stuck[c];
+            if (explosive is null || explosive.IsDestroyed) continue;
             Vector3 from = _stuckFrom[c];
             if (!Physics.Linecast(from, explosive.transform.position, out RaycastHit block, StuckMask, QueryTriggerInteraction.Ignore) || block.collider.ToBaseEntity() is TimedExplosive) continue;
             Detach(explosive, Vector3.MoveTowards(block.point, from, 0.25f));
         }
+        _stuck.Clear();
     }
 
     private static void Detach(TimedExplosive explosive, Vector3 position)
@@ -1343,11 +1723,12 @@ public class ScrapWorm : RustPlugin
         BaseEntity initiator = _parts.Count > 0 ? _parts[0] : null;
         if (damage <= 0f || initiator is null || initiator.IsDestroyed || player is null || player.IsDead()) return;
         if (Interface.CallHook("OnScrapWormRunOver", player) is not null) return;
-        player.OnAttacked(new HitInfo(initiator, player, Rust.DamageType.Blunt, damage, at));
+        try { player.OnAttacked(new HitInfo(initiator, player, Rust.DamageType.Blunt, damage, at)); }
+        catch (Exception ex) { if (_hurtFaults++ == 0) PrintError("Worm hit failed on a player (further ones in this life are not logged): " + ex); }
     }
 
     private static bool Targetable(BasePlayer player)
-        => player is not null && player.IsConnected && player.IsAlive() && !player.IsDead() && !player.IsSpectating() && !player.IsSleeping() && !player.IsFlying && !player.InSafeZone();
+        => player is not null && player.IsConnected && player.IsAlive() && !player.IsDead() && !player.IsSpectating() && !player.IsSleeping() && !((player.IsAdmin || player.IsDeveloper) && player.IsFlying) && !player.InSafeZone();
 
     private void CollectNear()
     {
@@ -1380,14 +1761,14 @@ public class ScrapWorm : RustPlugin
         if (!AboveGround(head, 0.5f)) { _biteTarget = null; return; }
         CurvePoint(SegmentS(0, _headS), out _, out Quaternion facing);
         Vector3 mouth = head + facing * (Vector3.forward * (2.6f * _settings.Scale));
-        if (_biteTarget is not null && (!Targetable(_biteTarget) || _biteTarget.isMounted || now - _biteSince > BiteWindup + BiteHold)) { _biteTarget = null; _nextBite = now + BiteCooldown; }
+        if (_biteTarget is not null && (!Targetable(_biteTarget) || _biteTarget.isMounted || _biteTarget.HasParent() || now - _biteSince > BiteWindup + BiteHold)) { _biteTarget = null; _nextBite = now + BiteCooldown; }
         if (_biteTarget is null)
         {
             if (now < _nextBite) return;
             float best = _settings.BiteRange * _settings.BiteRange;
             foreach (BasePlayer player in _near)
             {
-                if (player.isMounted) continue;
+                if (player.isMounted || player.HasParent() || _biteSkipUntil.TryGetValue(player.userID, out float skipUntil) && now < skipUntil) continue;
                 float distance = (player.CenterPoint() - mouth).sqrMagnitude;
                 if (distance >= best || Physics.Linecast(mouth, player.CenterPoint(), PullMask, QueryTriggerInteraction.Ignore)) continue;
                 best = distance;
@@ -1395,7 +1776,7 @@ public class ScrapWorm : RustPlugin
             }
             if (_biteTarget is null) return;
             _biteSince = now;
-            SendLocal(_biteTarget, RoarEffect, _biteTarget.transform.position);
+            if (!PlayRoar(_biteTarget, head)) SendLocal(_biteTarget, RoarEffect, _biteTarget.transform.position);
             return;
         }
         if (now - _biteSince < BiteWindup) return;
@@ -1406,6 +1787,8 @@ public class ScrapWorm : RustPlugin
         {
             Effect.server.Run(BloodEffect, target.CenterPoint(), Vector3.up);
             HurtPlayer(target, _settings.BiteDamage, target.CenterPoint());
+            _bitten = target.userID;
+            _bittenUntil = now + BittenSeconds;
             _biteTarget = null;
             _nextBite = now + BiteCooldown;
             return;
@@ -1418,8 +1801,9 @@ public class ScrapWorm : RustPlugin
             (delta.sqrMagnitude > 0.000001f && Physics.CapsuleCast(bottom, top, radius, delta.normalized, delta.magnitude, PullMask, QueryTriggerInteraction.Ignore)) ||
             target.IsBuildingBlocked(next, Quaternion.identity, target.bounds))
         {
+            _biteSkipUntil[target.userID] = now + BiteCooldown;
             _biteTarget = null;
-            _nextBite = now + BiteCooldown;
+            _nextBite = now + 1f;
             return;
         }
         target.PauseFlyHackDetection();
@@ -1449,9 +1833,10 @@ public class ScrapWorm : RustPlugin
     {
         BaseEntity initiator = _parts.Count > 0 ? _parts[0] : null;
         if (initiator is null || initiator.IsDestroyed) return;
+        float now = Time.realtimeSinceStartup;
         foreach (BasePlayer player in _near)
         {
-            if (player.IsDead()) continue;
+            if (player.IsDead() || ReferenceEquals(player, _biteTarget) || player.userID == _bitten && now < _bittenUntil) continue;
             Vector3 body = player.transform.position + Vector3.up * 0.9f;
             for (int segment = 0; segment < Segments; segment++)
             {
@@ -1473,25 +1858,50 @@ public class ScrapWorm : RustPlugin
         if (initiator is null || initiator.IsDestroyed) return;
         float now = Time.realtimeSinceStartup;
         int crushed = 0;
-        for (int segment = 0; segment < Segments && crushed < CrushPerTick; segment++)
+        List<DecayEntity> hits = Facepunch.Pool.Get<List<DecayEntity>>();
+        try
         {
-            Vector3 center = _segmentHistory[segment * History + _historyCursor];
-            if (!AboveGround(center, -SegmentRadius(segment)) || !Near(center, _territory.Center, _territory.Radius)) continue;
-            int count = Physics.OverlapSphereNonAlloc(center, SegmentRadius(segment) * 1.1f, CrushHits, CrushMask, QueryTriggerInteraction.Ignore);
-            for (int i = 0; i < count && crushed < CrushPerTick; i++)
+            for (int segment = 0; segment < Segments && crushed < CrushPerTick; segment++)
             {
-                BaseEntity entity = CrushHits[i].ToBaseEntity();
-                if (entity is not DecayEntity building || building.IsDestroyed || _owned.Contains(building)) continue;
-                if (building is not BuildingBlock && building.OwnerID == 0 || !Near(building.transform.position, _territory.Center, _territory.Radius)) continue;
-                if (_crushedAt.TryGetValue(building.net.ID, out float last) && now - last < CrushCooldown) continue;
-                if (Interface.CallHook("OnScrapWormCrush", building) is not null) continue;
-                _crushedAt[building.net.ID] = now;
-                Effect.server.Run(GrindEffect, building.transform.position, Vector3.up);
-                building.Hurt(new HitInfo(initiator, building, Rust.DamageType.Explosion, _settings.BuildingDamage, center));
-                crushed++;
+                Vector3 center = _segmentHistory[segment * History + _historyCursor];
+                if (!AboveGround(center, -SegmentRadius(segment)) || !Near(center, _territory.Center, _territory.Radius)) continue;
+                int count = Physics.OverlapSphereNonAlloc(center, SegmentRadius(segment) * 1.1f, CrushHits, CrushMask, QueryTriggerInteraction.Ignore);
+                hits.Clear();
+                for (int i = 0; i < count; i++) if (CrushHits[i].ToBaseEntity() is DecayEntity piece) hits.Add(piece);
+                Array.Clear(CrushHits, 0, count);
+                for (int i = 0; i < hits.Count && crushed < CrushPerTick; i++)
+                {
+                    DecayEntity building = hits[i];
+                    if (building.IsDestroyed || _owned.Contains(building)) continue;
+                    if (building is not BuildingBlock && building.OwnerID == 0 || !Near(building.transform.position, _territory.Center, _territory.Radius)) continue;
+                    if (_crushedAt.TryGetValue(building.net.ID, out float last) && now - last < CrushCooldown) continue;
+                    _crushedAt[building.net.ID] = now;
+                    if (IsRaidBasePiece(building)) continue;
+                    if (Interface.CallHook("OnScrapWormCrush", building) is not null) continue;
+                    Effect.server.Run(GrindEffect, building.transform.position, Vector3.up);
+                    try { building.Hurt(new HitInfo(initiator, building, Rust.DamageType.Explosion, _settings.BuildingDamage, center)); }
+                    catch (Exception ex) { if (_crushFaults++ == 0) PrintError("Worm crush failed on a building (further ones in this life are not logged): " + ex); }
+                    crushed++;
+                }
             }
         }
-        Array.Clear(CrushHits, 0, CrushHits.Length);
+        finally { Facepunch.Pool.FreeUnmanaged(ref hits); }
+    }
+
+    private bool IsRaidBasePiece(BaseEntity entity)
+        => _settings.SpareRaidableBases && Live(RaidableBases, nameof(RaidableBases)) is { } raids && raids.Call("EventTerritory", entity.transform.position, 0f) is true;
+
+    private bool NearRaidBase(Vector3 point, float margin)
+    {
+        if (!_settings.SpareRaidableBases || TerrainMeta.HeightMap is null || Live(RaidableBases, nameof(RaidableBases)) is not { } raids) return false;
+        point.y = TerrainMeta.HeightMap.GetHeight(point);
+        return raids.Call("EventTerritory", point, margin) is true;
+    }
+
+    private bool ArcNearRaidBase(Vector3 start, Vector3 heading)
+    {
+        float margin = _arcLength * 0.25f + RaidBaseStartMargin;
+        return NearRaidBase(start, margin) || NearRaidBase(start + heading * (_arcLength * 0.5f), margin) || NearRaidBase(start + heading * _arcLength, margin);
     }
 
     private static float RayEntry(Vector3 origin, Vector3 direction, Vector3 center, float radius)
@@ -1746,6 +2156,11 @@ public class ScrapWorm : RustPlugin
     private void HitWorm(int core, int segment, BasePlayer attacker, float amount, Vector3 point, bool shared = true)
     {
         if (_dead || _health <= 0f) return;
+        float share = AttackerShare(attacker);
+        if (share <= 0f) return;
+        amount *= share;
+        float now = Time.realtimeSinceStartup;
+        _lastDamageAt = now;
         if (attacker.IsConnected) SendLocal(attacker, HitNotifyEffect, attacker.eyes.position);
         float before = _health;
         if (core >= 0 && _coreHealth[core] <= 0f) { segment = Model[_coreParts[core]].Segment; core = -1; }
@@ -1755,21 +2170,64 @@ public class ScrapWorm : RustPlugin
             Credit(attacker, before);
             return;
         }
-        float now = Time.realtimeSinceStartup;
         if (now >= _nextSpark[core]) { _nextSpark[core] = now + 0.25f; Effect.server.Run(SparkEffect, point, Vector3.up); }
         if (shared) _health -= amount * _settings.CoreDamage;
+        ulong id = attacker.userID;
+        if (id.IsSteamId())
+        {
+            Dictionary<ulong, float> by = _coreBy[core];
+            by.TryGetValue(id, out float done);
+            by[id] = done + Mathf.Min(amount, _coreHealth[core]);
+        }
         _coreHealth[core] -= amount;
+        float burst = 0f;
         if (_coreHealth[core] <= 0f)
         {
             _coreHealth[core] = 0f;
             if (_parts[_coreParts[core]] is CeilingLight light) light.UpdateFromInput(0, 0);
             Effect.server.Run(BlastEffect, point, Vector3.up);
             _coresAlive--;
+            burst = Mathf.Min(_maxHealth * CoreBurstShare, Mathf.Max(0f, _health));
             _health -= _maxHealth * CoreBurstShare;
-            if (_health > 0f && _coresAlive > 0) ShedArmor(Model[_coreParts[core]].Segment);
+            ShareBurst(core, burst);
+            if (_settings.ShedArmor && _health > 0f && _coresAlive > 0) ShedArmor(Model[_coreParts[core]].Segment);
             if (_coresAlive > 0 && _health > 0f) NotifyNearby(LangKeys.CoreDown, point, _coresAlive);
         }
-        Credit(attacker, before);
+        Credit(attacker, before - burst);
+    }
+
+    private float AttackerShare(BasePlayer attacker)
+    {
+        if (attacker is null || attacker.IsDestroyed || attacker.InSafeZone()) return 0f;
+        Vector3 at = attacker.transform.position;
+        if (_territory is not null && !Near(at, _territory.Center, _territory.Radius)) return 0f;
+        if (_settings.CoverDamageScale >= 1f) return 1f;
+        float now = Time.realtimeSinceStartup;
+        ulong id = attacker.userID;
+        if (!_cover.TryGetValue(id, out Cover cover) || now >= cover.Until)
+            _cover[id] = cover = new Cover { Until = now + CoverSeconds, Covered = NoBreachUnder(at) || attacker.GetBuildingPrivilege() is not null || BaseNear(at) || NearRaidBase(at, 0f) };
+        return cover.Covered ? _settings.CoverDamageScale : 1f;
+    }
+
+    private static bool NoBreachUnder(Vector3 at)
+    {
+        if (TerrainMeta.HeightMap is null) return false;
+        at.y = TerrainMeta.HeightMap.GetHeight(at);
+        return Flooded(at) || NearMonument(at, at);
+    }
+
+    private void ShareBurst(int core, float burst)
+    {
+        Dictionary<ulong, float> by = _coreBy[core];
+        float total = 0f;
+        foreach (KeyValuePair<ulong, float> pair in by) total += pair.Value;
+        if (burst > 0f && total > 0f)
+            foreach (KeyValuePair<ulong, float> pair in by)
+            {
+                _damageBy.TryGetValue(pair.Key, out float dealt);
+                _damageBy[pair.Key] = dealt + burst * pair.Value / total;
+            }
+        by.Clear();
     }
 
     private void Credit(BasePlayer attacker, float before)
@@ -1794,6 +2252,7 @@ public class ScrapWorm : RustPlugin
         _stripped[segment] = true;
         for (int i = _debris.Count - 1; i >= 0; i--) if (_debris[i] is null || _debris[i].IsDestroyed) _debris.RemoveAt(i);
         CurvePoint(SegmentS(segment, _headS), out Vector3 center, out _);
+        _debrisBatch.Clear();
         for (int i = 0; i < Model.Length; i++)
         {
             if (_shed[i] || Model[i].Segment != segment || !IsArmor(Model[i])) continue;
@@ -1807,6 +2266,7 @@ public class ScrapWorm : RustPlugin
             ReleaseStuck(part);
             part.Kill();
         }
+        _debrisBatch.Clear();
         Effect.server.Run(GrindEffect, center, Vector3.up);
         Effect.server.Run(DirtEffect, center, Vector3.up);
     }
@@ -1828,6 +2288,7 @@ public class ScrapWorm : RustPlugin
         Vector3 sum = Vector3.zero;
         int exposed = 0;
         for (int i = _debris.Count - 1; i >= 0; i--) if (_debris[i] is null || _debris[i].IsDestroyed) _debris.RemoveAt(i);
+        _debrisBatch.Clear();
         for (int i = 0; i < _parts.Count; i++)
         {
             BaseEntity part = _parts[i];
@@ -1837,6 +2298,7 @@ public class ScrapWorm : RustPlugin
             if (i % 6 == 0) Effect.server.Run(BlastEffect, part.transform.position, Vector3.up);
             if (Model[i].Gib is not null && _debris.Count < MaxDebris) SpawnDebris(Model[i], part);
         }
+        _debrisBatch.Clear();
         Vector3 fall = exposed > 0 ? sum / exposed : _origin + _heading * (_arcLength * 0.5f);
         fall.y = TerrainMeta.HeightMap.GetHeight(fall);
         Effect.server.Run(DeathEffect, fall + Vector3.up * 2f, Vector3.up);
@@ -1844,13 +2306,15 @@ public class ScrapWorm : RustPlugin
         ulong winner = 0;
         float most = 0f;
         foreach (var pair in _damageBy) if (pair.Value > most) { most = pair.Value; winner = pair.Key; }
+        ulong earned = most < _settings.MinRewardShare * _maxHealth ? 0UL : winner;
         BasePlayer top = winner == 0 ? null : RelationshipManager.FindByID(winner);
         string winnerName = PlainName(top?.displayName ?? winner.ToString());
         RemoveWorm();
-        SpawnLoot(fall, LootOwners(winner, winnerName));
+        try { SpawnLoot(fall, LootOwners(earned, winnerName)); }
+        catch (Exception ex) { PrintError("Worm loot failed: " + ex); }
         Interface.CallHook("OnScrapWormKilled", fall, winner);
         PayRewards();
-        RunWinnerCommands(winner, top?.displayName, fall);
+        RunWinnerCommands(earned, top?.displayName, fall);
         PostDiscord(winner == 0 ? LangKeys.Killed : LangKeys.KilledBy, DiscordSafe(winnerName));
         if (winner == 0) NotifyNearby(LangKeys.Killed, fall);
         else NotifyNearbyWithToast(LangKeys.KilledBy, LangKeys.ToastKilledBy, fall, winnerName);
@@ -1909,11 +2373,18 @@ public class ScrapWorm : RustPlugin
             if (created is not ServerGib debris) { if (created is not null) UnityEngine.Object.Destroy(created.gameObject); return; }
             debris._gibName = spec.Gib;
             debris.bounds = _gibBounds[spec.Gib];
+            LiftClear(debris.transform, debris.bounds);
+            debris.useContinuousCollision = true;
             debris.PhysicsInit(_gibMeshes[spec.Gib]);
             if (debris is HelicopterDebris dispenserOwner && dispenserOwner.GetComponent<ResourceDispenser>() is { } dispenser) FillDebris(dispenser, debris.bounds.size, spec.Scale * _settings.Scale);
             debris.enableSaving = false;
             debris.Spawn();
             _debris.Add(debris);
+            if (debris.GetCollider() is { } collider)
+            {
+                foreach (Collider other in _debrisBatch) if (other) Physics.IgnoreCollision(collider, other, true);
+                _debrisBatch.Add(collider);
+            }
             if (push != default && debris.GetComponent<Rigidbody>() is { } body)
             {
                 body.linearVelocity = push;
@@ -1926,6 +2397,14 @@ public class ScrapWorm : RustPlugin
             if (created is not null && !created.IsDestroyed) created.Kill();
             PrintError("Failed to create worm debris: " + ex.Message);
         }
+    }
+
+    private static void LiftClear(Transform piece, Bounds box)
+    {
+        Vector3 center = piece.TransformPoint(box.center), half = Vector3.Scale(box.extents, piece.lossyScale);
+        float reach = Mathf.Abs(piece.right.y * half.x) + Mathf.Abs(piece.up.y * half.y) + Mathf.Abs(piece.forward.y * half.z);
+        float lift = SolidGround(center) + reach + 0.1f - center.y;
+        if (lift > 0f) piece.position += Vector3.up * lift;
     }
 
     private LootLockEntry LootOwners(ulong winner, string winnerName)
@@ -2017,7 +2496,11 @@ public class ScrapWorm : RustPlugin
     private object CanEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
     {
         if (entity is null || info is null) return null;
-        if (info.Initiator is not null && _owned.Contains(info.Initiator)) return true;
+        if (_settings is { ForceDamageThroughTruePVE: true })
+        {
+            if (info.Initiator is not null && _owned.Contains(info.Initiator)) return true;
+            if (IsCrateFire(info.Initiator)) return entity is BasePlayer burnt && Targetable(burnt) ? true : null;
+        }
         if (info.InitiatorPlayer is not null && entity is ServerGib gib && _debris.Contains(gib)) return true;
         return null;
     }
@@ -2045,44 +2528,189 @@ public class ScrapWorm : RustPlugin
     private static bool Privileged(BaseEntity probe, Vector3 point)
         => probe.GetBuildingPrivilege(new OBB(point + Vector3.up * 1.5f, Quaternion.identity, new Bounds(Vector3.zero, new Vector3(7f, 3f, 7f))), false) is not null;
 
+    private const float CrateSettleSeconds = 6f, CrateStrayMeters = 8f, CrateGapMeters = 0.3f, CrateSunkMeters = 1.5f, CrateClearMeters = 1.6f;
+
     private void SpawnLoot(Vector3 ground, LootLockEntry owners)
     {
         string cratePrefab = CratePrefab(_settings.CrateType);
+        var thrown = new List<BaseEntity>(_settings.Crates);
         for (int i = 0; i < _settings.Crates; i++)
         {
-            Vector3 direction = Quaternion.Euler(0f, 360f * i / _settings.Crates + UnityEngine.Random.Range(-20f, 20f), 0f) * Vector3.forward;
-            Vector3 position = ground + Vector3.up * 1.5f + direction * UnityEngine.Random.Range(2f, 3f);
-            BaseEntity crate = GameManager.server.CreateEntity(cratePrefab, position, Quaternion.LookRotation(direction));
-            if (crate is null) continue;
-            crate.enableSaving = false;
-            crate.Spawn();
-            FillCrate(crate, owners);
-            var body = crate.gameObject.AddComponent<Rigidbody>();
-            body.useGravity = true;
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            body.mass = 2f;
-            body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.linearVelocity = direction * UnityEngine.Random.Range(1f, 3f);
-            body.angularVelocity = Vector3Ex.Range(-1.75f, 1.75f);
-            body.linearDamping = 0.2f;
-            body.angularDamping = 0.04f;
-            if (GameManager.server.CreateEntity(FireBallPrefab) is FireBall fire)
+            BaseEntity crate = null;
+            try
             {
-                fire.enableSaving = false;
-                fire.SetParent(crate);
-                fire.Spawn();
-                fire.GetComponent<Rigidbody>().isKinematic = true;
-                fire.GetComponent<Collider>().enabled = false;
-                if (crate is LockedByEntCrate locked) locked.SetLockingEnt(fire);
+                Vector3 direction = Quaternion.Euler(0f, 360f * i / _settings.Crates + UnityEngine.Random.Range(-20f, 20f), 0f) * Vector3.forward;
+                Vector3 position = ground + Vector3.up * 1.5f + direction * UnityEngine.Random.Range(2f, 3f);
+                position.y = Mathf.Max(position.y, TerrainMeta.HeightMap.GetHeight(position) + 1.5f);
+                crate = GameManager.server.CreateEntity(cratePrefab, position, Quaternion.LookRotation(direction));
+                if (crate is null) continue;
+                crate.enableSaving = false;
+                crate.Spawn();
+                FillCrate(crate, owners);
+                var body = crate.gameObject.AddComponent<Rigidbody>();
+                body.useGravity = true;
+                body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                body.mass = 2f;
+                body.interpolation = RigidbodyInterpolation.Interpolate;
+                body.linearVelocity = direction * UnityEngine.Random.Range(1f, 3f);
+                body.angularVelocity = Vector3Ex.Range(-1.75f, 1.75f);
+                body.linearDamping = 0.2f;
+                body.angularDamping = 0.08f;
+                if (GameManager.server.CreateEntity(FireBallPrefab) is FireBall fire)
+                {
+                    fire.enableSaving = false;
+                    fire.SetParent(crate);
+                    fire.Spawn();
+                    if (fire.GetComponent<Rigidbody>() is { } fireBody) fireBody.isKinematic = true;
+                    if (fire.GetComponent<Collider>() is { } fireCollider) fireCollider.enabled = false;
+                    fire.CancelInvoke(fire.TryToSpread);
+                    TameCrateFire(fire);
+                    if (crate is LockedByEntCrate locked) locked.SetLockingEnt(fire);
+                }
+                thrown.Add(crate);
+            }
+            catch (Exception ex)
+            {
+                PrintError("Worm crate failed: " + ex.Message);
+                if (crate is not null)
+                {
+                    _lootLocks.Remove(crate);
+                    if (!crate.IsDestroyed) crate.Kill();
+                }
             }
         }
-        if (_settings.HackableCrate && GameManager.server.CreateEntity(HackCratePrefab, ground + Vector3.up * 0.5f, Quaternion.LookRotation(_heading)) is { } hackable)
+        try
         {
-            hackable.enableSaving = false;
-            hackable.Spawn();
-            FillCrate(hackable, owners);
+            if (_settings.HackableCrate && GameManager.server.CreateEntity(HackCratePrefab, ground + Vector3.up * 0.5f, Quaternion.LookRotation(_heading)) is { } hackable)
+            {
+                hackable.enableSaving = false;
+                hackable.Spawn();
+                FillCrate(hackable, owners);
+            }
         }
+        catch (Exception ex) { PrintError("Worm hackable crate failed: " + ex.Message); }
         LootHooks();
+        if (thrown.Count > 0) timer.Once(CrateSettleSeconds, () => SettleCrates(thrown, ground));
+    }
+
+    private void SettleCrates(List<BaseEntity> crates, Vector3 ground)
+    {
+        bool groundClear = !WaterLevel.Test(ground + Vector3.up * 0.5f, false, false);
+        for (int i = 0; i < crates.Count; i++)
+        {
+            BaseEntity crate = crates[i];
+            if (crate is null || crate.IsDestroyed) continue;
+            try
+            {
+                Rigidbody body = crate.GetComponent<Rigidbody>();
+                if (body is not null)
+                {
+                    body.linearVelocity = body.angularVelocity = Vector3.zero;
+                    body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+                    body.isKinematic = true;
+                }
+                if (groundClear && Privileged(crate, ground)) groundClear = false;
+                Vector3 at = crate.transform.position;
+                Bounds box = crate.GetComponent<Collider>() is { } shape ? shape.bounds : new Bounds(at, Vector3.zero);
+                float gap = box.min.y - SolidGround(box.center);
+                bool stray = !Near(at, ground, CrateStrayMeters) || gap > CrateGapMeters || gap < -CrateSunkMeters || (groundClear && (WaterLevel.Test(at + Vector3.up * 0.5f, false, false) || Privileged(crate, at)));
+                if (stray)
+                {
+                    Vector3 direction = Quaternion.Euler(0f, 360f * i / crates.Count, 0f) * Vector3.forward;
+                    Vector3 back = ground + direction * 2.5f;
+                    if (WaterLevel.Test(back.WithY(TerrainMeta.HeightMap.GetHeight(back)) + Vector3.up * 0.5f, false, false) || Privileged(crate, back) || Taken(crates, i, back)) back = ground + direction * 1.5f;
+                    back.y = SolidGround(back) + 0.1f;
+                    Quaternion upright = Quaternion.Euler(0f, crate.transform.eulerAngles.y, 0f);
+                    crate.transform.SetPositionAndRotation(back, upright);
+                }
+                crate.SendNetworkUpdateImmediate();
+            }
+            catch (Exception ex) { PrintError("Worm crate settle failed: " + ex.Message); }
+        }
+    }
+
+    private static bool Taken(List<BaseEntity> crates, int self, Vector3 point)
+    {
+        for (int i = 0; i < crates.Count; i++)
+            if (i != self && crates[i] is { IsDestroyed: false } other && Near(other.transform.position, point, CrateClearMeters)) return true;
+        return false;
+    }
+
+    private static float SolidGround(Vector3 at)
+    {
+        float ground = TerrainMeta.HeightMap.GetHeight(at);
+        return Physics.Raycast(new Vector3(at.x, ground + 30f, at.z), Vector3.down, out RaycastHit hit, 40f, Rust.Layers.Mask.Terrain | Rust.Layers.Mask.World, QueryTriggerInteraction.Ignore) ? Mathf.Max(ground, hit.point.y) : ground;
+    }
+
+    private const float CrateFireTick = 0.5f;
+    private const float CrateFireRadius = 2f;
+    private const string CrateFireHitHook = "OnScrapWormRunOver";
+    private const string CrateFireHitEffect = "assets/bundled/prefabs/fx/impacts/additive/fire.prefab";
+    private readonly List<CrateFire> _crateFires = new();
+    private Timer _crateFireTimer;
+
+    private sealed class CrateFire
+    {
+        public FireBall Fire;
+        public float Damage, Radius;
+    }
+
+    private bool IsCrateFire(BaseEntity entity)
+    {
+        if (entity is not FireBall) return false;
+        foreach (CrateFire entry in _crateFires) if (ReferenceEquals(entry.Fire, entity)) return true;
+        return false;
+    }
+
+    private void TameCrateFire(FireBall fire)
+    {
+        if (fire is null || fire.IsDestroyed) return;
+        var entry = new CrateFire { Fire = fire, Damage = fire.damagePerSecond * CrateFireTick, Radius = Mathf.Min(fire.radius, CrateFireRadius) };
+        fire.damagePerSecond = 0f;
+        fire.AttackLayers = 0;
+        fire.radius = 0f;
+        if (!IsLoaded) return;
+        _crateFires.Add(entry);
+        if (_crateFires.Count > 1) return;
+        timer.Destroy(ref _crateFireTimer);
+        _crateFireTimer = timer.Every(CrateFireTick, CrateFireStep);
+    }
+
+    private void CrateFireStep()
+    {
+        List<BasePlayer> near = Facepunch.Pool.Get<List<BasePlayer>>();
+        try
+        {
+            for (int i = _crateFires.Count - 1; i >= 0; i--)
+            {
+                CrateFire entry = _crateFires[i];
+                FireBall fire = entry.Fire;
+                if (fire is null || fire.IsDestroyed) { _crateFires.RemoveAt(i); continue; }
+                Vector3 center = fire.transform.position + Vector3.up * (entry.Radius * 0.75f);
+                near.Clear();
+                Vis.Entities(center, entry.Radius, near, Rust.Layers.Mask.Player_Server, QueryTriggerInteraction.Ignore);
+                foreach (BasePlayer player in near)
+                {
+                    if (!Targetable(player) || !player.IsVisible(center)) continue;
+                    if (Interface.CallHook(CrateFireHitHook, player) is not null) continue;
+                    Effect.server.Run(CrateFireHitEffect, player, 0, Vector3.up, Vector3.up);
+                    player.OnAttacked(new HitInfo(fire, player, Rust.DamageType.Heat, entry.Damage, player.transform.position));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            PrintError("Crate fire tick failed; the fires stay lit but burn nobody from now on: " + ex);
+            _crateFires.Clear();
+        }
+        finally { Facepunch.Pool.FreeUnmanaged(ref near); }
+        if (_crateFires.Count == 0) DropCrateFires();
+    }
+
+    private void DropCrateFires()
+    {
+        timer.Destroy(ref _crateFireTimer);
+        _crateFires.Clear();
     }
 
     private bool Exposed()
@@ -2201,8 +2829,10 @@ public class ScrapWorm : RustPlugin
 
     private void SetupTerritories()
     {
+        float edge = World.Size * 0.5f;
         foreach (TerritorySpec spec in _settings.Territories)
         {
+            if (Mathf.Abs(spec.X) > edge || Mathf.Abs(spec.Z) > edge) { PrintWarning($"Territory '{spec.Name}' ({spec.X:0}, {spec.Z:0}) is outside the {World.Size} m map, skipped."); continue; }
             Vector3 center = new(spec.X, 0f, spec.Z);
             center.y = TerrainMeta.HeightMap.GetHeight(center);
             _territories.Add(new Territory { Name = spec.Name.Length > 0 ? spec.Name : MapHelper.PositionToString(center), Center = center, Radius = spec.Radius });
@@ -2216,7 +2846,7 @@ public class ScrapWorm : RustPlugin
             int why = TerritoryProblem(center, _settings.TerritoryRadius);
             if (why >= 0) { rejected[why]++; continue; }
             center.y = TerrainMeta.HeightMap.GetHeight(center);
-            _territories.Add(new Territory { Name = MapHelper.PositionToString(center), Center = center, Radius = _settings.TerritoryRadius, Generated = true });
+            _territories.Add(new Territory { Name = MapHelper.PositionToString(center), Center = center, Radius = _settings.TerritoryRadius });
             added++;
         }
         if (_settings.MapMarkers) foreach (Territory territory in _territories) territory.Marker = SpawnMarker(territory, false);
@@ -2466,14 +3096,42 @@ public class ScrapWorm : RustPlugin
         {
             _eventTimer = null;
             bool started = false;
-            try { started = _ready && _parts.Count == 0 && BasePlayer.activePlayerList.Count >= _settings.MinPlayers && StartEvent(); }
-            finally { if (!started && _ready) ScheduleEvent(_settings.IntervalMinutes); }
+            bool blocked = false;
+            try { started = _ready && _parts.Count == 0 && BasePlayer.activePlayerList.Count >= _settings.MinPlayers && !(blocked = OtherColossusActive()) && StartEvent(); }
+            finally
+            {
+                if (!started && _ready)
+                {
+                    float retry = blocked ? Mathf.Min(_settings.IntervalMinutes, 5f + UnityEngine.Random.Range(0f, 5f)) : _settings.IntervalMinutes;
+                    if (blocked) Puts($"Automatic start skipped: another Colossus is out; retrying in {retry:0} min.");
+                    ScheduleEvent(retry);
+                }
+            }
         });
+    }
+
+    private bool IsColossusActive() => _parts.Count > 0;
+
+    private static readonly string[] OtherColossi = { "ScrapLeviathan", "ScrapStormray" };
+
+    private bool OtherColossusActive()
+    {
+        foreach (string name in OtherColossi)
+            if (plugins.Find(name) is { IsLoaded: true } other && other.Call("IsColossusActive") is true) return true;
+        return false;
     }
 
     private bool StartEvent()
     {
-        if (!HasPlaces || _parts.Count > 0) return false;
+        _raidBlockedStarts = 0;
+        bool started = StartEventIn();
+        if (!started && _raidBlockedStarts > 0) Puts($"No start; {_raidBlockedStarts} breach spots were skipped next to a RaidableBases base (SpareRaidableBases).");
+        return started;
+    }
+
+    private bool StartEventIn()
+    {
+        if (!HasPlaces || _parts.Count > 0 || OtherColossusActive()) return false;
         if (_settings.RandomLocationEachEvent)
         {
             float half = World.Size * 0.5f - _settings.TerritoryRadius - 100f;
@@ -2482,7 +3140,7 @@ public class ScrapWorm : RustPlugin
                 Vector3 center = new(UnityEngine.Random.Range(-half, half), 0f, UnityEngine.Random.Range(-half, half));
                 if (TerritoryProblem(center, _settings.TerritoryRadius) >= 0) continue;
                 center.y = TerrainMeta.HeightMap.GetHeight(center);
-                var place = new Territory { Name = MapHelper.PositionToString(center), Center = center, Radius = _settings.TerritoryRadius, Temporary = true, Generated = true };
+                var place = new Territory { Name = MapHelper.PositionToString(center), Center = center, Radius = _settings.TerritoryRadius, Temporary = true };
                 int result = TryStartIn(place, 10);
                 if (result != 0) return result > 0;
             }
@@ -2504,7 +3162,8 @@ public class ScrapWorm : RustPlugin
             Vector2 offset = UnityEngine.Random.insideUnitCircle * territory.Radius * 0.6f;
             Vector3 heading = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f) * Vector3.forward;
             RollArc();
-            if (!TryPlaceArc(territory.Center + new Vector3(offset.x, 0f, offset.y), heading, territory)) continue;
+            Vector3 start = territory.Center + new Vector3(offset.x, 0f, offset.y);
+            if (!TryPlaceArc(start, heading, territory, !_settings.DestroyBuildings)) continue;
             _territory = territory;
             try { SpawnWorm(); }
             catch (Exception ex)
@@ -2533,6 +3192,7 @@ public class ScrapWorm : RustPlugin
             if (player is not null && player.IsConnected && !player.IsDead() && Near(player.transform.position, center, _settings.IdleRadius)) { _lastSeenAt = now; break; }
         bool idle = now - _lastSeenAt > _settings.IdleMinutes * 60f;
         bool expired = _eventEndsAt > 0f && now > _eventEndsAt;
+        if (expired && now <= _eventEndsAt + _settings.LifetimeMinutes * 60f && Fighting(now)) expired = false;
         if (!idle && (!expired || _breaching)) return false;
         string name = _territory?.Name ?? MapHelper.PositionToString(center);
         Vector3 hub = _territory?.Center ?? center;
@@ -2543,6 +3203,9 @@ public class ScrapWorm : RustPlugin
         return true;
     }
 
+    private bool Fighting(float now)
+        => _biteTarget is not null || now - _lastDamageAt < FightSeconds || _settings.HuntNoise && now - _noiseAt <= _settings.NoiseMemorySeconds;
+
     private void PayRewards()
     {
         int ranks = Math.Max(_settings.RewardEconomics.Count, _settings.RewardServerRewards.Count);
@@ -2550,14 +3213,24 @@ public class ScrapWorm : RustPlugin
         Plugin economics = Live(Economics, nameof(Economics)), serverRewards = Live(ServerRewards, nameof(ServerRewards));
         var ranking = new List<KeyValuePair<ulong, float>>(_damageBy);
         ranking.Sort(static (a, b) => b.Value.CompareTo(a.Value));
+        float floor = _settings.MinRewardShare * _maxHealth;
         for (int rank = 0; rank < ranks && rank < ranking.Count; rank++)
         {
+            if (ranking[rank].Value < floor) continue;
             ulong id = ranking[rank].Key;
             double money = rank < _settings.RewardEconomics.Count ? _settings.RewardEconomics[rank] : 0;
             int points = rank < _settings.RewardServerRewards.Count ? _settings.RewardServerRewards[rank] : 0;
             var paid = new List<string>(2);
-            if (money > 0 && economics is not null && economics.Call("Deposit", id, money) is true) paid.Add("$" + money.ToString("N0", CultureInfo.InvariantCulture));
-            if (points > 0 && serverRewards is not null && serverRewards.Call("AddPoints", id, points) is true) paid.Add(points.ToString("N0", CultureInfo.InvariantCulture) + " RP");
+            if (money > 0 && economics is not null)
+            {
+                if (economics.Call("Deposit", id, money) is true) paid.Add("$" + money.ToString("N0", CultureInfo.InvariantCulture));
+                else PrintWarning($"Economics did not pay rank {rank + 1} ({id}): {money.ToString("N0", CultureInfo.InvariantCulture)} was not deposited.");
+            }
+            if (points > 0 && serverRewards is not null)
+            {
+                if (serverRewards.Call("AddPoints", id, points) is true) paid.Add(points.ToString("N0", CultureInfo.InvariantCulture) + " RP");
+                else PrintWarning($"ServerRewards did not pay rank {rank + 1} ({id}): {points.ToString("N0", CultureInfo.InvariantCulture)} RP were not added.");
+            }
             BasePlayer player = RelationshipManager.FindByID(id);
             if (paid.Count > 0 && player is not null && player.IsConnected) Tell(player, Fmt(Msg(LangKeys.RewardPaid, player), rank + 1, string.Join(" + ", paid)));
         }
@@ -2633,6 +3306,7 @@ public class ScrapWorm : RustPlugin
 
     private void RemoveWorm()
     {
+        RetireRoar();
         HideSurfaceMarker();
         if (_territory is not null)
         {
@@ -2667,6 +3341,20 @@ public class ScrapWorm : RustPlugin
             catch (Exception ex) { PrintError("Failed to remove worm part: " + ex); }
         }
         _parts.Clear();
+        for (int segment = Segments - 1; segment >= 0; segment--)
+        {
+            BaseEntity anchor = _anchors[segment];
+            _anchors[segment] = null;
+            if (anchor is null || anchor.IsDestroyed) continue;
+            try { anchor.Kill(); }
+            catch (Exception ex) { PrintError("Failed to remove worm anchor: " + ex); }
+        }
+        foreach (BaseEntity entity in new List<BaseEntity>(_owned))
+        {
+            if (entity is null || entity.IsDestroyed) continue;
+            try { entity.Kill(); }
+            catch (Exception ex) { PrintError("Failed to remove worm piece: " + ex); }
+        }
         _owned.Clear();
         _coresAlive = 0;
         ToggleProtection(false);
@@ -2675,8 +3363,10 @@ public class ScrapWorm : RustPlugin
     private void Unload()
     {
         _ready = false;
+        DropCrateFires();
         timer.Destroy(ref _eventTimer);
         RemoveWorm();
+        DropRoar();
         SaveWarned();
         if (_settings is not null) SaveLootLocks();
         SavePendingWinners();

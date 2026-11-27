@@ -1,0 +1,33 @@
+{
+  "key": "ice_lake_4",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:41",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -87.51671,
+      "y": -7.5710144,
+      "z": -87.56927
+    },
+    "localMax": {
+      "x": 84.40477,
+      "y": 10.5933075,
+      "z": 83.24525
+    },
+    "tilesX": 17,
+    "tilesZ": 17,
+    "tilesBuilt": 59,
+    "polys": 381,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 1,
+  "nodes": []
+}

@@ -1,0 +1,33 @@
+{
+  "key": "water_well_a",
+  "kind": "monument",
+  "format": 1,
+  "build": {
+    "buildId": "2633.288",
+    "date": "2026-09-20 01:40",
+    "cell": 0.0833333358,
+    "cellHeight": 0.0833333358,
+    "tileVoxels": 128,
+    "agentRadius": 0.15,
+    "agentHeight": 1.1,
+    "agentClimb": 0.51,
+    "agentSlope": 45.0,
+    "localMin": {
+      "x": -33.9,
+      "y": -31.2,
+      "z": -36.4
+    },
+    "localMax": {
+      "x": 33.9,
+      "y": 31.2,
+      "z": 36.4
+    },
+    "tilesX": 7,
+    "tilesZ": 7,
+    "tilesBuilt": 12,
+    "polys": 215,
+    "terrain": "monumentMaps"
+  },
+  "nextId": 7,
+  "nodes": []
+}
