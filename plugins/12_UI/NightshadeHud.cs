@@ -2,9 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
-using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using Oxide.Game.Rust.Cui;
@@ -12,8 +13,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.1.3")]
-    [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, TC shield, and event labels.")]
+    [Info("NightshadeHud", "Nightshade", "1.2.0")]
+    [Description("Text HUD on the top-right or under the missions bar: clock, PvP countdown, raid protection, teleport prices, and event labels.")]
     public class NightshadeHud : RustPlugin
     {
         private const string Root = "NightshadeHud";
@@ -23,7 +24,12 @@ namespace Oxide.Plugins
         private const string IconDrag = "NightshadeHud.IconDrag";
         private const string Half = "NightshadeHud.Half";
         private const string Events = "NightshadeHud.Events";
+        private const string BorderName = "NightshadeHud.Border";
+        private const string BorderKey = "NightshadeHud.Border";
+        private const string TeleportTitleName = "NightshadeHud.TeleportTitle";
+        private const string TeleportPriceName = "NightshadeHud.TeleportPrice";
         private const string DataPath = "Nightshade/NightshadeHud/State";
+        private const string DefaultBorderFile = "Nightshade/NightshadeHud/hud_border.png";
         private const float Pad = 6f;
         private const float Line = 15f;
         private const int BadgeFont = 8;
@@ -45,6 +51,7 @@ namespace Oxide.Plugins
         [PluginReference] private Plugin ArmoredTrain;
         [PluginReference] private Plugin Convoy;
         [PluginReference] private Plugin DefendableHomes;
+        [PluginReference] private Plugin ImageLibrary;
 
         private Settings config;
         private Stored stored;
@@ -54,6 +61,8 @@ namespace Oxide.Plugins
         private bool eventsDirty;
         private bool popDirty;
         private Timer clockTimer;
+        private Timer priceTimer;
+        private Timer borderTimer;
         private Coroutine startupRoutine;
         private Coroutine convoyRoutine;
 
@@ -70,6 +79,11 @@ namespace Oxide.Plugins
         private string onlineCache = "\0";
         private string countdownCache = "\0";
         private string deepSeaCache = "\0";
+        private int outpostPrice = 150;
+        private int banditPrice = 200;
+        private bool priceFileWarned;
+        private int borderTries;
+        private string drawnBorderCrc;
 
         private readonly HashSet<ulong> bradleys = new HashSet<ulong>();
         private readonly HashSet<ulong> helis = new HashSet<ulong>();
@@ -119,6 +133,18 @@ namespace Oxide.Plugins
             [JsonProperty("Show PvP countdown")] public bool ShowCountdown = true;
             [JsonProperty("Show shield line")] public bool ShowShield = true;
             [JsonProperty("Hide shield line when none")] public bool HideShieldWhenNone = false;
+            [JsonProperty("Show teleportation block")] public bool ShowTeleport = true;
+            [JsonProperty("Teleportation title")] public string TeleportTitle = "Teleportation";
+            [JsonProperty("Teleportation title color")] public string TeleportTitleColor = "#50A0FF";
+            [JsonProperty("Teleportation label format")] public string TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
+            [JsonProperty("Default Outpost price")] public int DefaultOutpostPrice = 150;
+            [JsonProperty("Default Bandit price")] public int DefaultBanditPrice = 200;
+            [JsonProperty("Show border")] public bool ShowBorder = true;
+            [JsonProperty("Border image file")] public string BorderImage = DefaultBorderFile;
+            [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 8f;
+            [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 8f;
+            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 6f;
+            [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 8f;
             [JsonProperty("Panel color")] public string PanelColor = "#0E0E12";
             [JsonProperty("Panel opacity (0-100)")] public float PanelOpacity = 78f;
             [JsonProperty("Name color")] public string NameColor = "#A267D3";
@@ -194,6 +220,12 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.HeliActiveColor)) config.HeliActiveColor = "#FF4D4D";
             if (string.IsNullOrEmpty(config.BradleyLabel)) config.BradleyLabel = "BRAD";
             if (config.BradleyActiveColor == null) config.BradleyActiveColor = "";
+            if (config.TeleportTitle == null) config.TeleportTitle = "Teleportation";
+            if (string.IsNullOrEmpty(config.TeleportTitleColor)) config.TeleportTitleColor = "#50A0FF";
+            if (string.IsNullOrEmpty(config.TeleportFormat)) config.TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
+            if (config.DefaultOutpostPrice < 0) config.DefaultOutpostPrice = 150;
+            if (config.DefaultBanditPrice < 0) config.DefaultBanditPrice = 200;
+            if (string.IsNullOrEmpty(config.BorderImage)) config.BorderImage = DefaultBorderFile;
             bool added = false;
             foreach (var known in DefaultEvents())
             {
@@ -254,6 +286,8 @@ namespace Oxide.Plugins
         private void Unload()
         {
             clockTimer?.Destroy();
+            priceTimer?.Destroy();
+            borderTimer?.Destroy();
             foreach (var pending in dragCommit.Values)
                 if (pending != null) pending.Destroy();
             dragCommit.Clear();
@@ -269,7 +303,11 @@ namespace Oxide.Plugins
                 if (player != null) CuiHelper.DestroyUi(player, Root);
         }
 
-        private void OnServerSave() => SaveData();
+        private void OnServerSave()
+        {
+            SaveData();
+            RefreshTeleportPrices(true);
+        }
 
         private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(DataPath, stored);
 
@@ -426,8 +464,9 @@ namespace Oxide.Plugins
             if (state != "minimized")
             {
                 AddBackground(container);
+                AddBorder(container, player, state);
                 AddHalf(container, player);
-                if (state == "full") AddEvents(container);
+                if (state == "full") AddEvents(container, player);
             }
             AddIconGroup(container, state);
             CuiHelper.AddUi(player, container);
@@ -442,20 +481,22 @@ namespace Oxide.Plugins
             {
                 var add = new CuiElementContainer();
                 AddBackground(add);
+                AddBorder(add, player, to);
                 AddHalf(add, player);
-                if (to == "full") AddEvents(add);
+                if (to == "full") AddEvents(add, player);
                 CuiHelper.AddUi(player, add);
             }
             else if (to == "minimized")
             {
                 CuiHelper.DestroyUi(player, Bg);
+                CuiHelper.DestroyUi(player, BorderName);
                 CuiHelper.DestroyUi(player, Half);
                 CuiHelper.DestroyUi(player, Events);
             }
             else if (from == "half" && to == "full")
             {
                 var add = new CuiElementContainer();
-                AddEvents(add);
+                AddEvents(add, player);
                 CuiHelper.AddUi(player, add);
             }
             else if (from == "full" && to == "half")
@@ -699,44 +740,54 @@ namespace Oxide.Plugins
             string parent = HalfParent(container);
             float nameX = Pad + config.IconSize + 3f;
             float edge = config.Width - Pad;
+            const float clockW = 68f;
+            float clockLeft = edge - clockW;
+            float textLimit = clockLeft - 4f;
             string name = string.IsNullOrEmpty(config.ServerName) ? "Nightshade" : config.ServerName;
             float nameInk = TextWidth(name, 12, true);
-            float nameRight = Mathf.Min(nameX + nameInk + 1f, edge);
+            float nameRight = Mathf.Min(nameX + nameInk + 1f, textLimit);
             AddLabel(container, "NightshadeHud.Name", parent, name, Hex(config.NameColor), 12, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, top - 16f), Px(nameRight, top), true);
             float tagX = nameX + nameInk + 4f;
-            if (!string.IsNullOrEmpty(config.TagText) && tagX < edge - 8f)
-                AddLabel(container, "NightshadeHud.Tag", parent, config.TagText, Hex(config.TagColor), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(tagX, top - 16f), Px(edge, top));
+            if (!string.IsNullOrEmpty(config.TagText) && tagX < textLimit - 8f)
+                AddLabel(container, "NightshadeHud.Tag", parent, config.TagText, Hex(config.TagColor), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(tagX, top - 16f), Px(textLimit, top));
+            AddLabel(container, "NightshadeHud.Clock", parent, ClockText(), Hex(config.ClockColor), 11, TextAnchor.MiddleRight, "0 1", "0 1", Px(clockLeft, top - 16f), Px(edge, top));
             float row2 = top - 18f;
-            float clockW = 68f;
-            AddLabel(container, "NightshadeHud.Online", parent, OnlineText(), Hex(config.MutedColor, 0.95f), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, row2 - 16f), Px(config.Width - Pad - clockW - 4f, row2));
-            AddLabel(container, "NightshadeHud.Clock", parent, ClockText(), Hex(config.ClockColor), 11, TextAnchor.MiddleRight, "0 1", "0 1", Px(config.Width - Pad - clockW, row2 - 16f), Px(config.Width - Pad, row2));
+            AddLabel(container, "NightshadeHud.Online", parent, OnlineText(), Hex(config.MutedColor, 0.95f), 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, row2 - 16f), Px(edge, row2));
             float y = -(Pad + config.IconSize + BadgeHang() + 2f);
+            bool shield = ShieldVisible(player);
+            bool teleport = ShowTeleport();
+            float teleLeft = edge;
+            float teleRight = edge;
+            if (teleport) TeleportSpan(out teleLeft, out teleRight);
             string countText, countColor;
             Countdown(out countText, out countColor);
-            float split = Mathf.Max(120f, config.Width * 0.56f);
-            AddLabel(container, "NightshadeHud.Countdown", parent, countText, countColor, 11, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(split, y));
-            string shieldText, shieldColor;
-            ShieldLine(player, out shieldText, out shieldColor);
-            AddLabel(container, "NightshadeHud.Shield", parent, shieldText, shieldColor, 11, TextAnchor.MiddleRight, "0 1", "0 1", Px(split + 4f, y - Line), Px(config.Width - Pad, y));
+            float countRight = teleport && !shield ? Mathf.Max(Pad + 8f, teleLeft - 4f) : edge;
+            AddLabel(container, "NightshadeHud.Countdown", parent, countText, countColor, 11, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(countRight, y));
             y -= Line;
-            if (config.ShowShield)
+            if (shield)
             {
-                string queueText, queueColor;
-                ShieldQueueLine(player, out queueText, out queueColor);
-                AddLabel(container, "NightshadeHud.ShieldQueue", parent, queueText, queueColor, 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(config.Width - Pad, y));
+                float shieldRight = teleport ? Mathf.Max(Pad + 8f, teleLeft - 4f) : edge;
+                string shieldText, shieldColor;
+                RaidLine(player, out shieldText, out shieldColor);
+                shieldText = FitWidth(shieldText, 10, false, Mathf.Max(8f, shieldRight - Pad));
+                AddLabel(container, "NightshadeHud.ShieldQueue", parent, shieldText, shieldColor, 10, TextAnchor.MiddleLeft, "0 1", "0 1", Px(Pad, y - Line), Px(shieldRight, y));
+                if (teleport) AddTeleportTitle(container, parent, y, teleLeft, teleRight);
                 y -= Line;
             }
-            AddStatusLine(container, parent, y);
+            else if (teleport)
+                AddTeleportTitle(container, parent, y + Line, teleLeft, teleRight);
+            AddStatusLine(container, parent, y, teleport, teleLeft);
             if (player != null) shieldCache[player.userID] = ShieldSignature(player);
             clockCache = ClockText();
             onlineCache = OnlineText();
             countdownCache = countText + "|" + countColor;
         }
 
-        private void AddStatusLine(CuiElementContainer container, string parent, float y)
+        private void AddStatusLine(CuiElementContainer container, string parent, float y, bool teleport, float teleLeft)
         {
             float x = Pad;
             float limit = config.Width - Pad;
+            if (teleport) limit = Mathf.Max(x + 8f, teleLeft - 6f);
             const float gap = 10f;
             const int font = 11;
             if (ShowDeepSea())
@@ -746,6 +797,7 @@ namespace Oxide.Plugins
                 x = AddChip(container, "NightshadeHud.DeepSea", parent, text, color, font, x, TextWidth(text, font, false) + 2f, limit, y) + gap;
                 deepSeaCache = text + "|" + color;
             }
+            if (teleport) AddTeleportPrice(container, parent, y);
         }
 
         private float AddChip(CuiElementContainer container, string name, string parent, string text, string color, int font, float x, float width, float limit, float y)
@@ -772,9 +824,10 @@ namespace Oxide.Plugins
             return Half;
         }
 
-        private void AddEvents(CuiElementContainer container)
+        private void AddEvents(CuiElementContainer container, BasePlayer player)
         {
             var enabled = EnabledEvents();
+            float top = HalfHeight(player) + EventGap();
             container.Add(new CuiElement
             {
                 Name = Events,
@@ -782,7 +835,7 @@ namespace Oxide.Plugins
                 Components =
                 {
                     new CuiImageComponent { Color = "0 0 0 0" },
-                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(0f, -PanelHeight("full")), OffsetMax = Px(config.Width, -HalfHeight()) }
+                    new CuiRectTransformComponent { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = Px(0f, -PanelHeight(player, "full")), OffsetMax = Px(config.Width, -top) }
                 }
             });
             int columns = Math.Max(1, config.Columns);
@@ -857,7 +910,7 @@ namespace Oxide.Plugins
 
         private string OffsetMin(BasePlayer player, string state)
         {
-            float height = PanelHeight(state);
+            float height = PanelHeight(player, state);
             if (!OnLeft(player))
             {
                 float width = state == "minimized" ? config.IconSize : config.Width;
@@ -933,22 +986,30 @@ namespace Oxide.Plugins
             SetSide(player, x < 0.5f ? "left" : "right");
         }
 
-        private float HalfHeight()
+        private float HalfHeight(BasePlayer player)
         {
             float height = Pad + config.IconSize + BadgeHang() + 2f + Line;
-            if (config != null && config.ShowShield) height += Line;
+            if (ShieldVisible(player)) height += Line;
             if (HasStatusLine()) height += Line;
             return height + Pad;
         }
 
-        private float PanelHeight(string state)
+        // Keeps the border's bottom flowers off the event labels in the full view.
+        private float EventGap()
+        {
+            if (config == null || !config.ShowBorder) return 0f;
+            return Mathf.Max(0f, config.BorderOutsetBottom);
+        }
+
+        private float PanelHeight(BasePlayer player, string state)
         {
             if (state == "minimized") return config.IconSize + BadgeHang();
-            if (state != "full") return HalfHeight();
+            if (state != "full") return HalfHeight(player);
             int count = EnabledEvents().Count;
             int columns = Math.Max(1, config.Columns);
             int rows = count == 0 ? 0 : (count + columns - 1) / columns;
-            return HalfHeight() + rows * Line + (rows > 0 ? 4f : 0f);
+            float gap = rows > 0 ? EventGap() : 0f;
+            return HalfHeight(player) + gap + rows * Line + (rows > 0 ? 4f : 0f);
         }
 
         #endregion
@@ -1041,14 +1102,29 @@ namespace Oxide.Plugins
             if (!shown.TryGetValue(player.userID, out state) || state == "minimized") return;
             string sig = ShieldSignature(player);
             string previous;
-            if (!force && shieldCache.TryGetValue(player.userID, out previous) && previous == sig) return;
+            bool had = shieldCache.TryGetValue(player.userID, out previous);
+            if (!force && had && previous == sig) return;
+            bool wasVisible = had && previous.StartsWith("1|", StringComparison.Ordinal);
+            bool nowVisible = sig.StartsWith("1|", StringComparison.Ordinal);
+            if (had && wasVisible != nowVisible)
+            {
+                Show(player);
+                return;
+            }
             shieldCache[player.userID] = sig;
-            string text, color, queueText, queueColor;
-            ShieldLine(player, out text, out color);
-            ShieldQueueLine(player, out queueText, out queueColor);
-            PushText(player, "NightshadeHud.Shield", text, color, TextAnchor.MiddleRight);
-            if (config.ShowShield)
-                PushText(player, "NightshadeHud.ShieldQueue", queueText, queueColor, TextAnchor.MiddleLeft, 10);
+            if (!nowVisible) return;
+            string text, color;
+            RaidLine(player, out text, out color);
+            float edge = config.Width - Pad;
+            float shieldRight = edge;
+            if (ShowTeleport())
+            {
+                float teleLeft, teleRight;
+                TeleportSpan(out teleLeft, out teleRight);
+                shieldRight = Mathf.Max(Pad + 8f, teleLeft - 4f);
+            }
+            text = FitWidth(text, 10, false, Mathf.Max(8f, shieldRight - Pad));
+            PushText(player, "NightshadeHud.ShieldQueue", text, color, TextAnchor.MiddleLeft, 10);
         }
 
         private void PushBadge(BasePlayer player, bool pvp)
@@ -1223,117 +1299,56 @@ namespace Oxide.Plugins
             return Math.Max(0d, ToDouble(WeekendPlugin().Call("API_SecondsUntilPvPChange")));
         }
 
-        private void ShieldLine(BasePlayer player, out string text, out string color)
-        {
-            if (!config.ShowShield)
-            {
-                text = string.Empty;
-                color = Hex(config.MutedColor, config.InactiveAlpha);
-                return;
-            }
-            if (player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
-            {
-                text = "Shield: \u2014";
-                color = Hex(config.MutedColor, config.InactiveAlpha);
-                return;
-            }
-            object raw = WeekendPlugin().Call("API_GetPlayerShield", player);
-            string state = DictString(raw, "state") ?? "none";
-            double seconds = ToDouble(DictValue(raw, "seconds"));
-            if (state == "active")
-            {
-                text = "Shield " + CompactDur(seconds);
-                color = Hex(config.ShieldActive);
-                return;
-            }
-            if (state == "queued")
-            {
-                text = "Queued " + CompactDur(seconds);
-                color = Hex(config.ShieldQueued);
-                return;
-            }
-            text = config.HideShieldWhenNone ? string.Empty : "No shield";
-            color = Hex(config.MutedColor, config.InactiveAlpha);
-        }
-
-        private void ShieldQueueLine(BasePlayer player, out string text, out string color)
+        private void RaidLine(BasePlayer player, out string text, out string color)
         {
             text = string.Empty;
             color = Hex(config.MutedColor, config.InactiveAlpha);
-            if (!config.ShowShield || player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
+            if (config == null || !config.ShowShield || player == null || WeekendPlugin() == null || !WeekendPlugin().IsLoaded)
                 return;
             object raw = WeekendPlugin().Call("API_GetPlayerShield", player);
             string state = DictString(raw, "state") ?? "none";
             if (state != "active" && state != "queued") return;
+            double seconds = ToDouble(DictValue(raw, "seconds"));
+            if (seconds <= 0d) return;
             bool draining = DictBool(raw, "draining") || state == "active";
-            double until = ToDouble(DictValue(raw, "secondsUntilDrain"));
-            string entries = DictString(raw, "entries");
-            string body = QueueBody(entries);
-            if (string.IsNullOrEmpty(body)) body = CompactDur(ToDouble(DictValue(raw, "seconds")));
-            string tail = draining ? "counting down" : "starts in " + FormatDur(until);
-            text = FitWidth(body + " left, " + tail, 10, false);
+            int hours = HoursLeft(seconds);
+            text = "RaidProtection: " + hours.ToString(CultureInfo.InvariantCulture) + "h left";
             color = draining ? Hex(config.ShieldActive) : Hex(config.ShieldQueued);
         }
 
-        private static string QueueBody(string entries)
+        private static int HoursLeft(double seconds)
         {
-            if (string.IsNullOrEmpty(entries)) return string.Empty;
-            string[] parts = entries.Split(',');
-            StringBuilder sb = new StringBuilder();
-            int shown = 0;
-            for (int i = 0; i < parts.Length; i++)
-            {
-                double seconds;
-                if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out seconds)) continue;
-                if (sb.Length > 0) sb.Append(", ");
-                sb.Append(CompactDur(seconds));
-                shown++;
-                if (shown >= 6)
-                {
-                    if (i + 1 < parts.Length) sb.Append(", ...");
-                    break;
-                }
-            }
-            return sb.ToString();
+            if (seconds < 0d || double.IsNaN(seconds) || double.IsInfinity(seconds)) return 0;
+            int total = (int)Math.Ceiling(seconds);
+            if (total < 0) return 0;
+            return total / 3600;
         }
 
-        private string FitWidth(string text, int font, bool bold)
+        private bool ShieldVisible(BasePlayer player)
+        {
+            string text, color;
+            RaidLine(player, out text, out color);
+            return !string.IsNullOrEmpty(text);
+        }
+
+        private string FitWidth(string text, int font, bool bold, float limit)
         {
             if (string.IsNullOrEmpty(text)) return string.Empty;
-            float limit = Math.Max(40f, config.Width - Pad * 2f);
+            if (limit < 8f) limit = 8f;
             if (TextWidth(text, font, bold) <= limit) return text;
             const string ellipsis = "...";
             int keep = text.Length;
             while (keep > 4 && TextWidth(text.Substring(0, keep) + ellipsis, font, bold) > limit) keep--;
+            if (keep < 4) return string.Empty;
             return text.Substring(0, keep) + ellipsis;
-        }
-
-        private static string CompactDur(double seconds)
-        {
-            if (seconds < 0d || double.IsNaN(seconds) || double.IsInfinity(seconds)) seconds = 0d;
-            int total = (int)Math.Ceiling(seconds);
-            int hours = total / 3600;
-            int minutes = (total % 3600) / 60;
-            if (hours >= 48)
-            {
-                int days = hours / 24;
-                int left = hours % 24;
-                return left == 0
-                    ? days.ToString(CultureInfo.InvariantCulture) + "d"
-                    : days.ToString(CultureInfo.InvariantCulture) + "d " + left.ToString(CultureInfo.InvariantCulture) + "h";
-            }
-            if (hours > 0 && minutes == 0) return hours.ToString(CultureInfo.InvariantCulture) + "h";
-            if (hours > 0) return hours.ToString(CultureInfo.InvariantCulture) + "h " + minutes.ToString(CultureInfo.InvariantCulture) + "m";
-            if (minutes > 0) return minutes.ToString(CultureInfo.InvariantCulture) + "m";
-            return (total % 60).ToString(CultureInfo.InvariantCulture) + "s";
         }
 
         private string ShieldSignature(BasePlayer player)
         {
-            string text, color, queueText, queueColor;
-            ShieldLine(player, out text, out color);
-            ShieldQueueLine(player, out queueText, out queueColor);
-            return text + "|" + color + "|" + queueText + "|" + queueColor;
+            string text, color;
+            RaidLine(player, out text, out color);
+            bool visible = !string.IsNullOrEmpty(text);
+            return (visible ? "1|" : "0|") + text + "|" + color;
         }
 
         private void DebugHud(BasePlayer player)
@@ -1375,7 +1390,9 @@ namespace Oxide.Plugins
 
         private void OnPluginLoaded(Plugin plugin)
         {
-            if (plugin == null || scanning) return;
+            if (plugin == null) return;
+            if (plugin.Name == "ImageLibrary") LoadBorder();
+            if (scanning) return;
             timer.Once(1f, () => RefreshFromPlugin(plugin.Name));
         }
 
@@ -1570,6 +1587,8 @@ namespace Oxide.Plugins
             defend = CountDefend();
             scanning = false;
             eventCache.Clear();
+            RefreshTeleportPrices(false);
+            LoadBorder();
             MarkEvents();
             var players = new List<BasePlayer>();
             if (BasePlayer.activePlayerList != null)
@@ -1582,6 +1601,8 @@ namespace Oxide.Plugins
                 if ((i + 1) % 2 == 0) yield return null;
             }
             ScheduleClock();
+            priceTimer?.Destroy();
+            priceTimer = timer.Every(120f, () => RefreshTeleportPrices(true));
             startupRoutine = null;
         }
 
@@ -1796,7 +1817,7 @@ namespace Oxide.Plugins
 
         private bool HasStatusLine()
         {
-            return ShowChip("DeepSea");
+            return ShowDeepSea() || ShowTeleport();
         }
 
         private bool ShowChip(string key)
@@ -1904,6 +1925,267 @@ namespace Oxide.Plugins
         private static EventCfg Ev(string key, string label, bool enabled, bool count, int order)
         {
             return new EventCfg { Key = key, Label = label, Enabled = enabled, ShowCount = count, Order = order };
+        }
+
+        #endregion
+
+        #region Teleport and border
+
+        private bool ShowTeleport()
+        {
+            return config != null && config.ShowTeleport;
+        }
+
+        private string TeleportTitleText()
+        {
+            return string.IsNullOrEmpty(config.TeleportTitle) ? "Teleportation" : config.TeleportTitle;
+        }
+
+        private string TeleportPriceText()
+        {
+            string format = string.IsNullOrEmpty(config.TeleportFormat)
+                ? "Outpost: {outpost}rp | Bandit: {bandit}rp"
+                : config.TeleportFormat;
+            return format
+                .Replace("{outpost}", outpostPrice.ToString(CultureInfo.InvariantCulture))
+                .Replace("{bandit}", banditPrice.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private void TeleportSpan(out float left, out float right)
+        {
+            right = config.Width - Pad;
+            float width = Mathf.Max(TextWidth(TeleportPriceText(), 11, false), TextWidth(TeleportTitleText(), 11, false));
+            left = right - width;
+            float minLeft = Pad + 48f;
+            if (left < minLeft) left = minLeft;
+        }
+
+        private void AddTeleportTitle(CuiElementContainer container, string parent, float y, float left, float right)
+        {
+            if (right - left < 8f) return;
+            string color = Hex(string.IsNullOrEmpty(config.TeleportTitleColor) ? "#50A0FF" : config.TeleportTitleColor);
+            AddLabel(container, TeleportTitleName, parent, TeleportTitleText(), color, 11, TextAnchor.MiddleCenter, "0 1", "0 1", Px(left, y - Line), Px(right, y));
+        }
+
+        private void AddTeleportPrice(CuiElementContainer container, string parent, float y)
+        {
+            float left, right;
+            TeleportSpan(out left, out right);
+            if (right - left < 8f) return;
+            AddLabel(container, TeleportPriceName, parent, TeleportPriceText(), Hex(config.ClockColor), 11, TextAnchor.MiddleCenter, "0 1", "0 1", Px(left, y - Line), Px(right, y));
+        }
+
+        private void RefreshTeleportPrices(bool redraw)
+        {
+            if (config == null) return;
+            int outpost = config.DefaultOutpostPrice;
+            int bandit = config.DefaultBanditPrice;
+            bool warned = false;
+            try
+            {
+                string path = Path.Combine(Interface.Oxide.ConfigDirectory, "NTeleportation.json");
+                if (!File.Exists(path))
+                {
+                    if (!priceFileWarned)
+                    {
+                        priceFileWarned = true;
+                        PrintWarning("NTeleportation.json was not found. Teleport prices are using the HUD defaults.");
+                    }
+                }
+                else
+                {
+                    JObject root = JObject.Parse(File.ReadAllText(path));
+                    JObject commands = FindObject(root, "Dynamic Commands");
+                    int parsed;
+                    if (commands == null || !TryPay(commands, "Outpost", out parsed))
+                        warned = true;
+                    else
+                        outpost = parsed;
+                    if (commands == null || !TryPay(commands, "Bandit", out parsed))
+                        warned = true;
+                    else
+                        bandit = parsed;
+                    if (warned && !priceFileWarned)
+                    {
+                        priceFileWarned = true;
+                        PrintWarning("NTeleportation.json is missing Outpost or Bandit Pay. Missing prices use the HUD defaults.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                if (!priceFileWarned)
+                {
+                    priceFileWarned = true;
+                    PrintWarning("Could not read NTeleportation prices: " + ex.Message);
+                }
+            }
+            bool changed = outpost != outpostPrice || bandit != banditPrice;
+            outpostPrice = outpost;
+            banditPrice = bandit;
+            if (redraw && changed && ShowTeleport()) RedrawBoxed();
+        }
+
+        private static JObject FindObject(JObject parent, string name)
+        {
+            if (parent == null || string.IsNullOrEmpty(name)) return null;
+            JToken direct = parent[name];
+            if (direct is JObject exact) return exact;
+            foreach (var property in parent.Properties())
+            {
+                if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                return property.Value as JObject;
+            }
+            return null;
+        }
+
+        private static bool TryPay(JObject commands, string key, out int pay)
+        {
+            pay = 0;
+            JObject entry = FindObject(commands, key);
+            if (entry == null) return false;
+            JToken token = entry["Pay"];
+            if (token == null)
+            {
+                foreach (var property in entry.Properties())
+                {
+                    if (!string.Equals(property.Name, "Pay", StringComparison.OrdinalIgnoreCase)) continue;
+                    token = property.Value;
+                    break;
+                }
+            }
+            if (token == null || token.Type == JTokenType.Null) return false;
+            double number;
+            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
+                number = token.Value<double>();
+            else if (!double.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
+                return false;
+            if (double.IsNaN(number) || double.IsInfinity(number) || number < 0d) return false;
+            pay = (int)Math.Round(number);
+            return true;
+        }
+
+        private void AddBorder(CuiElementContainer container, BasePlayer player, string state)
+        {
+            if (state == "minimized") return;
+            string png = BorderPng();
+            if (string.IsNullOrEmpty(png)) return;
+            float left = -config.BorderOutsetLeft;
+            float right = config.Width + config.BorderOutsetRight;
+            float top = config.BorderOutsetTop;
+            float bottom = HalfHeight(player) + Mathf.Max(0f, config.BorderOutsetBottom);
+            container.Add(new CuiElement
+            {
+                Name = BorderName,
+                Parent = Root,
+                Components =
+                {
+                    new CuiRawImageComponent
+                    {
+                        Png = png,
+                        Color = "1 1 1 1",
+                        Sprite = "assets/content/textures/generic/fulltransparent.tga"
+                    },
+                    new CuiRectTransformComponent
+                    {
+                        AnchorMin = "0 1",
+                        AnchorMax = "0 1",
+                        OffsetMin = Px(left, -bottom),
+                        OffsetMax = Px(right, top)
+                    }
+                }
+            });
+        }
+
+        private string BorderPng()
+        {
+            if (config == null || !config.ShowBorder) return null;
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded) return null;
+            try
+            {
+                object has = ImageLibrary.Call("HasImage", BorderKey, 0UL);
+                if (!(has is bool ready) || !ready) return null;
+                string png = ImageLibrary.Call<string>("GetImage", BorderKey, 0UL);
+                if (string.IsNullOrEmpty(png) || png == "0" || png == "NONE_0") return null;
+                return png;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string BorderFilePath()
+        {
+            string file = config == null ? null : config.BorderImage;
+            if (string.IsNullOrEmpty(file)) file = DefaultBorderFile;
+            file = file.Replace('\\', '/').Trim();
+            if (Path.IsPathRooted(file)) return file;
+            return Path.Combine(Interface.Oxide.DataDirectory, file.TrimStart('/'));
+        }
+
+        // ImageLibrary downloads http(s) only, so the frame is stored from the local file bytes.
+        private void LoadBorder()
+        {
+            borderTries = 0;
+            borderTimer?.Destroy();
+            borderTimer = null;
+            if (config == null || !config.ShowBorder) return;
+            if (ImageLibrary == null || !ImageLibrary.IsLoaded) return;
+            byte[] bytes;
+            try
+            {
+                string path = BorderFilePath();
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    PrintWarning("HUD border image was not found at " + path);
+                    return;
+                }
+                bytes = File.ReadAllBytes(path);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("HUD border image could not be read: " + ex.Message);
+                return;
+            }
+            if (bytes == null || bytes.Length == 0) return;
+            try
+            {
+                ImageLibrary.Call("AddImageData", BorderKey, bytes, 0UL);
+            }
+            catch (Exception ex)
+            {
+                PrintWarning("ImageLibrary rejected the HUD border: " + ex.Message);
+                return;
+            }
+            borderTimer = timer.Once(1f, CheckBorder);
+        }
+
+        private void CheckBorder()
+        {
+            borderTimer = null;
+            if (config == null || !config.ShowBorder) return;
+            string png = BorderPng();
+            if (!string.IsNullOrEmpty(png) && png != drawnBorderCrc)
+            {
+                drawnBorderCrc = png;
+                RedrawBoxed();
+            }
+            borderTries++;
+            if (borderTries >= 8) return;
+            borderTimer = timer.Once(2f, CheckBorder);
+        }
+
+        private void RedrawBoxed()
+        {
+            if (BasePlayer.activePlayerList == null) return;
+            foreach (var player in BasePlayer.activePlayerList)
+            {
+                if (player == null || !player.IsConnected) continue;
+                string state;
+                if (!shown.TryGetValue(player.userID, out state) || state == "minimized") continue;
+                Show(player);
+            }
         }
 
         #endregion
