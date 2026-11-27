@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.3.3")]
+    [Info("NightshadeHud", "Nightshade", "1.3.4")]
     [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
@@ -23,8 +23,6 @@ namespace Oxide.Plugins
         private const string IconDrag = "NightshadeHud.IconDrag";
         private const string Half = "NightshadeHud.Half";
         private const string BorderName = "NightshadeHud.Border";
-        private const string TeleportTitleName = "NightshadeHud.TeleportTitle";
-        private const string TeleportPriceName = "NightshadeHud.TeleportPrice";
         private const string CountdownName = "NightshadeHud.Countdown";
         private const string StatusSepName = "NightshadeHud.StatusSep";
         private const string ShieldName = "NightshadeHud.ShieldQueue";
@@ -34,14 +32,14 @@ namespace Oxide.Plugins
         private const string DefaultBackgroundFile = "Nightshade/NightshadeHud/hud_bg.png";
         private const string DefaultLogoFile = "logo.png";
         private const string DefaultPurgeLogoFile = "purge_logo.png";
-        private const string ConfigVersion = "1.3.3";
+        private const string ConfigVersion = "1.3.4";
         private const float DefaultScale = 0.75f;
-        private const float DefaultLogoScale = 1.3f;
+        private const float DefaultLogoScale = 1.5f;
+        private const float StockLogoScale = 1.3f;
         private const float StockHalfScale = 0.5f;
         // Design space is the 1.3.0 box (268x120) with the rows pulled together.
         // Scale 0.75 draws that box at about 201x90. Logo scale multiplies the icon on top of Scale.
         private const float DesignWidth = 268f;
-        private const float DesignHeight = 120f;
         private const float DesignIcon = 32f;
         private const float DesignPad = 8f;
         private const float DesignNameGap = 6f;
@@ -49,12 +47,7 @@ namespace Oxide.Plugins
         private const float DesignNameH = 20f;
         private const float DesignOnlineTop = 26f;
         private const float DesignOnlineH = 18f;
-        private const float DesignStatusTop = 44f;
-        private const float DesignStatusH = 20f;
-        private const float DesignTeleTitleTop = 70f;
-        private const float DesignTeleTitleH = 18f;
-        private const float DesignTelePriceTop = 88f;
-        private const float DesignTelePriceH = 18f;
+        private const float DesignStatusH = 18f;
         private const float DesignOutL = 8f;
         private const float DesignOutR = 8f;
         private const float DesignOutT = 12f;
@@ -88,7 +81,6 @@ namespace Oxide.Plugins
         private bool zoneFallback;
         private bool purge;
         private Timer clockTimer;
-        private Timer priceTimer;
         private Timer artTimer;
         private Coroutine startupRoutine;
 
@@ -103,10 +95,6 @@ namespace Oxide.Plugins
         private string clockCache = "\0";
         private string onlineCache = "\0";
         private string countdownCache = "\0";
-        private int outpostPrice = 150;
-        private int banditPrice = 200;
-        private bool priceFileWarned;
-
         private Art logoArt;
         private Art purgeArt;
         private Art borderArt;
@@ -161,20 +149,24 @@ namespace Oxide.Plugins
         private float NameH => D(DesignNameH);
         private float OnlineTop => D(DesignOnlineTop);
         private float OnlineH => D(DesignOnlineH);
-        private float StatusTop => D(DesignStatusTop);
         private float StatusH => D(DesignStatusH);
-        private float TeleTitleTop => D(DesignTeleTitleTop);
-        private float TeleTitleH => D(DesignTeleTitleH);
-        private float TelePriceTop => D(DesignTelePriceTop);
-        private float TelePriceH => D(DesignTelePriceH);
+        // Keep the status line under the badge when the logo is enlarged.
+        private float StatusTop
+        {
+            get
+            {
+                float belowBadge = Pad + LogoSize + BadgeHang() + D(2f);
+                float belowOnline = OnlineTop + OnlineH;
+                return Mathf.Max(belowBadge, belowOnline);
+            }
+        }
+        private float PanelH => Mathf.Ceil(StatusTop + StatusH + Pad);
         private int NameFont => F(14f, ScaleOf, 8);
         private int TagFont => F(11f, ScaleOf, 7);
         private int ClockFont => F(12f, ScaleOf, 7);
         private int OnlineFont => F(11f, ScaleOf, 7);
         private int StatusFont => F(12f, ScaleOf, 7);
         private int ShieldFont => F(11f, ScaleOf, 7);
-        private int TeleTitleFont => F(11f, ScaleOf, 7);
-        private int TelePriceFont => F(10f, ScaleOf, 7);
         private int BadgeFont => F(8f, ScaleOf, 6);
 
         private class Settings
@@ -190,7 +182,7 @@ namespace Oxide.Plugins
             [JsonProperty("Inset from the right (px)")] public float Right = 16f;
             [JsonProperty("Inset from the top (px)")] public float Top = 12f;
             [JsonProperty("Width (px)")] public float Width = 201f;
-            [JsonProperty("Height (px)")] public float Height = 90f;
+            [JsonProperty("Height (px)")] public float Height = 66f;
             [JsonProperty("Icon size (px)")] public float IconSize = 24f;
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
             [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
@@ -209,12 +201,6 @@ namespace Oxide.Plugins
             [JsonProperty("Count admins in online")] public bool CountAdmins = false;
             [JsonProperty("Show PvP countdown")] public bool ShowCountdown = true;
             [JsonProperty("Show shield line")] public bool ShowShield = true;
-            [JsonProperty("Show teleportation block")] public bool ShowTeleport = true;
-            [JsonProperty("Teleportation title")] public string TeleportTitle = "Teleportation";
-            [JsonProperty("Teleportation title color")] public string TeleportTitleColor = "#50A0FF";
-            [JsonProperty("Teleportation label format")] public string TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
-            [JsonProperty("Default Outpost price")] public int DefaultOutpostPrice = 150;
-            [JsonProperty("Default Bandit price")] public int DefaultBanditPrice = 200;
             [JsonProperty("Show border")] public bool ShowBorder = true;
             [JsonProperty("Border image file")] public string BorderImage = DefaultBorderFile;
             [JsonProperty("Background image file")] public string BackgroundImage = DefaultBackgroundFile;
@@ -316,8 +302,16 @@ namespace Oxide.Plugins
                     && Mathf.Abs(stored - StockHalfScale) < 0.001f)
                     config.Scale = DefaultScale;
             }
-            if (float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale) || config.LogoScale <= 0f)
+            bool hasLogo = raw != null && raw["Logo scale"] != null && raw["Logo scale"].Type != JTokenType.Null;
+            if (!hasLogo)
                 config.LogoScale = DefaultLogoScale;
+            else
+            {
+                float storedLogo;
+                if (float.TryParse(raw["Logo scale"].ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out storedLogo)
+                    && Mathf.Abs(storedLogo - StockLogoScale) < 0.001f)
+                    config.LogoScale = DefaultLogoScale;
+            }
             // 58 cleared the old top-right skill panel. 12 is the 1.3 corner inset.
             if (Mathf.Abs(config.Top - 58f) < 0.1f) config.Top = 12f;
             if (string.IsNullOrEmpty(config.NameColor) || string.Equals(config.NameColor, "#F4F1EA", StringComparison.OrdinalIgnoreCase))
@@ -349,11 +343,6 @@ namespace Oxide.Plugins
             if (string.IsNullOrEmpty(config.Anchor)) config.Anchor = "1 1";
             if (string.IsNullOrEmpty(config.CountdownActive)) config.CountdownActive = "#FF4D4D";
             if (string.IsNullOrEmpty(config.CountdownIdle)) config.CountdownIdle = "#FF4D4D";
-            if (config.TeleportTitle == null) config.TeleportTitle = "Teleportation";
-            if (string.IsNullOrEmpty(config.TeleportTitleColor)) config.TeleportTitleColor = "#50A0FF";
-            if (string.IsNullOrEmpty(config.TeleportFormat)) config.TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
-            if (config.DefaultOutpostPrice < 0) config.DefaultOutpostPrice = 150;
-            if (config.DefaultBanditPrice < 0) config.DefaultBanditPrice = 200;
             if (string.IsNullOrEmpty(config.ShieldActive)) config.ShieldActive = "#69D8A0";
             if (string.IsNullOrEmpty(config.ShieldQueued)) config.ShieldQueued = "#E2B968";
             if (string.IsNullOrEmpty(config.Command)) config.Command = "hud";
@@ -371,8 +360,8 @@ namespace Oxide.Plugins
             if (float.IsNaN(config.Scale) || float.IsInfinity(config.Scale) || config.Scale < 0.35f || config.Scale > 1.25f)
                 config.Scale = DefaultScale;
             config.Width = Mathf.Round(DesignWidth * config.Scale);
-            config.Height = Mathf.Round(DesignHeight * config.Scale);
             config.IconSize = Mathf.Round(DesignIcon * config.Scale);
+            config.Height = PanelH;
             config.BorderOutsetLeft = Mathf.Round(DesignOutL * config.Scale);
             config.BorderOutsetRight = Mathf.Round(DesignOutR * config.Scale);
             config.BorderOutsetTop = Mathf.Round(DesignOutT * config.Scale);
@@ -411,7 +400,6 @@ namespace Oxide.Plugins
         private void Unload()
         {
             clockTimer?.Destroy();
-            priceTimer?.Destroy();
             artTimer?.Destroy();
             foreach (var pending in dragCommit.Values)
                 if (pending != null) pending.Destroy();
@@ -424,11 +412,7 @@ namespace Oxide.Plugins
                 if (player != null) CuiHelper.DestroyUi(player, Root);
         }
 
-        private void OnServerSave()
-        {
-            SaveData();
-            RefreshTeleportPrices(true);
-        }
+        private void OnServerSave() => SaveData();
 
         private void SaveData() => Interface.Oxide.DataFileSystem.WriteObject(DataPath, stored);
 
@@ -910,12 +894,6 @@ namespace Oxide.Plugins
             AddLabel(container, "NightshadeHud.Clock", parent, clock, Hex(config.ClockColor), ClockFont, TextAnchor.MiddleRight, "0 1", "0 1", Px(clockLeft, -(NameTop + NameH)), Px(edge, -NameTop), true);
             AddLabel(container, "NightshadeHud.Online", parent, OnlineText(), Hex(config.MutedColor, 0.95f), OnlineFont, TextAnchor.MiddleLeft, "0 1", "0 1", Px(nameX, -(OnlineTop + OnlineH)), Px(edge, -OnlineTop));
             AddStatusRow(container, parent, player);
-            if (ShowTeleport())
-            {
-                string titleColor = Hex(string.IsNullOrEmpty(config.TeleportTitleColor) ? "#50A0FF" : config.TeleportTitleColor);
-                AddLabel(container, TeleportTitleName, parent, TeleportTitleText(), titleColor, TeleTitleFont, TextAnchor.MiddleCenter, "0 1", "0 1", Px(0f, -(TeleTitleTop + TeleTitleH)), Px(config.Width, -TeleTitleTop), true);
-                AddLabel(container, TeleportPriceName, parent, TeleportPriceText(), Hex(config.ClockColor), TelePriceFont, TextAnchor.MiddleCenter, "0 1", "0 1", Px(0f, -(TelePriceTop + TelePriceH)), Px(config.Width, -TelePriceTop));
-            }
             clockCache = clock;
             onlineCache = OnlineText();
         }
@@ -1107,7 +1085,7 @@ namespace Oxide.Plugins
         private float PanelHeight(string state)
         {
             if (state == "minimized") return LogoSize + BadgeHang();
-            return config.Height;
+            return config.Height > 1f ? config.Height : PanelH;
         }
 
         #endregion
@@ -1472,7 +1450,6 @@ namespace Oxide.Plugins
         {
             yield return null;
             purge = CallBool(PurgeStatus, "API_IsPurgeActive");
-            RefreshTeleportPrices(false);
             var players = new List<BasePlayer>();
             if (BasePlayer.activePlayerList != null)
                 foreach (var connected in BasePlayer.activePlayerList)
@@ -1484,8 +1461,6 @@ namespace Oxide.Plugins
                 if ((i + 1) % 2 == 0) yield return null;
             }
             ScheduleClock();
-            priceTimer?.Destroy();
-            priceTimer = timer.Every(120f, () => RefreshTeleportPrices(true));
             startupRoutine = null;
         }
 
@@ -1731,117 +1706,7 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Teleport and border
-
-        private bool ShowTeleport()
-        {
-            return config != null && config.ShowTeleport;
-        }
-
-        private string TeleportTitleText()
-        {
-            return string.IsNullOrEmpty(config.TeleportTitle) ? "Teleportation" : config.TeleportTitle;
-        }
-
-        private string TeleportPriceText()
-        {
-            string format = string.IsNullOrEmpty(config.TeleportFormat)
-                ? "Outpost: {outpost}rp | Bandit: {bandit}rp"
-                : config.TeleportFormat;
-            return format
-                .Replace("{outpost}", outpostPrice.ToString(CultureInfo.InvariantCulture))
-                .Replace("{bandit}", banditPrice.ToString(CultureInfo.InvariantCulture));
-        }
-
-        private void RefreshTeleportPrices(bool redraw)
-        {
-            if (config == null) return;
-            int outpost = config.DefaultOutpostPrice;
-            int bandit = config.DefaultBanditPrice;
-            bool warned = false;
-            try
-            {
-                string path = Path.Combine(Interface.Oxide.ConfigDirectory, "NTeleportation.json");
-                if (!File.Exists(path))
-                {
-                    if (!priceFileWarned)
-                    {
-                        priceFileWarned = true;
-                        PrintWarning("NTeleportation.json was not found. Teleport prices are using the HUD defaults.");
-                    }
-                }
-                else
-                {
-                    JObject root = JObject.Parse(File.ReadAllText(path));
-                    JObject commands = FindObject(root, "Dynamic Commands");
-                    int parsed;
-                    if (commands == null || !TryPay(commands, "Outpost", out parsed))
-                        warned = true;
-                    else
-                        outpost = parsed;
-                    if (commands == null || !TryPay(commands, "Bandit", out parsed))
-                        warned = true;
-                    else
-                        bandit = parsed;
-                    if (warned && !priceFileWarned)
-                    {
-                        priceFileWarned = true;
-                        PrintWarning("NTeleportation.json is missing Outpost or Bandit Pay. Missing prices use the HUD defaults.");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (!priceFileWarned)
-                {
-                    priceFileWarned = true;
-                    PrintWarning("Could not read NTeleportation prices: " + ex.Message);
-                }
-            }
-            bool changed = outpost != outpostPrice || bandit != banditPrice;
-            outpostPrice = outpost;
-            banditPrice = bandit;
-            if (redraw && changed && ShowTeleport()) RedrawBoxed();
-        }
-
-        private static JObject FindObject(JObject parent, string name)
-        {
-            if (parent == null || string.IsNullOrEmpty(name)) return null;
-            JToken direct = parent[name];
-            if (direct is JObject exact) return exact;
-            foreach (var property in parent.Properties())
-            {
-                if (!string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
-                return property.Value as JObject;
-            }
-            return null;
-        }
-
-        private static bool TryPay(JObject commands, string key, out int pay)
-        {
-            pay = 0;
-            JObject entry = FindObject(commands, key);
-            if (entry == null) return false;
-            JToken token = entry["Pay"];
-            if (token == null)
-            {
-                foreach (var property in entry.Properties())
-                {
-                    if (!string.Equals(property.Name, "Pay", StringComparison.OrdinalIgnoreCase)) continue;
-                    token = property.Value;
-                    break;
-                }
-            }
-            if (token == null || token.Type == JTokenType.Null) return false;
-            double number;
-            if (token.Type == JTokenType.Integer || token.Type == JTokenType.Float)
-                number = token.Value<double>();
-            else if (!double.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number))
-                return false;
-            if (double.IsNaN(number) || double.IsInfinity(number) || number < 0d) return false;
-            pay = (int)Math.Round(number);
-            return true;
-        }
+        #region Border
 
         private void AddBorder(CuiElementContainer container)
         {
