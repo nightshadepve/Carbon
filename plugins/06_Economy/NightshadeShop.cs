@@ -662,6 +662,11 @@ namespace Oxide.Plugins
             // Set once placeholders are inserted. A later delete stays deleted.
             [JsonProperty("Placeholders Added")]
             public bool PlaceholdersAdded;
+
+            // Separate from Placeholders Added so a file that already received the first
+            // dog-tag kits still gains the colored ID tag kits on the next load.
+            [JsonProperty("Colored Id Tag Placeholders Added")]
+            public bool ColoredIdTagPlaceholdersAdded;
         }
 
         private class KitDef
@@ -838,6 +843,7 @@ namespace Oxide.Plugins
             }
             if (ApplyStoredKitDefaults()) changed = true;
             if (EnsurePlaceholderKits()) changed = true;
+            if (EnsureColoredIdTagKits()) changed = true;
             foreach (var kit in kitFile.Kits)
             {
                 if (kit == null) continue;
@@ -4994,9 +5000,9 @@ namespace Oxide.Plugins
         }
 
         // One-time inserts. Existing kit ids, items, permissions, icons, and claims are left alone.
-        // Dog-tag placeholders are regular kits (empty permission). The repo does not map
-        // bluedogtags, reddogtags, or dogtagneutral onto a permission. The admin shop also
-        // trades lavenderidtag, purpleidtag, and pinkidtag under Dog Tags; those are not kits.
+        // Dog-tag and colored ID tag placeholders are regular kits (empty permission). The repo
+        // does not map any of these shortnames onto a permission. The Dog Tags admin shop
+        // listings stay; these kits do not replace those trades.
         private bool EnsurePlaceholderKits()
         {
             if (kitFile == null || kitFile.PlaceholdersAdded) return false;
@@ -5011,6 +5017,21 @@ namespace Oxide.Plugins
                 new[] { StackItem("dogtagneutral", 1, 0), StackItem("wood", 50, 0) });
             kitFile.PlaceholdersAdded = true;
             Puts("NightshadeShop added any missing placeholder kits (wipe-day and dog tags). Existing kits were not changed.");
+            return true;
+        }
+
+        private bool EnsureColoredIdTagKits()
+        {
+            if (kitFile == null || kitFile.ColoredIdTagPlaceholdersAdded) return false;
+            if (kitFile.Kits == null) kitFile.Kits = new List<KitDef>();
+            AddKitIfMissing("tag-lavenderidtag", "PLACEHOLDER Lavender ID Tag", "lavenderidtag", "", 86400, 0, false,
+                new[] { StackItem("lavenderidtag", 1, 0), StackItem("wood", 50, 0) });
+            AddKitIfMissing("tag-purpleidtag", "PLACEHOLDER Purple ID Tag", "purpleidtag", "", 86400, 0, false,
+                new[] { StackItem("purpleidtag", 1, 0), StackItem("wood", 50, 0) });
+            AddKitIfMissing("tag-pinkidtag", "PLACEHOLDER Pink ID Tag", "pinkidtag", "", 86400, 0, false,
+                new[] { StackItem("pinkidtag", 1, 0), StackItem("wood", 50, 0) });
+            kitFile.ColoredIdTagPlaceholdersAdded = true;
+            Puts("NightshadeShop added any missing colored ID tag placeholder kits (lavender, purple, pink). Existing kits were not changed.");
             return true;
         }
 

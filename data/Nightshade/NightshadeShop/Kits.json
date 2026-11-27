@@ -2,6 +2,7 @@
   "Migrated From VIPPerks": false,
   "NextId": 5,
   "Placeholders Added": true,
+  "Colored Id Tag Placeholders Added": true,
   "Kits": [
     {
       "Id": "vip-daily",
@@ -346,6 +347,69 @@
       "Items": [
         {
           "Shortname": "dogtagneutral",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-lavenderidtag",
+      "Name": "PLACEHOLDER Lavender ID Tag",
+      "Icon (URL, skin ID or shortname)": "lavenderidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "lavenderidtag",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-purpleidtag",
+      "Name": "PLACEHOLDER Purple ID Tag",
+      "Icon (URL, skin ID or shortname)": "purpleidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "purpleidtag",
+          "Amount": 1,
+          "Skin": 0
+        },
+        {
+          "Shortname": "wood",
+          "Amount": 50,
+          "Skin": 0
+        }
+      ]
+    },
+    {
+      "Id": "tag-pinkidtag",
+      "Name": "PLACEHOLDER Pink ID Tag",
+      "Icon (URL, skin ID or shortname)": "pinkidtag",
+      "Required Permission (empty = anyone who can open Kits)": "",
+      "Cooldown (seconds)": 86400,
+      "Max Uses Per Wipe (0 = no cap)": 0,
+      "Wipe Day": false,
+      "Items": [
+        {
+          "Shortname": "pinkidtag",
           "Amount": 1,
           "Skin": 0
         },
