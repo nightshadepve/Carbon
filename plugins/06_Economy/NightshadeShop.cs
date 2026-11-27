@@ -13,13 +13,13 @@ using UnityEngine.UI;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeShop", "Nightshade", "1.8.3")]
+    [Info("NightshadeShop", "Nightshade", "1.9.0")]
     [Description("Seasonal-themed Server Rewards shop with in-game item management, an Admin Shop resource exchange, claimable kits, and an RP coin bank")]
     public class NightshadeShop : RustPlugin
     {
         #region Fields
 
-        private const string PluginVersion = "1.8.3";
+        private const string PluginVersion = "1.9.0";
 
         [PluginReference] private Plugin ServerRewards, RaidableBases, DungeonEvents, ImageLibrary;
 
@@ -69,6 +69,8 @@ namespace Oxide.Plugins
         private const string PermVipXPerk = "nightshadeshop.vipxperk";
         private const string DailyKitPng = "VIP_Daily.png";
         private const string FourDayKitPng = "VIP_4Day.png";
+        private const string KitReadyColor = "#AAD28C";
+        private const string KitWaitColor = "#D2BE96";
         private readonly HashSet<string> localPngQueued = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> localPngWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> remoteIconWarned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -135,6 +137,7 @@ namespace Oxide.Plugins
             public string TradeQty = "1";       // "1", "10" or "max"   // Admin Shop: -2 = category tiles, -1 = uncategorized, >= 0 category index
 
             public string EditKitId;
+            public string PreviewKitId;
             public string KitShort = "";
             public string KitAmt = "1";
             public string KitSkin = "0";
@@ -204,8 +207,25 @@ namespace Oxide.Plugins
             [JsonProperty("Bank")]
             public BankSettings Bank = new BankSettings();
 
+            [JsonProperty("Kits")]
+            public KitSettings Kits = new KitSettings();
+
             [JsonProperty("Themes")]
             public List<Theme> Themes = new List<Theme>();
+        }
+
+        // Wipe-day kits (KitDef.WipeDay) are shown to every player, including players without
+        // nightshadeshop.wipelock, only while UtcNow is inside this many hours after
+        // SaveRestore.SaveCreatedTime. That timestamp is the map wipe clock Rust sets when the
+        // save is created. OnNewSave fires for the same wipe and already clears kit wipe-use counts.
+        // 0 hides wipe-day kits. The kit id is not special; the Wipe Day flag on the kit is.
+        private class KitSettings
+        {
+            [JsonProperty("Wipe Day Window (hours after SaveRestore.SaveCreatedTime, 0 hides wipe-day kits)")]
+            public int WipeDayHours = 24;
+
+            [JsonProperty("Wipe Day Notes")]
+            public string WipeDayNotes = "SaveRestore.SaveCreatedTime is the wipe clock (map save creation). A kit with Wipe Day true is listed for everyone, including players without nightshadeshop.wipelock, until this many hours have passed. Claim is refused after that, and the card is hidden. 0 disables wipe-day kits. Do not hardcode a kit id; set Wipe Day on the kit.";
         }
 
         private class BankSettings
@@ -458,6 +478,10 @@ namespace Oxide.Plugins
                 if (config.Bank.CoinShortname == null) config.Bank.CoinShortname = "";
                 if (config.Bank.CoinName == null) config.Bank.CoinName = "RP Coin";
                 if (config.Bank.Permission == null) config.Bank.Permission = "";
+                if (config.Kits == null) config.Kits = new KitSettings();
+                if (config.Kits.WipeDayHours < 0) config.Kits.WipeDayHours = 0;
+                if (config.Kits.WipeDayHours > 8760) config.Kits.WipeDayHours = 8760;
+                if (string.IsNullOrWhiteSpace(config.Kits.WipeDayNotes)) config.Kits.WipeDayNotes = new KitSettings().WipeDayNotes;
                 config.Bank.CoinShortname = config.Bank.CoinShortname.Trim();
                 config.Bank.CoinName = config.Bank.CoinName.Trim();
                 config.Bank.Permission = config.Bank.Permission.Trim();
@@ -634,6 +658,10 @@ namespace Oxide.Plugins
             public List<KitDef> Kits = new List<KitDef>();
 
             public Dictionary<string, Dictionary<string, KitClaim>> Claims = new Dictionary<string, Dictionary<string, KitClaim>>();
+
+            // Set once placeholders are inserted. A later delete stays deleted.
+            [JsonProperty("Placeholders Added")]
+            public bool PlaceholdersAdded;
         }
 
         private class KitDef
@@ -652,6 +680,10 @@ namespace Oxide.Plugins
 
             [JsonProperty("Max Uses Per Wipe (0 = no cap)")]
             public int MaxUsesPerWipe;
+
+            // True: listed for everyone only during the config wipe-day window. The id is not special.
+            [JsonProperty("Wipe Day")]
+            public bool WipeDay;
 
             public List<KitStack> Items = new List<KitStack>();
         }
@@ -805,6 +837,7 @@ namespace Oxide.Plugins
                     PrintWarning("VIP kit cooldown import did not finish. Kits.json was left unmarked so the next load can retry.");
             }
             if (ApplyStoredKitDefaults()) changed = true;
+            if (EnsurePlaceholderKits()) changed = true;
             foreach (var kit in kitFile.Kits)
             {
                 if (kit == null) continue;
@@ -920,6 +953,8 @@ namespace Oxide.Plugins
             FindPaidItems();
             PreloadLocalIcons();
             Puts($"NightshadeShop v{PluginVersion} loaded: {data.Categories.Count} categories, {data.Categories.Sum(x => x.Items.Count)} listings, {data.TradeCategories.Count} Admin Shop categories, {data.Exchanges.Count} trades, {kitFile.Kits.Count} kits.");
+            if (kitFile?.Kits != null && kitFile.Kits.Any(k => k != null && k.WipeDay))
+                Puts("NightshadeShop wipe-day kits stay visible for " + WipeWindowHours() + " hours after SaveRestore.SaveCreatedTime. Set Kits / Wipe Day Window in the config. 0 hides them.");
             ItemDefinition coinDef;
             if (config.Bank != null && config.Bank.Enabled && !CoinReady(out coinDef))
                 PrintWarning("NightshadeShop bank coin shortname is not a game item. The default is paper with skin 3843525164.");
@@ -1272,17 +1307,33 @@ namespace Oxide.Plugins
             return cat.Themes.Any(t => string.Equals(t, active, StringComparison.OrdinalIgnoreCase));
         }
 
-        private bool CanSee(BasePlayer p, string perm) =>
-            string.IsNullOrEmpty(perm) || IsAdmin(p) || permission.UserHasPermission(p.UserIDString, perm);
+        // Admin mode is the shop's "see everything" switch. Auth level and nightshadeshop.admin do not count.
+        private bool InAdminMode(BasePlayer p)
+        {
+            if (p == null || !IsAdmin(p)) return false;
+            UiState s;
+            return states.TryGetValue(p.userID, out s) && s != null && s.Admin;
+        }
+
+        private static bool IsWipeLockPerm(string perm) =>
+            string.Equals((perm ?? "").Trim(), PermWipeLock, StringComparison.OrdinalIgnoreCase);
+
+        // Empty permission is public. nightshadeshop.wipelock (default_unlocked) is not implied by
+        // admin status: the player needs the permission, or admin mode. Shop, Events, purchases,
+        // and regular kits all come through here. Other permissions still allow admins, as before.
+        private bool CanSee(BasePlayer p, string perm)
+        {
+            if (string.IsNullOrEmpty(perm)) return true;
+            if (IsWipeLockPerm(perm))
+                return InAdminMode(p) || (p != null && permission.UserHasPermission(p.UserIDString, PermWipeLock));
+            return IsAdmin(p) || (p != null && permission.UserHasPermission(p.UserIDString, perm));
+        }
 
         // Admin-only categories stay hidden, including from buy commands, until that admin turns admin mode on.
         private bool HiddenFromPlayer(BasePlayer p, ShopCategory cat)
         {
             if (cat == null || cat.AdminModeOnly != true) return false;
-            if (p == null || !IsAdmin(p)) return true;
-            UiState s;
-            if (!states.TryGetValue(p.userID, out s) || s == null || !s.Admin) return true;
-            return false;
+            return !InAdminMode(p);
         }
 
         private void RegisterPerm(string perm)
@@ -2212,6 +2263,7 @@ namespace Oxide.Plugins
                     s.DescriptionEdit = false;
                     s.EditItem = s.EditTrade = 0;
                     s.EditKitId = null;
+                    s.PreviewKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
                     s.Open = false;
@@ -2224,13 +2276,20 @@ namespace Oxide.Plugins
                     s.BuyToken = null;
                     int requested = arg.GetInt(1);
                     if (requested == 3 && CanExchange(p)) s.Tab = 3;
-                    else if (requested == 2 && CanSeeKits(p)) s.Tab = 2;
+                    else if (requested == 2) s.Tab = 2;
                     else if (requested == 1) s.Tab = 1;
                     else s.Tab = 0;
                     s.EditItem = s.EditTrade = 0;
                     s.EditKitId = null;
+                    s.PreviewKitId = null;
                     s.TradeCat = TradeTiles;
                     s.Status = "";
+                    break;
+                case "kitopen":
+                    OpenKitPreview(p, s, arg.GetString(1, ""));
+                    break;
+                case "kitclosepreview":
+                    s.PreviewKitId = null;
                     break;
                 case "kitclaim":
                     ClaimKit(p, s, arg.GetString(1, ""));
@@ -2317,6 +2376,7 @@ namespace Oxide.Plugins
                     s.ThemeMenu = false;
                     s.EditItem = s.EditTrade = 0;
                     s.EditKitId = null;
+                    s.PreviewKitId = null;
                     s.PickTarget = null;
                     s.EventMenu = false;
                     break;
@@ -2486,14 +2546,16 @@ namespace Oxide.Plugins
                     kitFile.Kits.Add(created);
                     SaveKits();
                     s.EditKitId = created.Id;
+                    s.PreviewKitId = null;
                     s.KitShort = "";
                     s.KitAmt = "1";
                     s.KitSkin = "0";
-                    SetStatus(s, "Kit created. Empty permission means anyone who can open Kits.", false);
+                    SetStatus(s, "Kit created. Empty permission is a regular kit. vipperk is VIP only (hidden from VIPx). vipxperk is VIPx only.", false);
                     return;
                 }
                 case "kitedit":
                     s.EditKitId = arg.GetString(1, "");
+                    s.PreviewKitId = null;
                     s.EditItem = s.EditTrade = 0;
                     s.KitShort = "";
                     s.KitAmt = "1";
@@ -2506,6 +2568,7 @@ namespace Oxide.Plugins
                     if (!Confirm(s, "kit" + kit.Id)) { SetStatus(s, Msg("ConfirmDelete", p) + " (" + kit.Name + ")", true); return; }
                     kitFile.Kits.Remove(kit);
                     if (s.EditKitId == kit.Id) s.EditKitId = null;
+                    if (s.PreviewKitId == kit.Id) s.PreviewKitId = null;
                     SaveKits();
                     SetStatus(s, Msg("Deleted", p), false);
                     return;
@@ -3159,7 +3222,6 @@ namespace Oxide.Plugins
             bool admin = IsAdmin(p);
             if (!admin) s.Admin = false;
             if (s.Tab == 3 && !CanExchange(p)) s.Tab = 0;
-            if (s.Tab == 2 && !CanSeeKits(p)) s.Tab = 0;
             if (s.Tab < 0 || s.Tab > 3) s.Tab = 0;
             if (!CanUseBank(p)) s.BankOpen = false;
             if (!admin || !s.Admin) s.ThemeMenu = false;
@@ -3211,6 +3273,7 @@ namespace Oxide.Plugins
             else if (s.Admin && s.EditItem != 0) BuildItemEditor(c, s, tc);
             else if (s.Admin && s.EditTrade != 0) BuildTradeEditor(c, s, tc);
             else if (s.Admin && !string.IsNullOrEmpty(s.EditKitId)) BuildKitEditor(c, s, tc);
+            else if (!string.IsNullOrEmpty(s.PreviewKitId)) BuildKitPreview(c, p, s, tc);
 
             s.Open = true;
             CuiHelper.AddUi(p, c);
@@ -3760,25 +3823,21 @@ namespace Oxide.Plugins
 
         #region Kits
 
-        // Kits tab is the wipe-unlock gate. default_unlocked is an Oxide group maintained by
-        // NightshadeDefaultUnlocked. That group is granted nightshadeshop.wipelock, and shop
-        // categories such as Halloween already require that permission through CanSee.
+        // nightshadeshop.wipelock is what default_unlocked receives from NightshadeDefaultUnlocked.
+        // Regular kits require it. Admin status does not. The Kits tab itself stays open without it
+        // so a wipe-day kit can show. Admin mode lists every kit.
         private bool CanSeeKits(BasePlayer p) => CanSee(p, PermWipeLock);
 
         private void ChatOpenKits(BasePlayer p, string command, string[] args)
         {
             if (!CanUse(p)) { SendReply(p, Msg("NoPermission", p)); return; }
-            if (!CanSeeKits(p))
-            {
-                SendReply(p, "The Kits tab opens with wipe unlock (default_unlocked).");
-                return;
-            }
             var s = S(p);
             s.Tab = 2;
             s.BuyItem = 0;
             s.BuyToken = null;
             s.EditItem = s.EditTrade = 0;
             s.EditKitId = null;
+            s.PreviewKitId = null;
             s.PickTarget = null;
             s.EventMenu = false;
             s.DescriptionEdit = false;
@@ -3800,13 +3859,6 @@ namespace Oxide.Plugins
 
         private static bool IsVipXPerm(string perm) =>
             string.Equals((perm ?? "").Trim(), PermVipXPerk, StringComparison.OrdinalIgnoreCase);
-
-        private static string LockLabel(string perm)
-        {
-            if (IsVipPerkPerm(perm)) return "VIP ONLY";
-            if (IsVipXPerm(perm)) return "VIPX ONLY";
-            return "LOCKED";
-        }
 
         private KitClaim ClaimOf(string userId, string kitId, bool create)
         {
@@ -3881,14 +3933,68 @@ namespace Oxide.Plugins
             return permission.UserHasPermission(p.UserIDString, perm);
         }
 
-        private void ClaimKit(BasePlayer p, UiState s, string id)
+        private int WipeWindowHours()
         {
-            if (!CanSeeKits(p))
+            if (config?.Kits == null) return 24;
+            int hours = config.Kits.WipeDayHours;
+            if (hours < 0) return 0;
+            if (hours > 8760) return 8760;
+            return hours;
+        }
+
+        // Hours after SaveRestore.SaveCreatedTime. Kind is left alone so this matches the other
+        // Nightshade plugins that subtract that timestamp from DateTime.UtcNow.
+        private bool WipeWindowOpen(out double secondsLeft)
+        {
+            secondsLeft = 0;
+            int hours = WipeWindowHours();
+            if (hours <= 0) return false;
+            DateTime created = SaveRestore.SaveCreatedTime;
+            if (created == DateTime.MinValue) return false;
+            double elapsed = (DateTime.UtcNow - created).TotalSeconds;
+            double window = hours * 3600d;
+            if (elapsed < 0 || elapsed >= window) return false;
+            secondsLeft = window - elapsed;
+            return true;
+        }
+
+        // Admin mode lists every kit. Otherwise: wipe-day kits only while the window is open,
+        // and only those kits for players without wipelock. VIP kits hide from VIPx. Empty
+        // permission is a regular kit for anyone with wipelock. VIPx still sees regular kits.
+        private bool KitVisible(BasePlayer p, KitDef kit, bool adminMode)
+        {
+            if (p == null || kit == null) return false;
+            if (adminMode) return true;
+            if (kit.WipeDay) return WipeWindowOpen(out _);
+            if (!CanSeeKits(p)) return false;
+            string perm = (kit.Permission ?? "").Trim();
+            if (perm.Length == 0) return true;
+            if (IsVipXPerm(perm)) return permission.UserHasPermission(p.UserIDString, PermVipXPerk);
+            if (IsVipPerkPerm(perm))
+                return permission.UserHasPermission(p.UserIDString, PermVipPerk)
+                    && !permission.UserHasPermission(p.UserIDString, PermVipXPerk);
+            return permission.UserHasPermission(p.UserIDString, perm);
+        }
+
+        private bool KitAdminMode(BasePlayer p, UiState s) => p != null && s != null && s.Admin && IsAdmin(p);
+
+        private void OpenKitPreview(BasePlayer p, UiState s, string id)
+        {
+            var kit = FindKit(id);
+            if (kit == null || !KitVisible(p, kit, KitAdminMode(p, s)))
             {
-                SetStatus(s, "The Kits tab is available after wipe unlock.", true);
+                s.PreviewKitId = null;
+                SetStatus(s, "That kit is not available.", true);
                 Fx(p, FxDeny);
                 return;
             }
+            s.PreviewKitId = kit.Id;
+            s.EditKitId = null;
+            s.Status = "";
+        }
+
+        private void ClaimKit(BasePlayer p, UiState s, string id)
+        {
             var kit = FindKit(id);
             if (kit == null)
             {
@@ -3897,26 +4003,40 @@ namespace Oxide.Plugins
                 return;
             }
             string deny;
-            if (!TryClaimKit(p, kit, out deny))
+            if (!TryClaimKit(p, kit, KitAdminMode(p, s), out deny))
             {
                 SetStatus(s, deny, true);
                 Fx(p, FxDeny);
                 return;
             }
+            s.PreviewKitId = null;
             SetStatus(s, kit.Name + " claimed.", false);
             Fx(p, FxBuy);
         }
 
-        private bool TryClaimKit(BasePlayer p, KitDef kit, out string deny)
+        private bool TryClaimKit(BasePlayer p, KitDef kit, bool adminMode, out string deny)
         {
             deny = "";
             if (p == null || kit == null) { deny = "That kit no longer exists."; return false; }
-            if (!CanSeeKits(p)) { deny = "The Kits tab is available after wipe unlock."; return false; }
-            string perm = (kit.Permission ?? "").Trim();
-            if (perm.Length > 0 && !permission.UserHasPermission(p.UserIDString, perm))
+            if (!KitVisible(p, kit, adminMode))
             {
+                deny = "You can't claim that kit.";
+                return false;
+            }
+            if (kit.WipeDay && !WipeWindowOpen(out _))
+            {
+                int hours = WipeWindowHours();
+                deny = hours <= 0
+                    ? "Wipe-day kits are turned off in the NightshadeShop config."
+                    : "This kit can only be claimed for " + hours + " hours after the map wipe.";
+                return false;
+            }
+            if (!HasKitPerm(p, kit))
+            {
+                string perm = (kit.Permission ?? "").Trim();
                 deny = IsVipPerkPerm(perm) ? "VIP only. You need " + PermVipPerk + "."
                     : IsVipXPerm(perm) ? "VIPx only. You need " + PermVipXPerk + "."
+                    : perm.Length == 0 ? "You can't claim that kit."
                     : "You need " + perm + " to claim this kit.";
                 return false;
             }
@@ -4041,6 +4161,15 @@ namespace Oxide.Plugins
                     kit.MaxUsesPerWipe = uses;
                     return true;
                 }
+                case "wipeday":
+                {
+                    string flag = (value ?? "").Trim();
+                    if (flag.Length == 0) kit.WipeDay = !kit.WipeDay;
+                    else if (flag == "1" || flag.Equals("yes", StringComparison.OrdinalIgnoreCase) || flag.Equals("true", StringComparison.OrdinalIgnoreCase)) kit.WipeDay = true;
+                    else if (flag == "0" || flag.Equals("no", StringComparison.OrdinalIgnoreCase) || flag.Equals("false", StringComparison.OrdinalIgnoreCase)) kit.WipeDay = false;
+                    else return false;
+                    return true;
+                }
             }
             return false;
         }
@@ -4124,7 +4253,7 @@ namespace Oxide.Plugins
                 new KeyValuePair<int, string>(0, "SHOP"),
                 new KeyValuePair<int, string>(1, "EVENTS")
             };
-            if (CanSeeKits(p)) entries.Add(new KeyValuePair<int, string>(2, "KITS"));
+            entries.Add(new KeyValuePair<int, string>(2, "KITS"));
             if (CanExchange(p))
                 entries.Add(new KeyValuePair<int, string>(3, string.IsNullOrEmpty(config.ExchangeTabName) ? "ADMIN SHOP" : config.ExchangeTabName));
 
@@ -4145,82 +4274,361 @@ namespace Oxide.Plugins
             }
         }
 
-        private void BuildKits(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        private static string RefreshText(KitDef kit)
         {
-            string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
-            Label(c, panel, "KITS", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 414, 200, 446));
-            if (s.Admin)
-                Btn(c, panel, UiCmd + " kitnew", tc.Accent, R(900, 414, 1052, 444), "+ NEW KIT", 13, tc.AccentText);
-
-            var list = kitFile?.Kits ?? new List<KitDef>();
-            const int rowH = 156;
-            const int gap = 8;
-            const int viewTop = 406;
-            string area = Scroll(c, panel, R(8, 8, 1060, viewTop), viewTop - 8, Math.Max(1, list.Count) * (rowH + gap), tc);
-            if (list.Count == 0)
+            if (kit != null && kit.WipeDay) return "Wipe day only";
+            int seconds = kit == null ? 0 : kit.CooldownSeconds;
+            if (seconds <= 0) return "No cooldown";
+            if (seconds % 86400 == 0)
             {
-                Label(c, area, s.Admin ? "No kits yet. Click + NEW KIT." : "No kits right now.", 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 150, 1040, 40));
-                return;
+                int days = seconds / 86400;
+                if (days == 1) return "Refreshes every 24 hours";
+                return "Refreshes every " + days.ToString(CultureInfo.InvariantCulture) + " days";
             }
-            for (int i = 0; i < list.Count; i++)
-                DrawKitCard(c, area, p, s, tc, list[i], i * (rowH + gap), rowH);
+            if (seconds % 3600 == 0)
+            {
+                int hours = seconds / 3600;
+                return "Refreshes every " + hours.ToString(CultureInfo.InvariantCulture) + (hours == 1 ? " hour" : " hours");
+            }
+            return "Refreshes every " + FormatSpan(seconds);
         }
 
-        private void DrawKitCard(CuiElementContainer c, string parent, BasePlayer p, UiState s, ThemeColors tc, KitDef kit, int y, int height)
+        private static string KitItemLabel(KitStack stack)
         {
-            const int width = 1040;
-            // Left-middle point anchor plus equal pixel offsets. Equal anchor spans are
-            // wider than they are tall on a 16:9 screen, which stretches the square kit art.
-            const int iconSize = 120;
-            const int iconLeft = 16;
-            string row = Box(c, parent, tc.Card, TL(0, y, width, height));
-            string icon = string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon;
-            string iconBg = Box(c, row, tc.Panel, new CuiRectTransformComponent
+            string name = NameOf(stack == null ? "" : stack.Shortname);
+            if (stack != null && stack.Skin != 0) name += " (skinned)";
+            return name;
+        }
+
+        private static int KitTierRank(string perm)
+        {
+            perm = (perm ?? "").Trim();
+            if (perm.Length == 0) return 0;
+            if (IsVipPerkPerm(perm)) return 2;
+            if (IsVipXPerm(perm)) return 3;
+            return 1;
+        }
+
+        private static bool IsFourDayKit(KitDef kit)
+        {
+            string id = (kit == null || kit.Id == null ? "" : kit.Id).ToLowerInvariant();
+            string name = (kit == null || kit.Name == null ? "" : kit.Name).ToLowerInvariant();
+            return id.Contains("4day") || id.Contains("4-day") || name.Contains("4-day") || name.Contains("4 day") || name.Contains("4day");
+        }
+
+        private static bool IsDailyKit(KitDef kit)
+        {
+            if (kit == null || IsFourDayKit(kit)) return false;
+            string id = (kit.Id ?? "").ToLowerInvariant();
+            string name = (kit.Name ?? "").ToLowerInvariant();
+            return id.Contains("daily") || name.Contains("daily");
+        }
+
+        // Daily and 4-day of one permission stay a pair so they land on the same row.
+        // Other kits, including wipe-day and dog-tag placeholders, follow in the same grid.
+        private static List<KitDef> OrderKits(List<KitDef> visible)
+        {
+            var pool = new List<KitDef>();
+            if (visible != null)
+                for (int i = 0; i < visible.Count; i++)
+                    if (visible[i] != null) pool.Add(visible[i]);
+
+            var perms = new List<string>();
+            for (int i = 0; i < pool.Count; i++)
             {
-                AnchorMin = "0 0.5",
-                AnchorMax = "0 0.5",
-                OffsetMin = $"{iconLeft} {-iconSize / 2}",
-                OffsetMax = $"{iconLeft + iconSize} {iconSize / 2}"
+                string perm = (pool[i].Permission ?? "").Trim();
+                bool seen = false;
+                for (int n = 0; n < perms.Count; n++)
+                    if (string.Equals(perms[n], perm, StringComparison.OrdinalIgnoreCase)) { seen = true; break; }
+                if (!seen) perms.Add(perm);
+            }
+            var order = new List<int>();
+            for (int i = 0; i < perms.Count; i++) order.Add(i);
+            order.Sort((a, b) =>
+            {
+                int rank = KitTierRank(perms[a]).CompareTo(KitTierRank(perms[b]));
+                return rank != 0 ? rank : a.CompareTo(b);
             });
-            const int inset = 4;
-            ListIcon(c, iconBg, icon, Def(FirstKitIcon(kit)), 0, R(inset, inset, iconSize - inset, iconSize - inset));
 
-            bool admin = s.Admin;
-            int textX = iconLeft + iconSize + 14;
-            int textRight = admin ? 750 : 876;
-            Label(c, row, string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant(), 16, tc.Text, TextAnchor.MiddleLeft, R(textX, 96, textRight, 122));
+            var pairs = new List<KitDef>();
+            for (int o = 0; o < order.Count; o++)
+            {
+                string perm = perms[order[o]];
+                int daily = -1;
+                int four = -1;
+                for (int i = 0; i < pool.Count; i++)
+                {
+                    if (!string.Equals((pool[i].Permission ?? "").Trim(), perm, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (daily < 0 && IsDailyKit(pool[i])) daily = i;
+                    else if (four < 0 && IsFourDayKit(pool[i])) four = i;
+                }
+                if (daily < 0 || four < 0) continue;
+                var dayKit = pool[daily];
+                var fourKit = pool[four];
+                int hi = daily > four ? daily : four;
+                int lo = daily > four ? four : daily;
+                pool.RemoveAt(hi);
+                pool.RemoveAt(lo);
+                pairs.Add(dayKit);
+                pairs.Add(fourKit);
+            }
 
-            DrawKitContents(c, row, tc, kit.Items, textX, 6, textRight - textX, 84);
+            var ordered = new List<KitDef>();
+            ordered.AddRange(pairs);
+            for (int i = 0; i < pool.Count; i++)
+                if (pool[i].WipeDay) ordered.Add(pool[i]);
+            for (int i = 0; i < pool.Count; i++)
+                if (!pool[i].WipeDay) ordered.Add(pool[i]);
+            return ordered;
+        }
 
-            bool allowed = HasKitPerm(p, kit);
+        private List<KitDef> KitsFor(BasePlayer p, bool adminMode)
+        {
+            var list = new List<KitDef>();
+            if (kitFile?.Kits == null) return list;
+            for (int i = 0; i < kitFile.Kits.Count; i++)
+            {
+                var kit = kitFile.Kits[i];
+                if (kit != null && KitVisible(p, kit, adminMode)) list.Add(kit);
+            }
+            return list;
+        }
+
+        private string KitsSubtitle(BasePlayer p, bool adminMode)
+        {
+            if (adminMode) return "All kits";
+            if (!CanSeeKits(p)) return "Wipe day";
+            if (p != null && permission.UserHasPermission(p.UserIDString, PermVipXPerk)) return "VIPx";
+            if (p != null && permission.UserHasPermission(p.UserIDString, PermVipPerk)) return "VIP";
+            return "No rank required";
+        }
+
+        private string KitsEmptyText(BasePlayer p, bool adminMode)
+        {
+            if (adminMode) return "No kits yet. Click + NEW KIT.";
+            double ignored;
+            if (!CanSeeKits(p) && !WipeWindowOpen(out ignored))
+                return "The wipe-day kit is not available right now.";
+            return "No kits right now.";
+        }
+
+        // ready is false when the window's Claim must stay disabled. The card still opens the preview.
+        private bool KitReady(BasePlayer p, KitDef kit, out string status, out string button, out string banner)
+        {
+            status = "Ready";
+            button = "CLAIM";
+            banner = "";
+            if (kit == null) { status = "Missing"; button = "NOT READY"; banner = "NOT READY"; return false; }
+            if (!HasKitPerm(p, kit))
+            {
+                string perm = (kit.Permission ?? "").Trim();
+                status = IsVipPerkPerm(perm) ? "VIP only" : IsVipXPerm(perm) ? "VIPx only" : "Locked";
+                button = status.ToUpperInvariant();
+                banner = button;
+                return false;
+            }
+            if (kit.WipeDay && !WipeWindowOpen(out _))
+            {
+                status = "Wipe window closed";
+                button = "NOT READY";
+                banner = "WIPE DAY ONLY";
+                return false;
+            }
             double left = CooldownLeft(p, kit);
-            int uses = UsesRemaining(p, kit);
-            int claimX = admin ? 760 : 888;
-            int claimR = admin ? 876 : 1024;
-            if (!allowed)
+            if (left > 0)
             {
-                string locked = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
-                Label(c, locked, LockLabel(kit.Permission), 13, tc.SubText, TextAnchor.MiddleCenter, Full());
+                string span = FormatSpan(left);
+                status = "Available in " + span;
+                button = "COOLDOWN  " + span.ToUpperInvariant();
+                banner = "AVAILABLE IN  " + span.ToUpperInvariant();
+                return false;
             }
-            else if (left > 0)
+            if (UsesRemaining(p, kit) <= 0)
             {
-                string wait = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
-                int bw = claimR - claimX;
-                Label(c, wait, "COOLDOWN", 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 23, bw - 2, 42));
-                Label(c, wait, FormatSpan(left).ToUpperInvariant(), 11, tc.SubText, TextAnchor.MiddleCenter, R(2, 2, bw - 2, 21));
+                status = "No uses left";
+                button = "LIMIT REACHED";
+                banner = "NO USES LEFT THIS WIPE";
+                return false;
             }
-            else if (uses <= 0)
+            return true;
+        }
+
+        private void BuildKits(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            bool adminMode = KitAdminMode(p, s);
+            string panel = Box(c, UiFrame, tc.Panel, R(16, 56, 1084, 510));
+            Label(c, panel, "KITS", 20, tc.Text, TextAnchor.MiddleLeft, R(16, 414, 92, 446));
+            Label(c, panel, KitsSubtitle(p, adminMode), 13, tc.SubText, TextAnchor.MiddleLeft, R(100, 418, 860, 444), false);
+            if (adminMode)
+                Btn(c, panel, UiCmd + " kitnew", tc.Accent, R(900, 414, 1052, 444), "+ NEW KIT", 13, tc.AccentText);
+
+            var list = OrderKits(KitsFor(p, adminMode));
+            const int viewTop = 406;
+            const int viewBottom = 8;
+            int viewH = viewTop - viewBottom;
+            const int gap = 12;
+            const int inner = 1036;
+            int cardW = (inner - gap) / 2;
+            int cardH = viewH;
+            int count = list.Count;
+            int rows = Math.Max(1, (count + 1) / 2);
+            int contentH = count == 0 ? viewH : rows * cardH + Math.Max(0, rows - 1) * gap;
+            string area = Scroll(c, panel, R(8, viewBottom, 1060, viewTop), viewH, contentH, tc);
+            if (count == 0)
             {
-                string none = Box(c, row, tc.Button, R(claimX, 48, claimR, 92));
-                Label(c, none, "LIMIT REACHED", 11, tc.SubText, TextAnchor.MiddleCenter, Full());
+                Label(c, area, KitsEmptyText(p, adminMode), 16, tc.SubText, TextAnchor.MiddleCenter, TL(0, 160, inner, 40));
+                return;
+            }
+            for (int i = 0; i < count; i++)
+            {
+                int col = i % 2;
+                int row = i / 2;
+                DrawKitCard(c, area, p, tc, list[i], col * (cardW + gap), row * (cardH + gap), cardW, cardH, adminMode);
+            }
+        }
+
+        private void DrawKitCard(CuiElementContainer c, string parent, BasePlayer p, ThemeColors tc, KitDef kit, int x, int y, int cardW, int cardH, bool adminMode)
+        {
+            string card = Box(c, parent, tc.Card, TL(x, y, cardW, cardH));
+            int buttonBottom = adminMode ? 48 : 18;
+            int buttonTop = buttonBottom + 40;
+            int statusBottom = buttonTop + 8;
+            int statusTop = statusBottom + 20;
+            int refreshBottom = statusTop + 2;
+            int refreshTop = refreshBottom + 20;
+            int nameBottom = refreshTop + 4;
+            int nameTop = nameBottom + 26;
+            int artBottom = nameTop + 12;
+            int room = cardH - 14 - artBottom;
+            if (room < 72) room = 72;
+            int art = Math.Min(230, Math.Min(cardW - 64, room));
+            int artLeft = (cardW - art) / 2;
+            string iconBg = Box(c, card, tc.Panel, R(artLeft - 4, artBottom - 4, artLeft + art + 4, artBottom + art + 4));
+            string icon = string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon;
+            ListIcon(c, iconBg, icon, Def(FirstKitIcon(kit)), 0, R(4, 4, art + 4, art + 4));
+
+            string name = string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant();
+            Label(c, card, name, 16, tc.Text, TextAnchor.MiddleCenter, R(12, nameBottom, cardW - 12, nameTop));
+            Label(c, card, RefreshText(kit), 13, tc.SubText, TextAnchor.MiddleCenter, R(12, refreshBottom, cardW - 12, refreshTop), false);
+
+            string status, button, banner;
+            bool ready = KitReady(p, kit, out status, out button, out banner);
+            Label(c, card, status, 14, ready ? KitReadyColor : KitWaitColor, TextAnchor.MiddleCenter, R(12, statusBottom, cardW - 12, statusTop));
+
+            int bw = Math.Min(240, cardW - 48);
+            int bx = (cardW - bw) / 2;
+            int claimSize = button.Length > 12 ? 12 : 16;
+            Btn(c, card, UiCmd + " kitopen " + kit.Id, ready ? tc.Accent : tc.Button, R(bx, buttonBottom, bx + bw, buttonTop), button, claimSize, ready ? tc.AccentText : tc.SubText);
+            if (adminMode)
+            {
+                int half = (bw - 8) / 2;
+                Btn(c, card, UiCmd + " kitedit " + kit.Id, tc.Button, R(bx, 10, bx + half, 40), "EDIT", 12, tc.ButtonText);
+                Btn(c, card, UiCmd + " kitdel " + kit.Id, tc.Danger, R(bx + half + 8, 10, bx + bw, 40), "DEL", 12, tc.DangerText);
+            }
+        }
+
+        private static List<KitStack> ListedStacks(KitDef kit)
+        {
+            var shown = new List<KitStack>();
+            if (kit?.Items == null) return shown;
+            for (int i = 0; i < kit.Items.Count; i++)
+            {
+                var stack = kit.Items[i];
+                if (stack == null || stack.Amount < 1 || string.IsNullOrEmpty(stack.Shortname)) continue;
+                shown.Add(stack);
+            }
+            return shown;
+        }
+
+        private void DrawPreviewRow(CuiElementContainer c, string parent, ThemeColors tc, KitStack stack, CuiRectTransformComponent rect, int width, int height)
+        {
+            string line = Box(c, parent, tc.Card, rect);
+            var def = Def(stack.Shortname);
+            if (def != null) Icon(c, line, def, stack.Skin, R(6, 4, 32, height - 4));
+            else Label(c, line, "?", 14, tc.Danger, TextAnchor.MiddleCenter, R(6, 4, 32, height - 4));
+            Label(c, line, KitItemLabel(stack), 13, tc.Text, TextAnchor.MiddleLeft, R(40, 0, width - 74, height), false);
+            Label(c, line, "x" + Math.Max(0, stack.Amount).ToString(CultureInfo.InvariantCulture), 13, tc.SubText, TextAnchor.MiddleRight, R(width - 70, 0, width - 8, height));
+        }
+
+        private void BuildKitPreview(CuiElementContainer c, BasePlayer p, UiState s, ThemeColors tc)
+        {
+            var kit = FindKit(s.PreviewKitId);
+            bool adminMode = KitAdminMode(p, s);
+            if (kit == null || !KitVisible(p, kit, adminMode))
+            {
+                s.PreviewKitId = null;
+                return;
+            }
+            var shown = ListedStacks(kit);
+            int n = shown.Count;
+            const int W = 740;
+            const int rowH = 40;
+            int rows = Math.Max(1, (n + 1) / 2);
+            string status, button, banner;
+            bool ready = KitReady(p, kit, out status, out button, out banner);
+            int listNatural = rows * rowH;
+            int bannerBlock = ready ? 0 : 40;
+            int natural = 50 + 36 + bannerBlock + listNatural + 88;
+            int H = natural;
+            if (H > 560) H = 560;
+            // Tall enough to cover the kit cards under the dimmer, including a short kit.
+            if (H < 520) H = 520;
+
+            string title = string.IsNullOrWhiteSpace(kit.Name) ? "KIT" : kit.Name.ToUpperInvariant();
+            string box = ModalBox(c, tc, W, H, title);
+            Btn(c, box, UiCmd + " kitclosepreview", tc.Danger, R(W - 36, H - 34, W - 8, H - 6), "X", 14, tc.DangerText);
+
+            int subBottom = H - 78;
+            string countText = (n == 1 ? "1 item" : n.ToString(CultureInfo.InvariantCulture) + " items") + "  -  " + RefreshText(kit);
+            Label(c, box, countText, 13, tc.SubText, TextAnchor.MiddleLeft, R(14, subBottom, W - 150, subBottom + 26), false);
+            if (ready)
+                Label(c, box, "Ready", 13, KitReadyColor, TextAnchor.MiddleRight, R(W - 140, subBottom, W - 14, subBottom + 26));
+
+            int listTop = subBottom - 8;
+            if (!ready)
+            {
+                int bTop = listTop;
+                int bBot = bTop - 32;
+                string band = Box(c, box, tc.Button, R(14, bBot, W - 14, bTop));
+                Label(c, band, banner, 14, KitWaitColor, TextAnchor.MiddleCenter, Full());
+                listTop = bBot - 8;
+            }
+            int listBottom = 72;
+            int listH = Math.Max(36, listTop - listBottom);
+            int colW = (W - 28 - 10) / 2;
+            int rowInner = rowH - 4;
+            if (n == 0)
+                Label(c, box, "This kit is empty.", 14, tc.SubText, TextAnchor.MiddleCenter, R(14, listBottom, W - 14, listTop));
+            else if (listNatural <= listH)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    int col = i % 2;
+                    int row = i / 2;
+                    int rx = 14 + col * (colW + 10);
+                    int top = listTop - row * rowH;
+                    DrawPreviewRow(c, box, tc, shown[i], R(rx, top - rowInner, rx + colW, top), colW, rowInner);
+                }
             }
             else
-                Btn(c, row, UiCmd + " kitclaim " + kit.Id, tc.Accent, R(claimX, 48, claimR, 92), "CLAIM", 14, tc.AccentText);
-
-            if (admin)
             {
-                Btn(c, row, UiCmd + " kitedit " + kit.Id, tc.Button, R(892, 100, 1024, 132), "EDIT", 12, tc.ButtonText);
-                Btn(c, row, UiCmd + " kitdel " + kit.Id, tc.Danger, R(892, 12, 1024, 40), "DEL", 12, tc.DangerText);
+                string strip = Scroll(c, box, R(14, listBottom, W - 14, listTop), listH, listNatural, tc);
+                for (int i = 0; i < n; i++)
+                {
+                    int col = i % 2;
+                    int row = i / 2;
+                    DrawPreviewRow(c, strip, tc, shown[i], TL(col * (colW + 10), row * rowH, colW, rowInner), colW, rowInner);
+                }
+            }
+
+            int mid = W / 2;
+            Btn(c, box, UiCmd + " kitclosepreview", tc.Button, R(16, 16, mid - 8, 56), "CANCEL", 16, tc.ButtonText);
+            if (ready)
+                Btn(c, box, UiCmd + " kitclaim " + kit.Id, tc.Accent, R(mid + 8, 16, W - 16, 56), "CLAIM", 16, tc.AccentText);
+            else
+            {
+                string dead = Box(c, box, tc.Button, R(mid + 8, 16, W - 16, 56));
+                Label(c, dead, "CLAIM", 16, tc.SubText, TextAnchor.MiddleCenter, Full());
             }
         }
 
@@ -4317,8 +4725,10 @@ namespace Oxide.Plugins
             string preview = Box(c, box, tc.Panel, R(568, 446, 606, 484));
             ListIcon(c, preview, string.IsNullOrWhiteSpace(kit.Icon) ? FirstKitIcon(kit) : kit.Icon, Def(FirstKitIcon(kit)), 0, R(4, 4, 34, 34));
             Field(c, box, tc, 410, "PERMISSION", kit.Permission, cmd + " perm", 0, 128);
-            Label(c, box, "Empty = Kits access. vipperk = VIP ONLY. vipxperk = VIPX ONLY. Icon: skin, shortname, or VIP_Daily.png in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
+            Label(c, box, "Empty = regular (wipe unlock). vipperk = VIP only, hidden from VIPx. vipxperk = VIPx only. Icon: skin, shortname, or a png file in Icons/.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 388, 960, 408), false);
             Field(c, box, tc, 350, "COOLDOWN (HOURS)", HoursText(kit.CooldownSeconds), cmd + " cooldown");
+            Btn(c, box, cmd + " wipeday", kit.WipeDay ? tc.Accent : tc.Button, R(500, 350, 760, 380), kit.WipeDay ? "WIPE DAY: YES" : "WIPE DAY: NO", 12, kit.WipeDay ? tc.AccentText : tc.ButtonText);
+            Label(c, box, "YES lists this kit for everyone only during the config wipe-day window. Card art is the Icon field.", 10, tc.SubText, TextAnchor.MiddleLeft, R(500, 318, 960, 344), false);
             Field(c, box, tc, 310, "MAX USES / WIPE", kit.MaxUsesPerWipe.ToString(), cmd + " uses");
             Label(c, box, "0 uses means no wipe cap. Cooldown still applies.", 10, tc.SubText, TextAnchor.MiddleLeft, R(175, 288, 560, 308), false);
 
@@ -4581,6 +4991,43 @@ namespace Oxide.Plugins
         {
             string name = LocalPngName(icon);
             if (name != null) names.Add(name);
+        }
+
+        // One-time inserts. Existing kit ids, items, permissions, icons, and claims are left alone.
+        // Dog-tag placeholders are regular kits (empty permission). The repo does not map
+        // bluedogtags, reddogtags, or dogtagneutral onto a permission. The admin shop also
+        // trades lavenderidtag, purpleidtag, and pinkidtag under Dog Tags; those are not kits.
+        private bool EnsurePlaceholderKits()
+        {
+            if (kitFile == null || kitFile.PlaceholdersAdded) return false;
+            if (kitFile.Kits == null) kitFile.Kits = new List<KitDef>();
+            AddKitIfMissing("wipe-day", "PLACEHOLDER Wipe Day Kit", "box.wooden", "", 0, 1, true,
+                new[] { StackItem("wood", 100, 0), StackItem("stones", 100, 0), StackItem("cloth", 50, 0) });
+            AddKitIfMissing("tag-bluedogtags", "PLACEHOLDER Blue Dog Tags", "bluedogtags", "", 86400, 0, false,
+                new[] { StackItem("bluedogtags", 1, 0), StackItem("wood", 50, 0) });
+            AddKitIfMissing("tag-reddogtags", "PLACEHOLDER Red Dog Tags", "reddogtags", "", 86400, 0, false,
+                new[] { StackItem("reddogtags", 1, 0), StackItem("wood", 50, 0) });
+            AddKitIfMissing("tag-dogtagneutral", "PLACEHOLDER Dog Tag", "dogtagneutral", "", 86400, 0, false,
+                new[] { StackItem("dogtagneutral", 1, 0), StackItem("wood", 50, 0) });
+            kitFile.PlaceholdersAdded = true;
+            Puts("NightshadeShop added any missing placeholder kits (wipe-day and dog tags). Existing kits were not changed.");
+            return true;
+        }
+
+        private void AddKitIfMissing(string id, string name, string icon, string perm, int cooldown, int uses, bool wipeDay, KitStack[] items)
+        {
+            if (FindKit(id) != null) return;
+            kitFile.Kits.Add(new KitDef
+            {
+                Id = id,
+                Name = name,
+                Icon = icon,
+                Permission = perm ?? "",
+                CooldownSeconds = cooldown,
+                MaxUsesPerWipe = uses,
+                WipeDay = wipeDay,
+                Items = new List<KitStack>(items ?? new KitStack[0])
+            });
         }
 
         private bool MigrateVipPerkKits()
@@ -5014,6 +5461,7 @@ namespace Oxide.Plugins
             s.DescriptionEdit = false;
             s.EditItem = s.EditTrade = 0;
             s.EditKitId = null;
+            s.PreviewKitId = null;
             s.PickTarget = null;
             s.EventMenu = false;
             s.Status = "";

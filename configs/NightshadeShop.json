@@ -127,6 +127,10 @@
     "Required Permission (empty = everyone who can open the shop)": "",
     "Log Transactions": true
   },
+  "Kits": {
+    "Wipe Day Window (hours after SaveRestore.SaveCreatedTime, 0 hides wipe-day kits)": 24,
+    "Wipe Day Notes": "SaveRestore.SaveCreatedTime is the wipe clock (map save creation). A kit with Wipe Day true is listed for everyone, including players without nightshadeshop.wipelock, until this many hours have passed. Claim is refused after that, and the card is hidden. 0 disables wipe-day kits. Do not hardcode a kit id; set Wipe Day on the kit."
+  },
   "Themes": [
     {
       "Name": "Nightshade",
