@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
 using Oxide.Core;
 using UnityEngine;
 
@@ -8,7 +8,9 @@ namespace Oxide.Plugins
 {
     // Local Nightshade change on Grok's IslandStorm 1.0.0.
     // Weather eases in and out. Replacing this file with a stock 1.0.0 copy removes that.
-    [Info("IslandStorm", "Grok", "1.1.0")]
+    // weather.* values are applied with console commands so connected clients receive them.
+    // Assigning ConVar.Weather in C# updates this server only.
+    [Info("IslandStorm", "Grok", "1.1.1")]
     [Description("Island-wide radiation storm with whipping winds. Nightshade build: weather eases in and out (based on Grok 1.0.0).")]
     public class IslandStorm : RustPlugin
     {
@@ -29,6 +31,7 @@ namespace Oxide.Plugins
         private bool rampActive;
         private StormPhase phase = StormPhase.Idle;
         private List<WeatherChannel> channels;
+        private readonly HashSet<string> weatherWarns = new HashSet<string>();
 
         private enum StormPhase
         {
@@ -246,7 +249,17 @@ namespace Oxide.Plugins
                 return;
             }
 
-            HandleStormCommand(null, arg.Args?.Select(a => a.ToString()).ToArray() ?? new string[0]);
+            HandleStormCommand(null, ReadConsoleArgs(arg));
+        }
+
+        // ConsoleSystem.Arg.Args is Facepunch.StringView[] on this host.
+        private static string[] ReadConsoleArgs(ConsoleSystem.Arg arg)
+        {
+            if (arg == null) return new string[0];
+            var list = new List<string>();
+            for (int i = 0; i < 8 && arg.HasArgs(i + 1); i++)
+                list.Add(arg.GetString(i) ?? "");
+            return list.ToArray();
         }
 
         private void HandleStormCommand(BasePlayer player, string[] args)
@@ -715,16 +728,23 @@ namespace Oxide.Plugins
 
         private void SetChannel(string key, float value)
         {
-            switch (key)
+            // set_rain and the other ConVar.Weather setters write Climate.WeatherOverrides
+            // on this server and do not call SendReplicatedVars. The console command does:
+            // Command.Set raises OnReplicatedVarChanged, and ServerMgr sends that weather.*
+            // value to clients who are already connected. A direct property write leaves
+            // their sky on the procedural forecast.
+            string command = "weather." + key;
+            string text = value.ToString("0.00", CultureInfo.InvariantCulture);
+            try
             {
-                case "rain": ConVar.Weather.rain = value; break;
-                case "wind": ConVar.Weather.wind = value; break;
-                case "thunder": ConVar.Weather.thunder = value; break;
-                case "fog": ConVar.Weather.fog = value; break;
-                case "cloud_coverage": ConVar.Weather.cloud_coverage = value; break;
-                case "atmosphere_rayleigh": ConVar.Weather.atmosphere_rayleigh = value; break;
-                case "atmosphere_mie": ConVar.Weather.atmosphere_mie = value; break;
-                case "atmosphere_brightness": ConVar.Weather.atmosphere_brightness = value; break;
+                ConsoleSystem.CommandResult result = ConsoleSystem.RunWithResult(ConsoleSystem.Option.Server.Quiet(), command, text);
+                if (result.Result == ConsoleSystem.CommandResultType.CommandNotFound && weatherWarns.Add(key))
+                    PrintWarning("Weather command '" + command + "' was not found. Clients will not see this part of the storm.");
+            }
+            catch (Exception ex)
+            {
+                if (weatherWarns.Add(key))
+                    PrintWarning("Could not set " + command + ": " + ex.Message);
             }
         }
 
