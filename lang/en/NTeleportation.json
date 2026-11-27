@@ -1,18 +1,5 @@
 {
-  "DM_TownTPStarted": "Teleporting to {0} in {1} seconds! If this teleport costs RP, it is taken when the countdown finishes. If you cannot afford it, the teleport is cancelled and the amount is shown.",
-  "HomeTPStarted": "Teleporting to your home {0} in {1} seconds! If this teleport costs RP, it is taken when the countdown finishes. If you cannot afford it, the teleport is cancelled and the amount is shown.",
-  "Accept": "{0} has accepted your teleport request! Teleporting in {1} seconds! If this teleport costs RP, it is taken when the countdown finishes. If you cannot afford it, the teleport is cancelled and the amount is shown.",
-  "TPMoney": "{0} RP deducted from your account!",
-  "TPNoMoney": "You do not have {0} RP for this teleport!",
-  "PayToTown": "Normal {1} teleports cost {0} RP. After you pay to skip the cooldown, that normal cost is not taken again.",
-  "PayToTPR": "Normal TPR teleports cost {0} RP, charged when the teleport finishes.",
-  "DM_TownTPCooldownBypass": "Your teleport was on cooldown. You paid {0} RP to skip it.",
-  "DM_TownTPCooldownBypassF": "Your teleport is currently on cooldown. You do not have {0} RP to skip it.",
-  "DM_TownTPCooldownBypassP": "You may pay {0} RP to skip this cooldown.",
-  "HomeTPCooldownBypass": "Your teleport was on cooldown. You paid {0} RP to skip it.",
-  "HomeTPCooldownBypassF": "Your teleport is currently on cooldown. You do not have {0} RP to skip it.",
-  "HomeTPCooldownBypassP": "You may pay {0} RP to skip this cooldown.",
-  "TPRCooldownBypass": "Your teleport request was on cooldown. You paid {0} RP to skip it.",
-  "TPRCooldownBypassF": "Your teleport is currently on cooldown. You do not have {0} RP to skip it.",
-  "TPRCooldownBypassP": "You may pay {0} RP to skip this cooldown."
+  "HomeTPStarted": "",
+  "DM_TownTPStarted": "",
+  "Accept": ""
 }
