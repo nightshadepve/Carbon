@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.3.0")]
+    [Info("NightshadeHud", "Nightshade", "1.3.1")]
     [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
@@ -32,27 +32,31 @@ namespace Oxide.Plugins
         private const string ArtDir = "Nightshade/NightshadeHud";
         private const string DefaultBorderFile = "Nightshade/NightshadeHud/hud_border.png";
         private const string DefaultBackgroundFile = "Nightshade/NightshadeHud/hud_bg.png";
-        private const float Pad = 16f;
-        private const float NameGap = 8f;
-        private const float NameTop = 17f;
-        private const float NameH = 16f;
-        private const float OnlineTop = 37f;
-        private const float OnlineH = 14f;
-        private const float StatusTop = 53f;
-        private const float StatusH = 16f;
-        private const float TeleTitleTop = 80f;
-        private const float TeleTitleH = 14f;
-        private const float TelePriceTop = 95f;
-        private const float TelePriceH = 12f;
-        private const int NameFont = 14;
-        private const int TagFont = 11;
-        private const int ClockFont = 12;
-        private const int OnlineFont = 11;
-        private const int StatusFont = 12;
-        private const int ShieldFont = 11;
-        private const int TeleTitleFont = 11;
-        private const int TelePriceFont = 10;
-        private const int BadgeFont = 8;
+        private const string DefaultLogoFile = "logo.png";
+        private const string DefaultPurgeLogoFile = "purge_logo.png";
+        private const string ConfigVersion = "1.3.1";
+        private const float DefaultScale = 0.5f;
+        // Design space is the 1.3.0 box (268x120) with the rows pulled together.
+        // Scale 0.5 draws that box at about 134x60. Padding and row positions are tighter than 1.3.0.
+        private const float DesignWidth = 268f;
+        private const float DesignHeight = 120f;
+        private const float DesignIcon = 32f;
+        private const float DesignPad = 8f;
+        private const float DesignNameGap = 6f;
+        private const float DesignNameTop = 6f;
+        private const float DesignNameH = 20f;
+        private const float DesignOnlineTop = 26f;
+        private const float DesignOnlineH = 18f;
+        private const float DesignStatusTop = 44f;
+        private const float DesignStatusH = 20f;
+        private const float DesignTeleTitleTop = 70f;
+        private const float DesignTeleTitleH = 18f;
+        private const float DesignTelePriceTop = 88f;
+        private const float DesignTelePriceH = 18f;
+        private const float DesignOutL = 8f;
+        private const float DesignOutR = 8f;
+        private const float DesignOutT = 12f;
+        private const float DesignOutB = 8f;
         private const string BadgeBgName = "NightshadeHud.BadgeBg";
         private const string BadgeName = "NightshadeHud.Badge";
         private const string LogoImageKey = "NightshadeHud.Logo";
@@ -119,8 +123,50 @@ namespace Oxide.Plugins
             public string Shown;
         }
 
+        private float ScaleOf
+        {
+            get
+            {
+                if (config == null || float.IsNaN(config.Scale) || float.IsInfinity(config.Scale)) return DefaultScale;
+                return Mathf.Clamp(config.Scale, 0.35f, 1.25f);
+            }
+        }
+
+        private float D(float design) => design * ScaleOf;
+
+        // Font sizes follow Scale, but stay large enough to read at the default half size.
+        private static int F(float design, float scale, int min)
+        {
+            int n = Mathf.RoundToInt(design * scale);
+            return n < min ? min : n;
+        }
+
+        private float Pad => D(DesignPad);
+        private float NameGap => D(DesignNameGap);
+        private float NameTop => D(DesignNameTop);
+        private float NameH => D(DesignNameH);
+        private float OnlineTop => D(DesignOnlineTop);
+        private float OnlineH => D(DesignOnlineH);
+        private float StatusTop => D(DesignStatusTop);
+        private float StatusH => D(DesignStatusH);
+        private float TeleTitleTop => D(DesignTeleTitleTop);
+        private float TeleTitleH => D(DesignTeleTitleH);
+        private float TelePriceTop => D(DesignTelePriceTop);
+        private float TelePriceH => D(DesignTelePriceH);
+        private int NameFont => F(14f, ScaleOf, 8);
+        private int TagFont => F(11f, ScaleOf, 7);
+        private int ClockFont => F(12f, ScaleOf, 7);
+        private int OnlineFont => F(11f, ScaleOf, 7);
+        private int StatusFont => F(12f, ScaleOf, 7);
+        private int ShieldFont => F(11f, ScaleOf, 7);
+        private int TeleTitleFont => F(11f, ScaleOf, 7);
+        private int TelePriceFont => F(10f, ScaleOf, 7);
+        private int BadgeFont => F(8f, ScaleOf, 6);
+
         private class Settings
         {
+            [JsonProperty("Config version")] public string Version = ConfigVersion;
+            [JsonProperty("Scale")] public float Scale = DefaultScale;
             [JsonProperty("Chat command")] public string Command = "hud";
             [JsonProperty("Default state for new players (minimized, half, full)")] public string DefaultState = "full";
             [JsonProperty("Layer (Overlay shows in the inventory)")] public string Layer = "Overlay";
@@ -128,9 +174,9 @@ namespace Oxide.Plugins
             [JsonProperty("Left anchor (under the missions bar)")] public string LeftAnchor = "0.008 0.905";
             [JsonProperty("Inset from the right (px)")] public float Right = 16f;
             [JsonProperty("Inset from the top (px)")] public float Top = 12f;
-            [JsonProperty("Width (px)")] public float Width = 268f;
-            [JsonProperty("Height (px)")] public float Height = 120f;
-            [JsonProperty("Icon size (px)")] public float IconSize = 36f;
+            [JsonProperty("Width (px)")] public float Width = 134f;
+            [JsonProperty("Height (px)")] public float Height = 60f;
+            [JsonProperty("Icon size (px)")] public float IconSize = 16f;
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
             [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
             [JsonProperty("Purge logo image file")] public string PurgeLogoImage = "purge_logo.png";
@@ -154,10 +200,10 @@ namespace Oxide.Plugins
             [JsonProperty("Show border")] public bool ShowBorder = true;
             [JsonProperty("Border image file")] public string BorderImage = DefaultBorderFile;
             [JsonProperty("Background image file")] public string BackgroundImage = DefaultBackgroundFile;
-            [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 8f;
-            [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 8f;
-            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 12f;
-            [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 8f;
+            [JsonProperty("Border outset left (px)")] public float BorderOutsetLeft = 4f;
+            [JsonProperty("Border outset right (px)")] public float BorderOutsetRight = 4f;
+            [JsonProperty("Border outset top (px)")] public float BorderOutsetTop = 6f;
+            [JsonProperty("Border outset bottom (px)")] public float BorderOutsetBottom = 4f;
             [JsonProperty("Panel color")] public string PanelColor = "#0E0E12";
             [JsonProperty("Panel opacity (0-100)")] public float PanelOpacity = 78f;
             [JsonProperty("Name color")] public string NameColor = "#A267D3";
@@ -189,47 +235,114 @@ namespace Oxide.Plugins
         protected override void LoadConfig()
         {
             base.LoadConfig();
+            JObject raw = null;
+            try { raw = Config.ReadObject<JObject>(); }
+            catch { raw = null; }
             try { config = Config.ReadObject<Settings>() ?? new Settings(); }
             catch (Exception ex)
             {
                 PrintWarning("Invalid config, using defaults: " + ex.Message);
                 config = new Settings();
+                raw = null;
             }
-            if (config.Width < 180f) config.Width = 268f;
-            if (config.Height < 80f) config.Height = 120f;
-            if (config.IconSize < 16f) config.IconSize = 36f;
+            bool migrate = IsOlderConfig(raw);
+            if (migrate) MigrateOlderConfig(raw);
+            RepairImages();
+            FillMissingText();
+            ApplyScale();
+            config.Version = ConfigVersion;
+            SaveConfig();
+        }
+
+        private static bool IsOlderConfig(JObject raw)
+        {
+            if (raw == null) return true;
+            JToken token = raw["Config version"];
+            if (token == null || token.Type == JTokenType.Null) return true;
+            string text = token.ToString().Trim();
+            if (text.Length == 0) return true;
+            int dots = 0;
+            for (int i = 0; i < text.Length; i++)
+                if (text[i] == '.') dots++;
+            while (dots < 2)
+            {
+                text += ".0";
+                dots++;
+            }
+            Version have;
+            Version need;
+            if (!Version.TryParse(text, out have)) return true;
+            if (!Version.TryParse(ConfigVersion, out need)) return true;
+            return have < need;
+        }
+
+        private void MigrateOlderConfig(JObject raw)
+        {
+            bool hasScale = raw != null && raw["Scale"] != null && raw["Scale"].Type != JTokenType.Null;
+            if (!hasScale)
+            {
+                float oldWidth = DesignWidth;
+                JToken widthToken = raw == null ? null : raw["Width (px)"];
+                float parsed;
+                if (widthToken != null && widthToken.Type != JTokenType.Null
+                    && float.TryParse(widthToken.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+                    oldWidth = parsed;
+                bool stock = Mathf.Abs(oldWidth - 252f) < 0.6f || Mathf.Abs(oldWidth - DesignWidth) < 0.6f;
+                config.Scale = stock ? DefaultScale : Mathf.Clamp(oldWidth / DesignWidth, 0.35f, 1.25f);
+            }
+            // 58 cleared the old top-right skill panel. 12 is the 1.3 corner inset.
+            if (Mathf.Abs(config.Top - 58f) < 0.1f) config.Top = 12f;
             if (string.IsNullOrEmpty(config.NameColor) || string.Equals(config.NameColor, "#F4F1EA", StringComparison.OrdinalIgnoreCase))
                 config.NameColor = "#A267D3";
-            if (config.TagText == null) config.TagText = "Solo/Duo";
-            // The approved 1.3 layout uses grey for the tag. #C4A6E0 was the 1.2 default.
             if (string.IsNullOrEmpty(config.TagColor) || string.Equals(config.TagColor, "#C4A6E0", StringComparison.OrdinalIgnoreCase))
                 config.TagColor = "#9A9692";
-            if (string.IsNullOrEmpty(config.LeftAnchor)) config.LeftAnchor = "0.008 0.905";
-            if (string.IsNullOrEmpty(config.Anchor)) config.Anchor = "1 1";
-            // 58 cleared the old top-right skill panel. That panel now sits at the bottom.
-            if (Mathf.Abs(config.Top - 58f) < 0.1f) config.Top = 12f;
-            if (Mathf.Abs(config.Width - 252f) < 0.1f) config.Width = 268f;
-            if (Mathf.Abs(config.IconSize - 34f) < 0.1f) config.IconSize = 36f;
-            // The rounded border is drawn for a 12px top outset. 6 was the 1.2 default.
-            if (Mathf.Abs(config.BorderOutsetTop - 6f) < 0.1f) config.BorderOutsetTop = 12f;
             if (string.Equals(config.CountdownIdle, "#C8C8C8", StringComparison.OrdinalIgnoreCase))
                 config.CountdownIdle = "#FF4D4D";
+        }
+
+        private void RepairImages()
+        {
+            config.LogoImage = CleanArtName(config.LogoImage, true, DefaultLogoFile);
+            config.PurgeLogoImage = CleanArtName(config.PurgeLogoImage, true, DefaultPurgeLogoFile);
+            config.BorderImage = CleanArtName(config.BorderImage, false, DefaultBorderFile);
+            config.BackgroundImage = CleanArtName(config.BackgroundImage, false, DefaultBackgroundFile);
+        }
+
+        private static string CleanArtName(string name, bool filenameOnly, string fallback)
+        {
+            if (!SafeArtName(name, filenameOnly)) return fallback;
+            return name.Trim();
+        }
+
+        private void FillMissingText()
+        {
+            if (config.TagText == null) config.TagText = "Solo/Duo";
+            if (string.IsNullOrEmpty(config.LeftAnchor)) config.LeftAnchor = "0.008 0.905";
+            if (string.IsNullOrEmpty(config.Anchor)) config.Anchor = "1 1";
             if (string.IsNullOrEmpty(config.CountdownActive)) config.CountdownActive = "#FF4D4D";
             if (string.IsNullOrEmpty(config.CountdownIdle)) config.CountdownIdle = "#FF4D4D";
-            if (!SafeArtName(config.LogoImage, true)) config.LogoImage = "logo.png";
-            else config.LogoImage = config.LogoImage.Trim();
-            if (!SafeArtName(config.PurgeLogoImage, true)) config.PurgeLogoImage = "purge_logo.png";
-            else config.PurgeLogoImage = config.PurgeLogoImage.Trim();
             if (config.TeleportTitle == null) config.TeleportTitle = "Teleportation";
             if (string.IsNullOrEmpty(config.TeleportTitleColor)) config.TeleportTitleColor = "#50A0FF";
             if (string.IsNullOrEmpty(config.TeleportFormat)) config.TeleportFormat = "Outpost: {outpost}rp | Bandit: {bandit}rp";
             if (config.DefaultOutpostPrice < 0) config.DefaultOutpostPrice = 150;
             if (config.DefaultBanditPrice < 0) config.DefaultBanditPrice = 200;
-            if (!SafeArtName(config.BorderImage, false)) config.BorderImage = DefaultBorderFile;
-            if (!SafeArtName(config.BackgroundImage, false)) config.BackgroundImage = DefaultBackgroundFile;
             if (string.IsNullOrEmpty(config.ShieldActive)) config.ShieldActive = "#69D8A0";
             if (string.IsNullOrEmpty(config.ShieldQueued)) config.ShieldQueued = "#E2B968";
-            SaveConfig();
+            if (string.IsNullOrEmpty(config.Command)) config.Command = "hud";
+            if (string.IsNullOrEmpty(config.Layer)) config.Layer = "Overlay";
+        }
+
+        private void ApplyScale()
+        {
+            if (float.IsNaN(config.Scale) || float.IsInfinity(config.Scale) || config.Scale < 0.35f || config.Scale > 1.25f)
+                config.Scale = DefaultScale;
+            config.Width = Mathf.Round(DesignWidth * config.Scale);
+            config.Height = Mathf.Round(DesignHeight * config.Scale);
+            config.IconSize = Mathf.Round(DesignIcon * config.Scale);
+            config.BorderOutsetLeft = Mathf.Round(DesignOutL * config.Scale);
+            config.BorderOutsetRight = Mathf.Round(DesignOutR * config.Scale);
+            config.BorderOutsetTop = Mathf.Round(DesignOutT * config.Scale);
+            config.BorderOutsetBottom = Mathf.Round(DesignOutB * config.Scale);
         }
 
         protected override void SaveConfig() => Config.WriteObject(config, true);
@@ -247,6 +360,7 @@ namespace Oxide.Plugins
             purgeArt = new Art { Key = PurgeImageKey, Label = "purge logo" };
             borderArt = new Art { Key = BorderKey, Label = "HUD border" };
             backgroundArt = new Art { Key = BackgroundKey, Label = "HUD background" };
+            EnsureArtPaths();
         }
 
         private void OnServerInitialized()
@@ -1335,31 +1449,47 @@ namespace Oxide.Plugins
             art.Waiting = false;
         }
 
+        private void EnsureArtPaths()
+        {
+            BindArt(logoArt, LogoPath(config == null ? null : config.LogoImage));
+            BindArt(purgeArt, LogoPath(config == null ? null : config.PurgeLogoImage, DefaultPurgeLogoFile));
+            BindArt(borderArt, DataPathOf(config == null ? null : config.BorderImage, DefaultBorderFile));
+            BindArt(backgroundArt, DataPathOf(config == null ? null : config.BackgroundImage, DefaultBackgroundFile));
+        }
+
+        private static void BindArt(Art art, string path)
+        {
+            if (art == null) return;
+            string next = path ?? string.Empty;
+            if (art.Path == next) return;
+            bool wasEmpty = string.IsNullOrEmpty(art.Path);
+            art.Path = next;
+            if (wasEmpty && art.GaveUp && next.Length > 0)
+            {
+                art.GaveUp = false;
+                art.Warned = false;
+                art.Tries = 0;
+            }
+        }
+
         private void QueueImages()
         {
-            PrepareArt(logoArt, LogoPath(config.LogoImage));
-            PrepareArt(purgeArt, LogoPath(config.PurgeLogoImage));
-            PrepareArt(borderArt, DataPathOf(config.BorderImage, DefaultBorderFile));
-            PrepareArt(backgroundArt, DataPathOf(config.BackgroundImage, DefaultBackgroundFile));
+            EnsureArtPaths();
             QueueArt(logoArt);
             QueueArt(purgeArt);
             QueueArt(borderArt);
             QueueArt(backgroundArt);
         }
 
-        private void PrepareArt(Art art, string path)
-        {
-            if (art == null) return;
-            art.Path = path;
-        }
-
         private void QueueArt(Art art)
         {
-            if (art == null || art.Queued || art.GaveUp || art.Waiting) return;
+            if (art == null || art.Queued || art.Waiting) return;
+            if (string.IsNullOrEmpty(art.Path)) EnsureArtPaths();
+            if (art.GaveUp) return;
             if (string.IsNullOrEmpty(art.Path) || !File.Exists(art.Path))
             {
                 art.GaveUp = true;
-                WarnArt(art, art.Label + " file is missing (" + art.Path + "). The HUD stays up without it.");
+                WarnArt(art, art.Label + " file is missing (" + (string.IsNullOrEmpty(art.Path) ? "no path" : art.Path) + "). The HUD stays up without it.");
                 return;
             }
             if (ImageLibrary == null || !ImageLibrary.IsLoaded)
@@ -1501,17 +1631,19 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private string LogoPath(string name)
+        private string LogoPath(string name, string fallback = DefaultLogoFile)
         {
-            string file = SafeArtName(name, true) ? name.Trim() : "logo.png";
-            return Path.Combine(Interface.Oxide.DataDirectory, "Nightshade", "NightshadeHud", file);
+            string file = CleanArtName(name, true, string.IsNullOrEmpty(fallback) ? DefaultLogoFile : fallback);
+            string root = Interface.Oxide.DataDirectory ?? string.Empty;
+            return Path.Combine(root, "Nightshade", "NightshadeHud", file);
         }
 
         private string DataPathOf(string file, string fallback)
         {
-            if (!SafeArtName(file, false)) file = fallback;
-            file = file.Replace('\\', '/').Trim().TrimStart('/');
-            return Path.Combine(Interface.Oxide.DataDirectory, file);
+            if (!SafeArtName(file, false)) file = fallback ?? DefaultBorderFile;
+            file = (file ?? DefaultBorderFile).Replace('\\', '/').Trim().TrimStart('/');
+            string root = Interface.Oxide.DataDirectory ?? string.Empty;
+            return Path.Combine(root, file);
         }
 
         #endregion
