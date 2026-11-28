@@ -1,17 +1,33 @@
 {
   "name": "Got Triggered And",
-  "xp": 7525.994999999999,
+  "xp": 169382.41354007885,
   "prestige_level": 0,
-  "current_level": 6,
-  "achieved_level": 6,
+  "current_level": 28,
+  "achieved_level": 28,
   "available_points": 0,
   "non_level_related_points_given": 0,
   "buff_values": {
-    "Amature Woodcutter": 5,
-    "Efficient Lumberjack": 1,
-    "Adept Woodcutter": 5,
-    "Expert Woodcutter": 5,
-    "Instant Woodcutting": 2
+    "Amature Miner": 5,
+    "Adept Miner": 5,
+    "Expert Miner": 5,
+    "Refiner": 5,
+    "Stroke of luck": 5,
+    "Stone Sense": 1,
+    "Efficient Miner": 1,
+    "Tea Party": 5,
+    "Glutton": 5,
+    "Fry Cook": 5,
+    "Amature Harvester": 5,
+    "Amature Farmer": 5,
+    "Expert Farmer": 5,
+    "Robust pickaxe": 5,
+    "Instant Mining": 5,
+    "Animal Tamer": 5,
+    "Revitalization": 3,
+    "Clever Incubator": 2,
+    "Calming Presence": 1,
+    "Amature Tinkerer": 5,
+    "Adept Tinkerer": 1
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -23,19 +39,23 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-13T02:33:40.889252+00:00",
+  "logged_off": "2026-11-27T23:00:02.335252+00:00",
   "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
-  "ultimate_settings": {},
-  "plant_genes": "gggggg",
+  "ultimate_settings": {
+    "Mining_Ultimate": {
+      "enabled": true
+    }
+  },
+  "plant_genes": "yyyyyg",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
   "cooking_ultimate_used_time": "0001-01-01T00:00:00",
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "0001-01-01T00:00:00",
+  "last_xp_loss": "2026-11-23T02:36:47.483229+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -46,5 +66,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 18
+  "GetTotalSkillPoints": 84
 }

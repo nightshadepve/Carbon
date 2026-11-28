@@ -1,6 +1,6 @@
 {
   "name": "pinnaclepreditor",
-  "xp": 63562.930532604762,
+  "xp": 64044.655532604767,
   "prestige_level": 0,
   "current_level": 17,
   "achieved_level": 17,
@@ -25,8 +25,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-18T08:09:14.01824+00:00",
-  "xp_bonus_pool": 24529.975000000024,
+  "logged_off": "2026-11-21T18:09:33.506659+00:00",
+  "xp_bonus_pool": 24518.275,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {},

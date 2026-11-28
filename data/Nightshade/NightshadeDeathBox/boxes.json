@@ -1,0 +1,46 @@
+{
+  "SaveId": "639295024030000000",
+  "NextGroupId": 247,
+  "Boxes": [
+    {
+      "NetId": 25890966,
+      "OwnerId": 76561198138332799,
+      "OwnerName": "Got Triggered And",
+      "X": 1018.97015,
+      "Y": 161.141159,
+      "Z": 570.8127,
+      "CreatedUtcTicks": 639313705886218080,
+      "GroupId": 243
+    },
+    {
+      "NetId": 25880745,
+      "OwnerId": 76561198138332799,
+      "OwnerName": "Got Triggered And",
+      "X": 1020.94354,
+      "Y": 162.8864,
+      "Z": 587.0616,
+      "CreatedUtcTicks": 639313705886226550,
+      "GroupId": 244
+    },
+    {
+      "NetId": 25883122,
+      "OwnerId": 76561198138332799,
+      "OwnerName": "Got Triggered And",
+      "X": 1021.359,
+      "Y": 161.141159,
+      "Z": 583.8537,
+      "CreatedUtcTicks": 639313705886226590,
+      "GroupId": 245
+    },
+    {
+      "NetId": 25877966,
+      "OwnerId": 76561198138332799,
+      "OwnerName": "Got Triggered And",
+      "X": 1018.31549,
+      "Y": 164.141159,
+      "Z": 584.813965,
+      "CreatedUtcTicks": 639313705886226620,
+      "GroupId": 246
+    }
+  ]
+}

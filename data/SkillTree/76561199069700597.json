@@ -1,10 +1,10 @@
 {
   "name": "Blue",
-  "xp": 535008.62332527526,
+  "xp": 744752.73559887311,
   "prestige_level": 0,
-  "current_level": 51,
-  "achieved_level": 51,
-  "available_points": 13,
+  "current_level": 60,
+  "achieved_level": 60,
+  "available_points": 9,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Miner": 5,
@@ -42,7 +42,15 @@
     "Tank Buster": 5,
     "Skybane": 5,
     "Supersonic Thrust": 1,
-    "Ricochet": 5
+    "Ricochet": 5,
+    "Radiation Expert": 5,
+    "Accident Evasion": 5,
+    "Perfect Balance": 5,
+    "Amature Rider": 5,
+    "Airbags": 2,
+    "Economical Pilot": 3,
+    "Mechanic": 1,
+    "Jet Engine": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -54,8 +62,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-21T08:19:00.83462+00:00",
-  "xp_bonus_pool": 15451.25,
+  "logged_off": "2026-11-27T04:09:40.690101+00:00",
+  "xp_bonus_pool": 25000.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
@@ -70,10 +78,10 @@
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
   "cooking_ultimate_used_time": "0001-01-01T00:00:00",
-  "Trap_Spotter_used_time": "2026-11-21T06:52:05.97818+00:00",
-  "Loot_Spotter_used_time": "2026-11-18T07:07:18.323849+00:00",
+  "Trap_Spotter_used_time": "2026-11-25T04:42:16.631307+00:00",
+  "Loot_Spotter_used_time": "2026-11-26T20:35:21.237301+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-20T04:06:12.720164+00:00",
+  "last_xp_loss": "2026-11-26T20:33:21.026713+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -84,5 +92,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 153
+  "GetTotalSkillPoints": 180
 }

@@ -1,12 +1,28 @@
 {
   "name": "dispare1337",
-  "xp": 3719.25,
+  "xp": 137066.1607620384,
   "prestige_level": 0,
-  "current_level": 4,
-  "achieved_level": 4,
+  "current_level": 25,
+  "achieved_level": 25,
   "available_points": 12,
   "non_level_related_points_given": 0,
-  "buff_values": {},
+  "buff_values": {
+    "Maintenance": 5,
+    "Resourceful": 5,
+    "Drum Mag": 5,
+    "Sixth Sense": 5,
+    "Revitalization": 5,
+    "Flame Retardant": 5,
+    "Rugged Up": 1,
+    "Perfect Balance": 5,
+    "Accident Evasion": 5,
+    "Lead Lined": 5,
+    "Messiah": 1,
+    "Defence Research": 5,
+    "Vampiric Tendencies": 1,
+    "Scientific Breakthrough": 5,
+    "Skybane": 5
+  },
   "xp_drops": true,
   "xp_hud": true,
   "better_chat_enabled": true,
@@ -17,11 +33,18 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-09T01:04:25.632771+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-26T14:15:28.853718+00:00",
+  "xp_bonus_pool": 24574.96,
   "extra_pockets_button": true,
   "notifications": true,
-  "ultimate_settings": {},
+  "ultimate_settings": {
+    "Medical_Ultimate": {
+      "enabled": true
+    },
+    "Combat_Ultimate": {
+      "enabled": true
+    }
+  },
   "plant_genes": "gggggg",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
@@ -29,16 +52,16 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "0001-01-01T00:00:00",
+  "last_xp_loss": "2026-11-23T02:44:56.737362+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
   "DisabledBuffs": [],
   "presets": null,
   "ignoreWarning": false,
-  "ignoreMaxWarning": false,
+  "ignoreMaxWarning": true,
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 12
+  "GetTotalSkillPoints": 75
 }

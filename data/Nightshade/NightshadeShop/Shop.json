@@ -1,11 +1,11 @@
 {
-  "NextId": 241,
+  "NextId": 242,
   "RaidDisplayPricesApplied": true,
   "Categories": [
     {
       "Name": "VIP",
       "Managed Raidable Bases Tab": false,
-      "Icon (URL, skin ID or shortname)": "NS-VIP.png",
+      "Icon (URL, skin ID or shortname)": "https://i.ibb.co/W4jFkKB4/NS-VIP.png",
       "Required Permission (empty = everyone)": "nightshadeshop.vipperk",
       "Only Visible During Themes (empty = always)": [],
       "Items": [
@@ -15,7 +15,7 @@
           "Event Argument (raid difficulty 0-4 or dungeon tier name)": "",
           "Charged By Event Plugin (true = RaidableBases/DungeonEvents take the RP and refund failures)": true,
           "Show Event Plugin Pricing Instead Of Display Price": false,
-          "Card Icon (URL, skin ID or shortname; empty = item icon)": "market.png",
+          "Card Icon (URL, skin ID or shortname; empty = item icon)": "https://i.ibb.co/BKS5ZYpb/market.png",
           "Required Permission (empty = everyone)": "",
           "Cooldown Between Purchases (seconds, 0 = none)": 0,
           "Daily Buy Limit (0 = none)": 0,
@@ -177,6 +177,7 @@
       "Only Visible During Themes (empty = always)": [
         "Halloween"
       ],
+      "Admin mode only (hidden from players)": true,
       "Items": [
         {
           "Id": 95,
@@ -1150,6 +1151,7 @@
       "Only Visible During Themes (empty = always)": [
         "Christmas"
       ],
+      "Admin mode only (hidden from players)": true,
       "Items": [
         {
           "Id": 7,
@@ -1584,6 +1586,7 @@
       "Icon (URL, skin ID or shortname)": "3748997849",
       "Required Permission (empty = everyone)": "nightshadeshop.wipelock",
       "Only Visible During Themes (empty = always)": [],
+      "Tab (shop|events)": "events",
       "Items": [
         {
           "Id": 20,
@@ -1749,6 +1752,7 @@
       "Icon (URL, skin ID or shortname)": "explosive.timed",
       "Required Permission (empty = everyone)": "",
       "Only Visible During Themes (empty = always)": [],
+      "Tab (shop|events)": "events",
       "Items": [
         {
           "Id": 215,
@@ -1885,9 +1889,10 @@
     {
       "Name": "Heli Signals",
       "Managed Raidable Bases Tab": false,
-      "Icon (URL, skin ID or shortname)": "Heli-Signals-Logo1.png",
+      "Icon (URL, skin ID or shortname)": "https://i.ibb.co/hx3XWS6B/Heli-Signals-Logo1.png",
       "Required Permission (empty = everyone)": "nightshadeshop.wipelock",
       "Only Visible During Themes (empty = always)": [],
+      "Tab (shop|events)": "events",
       "Items": [
         {
           "Id": 26,
@@ -2258,9 +2263,10 @@
     {
       "Name": "Brad Signals",
       "Managed Raidable Bases Tab": false,
-      "Icon (URL, skin ID or shortname)": "bradley-Drops.png",
+      "Icon (URL, skin ID or shortname)": "https://i.ibb.co/9kXPfwfX/bradley-Drops.png",
       "Required Permission (empty = everyone)": "nightshadeshop.wipelock",
       "Only Visible During Themes (empty = always)": [],
+      "Tab (shop|events)": "events",
       "Items": [
         {
           "Id": 40,
@@ -2485,11 +2491,11 @@
           "Event Argument (raid difficulty 0-4 or dungeon tier name)": "",
           "Charged By Event Plugin (true = RaidableBases/DungeonEvents take the RP and refund failures)": true,
           "Show Event Plugin Pricing Instead Of Display Price": false,
-          "Card Icon (URL, skin ID or shortname; empty = item icon)": "recycler.png",
+          "Card Icon (URL, skin ID or shortname; empty = item icon)": "https://i.ibb.co/1y6x6tf/recycler.png",
           "Required Permission (empty = everyone)": "",
           "Cooldown Between Purchases (seconds, 0 = none)": 0,
           "Daily Buy Limit (0 = none)": 0,
-          "Wipe Buy Limit (0 = none)": 1,
+          "Wipe Buy Limit (0 = none)": 2,
           "Limit Each Purchase To One": true,
           "Description (empty = use matching imported description)": "",
           "Imported Description Key (for example helisignal_easy)": "",
@@ -2537,7 +2543,7 @@
           "Event Argument (raid difficulty 0-4 or dungeon tier name)": "",
           "Charged By Event Plugin (true = RaidableBases/DungeonEvents take the RP and refund failures)": true,
           "Show Event Plugin Pricing Instead Of Display Price": false,
-          "Card Icon (URL, skin ID or shortname; empty = item icon)": "slotmachine.png",
+          "Card Icon (URL, skin ID or shortname; empty = item icon)": "https://i.ibb.co/wNPCK3M6/slotmachine.png",
           "Required Permission (empty = everyone)": "",
           "Cooldown Between Purchases (seconds, 0 = none)": 0,
           "Daily Buy Limit (0 = none)": 0,
@@ -2886,6 +2892,7 @@
       "Icon (URL, skin ID or shortname)": "pitchfork",
       "Required Permission (empty = everyone)": "nightshadeshop.wipelock",
       "Only Visible During Themes (empty = always)": [],
+      "Admin mode only (hidden from players)": true,
       "Items": [
         {
           "Id": 72,

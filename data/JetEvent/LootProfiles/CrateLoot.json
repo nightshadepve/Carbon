@@ -1,0 +1,7382 @@
+[
+  {
+    "Item ShortName": "hat.wolf",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "kayak",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "skidoo",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.armor.roadsign",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.armor.wood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.saddle.double",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.saddle.single",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.saddlebag",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.shoes.advanced",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horse.shoes.basic",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "aiming.module.mlrs",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.mlrs",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.bolt.hammerhead",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.bolt.incendiary",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.bolt.piercer",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.bolt.pitchfork",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.mounted",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballista.static",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "batteringram",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "catapult.ammo.bee",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "catapult.ammo.explosive",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "catapult.ammo.incendiary",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "catapult.ammo.boulder",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "catapult",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "siegetower",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.grenadelauncher.buckshot",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.grenadelauncher.he",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.grenadelauncher.smoke",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "arrow.hv",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "arrow.wooden",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "arrow.bone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "arrow.fire",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "dart.incapacitate",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "dart.radiation",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "dart.scatter",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "dart.wood",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.handmade.shell",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.nailgun.nails",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.pistol",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.pistol.fire",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.pistol.hv",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rifle",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rifle.explosive",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rifle.incendiary",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rifle.hv",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.basic",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.fire",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.hv",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.seeker",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.smoke",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.shotgun",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.shotgun.fire",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.shotgun.slug",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "speargun.spear",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "submarine.torpedo.straight",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.double.hinged.metal",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.double.hinged.toptier",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.double.hinged.wood",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.hinged.metal",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.hinged.toptier",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.hinged.wood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.grill",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.ladder.hatch.toptier",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.triangle.ladder.hatch.toptier",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.ladder.hatch",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.triangle.grill",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "floor.triangle.ladder.hatch",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gates.external.high.stone",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gates.external.high.wood",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ladder.wooden.wall",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "legacy.shelter.wood",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.external.high.stone",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.external.high",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.cell.gate",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.cell",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.fence.gate",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.fence",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.garagedoor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.netting",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.shopfront",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.frame.shopfront.metal",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.window.bars.metal",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.window.bars.toptier",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.window.bars.wood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shutter.metal.embrasure.a",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shutter.metal.embrasure.b",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.window.glass.reinforced",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shutter.wood.a",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "watchtower.wood",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballistic.helmet",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballistic.legarmor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ballistic.vest",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bdu.pants",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bdu.shirt",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diving.fins",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diving.mask",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diving.tank.double",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diving.tank",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diving.wetsuit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barrelcostume",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cratecostume",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.gas.mask",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.gloves.new",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.gloves",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "roadsign.gloves",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tactical.gloves",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodarmor.gloves",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ghostsheet",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "halloween.mummysuit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scarecrow.suit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scarecrowhead",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.helterneck",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.beenie",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.boonie",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bucket.helmet",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.headwrap",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.candle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.cap",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "coffeecan.helmet",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "deer.skull.mask",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "heavy.plate.helmet",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hat.miner",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "partyhat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "prisonerhood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "riot.helmet",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wood.armor.helmet",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hoodie",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bone.armor.suit",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "heavy.plate.jacket",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jacket.snow",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jacket",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wood.armor.jacket",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mask.balaclava",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mask.bandana",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.facemask",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "nightvisiongoggles",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.trousers",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "heavy.plate.pants",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.pants",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "roadsign.kilt",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pants.shorts",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wood.armor.pants",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pants",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.poncho",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.shirt",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shirt.collared",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.vest",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shirt.tanktop",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shoes.boots",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "burlap.shoes",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.boots",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.hide.skirt",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.banditguard",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit_scientist",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit_scientist_arctic",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit_scientist_naval",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit_scientist_nvgm",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hazmatsuit_scientist_peacekeeper",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scientistsuit_heavy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jumpsuit.suit.blue",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jumpsuit.suit",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jumpsuit.waterwellnpc",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oubreak_scientist",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tshirt.long",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tshirt",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.plate.torso",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "roadsign.jacket",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clothing.mod.armorinsert_asbestos",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clothing.mod.armorinsert_lead",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clothing.mod.armorinsert_metal",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clothing.mod.armorinsert_wood",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clothing.mod.armorinsert_wool",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bleach",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ducttape",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "carburetor1",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "carburetor2",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "carburetor3",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crankshaft1",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crankshaft2",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crankshaft3",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "piston1",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "piston2",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "piston3",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sparkplug1",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sparkplug2",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sparkplug3",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "valve1",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "valve2",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "valve3",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fuse",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gears",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "glue",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metalblade",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metalpipe",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "propanetank",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "roadsigns",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rope",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sewingkit",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sheetmetal",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metalspring",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sticks",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tarp",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "techparts",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "riflebody",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "semibody",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smgbody",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.animal.fence.gate",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.animal.fence",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.concrete",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.wood.cover",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.metal",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.sandbags",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.stone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.wood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "barricade.woodwire",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bbq",
+    "Is Blueprint": true,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "trap.bear",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bed",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "beehive",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "generator.biofuel",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "boatbuildingstation",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "anchor",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cannon",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cannonball",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "plank",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sail",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "small_ramp",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smallengine",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "steeringwheel.boat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "campfire",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ceilinglight",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chair",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chickencoop",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clantable",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "composter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "computerstation",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cookingworkbench",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "drone",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "dropbox",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "elevator",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fireplace.stone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spikes.floor",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteintable",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fridge",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "furnace.large",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "furnace",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hitchtroughcombo",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hopper",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hab.armor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "iotable",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "trap.landmine",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lantern",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "box.wooden.large",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.barrel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "locker",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mailbox",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "minifridge",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mixingtable",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "modularcarlift",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.mortar.basic",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.mortar.fragment",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mortar.deployable",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mining.pumpjack",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "small.oil.refinery",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "plantpot.single",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "planter.large",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "planter.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "planter.triangle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.audioalarm",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smart.alarm",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smart.switch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "storage.monitor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.battery.rechargable.large",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.battery.rechargable.medium",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.battery.rechargable.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.button",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.counter",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.hbhfsensor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.laserdetector",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.pressurepad",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tincan.alarm",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.digitalclock",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.doorcontroller",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.furnace",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.heater",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fluid.combiner",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fluid.splitter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fluid.switch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.andswitch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.blocker",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electrical.branch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electrical.combiner",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electrical.memorycell",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.orswitch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.random.switch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.rf.broadcaster",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.rf.receiver",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.xorswitch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.fuelgenerator.small",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.generator.small",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.solarpanel.large",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.igniter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "storageadaptor",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "industrial.combiner",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "industrial.conveyor",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "industrial.crafter",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "industrial.splitter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.flasherlight",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.simplelight",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.sirenlight",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "powered.water.purifier",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.seismicsensor",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.switch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.splitter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.sprinkler",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.teslacoil",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.timer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "electric.cabletunnel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "waterpump",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ptz.cctv.camera",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mining.quarry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "target.reactive",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "box.repair.bench",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "research.table",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rug.bear",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rug",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "searchlight",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shelves",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sign.wooden.huge",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sign.wooden.large",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sign.wooden.medium",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sign.wooden.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "guntrap",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sleepingbag",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stash.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spikes.trap",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spinner.wheel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fishtrap.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "table",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench1",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench2",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench3",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cupboard.tool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tunalight",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vending.machine",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.catcher.large",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.catcher.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "generator.water",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.purifier",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "generator.wind.scrap",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "box.wooden",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.accelerated",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.comfort",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.defensive",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.efficiency",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.prototype",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.range",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.recyclebin",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.reinforced",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.salvage",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "workbench.upgrade.surplus",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "apple",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "apple.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "black.raspberries",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blueberries",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "botabag",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bread.loaf",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bread.brioche.loaf",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grub",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "worm",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cactusflesh",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "can.beans",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "can.tuna",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chocolate",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "coconut",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "egg",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.anchovy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.catfish",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.herring",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.minnows",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.orangeroughy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.salmon",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.sardine",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.smallshark",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.troutsmall",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.yellowperch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "granolabar",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "honey",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "nucleus",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bearmeat.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bearmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bearmeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bearmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bigcatmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bigcatmeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bigcatmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chicken.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chicken.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chicken.raw",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chicken.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "beefmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "beefmeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "beefmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crocodilemeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crocodilemeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crocodilemeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "deermeat.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "deermeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "deermeat.raw",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "deermeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.cooked",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.raw",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fish.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horsemeat.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horsemeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horsemeat.raw",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horsemeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "humanmeat.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "humanmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "humanmeat.raw",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "humanmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "muttonmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "muttonmeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "muttonmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "meat.pork.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "meat.pork.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "meat.boar",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "porkmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "snakemeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "snakemeat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "snakemeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wolfmeat.burned",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wolfmeat.cooked",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wolfmeat.raw",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wolfmeat.spoiled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cream",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "milk",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "skimmedmilk",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mushroom",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jar.pickle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.apple",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.apple.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.bear",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.bear.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.beef",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.beef.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.bigcat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.bigcat.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.chicken",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.chicken.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.crocodile",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.crocodile.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.fish",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.fish.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.hunters",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.hunters.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.mutton",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.mutton.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.pork",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.pork.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.pumpkin",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.pumpkin.rich",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pie.survivors",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smallwaterbottle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spoiled.produce",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "waterjug",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fun.guitar",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.key",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lock.key",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lock.code",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lunar.firecrackers",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "confetticannon",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "head.bag",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "door.closer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.bunnyears",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.bunny.onesie",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "easterbasket",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "easter.bronzeegg",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "easter.goldegg",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "easter.paintedeggs",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "easter.silveregg",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "halloween.candy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "coffin.storage",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gravestone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodcross",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.01.head",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.01.legs",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.01.torso",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.02.head",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.02.legs",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.02.torso",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.03.head",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.03.legs",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "frankensteins.monster.03.torso",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.graveyard.fence",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "halloween.lootbag.large",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "halloween.lootbag.medium",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "halloween.lootbag.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pumpkinbasket",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spiderweb",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "largebackpack",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "note",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "parachute",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pinata",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "skull.human",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smallbackpack",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "venom.snake",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.advent",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "candycaneclub",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "candycane",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.ice.wall",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wall.external.high.ice",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pookie.bear",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "coal",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.present.large",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.present.medium",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.present.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sled",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "snowball",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "snowballgun",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stocking.large",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stocking.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gingerbreadsuit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "attire.reindeer.headband",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "santahat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wrappedgift",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wrappingpaper",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.baubels",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.candycanes",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.gingerbreadmen",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.lights",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.pinecone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.star",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.decoration.tinsel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "xmas.tree",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "captainslog",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "documents",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fishing.tackle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mrspice.can",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bottle.vodka",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fuse.highgrade",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "autoturret",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "flameturret",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gloweyes",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "ammo.rocket.sam",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "samsite",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "black.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.black.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.black.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blue.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.blue.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.blue.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "green.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.green.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.green.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "red.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.red.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.red.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "white.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.white.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.white.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "yellow.berry",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.yellow.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.yellow.berry",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "corn",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.corn",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.corn",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.hemp",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.hemp",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "orchid",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.orchid",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.orchid",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "potato",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.potato",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.potato",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pumpkin",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.pumpkin",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.pumpkin",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rose",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.rose",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.rose",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sunflower",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.sunflower",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.sunflower",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wheat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "clone.wheat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "seed.wheat",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fat.animal",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "battery.small",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blueprintbook",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blueprintfragment",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blueprintpage",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bone.fragments",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cctv.camera",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "charcoal",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cloth",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crude.oil",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "diesel_barrel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "can.beans.empty",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "can.tuna.empty",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "explosives",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fertilizer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "gunpowder",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "honeycomb",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "horsedung",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hq.metal.ore",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.refined",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "leather",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lowgradefuel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.fragments",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.ore",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "paper",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "plantfiber",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.radioactive",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water.salt",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scrap",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stones",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sulfur.ore",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sulfur",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "targeting.computer",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "thruster.module",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "water",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "skull.wolf",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wood",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "advancedcoolingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "coolingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purecoolingtea.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purecoolingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purecoolingtea.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "advancedcraftingtea_quality",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "craftingtea_quality",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purecraftingtea_quality",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "advanceharvestingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "harvestingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pureharvestingtea.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pureharvestingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pureharvestingtea.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "healingtea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "healingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "healingtea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "healingtea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "healingtea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "maxhealthtea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "maxhealthtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "maxhealthtea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "maxhealthtea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "maxhealthtea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oretea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oretea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oretea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oretea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "oretea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationremovetea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationremovetea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationremovetea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationresisttea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationresisttea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationresisttea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationresisttea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "radiationresisttea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scraptea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scraptea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scraptea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scraptea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "scraptea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "supertea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "advancedwarmingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purewarmingtea.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purewarmingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "purewarmingtea.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "warmingtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodtea.advanced",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodtea",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodtea.pure.creamy",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodtea.pure",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "woodtea.pure.milky",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "antiradpills",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tool.binoculars",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "explosive.timed",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "tool.camera",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "compass",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rf.detonator",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "fishingrod.handmade",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "flare",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "flashlight.held",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "geiger.counter",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "handcuffs",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hosetool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "jackhammer",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "keycard_blue",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "keycard_green",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "keycard_red",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "largemedkit",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "map",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "apartment.master_key",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "syringe.medical",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.detector",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rf_pager",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pipetool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "boat.planner",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "building.planner",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shears",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shovel",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.smoke",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "supply.signal",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "surveycharge",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wiretool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.cockpit",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.cockpit.armored",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.cockpit.with.engine",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.engine",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.flatbed",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.passengers.armored",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.rear.seats",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.storage",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.1mod.taxi",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.2mod.camper",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.2mod.flatbed",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.2mod.fuel.tank",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vehicle.2mod.passengers",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "telephone",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wallpaper.tool",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.8x.scope",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.burstmodule",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.extendedmags",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.flashlight",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.gascompressionovedrive",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.holosight",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.lasersight",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.muzzleboost",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.muzzlebrake",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.simplesight",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.oilfiltersilencer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.silencer",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.sodacansilencer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.small.scope",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "weapon.mod.targetingattachment",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.ak",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bandage",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.beancan",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.bee",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "blowpipe",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.bolt",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bone.club",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "knife.bone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "boomerang",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bow.hunting",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "cakefiveyear",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "chainsaw",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "salvaged.cleaver",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bow.compound",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "crossbow",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shotgun.double",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.eoka",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.f1",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "flamethrower",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.flashbang",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.prototype17",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "multiplegrenadelauncher",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "knife.butcher",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pitchfork",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "sickle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "vampire.stake",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hammer",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hatchet",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "revolver.hc",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hmlmg",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "homingmissile.launcher",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "knife.combat",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.l96",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.lr300",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "m16a2",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "lmg.m249",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.m39",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shotgun.m4",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.m92",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "mace",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "machete",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "medical.honey.bandage",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "metal.shield",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "military flamethrower",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "minicrossbow",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "minigun",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "grenade.molotov",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smg.mp5",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.nailgun",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "paddle",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pickaxe",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shotgun.waterpipe",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.python",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "reinforced.wooden.shield",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.revolver",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rock",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rocket.launcher",
+    "Is Blueprint": false,
+    "Chance": 2.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "axe.salvaged",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "hammer.salvaged",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "icepick.salvaged",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "explosive.satchel",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shotgun.pump",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "pistol.semiauto",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.semiauto",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "rifle.sks",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smg.2",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "shotgun.spas12",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "speargun",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stonehatchet",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "stone.pickaxe",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spear.stone",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "longsword",
+    "Is Blueprint": false,
+    "Chance": 50.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "salvaged.sword",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "t1_smg",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smg.thompson",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "torch",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "smg.uzi",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "bucket.water",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "wooden.shield",
+    "Is Blueprint": false,
+    "Chance": 10.0,
+    "Min amount": 1,
+    "Max Amount": 1,
+    "SkinID": 0,
+    "Display Name": null
+  },
+  {
+    "Item ShortName": "spear.wooden",
+    "Is Blueprint": false,
+    "Chance": 80.0,
+    "Min amount": 0,
+    "Max Amount": 0,
+    "SkinID": 0,
+    "Display Name": null
+  }
+]

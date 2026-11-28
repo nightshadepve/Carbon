@@ -1,10 +1,10 @@
 {
   "name": "RKFISHHH",
-  "xp": 1095659.4330139821,
+  "xp": 1530769.1726401947,
   "prestige_level": 0,
-  "current_level": 73,
-  "achieved_level": 73,
-  "available_points": 27,
+  "current_level": 86,
+  "achieved_level": 86,
+  "available_points": 58,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Amature Miner": 5,
@@ -28,7 +28,7 @@
     "Fresh Spawn": 1,
     "Animal Tamer": 5,
     "Maintenance": 5,
-    "Defence Research": 2,
+    "Defence Research": 5,
     "Supersonic Thrust": 5,
     "Glutton": 5,
     "Amature Tinkerer": 5,
@@ -54,7 +54,8 @@
     "Instant Woodcutting": 5,
     "Deforestation": 1,
     "Guarded": 5,
-    "Mine Sweeper": 5
+    "Mine Sweeper": 5,
+    "Ricochet": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -66,8 +67,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-21T06:21:40.304418+00:00",
-  "xp_bonus_pool": 5337.5,
+  "logged_off": "2026-11-27T22:31:28.593175+00:00",
+  "xp_bonus_pool": 0.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
@@ -87,11 +88,11 @@
   "plant_genes": "gggyyy",
   "respec_multiplier": 0.0,
   "raiding_ultimate_used_time": "0001-01-01T00:00:00",
-  "cooking_ultimate_used_time": "2026-11-20T00:35:45.192676+00:00",
+  "cooking_ultimate_used_time": "2026-11-26T02:34:27.75675+00:00",
   "Trap_Spotter_used_time": "2026-11-05T19:06:43.827519+00:00",
   "Loot_Spotter_used_time": "2026-11-05T19:06:43.82752+00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-20T20:15:35.767117+00:00",
+  "last_xp_loss": "2026-11-27T02:45:49.43121+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -102,5 +103,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 219
+  "GetTotalSkillPoints": 258
 }

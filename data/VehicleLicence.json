@@ -40,12 +40,12 @@
         "lastDeath": 0.0
       },
       "Chinook": {
-        "entityID": 0,
-        "lastDeath": 1794355745.731
+        "entityID": 32535440,
+        "lastDeath": 1795569301.892
       },
       "Tugboat": {
         "entityID": 0,
-        "lastDeath": 1794448412.566
+        "lastDeath": 1795764315.498
       }
     },
     "76561197996909849": {
@@ -99,7 +99,7 @@
     "76561198017547177": {
       "Tugboat": {
         "entityID": 0,
-        "lastDeath": 0.0
+        "lastDeath": 1795764360.327
       }
     },
     "76561199389941588": {
@@ -111,11 +111,11 @@
     "76561199069700597": {
       "TumblerArmed": {
         "entityID": 0,
-        "lastDeath": 1795245840.125
+        "lastDeath": 1795514444.235
       },
       "Tugboat": {
         "entityID": 0,
-        "lastDeath": 1794521505.88
+        "lastDeath": 1795731039.132
       }
     },
     "76561198383506301": {

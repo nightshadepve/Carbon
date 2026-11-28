@@ -1,5 +1,5 @@
 {
-  "Migrated From VIPPerks": false,
+  "Migrated From VIPPerks": true,
   "NextId": 5,
   "Kits": [
     {
@@ -16,16 +16,6 @@
           "Skin": 0
         },
         {
-          "Shortname": "healingtea.advanced",
-          "Amount": 1,
-          "Skin": 0
-        },
-        {
-          "Shortname": "oretea.advanced",
-          "Amount": 1,
-          "Skin": 0
-        },
-        {
           "Shortname": "scraptea.advanced",
           "Amount": 1,
           "Skin": 0
@@ -37,7 +27,7 @@
         },
         {
           "Shortname": "lowgradefuel",
-          "Amount": 1000,
+          "Amount": 500,
           "Skin": 0
         },
         {
@@ -52,26 +42,21 @@
         },
         {
           "Shortname": "largemedkit",
-          "Amount": 5,
+          "Amount": 2,
           "Skin": 0
         },
         {
           "Shortname": "syringe.medical",
-          "Amount": 10,
+          "Amount": 5,
           "Skin": 0
         },
         {
           "Shortname": "sewingkit",
-          "Amount": 10,
+          "Amount": 3,
           "Skin": 0
         },
         {
           "Shortname": "sheetmetal",
-          "Amount": 10,
-          "Skin": 0
-        },
-        {
-          "Shortname": "roadsigns",
           "Amount": 10,
           "Skin": 0
         },
@@ -81,13 +66,8 @@
           "Skin": 0
         },
         {
-          "Shortname": "cctv.camera",
-          "Amount": 2,
-          "Skin": 0
-        },
-        {
           "Shortname": "tarp",
-          "Amount": 4,
+          "Amount": 2,
           "Skin": 0
         }
       ]
@@ -101,23 +81,8 @@
       "Max Uses Per Wipe (0 = no cap)": 0,
       "Items": [
         {
-          "Shortname": "radiationresisttea.pure",
-          "Amount": 1,
-          "Skin": 0
-        },
-        {
           "Shortname": "purecraftingtea_quality",
           "Amount": 1,
-          "Skin": 0
-        },
-        {
-          "Shortname": "healingtea.pure",
-          "Amount": 2,
-          "Skin": 0
-        },
-        {
-          "Shortname": "bandage",
-          "Amount": 10,
           "Skin": 0
         },
         {
@@ -127,32 +92,17 @@
         },
         {
           "Shortname": "syringe.medical",
-          "Amount": 20,
-          "Skin": 0
-        },
-        {
-          "Shortname": "sewingkit",
-          "Amount": 20,
+          "Amount": 10,
           "Skin": 0
         },
         {
           "Shortname": "sheetmetal",
-          "Amount": 10,
-          "Skin": 0
-        },
-        {
-          "Shortname": "roadsigns",
-          "Amount": 10,
+          "Amount": 5,
           "Skin": 0
         },
         {
           "Shortname": "metalpipe",
           "Amount": 10,
-          "Skin": 0
-        },
-        {
-          "Shortname": "supply.signal",
-          "Amount": 1,
           "Skin": 0
         }
       ]
@@ -263,5 +213,556 @@
       ]
     }
   ],
-  "Claims": {}
+  "Claims": {
+    "76561199649462056": {
+      "vip-daily": {
+        "LastClaim": "2026-11-16T01:04:04.728273Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-16T01:04:04.728273Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-13T03:21:51.057554Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-13T03:21:51.057554Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198370592360": {
+      "vip-daily": {
+        "LastClaim": "2026-08-24T02:55:45.098599Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-08-24T02:55:45.098599Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-08-21T01:31:09.340495Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-08-21T01:31:09.340495Z",
+        "WipeUses": 0
+      }
+    },
+    "76561197996909849": {
+      "vip-daily": {
+        "LastClaim": "2026-10-20T04:41:41.246055Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-20T04:41:41.246055Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-17T15:24:38.459381Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-17T15:24:38.459381Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198375397546": {
+      "vip-daily": {
+        "LastClaim": "2026-11-25T04:02:08.33709Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-25T04:02:09.12145Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-24T03:02:00.251177Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-24T03:01:56.775226Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199132885452": {
+      "vip-daily": {
+        "LastClaim": "2026-11-05T20:19:20.169363Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-05T20:19:20.169363Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-05T20:19:22.995373Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-05T20:19:22.995373Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198111185372": {
+      "vip-daily": {
+        "LastClaim": "2026-07-07T22:26:35.469594Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-07-07T22:26:35.469594Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-07-04T17:41:03.186598Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-07-04T17:41:03.186598Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198095722946": {
+      "vip-daily": {
+        "LastClaim": "2026-07-11T15:32:03.047274Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-07-11T15:32:03.047274Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-07-11T15:32:05.732713Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-07-11T15:32:05.732713Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198038083201": {
+      "vip-daily": {
+        "LastClaim": "2026-10-09T16:55:14.698164Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-09T16:55:14.698164Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-06T01:13:53.231778Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-06T01:13:53.231778Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198802227297": {
+      "vip-daily": {
+        "LastClaim": "2026-09-29T00:17:01.479437Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-09-29T00:17:01.479437Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-09-28T23:24:31.05171Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-28T23:24:31.05171Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198320243883": {
+      "vip-daily": {
+        "LastClaim": "2026-10-16T01:51:09.909922Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-16T01:51:09.909922Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-19T06:58:01.971809Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-19T06:58:01.971809Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198210900224": {
+      "vip-daily": {
+        "LastClaim": "2026-09-17T05:00:27.073235Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-09-17T05:00:27.073235Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-09-17T05:00:28.576803Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-17T05:00:28.576803Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198121242019": {
+      "vip-daily": {
+        "LastClaim": "2026-09-04T21:26:07.35583Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-09-04T21:26:07.35583Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-09-04T21:26:52.943213Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-04T21:26:52.943213Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199866337898": {
+      "vip-daily": {
+        "LastClaim": "2026-11-17T02:04:36.822108Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-17T02:04:36.822108Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-14T12:49:03.679307Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-14T12:49:03.679307Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199018577217": {
+      "vip-daily": {
+        "LastClaim": "2026-07-05T19:30:38.058034Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-07-05T19:30:38.058034Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-07-04T17:33:42.489044Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-07-04T17:33:42.489044Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198799369142": {
+      "vip-daily": {
+        "LastClaim": "2026-11-21T06:32:02.556967Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-25T08:53:00.16295Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-21T06:32:13.813147Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-25T08:53:01.612334Z",
+        "WipeUses": 0
+      }
+    },
+    "76561197992098070": {
+      "vip-daily": {
+        "LastClaim": "2026-07-10T00:38:34.188642Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-07-10T00:38:34.188642Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-07-10T00:38:35.885066Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-07-10T00:38:35.885066Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198839853772": {
+      "vip-daily": {
+        "LastClaim": "2026-11-26T19:33:17.403301Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-26T19:33:18.773323Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-26T19:33:20.745864Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-26T19:33:54.444673Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198301822059": {
+      "vip-daily": {
+        "LastClaim": "2026-10-05T01:24:29.431504Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-05T01:24:29.431504Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-05T01:43:59.366617Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-05T01:43:59.366617Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198280329975": {
+      "vip-daily": {
+        "LastClaim": "2026-08-08T02:39:18.892756Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-08-08T02:39:18.892756Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-08-06T19:14:52.527945Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-08-06T19:14:52.527945Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199123137166": {
+      "vip-daily": {
+        "LastClaim": "2026-09-07T01:35:39.70437Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-09-07T01:35:39.70437Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-09-07T01:36:05.27517Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-07T01:36:05.27517Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198067432226": {
+      "vip-daily": {
+        "LastClaim": "2026-09-09T11:19:11.782467Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-09-09T11:19:11.782467Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-09-09T11:19:19.6114Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-09T11:19:19.6114Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199389941588": {
+      "vip-daily": {
+        "LastClaim": "2026-10-03T23:56:51.51807Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-03T23:56:51.51807Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-01T23:42:04.830906Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-01T23:42:04.830906Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198035665693": {
+      "vip-daily": {
+        "LastClaim": "2026-11-22T18:19:13.591337Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-19T23:19:29.320097Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-24T14:59:47.650869Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-24T14:59:51.416652Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199060510205": {
+      "vip-daily": {
+        "LastClaim": "2026-10-17T04:33:35.566288Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-10-17T04:33:35.566288Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-10-17T04:33:43.074881Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-10-17T04:33:43.074881Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198967295510": {
+      "vip-daily": {
+        "LastClaim": "2026-11-26T03:10:15.923254Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-26T03:10:15.001896Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-23T02:59:53.631741Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-22T22:28:16.793576Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198138332799": {
+      "vip-daily": {
+        "LastClaim": "2026-11-27T17:53:12.355326Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-13T01:50:50.849158Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-27T17:53:13.588306Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-13T01:50:48.965749Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198017547177": {
+      "vip-daily": {
+        "LastClaim": "2026-11-25T20:56:14.334076Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-25T20:56:16.482141Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-22T15:31:08.940512Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-22T15:33:52.080775Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198383506301": {
+      "vip-daily": {
+        "LastClaim": "2026-11-17T12:03:13.976513Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-17T12:03:13.976513Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-13T20:40:24.448611Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-13T20:40:24.448611Z",
+        "WipeUses": 0
+      }
+    },
+    "76561199069700597": {
+      "vip-daily": {
+        "LastClaim": "2026-11-26T19:40:11.587896Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-26T19:40:12.699044Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-24T01:25:38.949151Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-24T01:25:40.548265Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198028960167": {
+      "vip-daily": {
+        "LastClaim": "2026-11-20T00:26:26.223696Z",
+        "WipeUses": 0
+      },
+      "vipx-daily": {
+        "LastClaim": "2026-11-20T00:26:26.223696Z",
+        "WipeUses": 0
+      },
+      "vip-4day": {
+        "LastClaim": "2026-11-20T00:25:00.251647Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-11-20T00:25:00.251647Z",
+        "WipeUses": 0
+      }
+    },
+    "76561198054213992": {
+      "vip-4day": {
+        "LastClaim": "2026-09-03T21:21:11.83767Z",
+        "WipeUses": 0
+      },
+      "vipx-4day": {
+        "LastClaim": "2026-09-03T21:21:11.83767Z",
+        "WipeUses": 0
+      }
+    }
+  }
 }

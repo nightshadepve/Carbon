@@ -9,7 +9,12 @@
     "MonumentList": []
   },
   "76561198802227297": {
-    "MonumentList": []
+    "MonumentList": [
+      "gas_station_1_1",
+      "power_sub_big_2_28",
+      "desert_military_base_c",
+      "powerplant_1"
+    ]
   },
   "76561198280329975": {
     "MonumentList": []
@@ -22,16 +27,7 @@
   },
   "76561199069700597": {
     "MonumentList": [
-      "swamp_b",
-      "radtown_1",
-      "swamp_c",
-      "supermarket_1_2",
-      "cave_small_easy_4",
-      "powerplant_1",
-      "mining_quarry_b",
-      "oilrig_2",
-      "oilrig_1",
-      "sphere_tank"
+      "swamp_b"
     ]
   },
   "76561198210900224": {
@@ -54,9 +50,7 @@
   },
   "76561198799369142": {
     "MonumentList": [
-      "radtown_1",
-      "supermarket_1_2",
-      "airfield_1"
+      "nuclear_missile_silo"
     ]
   },
   "76561198967628210": {
@@ -171,7 +165,11 @@
     "MonumentList": []
   },
   "76561198138332799": {
-    "MonumentList": []
+    "MonumentList": [
+      "compound",
+      "stables_a",
+      "bandit_town"
+    ]
   },
   "76561198095722946": {
     "MonumentList": []
@@ -219,14 +217,7 @@
     "MonumentList": []
   },
   "76561198375397546": {
-    "MonumentList": [
-      "bandit_town",
-      "launch_site_1",
-      "airfield_1",
-      "nuclear_missile_silo",
-      "apartments_complex_1",
-      "sphere_tank"
-    ]
+    "MonumentList": []
   },
   "76561198246408028": {
     "MonumentList": []
@@ -349,7 +340,9 @@
     "MonumentList": []
   },
   "76561198017547177": {
-    "MonumentList": []
+    "MonumentList": [
+      "bandit_town"
+    ]
   },
   "76561199116576538": {
     "MonumentList": []
@@ -661,9 +654,7 @@
     "MonumentList": []
   },
   "76561198028960167": {
-    "MonumentList": [
-      "compound"
-    ]
+    "MonumentList": []
   },
   "76561199674665467": {
     "MonumentList": []
@@ -954,14 +945,15 @@
     "MonumentList": []
   },
   "76561199837492600": {
-    "MonumentList": [
-      "ferry_terminal_1",
-      "gas_station_1_3",
-      "powerplant_1",
-      "mining_quarry_c",
-      "junkyard_1",
-      "harbor_2",
-      "CargoShip_22778395"
-    ]
+    "MonumentList": []
+  },
+  "76561198780136261": {
+    "MonumentList": []
+  },
+  "76561199815726574": {
+    "MonumentList": []
+  },
+  "76561198417302690": {
+    "MonumentList": []
   }
 }

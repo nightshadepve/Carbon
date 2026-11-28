@@ -1,10 +1,10 @@
 {
   "name": "Swift",
-  "xp": 286924.13872377906,
+  "xp": 462721.67334975896,
   "prestige_level": 0,
-  "current_level": 37,
-  "achieved_level": 37,
-  "available_points": 3,
+  "current_level": 47,
+  "achieved_level": 47,
+  "available_points": 10,
   "non_level_related_points_given": 0,
   "buff_values": {
     "Bandage Expert": 1,
@@ -35,7 +35,12 @@
     "Airbags": 2,
     "Expert Rider": 2,
     "Tank": 1,
-    "Second Wind": 2
+    "Second Wind": 2,
+    "Trap Evader": 5,
+    "Blast Suit": 5,
+    "Demolition": 5,
+    "Quality Crafter": 3,
+    "Radiation Expert": 5
   },
   "xp_drops": true,
   "xp_hud": true,
@@ -47,8 +52,8 @@
     "sqrMagnitude": 0.0
   },
   "pouch_items": [],
-  "logged_off": "2026-11-21T06:11:30.832815+00:00",
-  "xp_bonus_pool": 0.0,
+  "logged_off": "2026-11-27T18:29:09.439957+00:00",
+  "xp_bonus_pool": 24720.0,
   "extra_pockets_button": true,
   "notifications": true,
   "ultimate_settings": {
@@ -63,7 +68,7 @@
   "Trap_Spotter_used_time": "0001-01-01T00:00:00",
   "Loot_Spotter_used_time": "0001-01-01T00:00:00",
   "xp_debt": 0.0,
-  "last_xp_loss": "2026-11-21T06:09:25.597943+00:00",
+  "last_xp_loss": "2026-11-26T03:59:10.9324+00:00",
   "pending_xp_with_bonus": 0.0,
   "pending_xp_without_bonus": 0.0,
   "pending_levels": 0,
@@ -74,5 +79,5 @@
   "gained_today": 0.0,
   "notifiedOfCap": false,
   "nextXPCapReset": "0001-01-01T00:00:00",
-  "GetTotalSkillPoints": 111
+  "GetTotalSkillPoints": 141
 }
