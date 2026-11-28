@@ -154,16 +154,16 @@ namespace Oxide.Plugins
         private float OnlineTop => D(DesignOnlineTop);
         private float OnlineH => D(DesignOnlineH);
         private float StatusH => D(DesignStatusH);
-        // Keep the status line under the badge when the logo is enlarged.
-        private float StatusTop
+        // Extra space under the Online/Sleepers row. Screen pixels, not multiplied by Scale.
+        private float StatusGap
         {
             get
             {
-                float belowBadge = Pad + LogoSize + BadgeHang() + D(2f);
-                float belowOnline = OnlineTop + OnlineH;
-                return Mathf.Max(belowBadge, belowOnline);
+                if (config == null || float.IsNaN(config.StatusGap) || float.IsInfinity(config.StatusGap)) return 6f;
+                return Mathf.Clamp(config.StatusGap, 0f, 40f);
             }
         }
+        private float StatusTop => OnlineTop + OnlineH + StatusGap;
         private float PanelH => Mathf.Ceil(StatusTop + StatusH + Pad);
         private int NameFont => F(14f, ScaleOf, 8);
         private int TagFont => F(11f, ScaleOf, 7);
@@ -178,6 +178,7 @@ namespace Oxide.Plugins
             [JsonProperty("Config version")] public string Version = ConfigVersion;
             [JsonProperty("Scale")] public float Scale = DefaultScale;
             [JsonProperty("Logo scale")] public float LogoScale = DefaultLogoScale;
+            [JsonProperty("Status gap below online (px)")] public float StatusGap = 6f;
             [JsonProperty("Chat command")] public string Command = "hud";
             [JsonProperty("Default state for new players (minimized, half, full)")] public string DefaultState = "full";
             [JsonProperty("Layer (Overlay shows in the inventory)")] public string Layer = "Overlay";
@@ -359,6 +360,9 @@ namespace Oxide.Plugins
             if (float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale) || config.LogoScale <= 0f)
                 config.LogoScale = DefaultLogoScale;
             config.LogoScale = Mathf.Clamp(config.LogoScale, 0.5f, 2f);
+            if (float.IsNaN(config.StatusGap) || float.IsInfinity(config.StatusGap) || config.StatusGap < 0f)
+                config.StatusGap = 6f;
+            config.StatusGap = Mathf.Clamp(config.StatusGap, 0f, 40f);
         }
 
         private void ApplyScale()
