@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeHud", "Nightshade", "1.3.4")]
+    [Info("NightshadeHud", "Nightshade", "1.3.5")]
     [Description("Top-right HUD: clock, PvP countdown, PvP shield, and teleport prices.")]
     public class NightshadeHud : RustPlugin
     {
@@ -32,7 +32,8 @@ namespace Oxide.Plugins
         private const string DefaultBackgroundFile = "Nightshade/NightshadeHud/hud_bg.png";
         private const string DefaultLogoFile = "logo.png";
         private const string DefaultPurgeLogoFile = "purge_logo.png";
-        private const string ConfigVersion = "1.3.4";
+        private const string DefaultPvpLogoFile = "pvp_logo.png";
+        private const string ConfigVersion = "1.3.5";
         private const float DefaultScale = 0.75f;
         private const float DefaultLogoScale = 1.5f;
         private const float StockLogoScale = 1.3f;
@@ -56,6 +57,7 @@ namespace Oxide.Plugins
         private const string BadgeName = "NightshadeHud.Badge";
         private const string LogoImageKey = "NightshadeHud.Logo";
         private const string PurgeImageKey = "NightshadeHud.PurgeLogo";
+        private const string PvpImageKey = "NightshadeHud.PvpLogo";
         private const string BorderKey = "NightshadeHud.Border";
         private const string BackgroundKey = "NightshadeHud.Background";
         private const int ImageMaxBytes = 3145728;
@@ -97,6 +99,8 @@ namespace Oxide.Plugins
         private string countdownCache = "\0";
         private Art logoArt;
         private Art purgeArt;
+        private Art pvpArt;
+        private string logoModeCache = "\0";
         private Art borderArt;
         private Art backgroundArt;
 
@@ -150,16 +154,16 @@ namespace Oxide.Plugins
         private float OnlineTop => D(DesignOnlineTop);
         private float OnlineH => D(DesignOnlineH);
         private float StatusH => D(DesignStatusH);
-        // Keep the status line under the badge when the logo is enlarged.
-        private float StatusTop
+        // Extra space under the Online/Sleepers row. Screen pixels, not multiplied by Scale.
+        private float StatusGap
         {
             get
             {
-                float belowBadge = Pad + LogoSize + BadgeHang() + D(2f);
-                float belowOnline = OnlineTop + OnlineH;
-                return Mathf.Max(belowBadge, belowOnline);
+                if (config == null || float.IsNaN(config.StatusGap) || float.IsInfinity(config.StatusGap)) return 6f;
+                return Mathf.Clamp(config.StatusGap, 0f, 40f);
             }
         }
+        private float StatusTop => OnlineTop + OnlineH + StatusGap;
         private float PanelH => Mathf.Ceil(StatusTop + StatusH + Pad);
         private int NameFont => F(14f, ScaleOf, 8);
         private int TagFont => F(11f, ScaleOf, 7);
@@ -174,6 +178,7 @@ namespace Oxide.Plugins
             [JsonProperty("Config version")] public string Version = ConfigVersion;
             [JsonProperty("Scale")] public float Scale = DefaultScale;
             [JsonProperty("Logo scale")] public float LogoScale = DefaultLogoScale;
+            [JsonProperty("Status gap below online (px)")] public float StatusGap = 6f;
             [JsonProperty("Chat command")] public string Command = "hud";
             [JsonProperty("Default state for new players (minimized, half, full)")] public string DefaultState = "full";
             [JsonProperty("Layer (Overlay shows in the inventory)")] public string Layer = "Overlay";
@@ -187,6 +192,7 @@ namespace Oxide.Plugins
             [JsonProperty("Hide while using a computer station")] public bool HideInComputerStation = true;
             [JsonProperty("Logo image file")] public string LogoImage = "logo.png";
             [JsonProperty("Purge logo image file")] public string PurgeLogoImage = "purge_logo.png";
+            [JsonProperty("PvP logo image file")] public string PvpLogoImage = "pvp_logo.png";
             [JsonProperty("Server name")] public string ServerName = "Nightshade";
             [JsonProperty("Tag text")] public string TagText = "Solo/Duo";
             [JsonProperty("Tag color")] public string TagColor = "#9A9692";
@@ -326,6 +332,7 @@ namespace Oxide.Plugins
         {
             config.LogoImage = CleanArtName(config.LogoImage, true, DefaultLogoFile);
             config.PurgeLogoImage = CleanArtName(config.PurgeLogoImage, true, DefaultPurgeLogoFile);
+            config.PvpLogoImage = CleanArtName(config.PvpLogoImage, true, DefaultPvpLogoFile);
             config.BorderImage = CleanArtName(config.BorderImage, false, DefaultBorderFile);
             config.BackgroundImage = CleanArtName(config.BackgroundImage, false, DefaultBackgroundFile);
         }
@@ -353,6 +360,9 @@ namespace Oxide.Plugins
             if (float.IsNaN(config.LogoScale) || float.IsInfinity(config.LogoScale) || config.LogoScale <= 0f)
                 config.LogoScale = DefaultLogoScale;
             config.LogoScale = Mathf.Clamp(config.LogoScale, 0.5f, 2f);
+            if (float.IsNaN(config.StatusGap) || float.IsInfinity(config.StatusGap) || config.StatusGap < 0f)
+                config.StatusGap = 6f;
+            config.StatusGap = Mathf.Clamp(config.StatusGap, 0f, 40f);
         }
 
         private void ApplyScale()
@@ -381,6 +391,7 @@ namespace Oxide.Plugins
             zone = ResolveZone(config.TimeZoneId, out zoneFallback);
             logoArt = new Art { Key = LogoImageKey, Label = "HUD logo" };
             purgeArt = new Art { Key = PurgeImageKey, Label = "purge logo" };
+            pvpArt = new Art { Key = PvpImageKey, Label = "PvP logo" };
             borderArt = new Art { Key = BorderKey, Label = "HUD border" };
             backgroundArt = new Art { Key = BackgroundKey, Label = "HUD background" };
             EnsureArtPaths();
@@ -726,12 +737,24 @@ namespace Oxide.Plugins
             });
         }
 
+        private string LogoMode()
+        {
+            if (PurgeActive()) return "purge";
+            if (CallBool(WeekendPlugin(), "API_IsPvPActive")) return "pvp";
+            return "pve";
+        }
+
         private string LogoPng()
         {
-            if (PurgeActive())
+            if (LogoMode() == "purge")
             {
                 string purgePng = ArtPng(purgeArt);
                 if (!string.IsNullOrEmpty(purgePng)) return purgePng;
+            }
+            else if (LogoMode() == "pvp")
+            {
+                string pvpPng = ArtPng(pvpArt);
+                if (!string.IsNullOrEmpty(pvpPng)) return pvpPng;
             }
             return ArtPng(logoArt);
         }
@@ -1109,6 +1132,15 @@ namespace Oxide.Plugins
             string countText, countColor;
             Countdown(out countText, out countColor);
             string countSig = countText + "|" + countColor;
+            string logoMode = LogoMode();
+            if (logoMode != logoModeCache)
+            {
+                logoModeCache = logoMode;
+                badgeCache = "\0";
+                countdownCache = "\0";
+                RedrawAll();
+                return;
+            }
             bool pvp = CombatPvp();
             string badge = pvp ? "1" : "0";
             bool clockChanged = clock != clockCache;
@@ -1135,8 +1167,7 @@ namespace Oxide.Plugins
 
         private void PushModeLine()
         {
-            badgeCache = "\0";
-            countdownCache = "\0";
+            logoModeCache = "\0";
             TickShared(false);
         }
 
@@ -1471,6 +1502,7 @@ namespace Oxide.Plugins
             {
                 ResetArt(logoArt);
                 ResetArt(purgeArt);
+                ResetArt(pvpArt);
                 ResetArt(borderArt);
                 ResetArt(backgroundArt);
                 QueueImages();
@@ -1511,6 +1543,7 @@ namespace Oxide.Plugins
         {
             BindArt(logoArt, LogoPath(config == null ? null : config.LogoImage));
             BindArt(purgeArt, LogoPath(config == null ? null : config.PurgeLogoImage, DefaultPurgeLogoFile));
+            BindArt(pvpArt, LogoPath(config == null ? null : config.PvpLogoImage, DefaultPvpLogoFile));
             BindArt(borderArt, DataPathOf(config == null ? null : config.BorderImage, DefaultBorderFile));
             BindArt(backgroundArt, DataPathOf(config == null ? null : config.BackgroundImage, DefaultBackgroundFile));
         }
@@ -1535,6 +1568,7 @@ namespace Oxide.Plugins
             EnsureArtPaths();
             QueueArt(logoArt);
             QueueArt(purgeArt);
+            QueueArt(pvpArt);
             QueueArt(borderArt);
             QueueArt(backgroundArt);
         }
@@ -1618,12 +1652,13 @@ namespace Oxide.Plugins
         private void PollArt()
         {
             artTimer = null;
-            bool ready = NoteArt(logoArt) | NoteArt(purgeArt) | NoteArt(borderArt) | NoteArt(backgroundArt);
+            bool ready = NoteArt(logoArt) | NoteArt(purgeArt) | NoteArt(pvpArt) | NoteArt(borderArt) | NoteArt(backgroundArt);
             if (ready) RedrawAll();
             artPolls++;
             if (artPolls >= 8) return;
             if ((logoArt.Queued && string.IsNullOrEmpty(logoArt.Shown))
                 || (purgeArt.Queued && string.IsNullOrEmpty(purgeArt.Shown))
+                || (pvpArt.Queued && string.IsNullOrEmpty(pvpArt.Shown))
                 || (borderArt.Queued && string.IsNullOrEmpty(borderArt.Shown))
                 || (backgroundArt.Queued && string.IsNullOrEmpty(backgroundArt.Shown)))
                 ScheduleArtPoll();
