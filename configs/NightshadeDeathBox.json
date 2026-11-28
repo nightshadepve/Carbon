@@ -1,5 +1,6 @@
 {
   "Enabled": true,
+  "Block NPC Damage": true,
   "Only During PvP Weekend": true,
   "Allow Team To Loot": true,
   "Map Marker": true,
