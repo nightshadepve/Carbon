@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("NightshadeDeathBox", "Nightshade", "1.0.4")]
+    [Info("NightshadeDeathBox", "Nightshade", "1.0.5")]
     [Description("Puts a player's death loot in owner-only containers during the PvP weekend.")]
     public class NightshadeDeathBox : RustPlugin
     {
@@ -38,6 +38,15 @@ namespace Oxide.Plugins
         // RestoreUponDeath removes the items it will give back before the corpse
         // is filled, so only what actually lands in the corpse or a Backpacks bag
         // is moved. CreateCorpse copies that inventory before OnPlayerCorpseSpawned.
+        // NPC damage (Bradley cannon, rockets, coax, patrol heli, CH47, scientists,
+        // NPC turrets, and a projectile whose creator is an NPC or whose OwnerID is 0)
+        // is cancelled with true. TruePVE cancels OnEntityTakeDamage with that same
+        // true, so the two results are not a hook conflict. CanEntityTakeDamage
+        // returns false, which is what makes TruePVE cancel instead of letting the
+        // weekend "anything can hurt anything" ruleset through. A real player's hit
+        // is still cancelled and the attacker is still told. While Block NPC Damage
+        // is on, the container protection is replaced so a blast that never enters
+        // the hook still does not destroy the loot.
 
         private const string PermUse = "nightshadedeathbox.use";
         private const string PermAdmin = "nightshadedeathbox.admin";
@@ -71,6 +80,9 @@ namespace Oxide.Plugins
         private readonly List<DeathDecision> _decisions = new List<DeathDecision>();
         private readonly Dictionary<ulong, List<ulong>> _listedNets = new Dictionary<ulong, List<ulong>>();
         private readonly Dictionary<ulong, string> _removeReason = new Dictionary<ulong, string>();
+        private readonly Dictionary<int, ProtectionProperties> _previousProtection = new Dictionary<int, ProtectionProperties>();
+        private readonly Dictionary<ulong, float> _npcBlockLog = new Dictionary<ulong, float>();
+        private ProtectionProperties _npcImmunity;
 
         [PluginReference] private Plugin NightshadePVPWeekend;
 
@@ -91,6 +103,7 @@ namespace Oxide.Plugins
         private class PluginConfig
         {
             [JsonProperty("Enabled")] public bool Enabled = true;
+            [JsonProperty("Block NPC Damage")] public bool BlockNpcDamage = true;
             [JsonProperty("Only During PvP Weekend")] public bool OnlyDuringPvpWeekend = true;
             [JsonProperty("Allow Team To Loot")] public bool AllowTeamToLoot = true;
             [JsonProperty("Map Marker")] public bool MapMarker = true;
@@ -281,7 +294,8 @@ namespace Oxide.Plugins
             _worldReady = true;
             _maintainTimer = timer.Every(60f, Maintain);
             WarnMissingDefaultPermission();
-            Puts("NightshadeDeathBox 1.0.4. Debug logging is " + (_config.DebugLogging ? "on" : "off")
+            Puts("NightshadeDeathBox 1.0.5. Debug logging is " + (_config.DebugLogging ? "on" : "off")
+                + ". NPC damage block is " + (_config != null && _config.BlockNpcDamage ? "on" : "off")
                 + ". Container prefab: " + ContainerPrefabPath()
                 + ". New boxes follow NightshadePVPWeekend.API_IsPvPActive (Eastern weekend, test clock, and nspvp.pvpweekend)."
                 + " Admin locate: nsdeathbox.list [name|steamid], nsdeathbox.tp <netId|index>.");
@@ -290,8 +304,10 @@ namespace Oxide.Plugins
         private void Unload()
         {
             _maintainTimer?.Destroy();
+            RestoreNpcImmunity();
             KillAllMarkers();
             if (_worldReady) SaveData();
+            _npcImmunity = null;
         }
 
         private void OnServerSave()
@@ -305,6 +321,8 @@ namespace Oxide.Plugins
             _byNet.Clear();
             _pending.Clear();
             _announce.Clear();
+            _npcBlockLog.Clear();
+            _previousProtection.Clear();
             KillAllMarkers();
             if (_store == null) _store = new Store();
             _store.Boxes.Clear();
@@ -408,22 +426,91 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        // Carbon calls the overload whose argument type matches the entity. A single
+        // BaseCombatEntity method is not enough for a dropped backpack or a wooden
+        // box, the same way CanLootEntity needs one method per container type.
+        // Every overload returns the same value, so they cannot conflict with each other.
+        private object OnEntityTakeDamage(BaseEntity entity, HitInfo info)
         {
-            if (entity == null || !IsTracked(entity)) return null;
-            if (info != null && info.damageTypes != null) info.damageTypes.ScaleAll(0f);
-            BasePlayer attacker = info == null ? null : info.InitiatorPlayer;
-            BoxRecord record;
-            if (attacker != null && attacker.userID.IsSteamId() && TryRecord(entity, out record))
-                Tell(attacker, "Break", record.OwnerName);
-            return true;
+            return DamageDecision(entity, info);
         }
 
-        // TruePVE treats false as a block. null would let a weekend ruleset apply the hit.
+        private object OnEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
+        {
+            return DamageDecision(entity, info);
+        }
+
+        private object OnEntityTakeDamage(DroppedItemContainer entity, HitInfo info)
+        {
+            return DamageDecision(entity, info);
+        }
+
+        private object OnEntityTakeDamage(StorageContainer entity, HitInfo info)
+        {
+            return DamageDecision(entity, info);
+        }
+
+        private object OnEntityTakeDamage(LootableCorpse entity, HitInfo info)
+        {
+            return DamageDecision(entity, info);
+        }
+
+        // TruePVE asks this before its ruleset. false makes TruePVE return true from
+        // OnEntityTakeDamage (cancel). true would force it to allow the hit. null
+        // would let the weekend ruleset apply Bradley splash. Our own hook returns
+        // that same true, so the two plugins agree and Carbon has no conflict.
+        // Typed overloads match the entity Carbon actually passes, same as CanLootEntity.
+        private object CanEntityTakeDamage(BaseEntity entity, HitInfo info)
+        {
+            return NpcDamageVote(entity, info);
+        }
+
         private object CanEntityTakeDamage(BaseCombatEntity entity, HitInfo info)
         {
-            if (entity != null && IsTracked(entity)) return false;
+            return NpcDamageVote(entity, info);
+        }
+
+        private object CanEntityTakeDamage(DroppedItemContainer entity, HitInfo info)
+        {
+            return NpcDamageVote(entity, info);
+        }
+
+        private object CanEntityTakeDamage(StorageContainer entity, HitInfo info)
+        {
+            return NpcDamageVote(entity, info);
+        }
+
+        private object CanEntityTakeDamage(LootableCorpse entity, HitInfo info)
+        {
+            return NpcDamageVote(entity, info);
+        }
+
+        private object NpcDamageVote(BaseEntity entity, HitInfo info)
+        {
+            if (entity == null || !IsTracked(entity)) return null;
+            if (ShouldBlockDamage(info)) return false;
             return null;
+        }
+
+        private object DamageDecision(BaseEntity entity, HitInfo info)
+        {
+            if (entity == null || !IsTracked(entity)) return null;
+            if (!ShouldBlockDamage(info)) return null;
+            // A real player's hit stays the previous cancel: scale to zero, tell them, return true.
+            if (IsRealPlayerDamage(info))
+            {
+                if (info != null && info.damageTypes != null) info.damageTypes.ScaleAll(0f);
+                BasePlayer attacker = info == null ? null : info.InitiatorPlayer;
+                BoxRecord record;
+                if (attacker != null && attacker.userID.IsSteamId() && TryRecord(entity, out record))
+                    Tell(attacker, "Break", record.OwnerName);
+                return true;
+            }
+            ZeroDamage(info);
+            Repair(entity);
+            if (_config != null && _config.DebugLogging && IsNpcDamage(info))
+                NoteNpcBlock(entity, info);
+            return true;
         }
 
         private object canRemove(BasePlayer player, BaseEntity entity)
@@ -1045,6 +1132,7 @@ namespace Oxide.Plugins
             };
             _byNet[record.NetId] = record;
             session.Spawned++;
+            ProtectContainer(entity);
             ReleaseTruePveClaim(entity);
             NoteCreated(session, entity);
             EnsureMarker(session, entity.transform.position);
@@ -1083,6 +1171,7 @@ namespace Oxide.Plugins
                 GroupId = session.GroupId
             };
             _byNet[record.NetId] = record;
+            ProtectContainer(entity);
             NoteCreated(session, entity);
             if (_config.LogConversions && !_config.DebugLogging)
                 Puts("Death box cap (" + _config.MaxBoxesPerDeath + ") hit for " + session.UserId + ". Leftover container kept private.");
@@ -1223,6 +1312,232 @@ namespace Oxide.Plugins
             return _byNet.TryGetValue(entity.net.ID.Value, out record);
         }
 
+        // Real players, including a rocket or turret they own, stay on the old path.
+        // NPC Bradley/heli/CH47 shells often have a null initiator and OwnerID 0.
+        private bool ShouldBlockDamage(HitInfo info)
+        {
+            if (IsRealPlayerDamage(info)) return true;
+            if (IsNpcDamage(info)) return _config == null || _config.BlockNpcDamage;
+            return true;
+        }
+
+        private static bool IsRealPlayerDamage(HitInfo info)
+        {
+            if (info == null) return false;
+            if (IsRealPlayer(info.InitiatorPlayer)) return true;
+            if (IsRealPlayerOwned(info.Initiator, 0)) return true;
+            if (IsRealPlayerOwned(info.WeaponPrefab, 0)) return true;
+            return IsRealPlayerOwned(info.Weapon as BaseEntity, 0);
+        }
+
+        private static bool IsNpcDamage(HitInfo info)
+        {
+            if (info == null || IsRealPlayerDamage(info)) return false;
+            if (ChainIsNpc(info.Initiator, 0)) return true;
+            if (ChainIsNpc(info.WeaponPrefab, 0)) return true;
+            if (ChainIsNpc(info.Weapon as BaseEntity, 0)) return true;
+            if (info.Initiator != null || !IsBlast(info)) return false;
+            BaseEntity weapon = info.WeaponPrefab != null ? info.WeaponPrefab : info.Weapon as BaseEntity;
+            if (weapon == null) return false;
+            if (ChainIsNpc(weapon.creatorEntity, 0)) return true;
+            return weapon.OwnerID == 0UL && IsProjectileOrExplosive(weapon);
+        }
+
+        private static bool ChainIsNpc(BaseEntity entity, int depth)
+        {
+            if (entity == null || depth > 4) return false;
+            if (IsRealPlayerOwned(entity, 0)) return false;
+            if (IsNpcEntity(entity) || IsNpcOwnedProjectile(entity)) return true;
+            if (ChainIsNpc(entity.creatorEntity, depth + 1)) return true;
+            BaseEntity parent = entity.GetParentEntity();
+            if (parent != null && parent != entity) return ChainIsNpc(parent, depth + 1);
+            return false;
+        }
+
+        private static bool IsNpcOwnedProjectile(BaseEntity entity)
+        {
+            if (!IsProjectileOrExplosive(entity) || IsRealPlayerOwned(entity, 0)) return false;
+            if (IsNpcEntity(entity)) return true;
+            if (entity.creatorEntity != null && IsNpcEntity(entity.creatorEntity)) return true;
+            return entity.OwnerID == 0UL;
+        }
+
+        private static bool IsNpcEntity(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            if (entity is BradleyAPC || entity is PatrolHelicopter || entity is CH47Helicopter || entity is NPCAutoTurret)
+                return true;
+            if (entity is NPCPlayer || entity is ScientistNPC) return true;
+            BasePlayer player = entity as BasePlayer;
+            if (player != null && (player.IsNpc || !player.userID.IsSteamId())) return true;
+            string name = entity.ShortPrefabName;
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name.Equals("maincannonshell", StringComparison.OrdinalIgnoreCase)) return true;
+            if (name.Equals("bradleyapc", StringComparison.OrdinalIgnoreCase)) return true;
+            if (name.IndexOf("patrolhelicopter", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("ch47", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.StartsWith("rocket_heli", StringComparison.OrdinalIgnoreCase)) return true;
+            return name.IndexOf("heli", StringComparison.OrdinalIgnoreCase) >= 0
+                && name.IndexOf("napalm", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsProjectileOrExplosive(BaseEntity entity)
+        {
+            if (entity == null) return false;
+            if (entity is TimedExplosive || entity is FireBall) return true;
+            if (!entity.IsDestroyed && entity.GetComponent<ServerProjectile>() != null) return true;
+            string name = entity.ShortPrefabName;
+            if (string.IsNullOrEmpty(name)) return false;
+            if (name.IndexOf("rocket", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("shell", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("explosive", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (name.IndexOf("grenade", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            return name.IndexOf("napalm", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsBlast(HitInfo info)
+        {
+            if (info == null || info.damageTypes == null) return false;
+            if (info.damageTypes.Has(Rust.DamageType.Explosion) || info.damageTypes.Has(Rust.DamageType.AntiVehicle))
+                return true;
+            Rust.DamageType majority = info.damageTypes.GetMajorityDamageType();
+            return majority == Rust.DamageType.Explosion || majority == Rust.DamageType.AntiVehicle;
+        }
+
+        private static bool IsRealPlayer(BasePlayer player)
+        {
+            return player != null && !player.IsNpc && player.userID.IsSteamId();
+        }
+
+        private static bool IsRealPlayerOwned(BaseEntity entity, int depth)
+        {
+            if (entity == null || depth > 4) return false;
+            if (IsRealPlayer(entity as BasePlayer)) return true;
+            if (IsRealPlayer(entity.creatorEntity as BasePlayer)) return true;
+            if (entity.OwnerID.IsSteamId()) return true;
+            BaseEntity parent = entity.GetParentEntity();
+            if (parent != null && parent != entity) return IsRealPlayerOwned(parent, depth + 1);
+            return false;
+        }
+
+        private static void ZeroDamage(HitInfo info)
+        {
+            if (info == null) return;
+            if (info.damageTypes != null)
+            {
+                info.damageTypes.ScaleAll(0f);
+                info.damageTypes.Clear();
+            }
+            info.HitEntity = null;
+            info.DoHitEffects = false;
+            info.DidHit = false;
+        }
+
+        private static void Repair(BaseEntity entity)
+        {
+            BaseCombatEntity combat = entity as BaseCombatEntity;
+            if (combat == null || combat.IsDestroyed) return;
+            float max = combat.MaxHealth();
+            if (max > 0f && combat.health < max) combat.health = max;
+        }
+
+        private void NoteNpcBlock(BaseEntity entity, HitInfo info)
+        {
+            if (entity == null || entity.net == null) return;
+            float now = Time.realtimeSinceStartup;
+            float next;
+            ulong id = entity.net.ID.Value;
+            if (_npcBlockLog.TryGetValue(id, out next) && next > now) return;
+            if (_npcBlockLog.Count > 128) _npcBlockLog.Clear();
+            _npcBlockLog[id] = now + 5f;
+            Puts("Blocked NPC damage to death box net " + id.ToString(CultureInfo.InvariantCulture) + " from " + DamageSourceName(info) + ".");
+        }
+
+        private static string DamageSourceName(HitInfo info)
+        {
+            if (info == null) return "unknown";
+            BaseEntity source = info.Initiator != null ? info.Initiator : info.WeaponPrefab;
+            if (source == null) source = info.Weapon as BaseEntity;
+            if (source == null) return "unknown";
+            if (!string.IsNullOrEmpty(source.ShortPrefabName)) return source.ShortPrefabName;
+            return source.GetType().Name;
+        }
+
+        private void ProtectContainer(BaseEntity entity)
+        {
+            if (entity == null || entity.IsDestroyed) return;
+            BaseCombatEntity[] parts = entity.GetComponentsInChildren<BaseCombatEntity>(true);
+            if (parts == null || parts.Length == 0)
+            {
+                ApplyShield(entity as BaseCombatEntity);
+                return;
+            }
+            for (int i = 0; i < parts.Length; i++) ApplyShield(parts[i]);
+        }
+
+        private void ApplyShield(BaseCombatEntity combat)
+        {
+            if (combat == null || combat.IsDestroyed) return;
+            int id = combat.GetInstanceID();
+            bool blockNpc = _config == null || _config.BlockNpcDamage;
+            if (!blockNpc)
+            {
+                ProtectionProperties previous;
+                if (_previousProtection.TryGetValue(id, out previous) && combat.baseProtection == _npcImmunity)
+                    combat.baseProtection = previous;
+                _previousProtection.Remove(id);
+                return;
+            }
+            ProtectionProperties shield = NpcImmunity();
+            if (shield == null || combat.baseProtection == shield) return;
+            _previousProtection[id] = combat.baseProtection;
+            combat.baseProtection = shield;
+        }
+
+        // The game's own full resist. Its amounts array matches every current damage type,
+        // including Bradley splash, so a blast that never enters OnEntityTakeDamage still hits zero.
+        private ProtectionProperties NpcImmunity()
+        {
+            if (_npcImmunity != null) return _npcImmunity;
+            _npcImmunity = ProtectionProperties.immortalProtection;
+            return _npcImmunity;
+        }
+
+        private void RestoreNpcImmunity()
+        {
+            List<ulong> ids = new List<ulong>(_byNet.Keys);
+            for (int i = 0; i < ids.Count; i++) RestoreShield(FindEntity(ids[i]));
+            _previousProtection.Clear();
+        }
+
+        private void RestoreShield(BaseEntity entity)
+        {
+            if (entity == null || entity.IsDestroyed) return;
+            BaseCombatEntity[] parts = entity.GetComponentsInChildren<BaseCombatEntity>(true);
+            if (parts == null) return;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                BaseCombatEntity combat = parts[i];
+                if (combat == null) continue;
+                int id = combat.GetInstanceID();
+                ProtectionProperties previous;
+                if (_previousProtection.TryGetValue(id, out previous) && combat.baseProtection == _npcImmunity)
+                    combat.baseProtection = previous;
+                _previousProtection.Remove(id);
+            }
+        }
+
+        private void DropShield(BaseEntity entity)
+        {
+            if (entity == null) return;
+            BaseCombatEntity[] parts = entity.GetComponentsInChildren<BaseCombatEntity>(true);
+            if (parts == null) return;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (parts[i] != null) _previousProtection.Remove(parts[i].GetInstanceID());
+            }
+        }
+
         private static bool IsOurPrefab(DroppedItemContainer container)
         {
             return IsMarked(container);
@@ -1285,6 +1600,7 @@ namespace Oxide.Plugins
             _removeReason.Remove(entity.net.ID.Value);
             LogRemoval(record, entity, reason);
             _byNet.Remove(entity.net.ID.Value);
+            DropShield(entity);
             if (!GroupHasBoxes(record.GroupId)) KillMarker(record.GroupId);
             if (_worldReady) SaveData();
         }
@@ -1556,6 +1872,7 @@ namespace Oxide.Plugins
                     if (decay != null) UnityEngine.Object.Destroy(decay);
                 }
                 StripGroundWatch(container);
+                ProtectContainer(container);
             }
             if (unused.Count > 0)
                 Puts("Dropped " + unused.Count + " death box records whose containers are gone.");
@@ -2105,7 +2422,7 @@ namespace Oxide.Plugins
                 return "No active death containers. Total: 0";
             }
             StringBuilder builder = new StringBuilder();
-            builder.Append("NightshadeDeathBox 1.0.4");
+            builder.Append("NightshadeDeathBox 1.0.5");
             if (!string.IsNullOrEmpty(filter))
                 builder.Append(" matching \"").Append(OneLine(filter, 64)).Append("\"");
             for (int i = 0; i < count; i++)
@@ -2389,13 +2706,14 @@ namespace Oxide.Plugins
             try { granted = permission.GroupHasPermission("default", PermUse); }
             catch { granted = false; }
             StringBuilder builder = new StringBuilder();
-            builder.Append("NightshadeDeathBox 1.0.4");
+            builder.Append("NightshadeDeathBox 1.0.5");
             builder.Append("\nadmin: nsdeathbox.list [name|steamid]   nsdeathbox.tp <netId|index> (player F1 only)");
             builder.Append("\ncontainer prefab: ").Append(ContainerPrefabPath());
             builder.Append("\ndefault group nightshadedeathbox.use: ").Append(granted ? "yes" : "NO");
             builder.Append("\npvp active: ").Append(pvp ? "yes" : "no").Append(" (").Append(pvpDetail).Append(")");
             builder.Append("\ntracked containers: ").Append(_byNet.Count.ToString(CultureInfo.InvariantCulture));
             builder.Append("\ndebug logging: ").Append(_config != null && _config.DebugLogging ? "on" : "off");
+            builder.Append("\nblock npc damage: ").Append(_config != null && _config.BlockNpcDamage ? "on" : "off");
             builder.Append("\nlast deaths (newest first):");
             if (_decisions.Count == 0) builder.Append("\n(none since this load)");
             for (int i = 0; i < _decisions.Count; i++)
