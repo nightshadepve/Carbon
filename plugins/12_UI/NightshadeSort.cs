@@ -149,6 +149,92 @@ namespace Carbon.Plugins
             return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
         }
 
+        // One stack the sorter may combine. Blocked items (contents, ammo,
+        // attachments, or anything else vanilla would refuse) stay alone.
+        // MaxStack is item.MaxStackable(), which already includes info.stackable
+        // unless a stack-size plugin hook replaces it.
+        public struct StackUnit
+        {
+            public int ItemId;
+            public ulong Skin;
+            public string Name;
+            public string Text;
+            public int Amount;
+            public int MaxStack;
+            public bool Blocked;
+        }
+
+        public static bool SameStack(StackUnit a, StackUnit b)
+        {
+            if (a.Blocked || b.Blocked) return false;
+            if (a.ItemId == 0 || a.ItemId != b.ItemId) return false;
+            if (a.Skin != b.Skin) return false;
+            if (a.MaxStack <= 1 || b.MaxStack <= 1) return false;
+            if (!string.Equals(a.Name ?? "", b.Name ?? "", StringComparison.Ordinal)) return false;
+            if (!string.Equals(a.Text ?? "", b.Text ?? "", StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        // Pour later partial stacks into earlier ones, up to MaxStack.
+        // Returns false when the total amount changes.
+        public static bool Consolidate(List<StackUnit> items)
+        {
+            if (items == null) return true;
+            int before = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Amount > 0) before += items[i].Amount;
+            }
+            for (int i = 0; i < items.Count; i++)
+            {
+                StackUnit dest = items[i];
+                if (dest.Amount <= 0 || dest.Blocked || dest.MaxStack <= 1) continue;
+                for (int j = i + 1; j < items.Count && dest.Amount < dest.MaxStack; j++)
+                {
+                    StackUnit src = items[j];
+                    if (src.Amount <= 0 || !SameStack(dest, src)) continue;
+                    int room = dest.MaxStack - dest.Amount;
+                    if (room <= 0) break;
+                    int move = src.Amount < room ? src.Amount : room;
+                    if (move <= 0) continue;
+                    dest.Amount += move;
+                    src.Amount -= move;
+                    items[j] = src;
+                }
+                items[i] = dest;
+            }
+            int after = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Amount > 0) after += items[i].Amount;
+            }
+            return after == before;
+        }
+
+        public static int PositiveStacks(List<StackUnit> items)
+        {
+            int count = 0;
+            if (items == null) return 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Amount > 0) count++;
+            }
+            return count;
+        }
+
+        // Backpack loot uses the same bottom-center header as a resizable box.
+        // offsetY is the 1-row button. Each extra row lifts it by rowHeight so it
+        // stays on that page's header. Anchor stays 0.5 0.
+        public static void ShiftPackButtonY(float yMin, float yMax, int capacity, float baseY, float rowHeight, int maxRows, out float shiftedMin, out float shiftedMax)
+        {
+            int rows = RowCount(capacity, maxRows);
+            float oneRow = baseY + rowHeight;
+            float header = baseY + rowHeight * rows;
+            float extra = header - oneRow;
+            shiftedMin = yMin + extra;
+            shiftedMax = yMax + extra;
+        }
+
         public static bool IsSupportedTarget(ContainerQuery query)
         {
             if (query.InBlacklist) return false;
@@ -475,8 +561,118 @@ namespace Carbon.Plugins
                 return false;
             }
 
+            var partial = new List<StackUnit>();
+            partial.Add(Stack(1, 0UL, "", "", 40, 100, false));
+            partial.Add(Stack(1, 0UL, "", "", 40, 100, false));
+            partial.Add(Stack(1, 0UL, "", "", 30, 100, false));
+            if (!Consolidate(partial) || PositiveStacks(partial) != 2 || AmountAt(partial, 0) != 100 || AmountAt(partial, 1) != 10)
+            {
+                error = "partial stacks";
+                return false;
+            }
+            var skins = new List<StackUnit>();
+            skins.Add(Stack(1, 5UL, "", "", 40, 100, false));
+            skins.Add(Stack(1, 7UL, "", "", 25, 100, false));
+            skins.Add(Stack(1, 5UL, "", "", 40, 100, false));
+            if (!Consolidate(skins) || PositiveStacks(skins) != 2 || AmountAt(skins, 0) != 80 || SkinAt(skins, 0) != 5UL || AmountAt(skins, 1) != 25 || SkinAt(skins, 1) != 7UL)
+            {
+                error = "skin stacks";
+                return false;
+            }
+            SortKey skinLow = Key(1, "wood", "Wood", SkinAt(skins, 0), AmountAt(skins, 0), 0);
+            SortKey skinHigh = Key(1, "wood", "Wood", SkinAt(skins, 1), AmountAt(skins, 1), 1);
+            if (Compare(skinLow, skinHigh, SortMode.CategorySkin) >= 0)
+            {
+                error = "skin sort after merge";
+                return false;
+            }
+            var names = new List<StackUnit>();
+            names.Add(Stack(1, 0UL, "Gift", "", 10, 100, false));
+            names.Add(Stack(1, 0UL, "", "", 10, 100, false));
+            names.Add(Stack(1, 0UL, "Gift", "", 10, 100, false));
+            if (!Consolidate(names) || PositiveStacks(names) != 2 || AmountAt(names, 0) != 20 || AmountAt(names, 1) != 10)
+            {
+                error = "name stacks";
+                return false;
+            }
+            var notes = new List<StackUnit>();
+            notes.Add(Stack(2, 0UL, "", "alpha", 4, 10, false));
+            notes.Add(Stack(2, 0UL, "", "beta", 4, 10, false));
+            if (!Consolidate(notes) || PositiveStacks(notes) != 2)
+            {
+                error = "text stacks";
+                return false;
+            }
+            var blocked = new List<StackUnit>();
+            blocked.Add(Stack(3, 0UL, "", "", 5, 20, true));
+            blocked.Add(Stack(3, 0UL, "", "", 5, 20, false));
+            if (!Consolidate(blocked) || PositiveStacks(blocked) != 2)
+            {
+                error = "blocked stacks";
+                return false;
+            }
+            var single = new List<StackUnit>();
+            single.Add(Stack(4, 0UL, "", "", 1, 1, false));
+            single.Add(Stack(4, 0UL, "", "", 1, 1, false));
+            if (!Consolidate(single) || PositiveStacks(single) != 2)
+            {
+                error = "max one";
+                return false;
+            }
+            float packMin;
+            float packMax;
+            ShiftPackButtonY(175.5f, 197.5f, 6, BaseY, RowHeight, 8, out packMin, out packMax);
+            if (Math.Abs(packMin - 175.5f) > 0.01f || Math.Abs(packMax - 197.5f) > 0.01f)
+            {
+                error = "pack button one row";
+                return false;
+            }
+            ShiftPackButtonY(175.5f, 197.5f, 48, BaseY, RowHeight, 8, out packMin, out packMax);
+            if (Math.Abs(packMin - 609.5f) > 0.01f || Math.Abs(packMax - 631.5f) > 0.01f)
+            {
+                error = "pack button eight rows";
+                return false;
+            }
+
             error = "";
             return true;
+        }
+
+        private static StackUnit Stack(int itemId, ulong skin, string name, string text, int amount, int maxStack, bool blocked)
+        {
+            StackUnit unit = new StackUnit();
+            unit.ItemId = itemId;
+            unit.Skin = skin;
+            unit.Name = name;
+            unit.Text = text;
+            unit.Amount = amount;
+            unit.MaxStack = maxStack;
+            unit.Blocked = blocked;
+            return unit;
+        }
+
+        private static int AmountAt(List<StackUnit> items, int nth)
+        {
+            int seen = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Amount <= 0) continue;
+                if (seen == nth) return items[i].Amount;
+                seen++;
+            }
+            return -1;
+        }
+
+        private static ulong SkinAt(List<StackUnit> items, int nth)
+        {
+            int seen = 0;
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Amount <= 0) continue;
+                if (seen == nth) return items[i].Skin;
+                seen++;
+            }
+            return 0UL;
         }
 
         private static SortKey Key(int category, string shortname, string display, ulong skin, int amount, int position)
@@ -505,7 +701,7 @@ namespace Carbon.Plugins
     }
 
 #if !NIGHTSHADE_SORT_TESTS
-    [Info("NightshadeSort", "Nightshade", "1.0.0")]
+    [Info("NightshadeSort", "Nightshade", "1.0.1")]
     [Description("Sort menu and Transfer All for storage containers.")]
     public class NightshadeSort : CarbonPlugin
     {
@@ -525,6 +721,7 @@ namespace Carbon.Plugins
         private PrefStore _store;
         private readonly Dictionary<ulong, Draft> _draft = new Dictionary<ulong, Draft>();
         private readonly HashSet<ulong> _busy = new HashSet<ulong>();
+        private readonly Dictionary<ulong, ItemContainer> _openPack = new Dictionary<ulong, ItemContainer>();
 
         private class PluginConfig
         {
@@ -583,8 +780,10 @@ namespace Carbon.Plugins
             [JsonProperty("Main transfer offset max")] public string MainOffsetMax = "180 363";
             [JsonProperty("Backpack transfer anchor min")] public string PackAnchorMin = "0.5 0";
             [JsonProperty("Backpack transfer anchor max")] public string PackAnchorMax = "0.5 0";
-            [JsonProperty("Backpack transfer offset min")] public string PackOffsetMin = "48 368";
-            [JsonProperty("Backpack transfer offset max")] public string PackOffsetMax = "180 390";
+            // 1-row backpack header (Y = Base Y + one row). Taller pages add Y per row.
+            // Sits on the left of that header, short of the sort buttons at X 476.5.
+            [JsonProperty("Backpack transfer offset min")] public string PackOffsetMin = "330 175.5";
+            [JsonProperty("Backpack transfer offset max")] public string PackOffsetMax = "462 197.5";
             [JsonProperty("Transfer color")] public string TransferColor = "0.41 0.50 0.25 0.9";
             [JsonProperty("Transfer text color")] public string TransferText = "0.77 0.92 0.67 1";
         }
@@ -626,6 +825,7 @@ namespace Carbon.Plugins
                 DestroyUi(player);
             _draft.Clear();
             _busy.Clear();
+            _openPack.Clear();
         }
 
         private void OnLootEntity(BasePlayer player, BaseEntity entity)
@@ -647,6 +847,25 @@ namespace Carbon.Plugins
         private void OnLootEntityEnd(BasePlayer player, BaseCombatEntity entity)
         {
             EndLoot(player);
+        }
+
+        // Backpacks plugin. Fired when that player's own backpack loot panel opens.
+        private void OnBackpackOpened(BasePlayer player, ulong ownerId, ItemContainer container)
+        {
+            if (player == null || container == null) return;
+            if (player.userID != ownerId) return;
+            _openPack[player.userID] = container;
+            NextTick(() => ShowPackButton(player));
+        }
+
+        // Backpacks plugin. Hide the transfer button as soon as the panel closes
+        // so it does not stay on the screen after the backpack UI is gone.
+        private void OnBackpackClosed(BasePlayer player, ulong ownerId, ItemContainer container)
+        {
+            if (player == null) return;
+            if (ownerId != 0UL && player.userID != ownerId) return;
+            _openPack.Remove(player.userID);
+            CuiHelper.DestroyUi(player, UiTransferPack);
         }
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
@@ -679,6 +898,7 @@ namespace Carbon.Plugins
             DestroyUi(player);
             _draft.Remove(player.userID);
             _busy.Remove(player.userID);
+            _openPack.Remove(player.userID);
         }
 
         private bool HasPerm(BasePlayer player, string perm)
@@ -822,8 +1042,14 @@ namespace Carbon.Plugins
                 ItemContainer primary;
                 NightshadeSortRules.ContainerQuery query;
                 if (!BuildContext(player, out entity, out primary, out query)) return;
+                if (backpack && !_config.ShowBackpack) return;
+                if (backpack && !query.InRange)
+                {
+                    int ignored;
+                    if (PackOpen(player, out ignored)) query.InRange = true;
+                }
                 if (!NightshadeSortRules.CanAct(query)) return;
-                ItemContainer source = backpack ? BackpackSource(player, primary) : player.inventory.containerMain;
+                ItemContainer source = backpack ? OpenBackpackContents(player) : player.inventory.containerMain;
                 if (source == null || source.itemList == null) return;
                 if (NightshadeSortRules.IsProtectedPlayerSlot(source == player.inventory.containerBelt, source == player.inventory.containerWear))
                     return;
@@ -833,6 +1059,12 @@ namespace Carbon.Plugins
                 if (started == 0) return;
                 var targets = new List<ItemContainer>();
                 CollectTargets(player, entity, targets);
+                for (int i = targets.Count - 1; i >= 0; i--)
+                {
+                    if (targets[i] == source) targets.RemoveAt(i);
+                }
+                if (targets.Count == 0 && player.inventory.containerMain != null && player.inventory.containerMain != source)
+                    targets.Add(player.inventory.containerMain);
                 int moved = MoveInto(player, source, targets);
                 int left = source.itemList == null ? 0 : source.itemList.Count;
                 if (!_config.ChatFeedback) return;
@@ -975,19 +1207,6 @@ namespace Carbon.Plugins
             }
         }
 
-        private ItemContainer BackpackSource(BasePlayer player, ItemContainer destination)
-        {
-            if (player == null || player.inventory == null || !_config.ShowBackpack) return null;
-            Item backpack = player.inventory.GetBackpackWithInventory();
-            if (backpack == null || backpack.contents == null) return null;
-            ItemContainer contents = backpack.contents;
-            if (contents == destination) return null;
-            if (contents == player.inventory.containerMain) return null;
-            if (contents == player.inventory.containerBelt) return null;
-            if (contents == player.inventory.containerWear) return null;
-            return contents;
-        }
-
         private static int SlotLimit(BaseEntity entity, ItemContainer container)
         {
             int limit = container.capacity;
@@ -1004,6 +1223,8 @@ namespace Carbon.Plugins
             var taken = new List<Item>();
             try
             {
+                if (merge && !ConsolidateContainer(container, player, slotLimit))
+                    PrintError("NightshadeSort merge changed the total item amount. Sorting the items that are still in the container.");
                 for (int i = container.itemList.Count - 1; i >= 0; i--)
                 {
                     Item item = container.itemList[i];
@@ -1016,8 +1237,6 @@ namespace Carbon.Plugins
                     item.position = position;
                     taken.Add(item);
                 }
-                if (merge && !MergeStacks(taken))
-                    PrintError("NightshadeSort merge changed the total item amount. Placing the items that are still held.");
                 taken.Sort(delegate (Item a, Item b) { return CompareItems(a, b, mode); });
                 for (int i = 0; i < taken.Count; i++)
                 {
@@ -1072,58 +1291,151 @@ namespace Carbon.Plugins
             return key;
         }
 
-        private bool MergeStacks(List<Item> items)
+        // Combine partial stacks while they are still in the container so
+        // MaxStackable, CanStack, and MoveToContainer see the real parent.
+        private bool ConsolidateContainer(ItemContainer container, BasePlayer player, int slotLimit)
         {
-            int before = SumAmounts(items);
-            for (int i = 0; i < items.Count; i++)
+            if (container == null || container.itemList == null) return true;
+            int before = SumContainer(container);
+            int guard = 0;
+            bool progressed = true;
+            while (progressed && guard < 12)
             {
-                Item left = items[i];
-                if (left == null || left.amount <= 0 || left.info == null) continue;
-                if (left.contents != null && left.contents.itemList != null && left.contents.itemList.Count > 0) continue;
-                int max = left.MaxStackable();
-                if (max <= 1) continue;
-                for (int j = i + 1; j < items.Count && left.amount < max; j++)
+                guard++;
+                progressed = false;
+                var items = new List<Item>(container.itemList);
+                for (int i = 0; i < items.Count; i++)
                 {
-                    Item right = items[j];
-                    if (right == null || right == left || right.amount <= 0 || right.info == null) continue;
-                    if (right.contents != null && right.contents.itemList != null && right.contents.itemList.Count > 0) continue;
-                    if (!left.CanStack(right)) continue;
-                    int room = max - left.amount;
-                    if (room <= 0) break;
-                    int move = right.amount < room ? right.amount : room;
-                    if (move <= 0) continue;
-                    int sum = left.amount + right.amount;
-                    left.amount += move;
-                    right.amount -= move;
-                    if (left.amount + right.amount != sum)
+                    Item dest = items[i];
+                    if (!InSlot(dest, container, slotLimit)) continue;
+                    int max = StackCeiling(dest);
+                    if (max <= 1 || dest.amount >= max) continue;
+                    for (int j = i + 1; j < items.Count; j++)
                     {
-                        left.amount -= move;
-                        right.amount += move;
-                        continue;
-                    }
-                    left.MarkDirty();
-                    Interface.CallHook("OnItemStacked", left, right, move);
-                    if (right.amount <= 0)
-                    {
-                        right.amount = 0;
-                        items[j] = null;
-                        right.Remove(0f);
-                    }
-                    else
-                    {
-                        right.MarkDirty();
+                        if (!InSlot(dest, container, slotLimit)) break;
+                        max = StackCeiling(dest);
+                        if (dest.amount >= max) break;
+                        Item src = items[j];
+                        if (!InSlot(src, container, slotLimit) || !CanMergePair(dest, src)) continue;
+                        int destBefore = dest.amount;
+                        int srcBefore = src.amount;
+                        src.MoveToContainer(container, dest.position, true, false, player, false);
+                        bool changed = dest.amount != destBefore || src.amount != srcBefore || src.parent != container;
+                        if (!changed)
+                            changed = MergeAmounts(dest, src);
+                        if (!changed) continue;
+                        progressed = true;
+                        if (src.amount <= 0 && src.parent == container)
+                        {
+                            src.amount = 0;
+                            src.RemoveFromContainer();
+                            src.Remove(0f);
+                        }
                     }
                 }
             }
-            return SumAmounts(items) == before;
+            return SumContainer(container) == before;
         }
 
-        private static int SumAmounts(List<Item> items)
+        private static bool InSlot(Item item, ItemContainer container, int slotLimit)
+        {
+            if (item == null || item.amount <= 0 || item.parent != container) return false;
+            if (item.position < 0 || item.position >= slotLimit) return false;
+            return true;
+        }
+
+        private static bool CanMergePair(Item dest, Item src)
+        {
+            if (dest == null || src == null || dest == src) return false;
+            if (dest.info == null || src.info == null || dest.IsLocked() || src.IsLocked()) return false;
+            if (!NightshadeSortRules.SameStack(Describe(dest), Describe(src))) return false;
+            if (!dest.CanStack(src) || !src.CanStack(dest)) return false;
+            return true;
+        }
+
+        private static NightshadeSortRules.StackUnit Describe(Item item)
+        {
+            NightshadeSortRules.StackUnit unit = new NightshadeSortRules.StackUnit();
+            if (item == null || item.info == null)
+            {
+                unit.Blocked = true;
+                return unit;
+            }
+            unit.ItemId = item.info.itemid;
+            unit.Skin = item.skin;
+            unit.Name = item.name ?? "";
+            unit.Text = item.text ?? "";
+            unit.Amount = item.amount;
+            unit.MaxStack = StackCeiling(item);
+            unit.Blocked = HasContents(item) || HasLoadedAmmo(item);
+            return unit;
+        }
+
+        private static bool HasContents(Item item)
+        {
+            return item.contents != null && item.contents.itemList != null && item.contents.itemList.Count > 0;
+        }
+
+        private static bool HasLoadedAmmo(Item item)
+        {
+            BaseEntity held = item.GetHeldEntity();
+            if (held == null) return false;
+            BaseProjectile projectile = held as BaseProjectile;
+            if (projectile != null && projectile.primaryMagazine != null && projectile.primaryMagazine.contents > 0) return true;
+            FlameThrower flame = held as FlameThrower;
+            if (flame != null && flame.ammo > 0) return true;
+            Chainsaw saw = held as Chainsaw;
+            if (saw != null && saw.ammo > 0) return true;
+            return false;
+        }
+
+        private static int StackCeiling(Item item)
+        {
+            int max = item.MaxStackable();
+            if (max <= 0 && item.info != null) max = item.info.stackable;
+            return max;
+        }
+
+        private static bool MergeAmounts(Item dest, Item src)
+        {
+            if (dest == null || src == null || dest.parent == null) return false;
+            if (!dest.CanStack(src) || !src.CanStack(dest)) return false;
+            int max = StackCeiling(dest);
+            int room = max - dest.amount;
+            if (room <= 0 || src.amount <= 0) return false;
+            int move = src.amount < room ? src.amount : room;
+            if (move <= 0) return false;
+            int sum = dest.amount + src.amount;
+            dest.amount += move;
+            src.amount -= move;
+            if (dest.amount + src.amount != sum)
+            {
+                dest.amount -= move;
+                src.amount += move;
+                return false;
+            }
+            dest.MarkDirty();
+            Interface.CallHook("OnItemStacked", dest, src, move);
+            if (src.amount <= 0)
+            {
+                src.amount = 0;
+                if (src.parent != null) src.RemoveFromContainer();
+                src.Remove(0f);
+            }
+            else
+            {
+                src.MarkDirty();
+            }
+            return true;
+        }
+
+        private static int SumContainer(ItemContainer container)
         {
             int sum = 0;
-            for (int i = 0; i < items.Count; i++)
+            if (container == null || container.itemList == null) return 0;
+            for (int i = 0; i < container.itemList.Count; i++)
             {
-                Item item = items[i];
+                Item item = container.itemList[i];
                 if (item != null && item.amount > 0) sum += item.amount;
             }
             return sum;
@@ -1185,28 +1497,35 @@ namespace Carbon.Plugins
         private void Draw(BasePlayer player, BaseEntity entity)
         {
             DestroyUi(player);
-            if (player == null || entity == null || _config == null || !_config.Enabled) return;
-            ItemContainer container;
-            NightshadeSortRules.ContainerQuery query;
-            BaseEntity open;
-            if (!BuildContext(player, out open, out container, out query) || open != entity) return;
-            if (!NightshadeSortRules.CanAct(query)) return;
-            bool use = HasPerm(player, PermUse);
-            bool transfer = HasPerm(player, PermTransfer);
-            if (!use && !transfer) return;
-            if (use && NightshadeSortRules.ShowSortButtons(query))
+            try
             {
-                float x;
-                float y;
-                float height;
-                HeaderPlacement(entity, container, out x, out y, out height);
-                DrawHeader(player, x, y, height);
-                Draft draft;
-                if (_draft.TryGetValue(player.userID, out draft) && draft != null && draft.MenuOpen)
-                    DrawMenu(player, x, y, height, draft);
+                if (player == null || entity == null || _config == null || !_config.Enabled) return;
+                ItemContainer container;
+                NightshadeSortRules.ContainerQuery query;
+                BaseEntity open;
+                if (!BuildContext(player, out open, out container, out query) || open != entity) return;
+                if (!NightshadeSortRules.CanAct(query)) return;
+                bool use = HasPerm(player, PermUse);
+                bool transfer = HasPerm(player, PermTransfer);
+                if (!use && !transfer) return;
+                if (use && NightshadeSortRules.ShowSortButtons(query))
+                {
+                    float x;
+                    float y;
+                    float height;
+                    HeaderPlacement(entity, container, out x, out y, out height);
+                    DrawHeader(player, x, y, height);
+                    Draft draft;
+                    if (_draft.TryGetValue(player.userID, out draft) && draft != null && draft.MenuOpen)
+                        DrawMenu(player, x, y, height, draft);
+                }
+                if (transfer)
+                    DrawTransfer(player);
             }
-            if (transfer)
-                DrawTransfer(player, container);
+            finally
+            {
+                ShowPackButton(player);
+            }
         }
 
         private void HeaderPlacement(BaseEntity entity, ItemContainer container, out float x, out float y, out float height)
@@ -1337,14 +1656,145 @@ namespace Carbon.Plugins
             }, UiMenu);
         }
 
-        private void DrawTransfer(BasePlayer player, ItemContainer destination)
+        private void DrawTransfer(BasePlayer player)
         {
             var ui = new CuiElementContainer();
-            string parent = Parent();
-            AddTransferButton(ui, parent, UiTransferMain, _config.MainAnchorMin, _config.MainAnchorMax, _config.MainOffsetMin, _config.MainOffsetMax, UiCommand + " transfer main", Lang(player, "Transfer"));
-            if (BackpackSource(player, destination) != null)
-                AddTransferButton(ui, parent, UiTransferPack, _config.PackAnchorMin, _config.PackAnchorMax, _config.PackOffsetMin, _config.PackOffsetMax, UiCommand + " transfer backpack", Lang(player, "Transfer"));
+            AddTransferButton(ui, Parent(), UiTransferMain, _config.MainAnchorMin, _config.MainAnchorMax, _config.MainOffsetMin, _config.MainOffsetMax, UiCommand + " transfer main", Lang(player, "Transfer"));
             CuiHelper.AddUi(player, ui);
+        }
+
+        // Drawn only while the backpack panel is open. Anchor 0.5 0.
+        // Config offsets are the 1-row header rectangle (default 330 175.5 / 462 197.5).
+        // Each extra row of that page adds Y per row, so the button stays on the header.
+        private void ShowPackButton(BasePlayer player)
+        {
+            if (player == null || !player.IsConnected) return;
+            CuiHelper.DestroyUi(player, UiTransferPack);
+            if (!Active() || _config == null || !_config.ShowBackpack) return;
+            if (!HasPerm(player, PermTransfer)) return;
+            int capacity;
+            if (!PackOpen(player, out capacity)) return;
+            float x0;
+            float y0;
+            float x1;
+            float y1;
+            if (!PackRectangle(capacity, out x0, out y0, out x1, out y1)) return;
+            string anchorMin = string.IsNullOrEmpty(_config.PackAnchorMin) ? "0.5 0" : _config.PackAnchorMin;
+            string anchorMax = string.IsNullOrEmpty(_config.PackAnchorMax) ? "0.5 0" : _config.PackAnchorMax;
+            var ui = new CuiElementContainer();
+            AddTransferButton(ui, Parent(), UiTransferPack, anchorMin, anchorMax, F(x0) + " " + F(y0), F(x1) + " " + F(y1), UiCommand + " transfer backpack", Lang(player, "Transfer"));
+            CuiHelper.AddUi(player, ui);
+        }
+
+        private bool PackRectangle(int capacity, out float x0, out float y0, out float x1, out float y1)
+        {
+            x0 = 330f;
+            y0 = 175.5f;
+            x1 = 462f;
+            y1 = 197.5f;
+            float parsedX0;
+            float parsedY0;
+            float parsedX1;
+            float parsedY1;
+            bool legacy = IsLegacyPackOffset(_config.PackOffsetMin, _config.PackOffsetMax);
+            if (!legacy
+                && TryPair(_config.PackOffsetMin, out parsedX0, out parsedY0)
+                && TryPair(_config.PackOffsetMax, out parsedX1, out parsedY1))
+            {
+                x0 = parsedX0;
+                y0 = parsedY0;
+                x1 = parsedX1;
+                y1 = parsedY1;
+            }
+            float shiftedMin;
+            float shiftedMax;
+            NightshadeSortRules.ShiftPackButtonY(y0, y1, capacity, _config.BaseY, _config.RowHeight, _config.MaxRows, out shiftedMin, out shiftedMax);
+            y0 = shiftedMin;
+            y1 = shiftedMax;
+            if (x1 < x0)
+            {
+                float swap = x0;
+                x0 = x1;
+                x1 = swap;
+            }
+            if (y1 < y0)
+            {
+                float swap = y0;
+                y0 = y1;
+                y1 = swap;
+            }
+            return x1 - x0 >= 8f && y1 - y0 >= 8f;
+        }
+
+        private static bool IsLegacyPackOffset(string min, string max)
+        {
+            float x0;
+            float y0;
+            float x1;
+            float y1;
+            if (!TryPair(min, out x0, out y0) || !TryPair(max, out x1, out y1)) return false;
+            return Math.Abs(x0 - 48f) < 0.11f && Math.Abs(y0 - 368f) < 0.11f
+                && Math.Abs(x1 - 180f) < 0.11f && Math.Abs(y1 - 390f) < 0.11f;
+        }
+
+        private static bool TryPair(string value, out float x, out float y)
+        {
+            x = 0f;
+            y = 0f;
+            if (string.IsNullOrEmpty(value)) return false;
+            string[] parts = value.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2) return false;
+            if (!float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)) return false;
+            if (!float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y)) return false;
+            return true;
+        }
+
+        private bool PackOpen(BasePlayer player, out int capacity)
+        {
+            capacity = 0;
+            if (player == null) return false;
+            ItemContainer open;
+            if (_openPack.TryGetValue(player.userID, out open) && open != null)
+            {
+                capacity = open.capacity;
+                return capacity > 0;
+            }
+            ItemContainer vanilla = VanillaBackpackContents(player);
+            if (vanilla == null || player.inventory == null || player.inventory.loot == null) return false;
+            PlayerLoot loot = player.inventory.loot;
+            bool listed = loot.itemSource != null && loot.itemSource.contents == vanilla;
+            if (!listed && loot.containers != null)
+            {
+                for (int i = 0; i < loot.containers.Count; i++)
+                {
+                    if (loot.containers[i] == vanilla)
+                    {
+                        listed = true;
+                        break;
+                    }
+                }
+            }
+            if (!listed) return false;
+            capacity = vanilla.capacity;
+            return capacity > 0;
+        }
+
+        private ItemContainer OpenBackpackContents(BasePlayer player)
+        {
+            if (player == null) return null;
+            ItemContainer open;
+            if (_openPack.TryGetValue(player.userID, out open) && open != null) return open;
+            int capacity;
+            if (!PackOpen(player, out capacity)) return null;
+            return VanillaBackpackContents(player);
+        }
+
+        private static ItemContainer VanillaBackpackContents(BasePlayer player)
+        {
+            if (player == null || player.inventory == null) return null;
+            Item backpack = player.inventory.GetBackpackWithInventory();
+            if (backpack == null) return null;
+            return backpack.contents;
         }
 
         private void AddTransferButton(CuiElementContainer ui, string parent, string name, string anchorMin, string anchorMax, string offsetMin, string offsetMax, string command, string text)
@@ -1620,6 +2070,23 @@ namespace Carbon.Plugins
                 ["Moved"] = "Moved {0} stacks. {1} could not fit.",
                 ["NoneMoved"] = "Nothing could be moved into that container."
             }, this);
+        }
+    }
+#endif
+
+#if NIGHTSHADE_SORT_TESTS
+    public static class NightshadeSortRulesTest
+    {
+        public static int Main()
+        {
+            string error;
+            if (!NightshadeSortRules.Check(out error))
+            {
+                System.Console.Error.WriteLine(error);
+                return 1;
+            }
+            System.Console.WriteLine("ok");
+            return 0;
         }
     }
 #endif

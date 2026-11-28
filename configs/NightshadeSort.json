@@ -62,8 +62,8 @@
   "Main transfer offset max": "180 363",
   "Backpack transfer anchor min": "0.5 0",
   "Backpack transfer anchor max": "0.5 0",
-  "Backpack transfer offset min": "48 368",
-  "Backpack transfer offset max": "180 390",
+  "Backpack transfer offset min": "330 175.5",
+  "Backpack transfer offset max": "462 197.5",
   "Transfer color": "0.41 0.50 0.25 0.9",
   "Transfer text color": "0.77 0.92 0.67 1"
 }
